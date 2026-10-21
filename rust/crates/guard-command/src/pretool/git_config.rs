@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::time::Instant;
 
@@ -9,6 +9,8 @@ mod filters;
 mod pager;
 #[path = "git_config_textconv.rs"]
 mod textconv;
+
+pub(super) use super::git_config_trust::{clean_environment, trusted_command};
 
 const CONFIG_LIMIT: u64 = 65_536;
 
@@ -20,16 +22,55 @@ pub(super) fn execution_free(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     stdout_piped: bool,
 ) -> Option<bool> {
+    execution_free_paging(
+        executable,
+        arguments,
+        None,
+        context,
+        deadline,
+        execution_environment,
+        stdout_piped,
+    )
+}
+
+/// [`execution_free`] while paging is proved under `pager_operation` instead
+/// of the command's own name. A `stash show` diff is still a diff, but it
+/// pages under `pager.stash`.
+pub(super) fn execution_free_paging(
+    executable: &str,
+    arguments: &[String],
+    pager_operation: Option<&str>,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    stdout_piped: bool,
+) -> Option<bool> {
     let remaining = crate::command_compatibility::git_inspection_arguments(arguments, context)?;
     let operation = remaining.first()?.as_str();
+    if operation == "stash" && pager_operation.is_none() {
+        return stash_execution_free(
+            executable,
+            arguments,
+            remaining,
+            context,
+            deadline,
+            execution_environment,
+            stdout_piped,
+        );
+    }
     if !matches!(
         operation,
         "status"
             | "diff"
             | "log"
             | "show"
+            | "blame"
+            | "describe"
+            | "reflog"
             | "grep"
             | "branch"
+            | "tag"
+            | "clean"
             | "hash-object"
             | "config"
             | "merge-base"
@@ -38,6 +79,9 @@ pub(super) fn execution_free(
             | "show-ref"
             | "for-each-ref"
             | "rev-list"
+            | "shortlog"
+            | "check-ignore"
+            | "apply"
     ) {
         return None;
     }
@@ -55,14 +99,32 @@ pub(super) fn execution_free(
     if operation == "rev-list" && !super::git_rev_list::read_form(&remaining[1..]) {
         return None;
     }
+    if matches!(operation, "blame" | "describe" | "reflog")
+        && !super::git_history_reads::read_form(operation, &remaining[1..])
+    {
+        return None;
+    }
+    if matches!(operation, "shortlog" | "check-ignore")
+        && !super::git_listing_reads::read_form(operation, &remaining[1..])
+    {
+        return None;
+    }
+    // Only the patch check reads; every other apply writes, and its own
+    // review decides it.
+    if operation == "apply" && !super::git_apply_check::is_check_only(&remaining[1..]) {
+        return None;
+    }
     // A plain configuration write is no read; its own proof decides it.
     if operation == "config"
         && super::git_config_reads::writes::plain_write(&remaining[1..]).is_some()
     {
         return None;
     }
+    let pager_operation = pager_operation.unwrap_or(operation).to_owned();
+    // The memo key has no field of its own for which pager this proof uses,
+    // so the operation rides with the executable. A real executable has no NUL.
     let key = (
-        executable.to_owned(),
+        format!("{executable}\0{pager_operation}"),
         arguments.to_vec(),
         context.home_dir.map(str::to_owned),
         context.cwd.map(str::to_owned),
@@ -74,17 +136,26 @@ pub(super) fn execution_free(
                 executable,
                 arguments,
                 remaining,
+                Paging {
+                    operation: &pager_operation,
+                    stdout_piped,
+                },
                 context,
                 deadline,
                 execution_environment,
-                stdout_piped,
             )
             .unwrap_or(false),
         )
     })
 }
 
-fn probe(
+/// A printing `git stash` form, proved as the read Git runs for it. `list`
+/// runs `git log -g refs/stash` and `show` prints the entry's diff, so each is
+/// held to that read's configuration proof twice: once under `pager.stash`,
+/// which decides whether the stash command pages at all, and once under the
+/// inner read's own pager key, which Git consults where `pager.stash` left
+/// the choice open. Every other stash spelling moves work and stays reviewed.
+fn stash_execution_free(
     executable: &str,
     arguments: &[String],
     remaining: &[String],
@@ -93,6 +164,61 @@ fn probe(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     stdout_piped: bool,
 ) -> Option<bool> {
+    let rest: Vec<&str> = remaining[1..].iter().map(String::as_str).collect();
+    let inner: Vec<&str> = match rest.split_first() {
+        Some((&"list", options)) if super::git_stash_reads::list(options) => {
+            vec!["log", "-g", "--first-parent", "refs/stash"]
+        }
+        // The options are the diff options `show` passes through; the entry
+        // name is not a diff argument.
+        Some((&"show", options)) if super::git_stash_reads::show(options) => {
+            std::iter::once("diff")
+                .chain(options.iter().copied().filter(|word| word.starts_with('-')))
+                .collect()
+        }
+        _ => return None,
+    };
+    let leading = &arguments[..arguments.len().checked_sub(remaining.len())?];
+    let translated: Vec<String> = leading
+        .iter()
+        .cloned()
+        .chain(inner.into_iter().map(str::to_owned))
+        .collect();
+    let prove = |pager: Option<&str>| {
+        execution_free_paging(
+            executable,
+            &translated,
+            pager,
+            context,
+            deadline,
+            execution_environment,
+            stdout_piped,
+        )
+    };
+    Some(prove(Some("stash"))? && prove(None)?)
+}
+
+/// How the read would page: the configuration key the pager is proved under,
+/// and whether the caller already sends stdout down a pipe, which leaves Git
+/// no terminal to page to.
+struct Paging<'a> {
+    operation: &'a str,
+    stdout_piped: bool,
+}
+
+fn probe(
+    executable: &str,
+    arguments: &[String],
+    remaining: &[String],
+    paging: Paging<'_>,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Option<bool> {
+    let Paging {
+        operation: pager_operation,
+        stdout_piped,
+    } = paging;
     let operation = remaining.first()?.as_str();
     // Configuration plus root, path and attribute inspection share this budget.
     // The caller's overall deadline remains the upper bound.
@@ -169,7 +295,7 @@ fn probe(
             "config",
             "--null",
             "--get-regexp",
-            "^(core\\.fsmonitor|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|grep\\.fallbacktonoindex|extensions\\.partialclone|remote\\..*\\.promisor)$",
+            "^(core\\.fsmonitor|core\\.excludesfile|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|grep\\.fallbacktonoindex|extensions\\.partialclone|remote\\..*\\.promisor)$",
         ])
 ,
         deadline, CONFIG_LIMIT,
@@ -187,7 +313,7 @@ fn probe(
     // claim to prove the complete signature-format/helper option grammar.
     if options.clone().any(|value| {
         value.as_str() == "--show-signature"
-            || (matches!(operation, "log" | "show") && value.contains("%G"))
+            || (super::git_history_reads::verifies_signatures(operation) && value.contains("%G"))
             || value.starts_with("--remerge-diff")
             || value == "--diff-merges=remerge"
             || value == "--submodule=diff"
@@ -218,18 +344,24 @@ fn probe(
         .filter(|value| value.starts_with('-'))
         .collect::<Vec<_>>();
     let textconv_runs = !no_textconv && textconv::may_run(operation, &option_flags);
+    // An external driver renders a diff, so only a read that renders one can
+    // start it. A tag listing, a clean preview, a ref listing or an ignore
+    // check prints names, and a configured driver leaves all of them alone.
+    let renders_diff = matches!(operation, "diff" | "log" | "show" | "reflog" | "stash");
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {
         let (key, value) = record.split_once('\n')?;
         effective.insert(key, value);
     }
-    let pager_key = format!("pager.{operation}");
+    let pager_key = format!("pager.{pager_operation}");
     let pager_setting = effective.get(pager_key.as_str()).copied();
     // Like status, hash-object pages only when its own pager.* key says so;
     // config pages by default only for its listing forms.
     let pages_by_default = match operation {
+        // `clean` prints its preview, and `apply` its check report, without
+        // a pager.
         "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
-        | "for-each-ref" | "rev-list" => false,
+        | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" => false,
         "config" => super::git_config_reads::pages_by_default(&remaining[1..]),
         _ => true,
     };
@@ -267,7 +399,9 @@ fn probe(
         .then(|| super::git_hash_object::read_operands(&remaining[1..]))
         .flatten()
         .filter(|_| !super::git_hash_object::filters_disabled(&remaining[1..]));
-    let filtered = matches!(operation, "status" | "diff") || hashed.is_some();
+    let filtered = matches!(operation, "status" | "diff")
+        || super::git_history_reads::cleans_working_tree(operation, &remaining[1..])
+        || hashed.is_some();
     let has_filters = filtered
         && effective
             .iter()
@@ -288,8 +422,24 @@ fn probe(
         let unsafe_value = match key {
             "extensions.partialclone" => !value.is_empty(),
             key if key.starts_with("remote.") && key.ends_with(".promisor") => !disabled,
-            // Reading the index can start the monitor; grep reads it too.
-            "core.fsmonitor" => matches!(operation, "status" | "diff" | "grep") && !disabled,
+            // Reading the index can start the monitor; grep reads it too, a
+            // clean preview refreshes the index before it walks the untracked
+            // tree, and a patch check refreshes it before it reads the files
+            // the patch names.
+            "core.fsmonitor" => {
+                (matches!(operation, "status" | "diff" | "grep" | "clean" | "apply")
+                    || super::git_listing_reads::reads_index(operation, &remaining[1..])
+                    || super::git_history_reads::cleans_working_tree(operation, &remaining[1..]))
+                    && !disabled
+            }
+            // A verbose ignore check prints the rule that matched and the file
+            // it came from. The repository's own ignore files are part of the
+            // checkout, but a configured excludes file names anything, so the
+            // check keeps its review until someone reads that setting.
+            "core.excludesfile" => {
+                !value.is_empty()
+                    && super::git_listing_reads::prints_rule_source(operation, &remaining[1..])
+            }
             "core.pager" => {
                 configured_paging
                     && !git_pager_disabled
@@ -309,26 +459,31 @@ fn probe(
                         configured_paging
                     }
             }
-            "diff.external" => !no_external && !value.is_empty(),
+            "diff.external" => renders_diff && !no_external && !value.is_empty(),
             key if key.starts_with("diff.") && key.ends_with(".command") => {
-                !no_external && !value.is_empty()
+                renders_diff && !no_external && !value.is_empty()
             }
             key if key.starts_with("diff.") && key.ends_with(".textconv") => {
                 textconv_runs && !value.is_empty()
             }
             key if key.starts_with("filter.") => filtered && !value.is_empty() && !filters_unused,
-            "format.pretty" => matches!(operation, "log" | "show") && value.contains("%G"),
-            key if key.starts_with("pretty.") => {
-                matches!(operation, "log" | "show") && value.contains("%G")
+            "format.pretty" => {
+                super::git_history_reads::verifies_signatures(operation) && value.contains("%G")
             }
-            "log.showsignature" => matches!(operation, "log" | "show") && !disabled,
+            key if key.starts_with("pretty.") => {
+                super::git_history_reads::verifies_signatures(operation) && value.contains("%G")
+            }
+            "log.showsignature" => {
+                super::git_history_reads::verifies_signatures(operation) && !disabled
+            }
             // Outside a repository grep would search every file under cwd.
             "grep.fallbacktonoindex" => operation == "grep" && !disabled,
             // A configured verification program (a very common developer
             // setting) runs only when signature verification is requested.
             // Every such request is rejected above: --show-signature,
             // log.showSignature, %G placeholders in the command line,
-            // format.pretty or any pretty.* alias. A bare gpg.* definition
+            // format.pretty or any pretty.* alias, for the reflog walk as
+            // much as for `log` and `show`. A bare gpg.* definition
             // therefore cannot execute for the remaining reads.
             key if key.starts_with("gpg.") => false,
             _ => return None,
@@ -383,128 +538,6 @@ pub(super) fn enabled_boolean(value: &str) -> bool {
     )
 }
 
-pub(super) fn clean_environment(
-    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
-    home: &Path,
-    cwd: &Path,
-) -> bool {
-    let names = match execution_environment {
-        Some(context) => {
-            let declares_xdg = context
-                .environment_names
-                .iter()
-                .any(|name| name.eq_ignore_ascii_case("XDG_CONFIG_HOME"));
-            if declares_xdg != context.xdg_config_home.is_some() {
-                return false;
-            }
-            let declares_no_system = context
-                .environment_names
-                .iter()
-                .any(|name| name.eq_ignore_ascii_case("GIT_CONFIG_NOSYSTEM"));
-            if declares_no_system != context.git_config_no_system {
-                return false;
-            }
-            if !context.has_valid_shape()
-                || context
-                    .library_search_paths
-                    .keys()
-                    .any(|name| !context.environment_names.contains(name))
-            {
-                return false;
-            }
-            context.environment_names.clone()
-        }
-        None => std::env::vars_os()
-            .filter(|(_, value)| !value.is_empty())
-            .map(|(name, _)| name.to_string_lossy().into_owned())
-            .collect(),
-    };
-    !names.iter().any(|name| {
-        // Unix loader search paths are inert on Windows. Elsewhere a search
-        // path the hook stamped is checked entry by entry; every other loader
-        // variable, including injection, stays a refusal.
-        if super::trusted_location::inert_loader_search_path(name, cfg!(windows))
-            || execution_environment.is_some_and(|context| {
-                context.library_search_paths.get(name).is_some_and(|value| {
-                    super::trusted_location::trusted_library_search_path(value, home, cwd)
-                })
-            })
-        {
-            return false;
-        }
-        let key = name.to_ascii_uppercase();
-        key.starts_with("GIT_TRACE")
-            || key.starts_with("DYLD_")
-            || key.starts_with("LD_")
-            || (key.starts_with("GIT_CONFIG")
-                && !(key == "GIT_CONFIG_NOSYSTEM"
-                    && execution_environment.is_some_and(|context| context.git_config_no_system)))
-            || matches!(
-                key.as_str(),
-                "GIT_DIR"
-                    | "GIT_EXTERNAL_DIFF"
-                    | "GIT_COMMON_DIR"
-                    | "GIT_INDEX_FILE"
-                    | "GIT_OBJECT_DIRECTORY"
-                    | "GIT_ALTERNATE_OBJECT_DIRECTORIES"
-                    | "GIT_NAMESPACE"
-                    | "GIT_REPLACE_REF_BASE"
-                    | "GIT_SHALLOW_FILE"
-                    | "GIT_WORK_TREE"
-                    | "GIT_EXEC_PATH"
-                    | "GIT_DISCOVERY_ACROSS_FILESYSTEM"
-                    | "LD_PRELOAD"
-                    | "LD_LIBRARY_PATH"
-                    | "DYLD_INSERT_LIBRARIES"
-                    | "DYLD_LIBRARY_PATH"
-            )
-    })
-}
-
-pub(super) fn trusted_command(
-    executable: &str,
-    home: &Path,
-    cwd: &Path,
-    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
-) -> Option<PathBuf> {
-    let supplied = Path::new(executable);
-    let path = if supplied.components().count() > 1 {
-        fs::canonicalize(if supplied.is_absolute() {
-            supplied.to_path_buf()
-        } else {
-            cwd.join(supplied)
-        })
-        .ok()?
-    } else {
-        let mut found = None;
-        let path = execution_environment
-            .map(|context| std::ffi::OsString::from(&context.path))
-            .or_else(|| std::env::var_os("PATH"))?;
-        for directory in std::env::split_paths(&path) {
-            let directory = if directory.is_absolute() {
-                directory
-            } else {
-                cwd.join(directory)
-            };
-            let command_name = if cfg!(windows) && supplied.extension().is_none() {
-                format!("{executable}.exe")
-            } else {
-                executable.to_owned()
-            };
-            let candidate = directory.join(command_name);
-            if candidate.is_file() {
-                found = Some(fs::canonicalize(candidate).ok()?);
-                break;
-            }
-        }
-        found?
-    };
-    let shim = super::git_session_probe::apple_developer_tools::selection_overridden(
-        &path,
-        execution_environment,
-    );
-    (!shim && super::trusted_location::trusted_location(&path, home, cwd)).then_some(path)
-}
 #[cfg(all(test, unix))]
 #[path = "git_config_home_tests.rs"]
 mod home_tests;

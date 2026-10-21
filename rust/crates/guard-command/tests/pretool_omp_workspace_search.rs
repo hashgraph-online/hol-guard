@@ -104,18 +104,19 @@ fn grep_honors_the_gitignore_the_host_honors() {
         assert!(allowed(&result), "{input}: {}", result.reason_code);
         assert_eq!(result.reason_code, "native_bounded_search_scope");
     }
-    // The host then searches every file, so the `.env` is in reach.
+    // The host then searches every file, so the `.env` is in reach. The
+    // pattern is one its content holds, so the search would print from it.
     assert!(!allowed(&omp(
         &f,
         "app",
         "grep",
-        json!({"pattern": "deploy", "path": ".", "gitignore": false})
+        json!({"pattern": "fixture", "path": ".", "gitignore": false})
     )));
     // A `glob` or `type` override can re-include the gitignored `.env`.
     for input in [
-        json!({"pattern": "KEY", "path": ".", "glob": ".env"}),
-        json!({"pattern": "KEY", "path": ".", "glob": "*.sh"}),
-        json!({"pattern": "KEY", "type": "sh"}),
+        json!({"pattern": "fixture", "path": ".", "glob": ".env"}),
+        json!({"pattern": "fixture", "path": ".", "glob": "*.sh"}),
+        json!({"pattern": "fixture", "type": "sh"}),
     ] {
         assert!(!allowed(&omp(&f, "app", "grep", input.clone())), "{input}");
     }
@@ -126,7 +127,7 @@ fn grep_honors_the_gitignore_the_host_honors() {
     }
     // A tracked `.env`, or a `.ignore` that can re-include one, is in reach.
     for cwd in ["tracked", "custom"] {
-        let input = json!({"pattern": "deploy", "path": "."});
+        let input = json!({"pattern": "fixture", "path": "."});
         assert!(!allowed(&omp(&f, cwd, "grep", input)), "{cwd}");
     }
 }
@@ -263,4 +264,55 @@ fn globs_list_a_linked_worktree_of_a_workspace_repository() {
     // So does a worktree whose admin entry does not name it back.
     write(admin.join("gitdir"), &format!("{}/.git\n", copy.display()));
     assert!(!allowed(&glob(&worktree)));
+}
+
+#[test]
+fn one_level_globs_list_only_the_directory_they_name() {
+    let f = fixture();
+    // A worktree package borrowing another checkout's installed packages.
+    let shared = f.root.join("shared/node_modules");
+    write(shared.join("pkg/index.js"), "synthetic fixture\n");
+    write(f.home.join("app/web/package.json"), "{}\n");
+    std::os::unix::fs::symlink(&shared, f.home.join("app/web/node_modules")).unwrap();
+    write(f.home.join("app/bun.lock"), "synthetic fixture\n");
+    let root = f.home.join("app");
+    let root = root.to_str().unwrap();
+    // Below a literal directory the host runs one segment without recursion,
+    // so with the gitignore off it still never follows the link.
+    for path in [
+        format!("{root}/*lock*"),
+        "./*lock*".to_owned(),
+        "web/*".to_owned(),
+    ] {
+        let input = json!({"path": path, "gitignore": false, "hidden": true, "limit": 20});
+        let result = omp(&f, "app", "glob", input);
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+        assert_eq!(result.reason_code, "native_omp_directory_listing");
+    }
+    // A walk that reaches the link, a selector inside it, or one outside the
+    // session folder still gets the full proof.
+    for path in [
+        format!("{root}/**/*lock*"),
+        // Without a directory the host searches `**/*lock*` from the cwd.
+        "*lock*".to_owned(),
+        "web/*/pkg/*".to_owned(),
+        // The literal directory is the link itself: its canonical path is
+        // outside the session folder.
+        "web/node_modules/*".to_owned(),
+        "~/.ssh/*".to_owned(),
+        "~/*".to_owned(),
+    ] {
+        let input = json!({"path": path, "gitignore": false, "hidden": true});
+        assert!(!allowed(&omp(&f, "app", "glob", input)), "{path}");
+    }
+    // The host's glob schema has no recursion switch; a key it does not
+    // define, or a `pattern` the walk proof covers, keeps the full proof.
+    let path = format!("{root}/*lock*");
+    for input in [
+        json!({"path": path, "gitignore": false, "recursive": true}),
+        json!({"path": path, "gitignore": false, "maxDepth": 8}),
+        json!({"path": path, "gitignore": false, "pattern": "*"}),
+    ] {
+        assert!(!allowed(&omp(&f, "app", "glob", input.clone())), "{input}");
+    }
 }

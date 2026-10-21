@@ -11,7 +11,7 @@ dist/
 build/
 *.egg-info/
 *.egg
-rust/target/
+rust/target
 
 # Native binaries are staged only for wheel and frozen builds.
 /src/codex_plugin_scanner/_native/
@@ -82,3 +82,6 @@ contracts/extensions/build-descriptors/
 contracts/extensions/build-trust-class-map.v1.json
 contracts/extensions/trust-class-map.v1.json
 src/codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json
+
+# per-session editor hook cache (local paths, never committed)
+dashboard/.impeccable/hook.cache.json

@@ -237,6 +237,9 @@ def test_signed_receipt_redaction_authority_can_clear_and_relax_again(
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_policy_bundle_trust(store)
+    # Each applied bundle is acknowledged by one receipt-free follow-up request,
+    # which this transport answers with a plain reply.
+    plain_reply = {"syncedAt": "2026-07-01T00:00:00Z", "receiptsStored": 0}
     responses = iter(
         [
             {
@@ -248,6 +251,7 @@ def test_signed_receipt_redaction_authority_can_clear_and_relax_again(
                     issued_at="2026-07-01T00:00:01Z",
                 ),
             },
+            plain_reply,
             {
                 "syncedAt": "2026-07-01T00:00:02Z",
                 "receiptsStored": 0,
@@ -257,6 +261,7 @@ def test_signed_receipt_redaction_authority_can_clear_and_relax_again(
                     issued_at="2026-07-01T00:00:02Z",
                 ),
             },
+            plain_reply,
             {
                 "syncedAt": "2026-07-01T00:00:03Z",
                 "receiptsStored": 0,
@@ -266,6 +271,7 @@ def test_signed_receipt_redaction_authority_can_clear_and_relax_again(
                     issued_at="2026-07-01T00:00:03Z",
                 ),
             },
+            plain_reply,
         ]
     )
 

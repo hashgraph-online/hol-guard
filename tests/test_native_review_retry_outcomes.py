@@ -65,7 +65,9 @@ def test_real_native_omp_hook_honors_keep_blocked(tmp_path: Path, monkeypatch, n
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": "learn",
-        "tool_input": {"memory": "Synthetic retry test"},
+        # A global note reaches every project's recall, so it keeps the review
+        # a project note no longer needs, which is the review this retries.
+        "tool_input": {"memory": "Synthetic retry test", "scope": "global"},
         "session_id": "retry-test",
         "tool_call_id": "initial",
         "cwd": str(workspace),
@@ -126,7 +128,7 @@ def test_old_refusal_does_not_block_a_new_review(tmp_path: Path, monkeypatch) ->
 
 
 @pytest.mark.parametrize("command", ["python3 script.py --seed 7", "git push origin dev --dry-run"])
-def test_ask_without_retry_binding_does_not_offer_approval_wait(tmp_path: Path, monkeypatch, command: str) -> None:
+def test_unproven_command_reviews_still_offer_an_approval_wait(tmp_path: Path, monkeypatch, command: str) -> None:
     edge = _edge("omp", action_type="command")
     edge["result"].update(reason_code="native_command_review_required")
     worker, store = _worker(tmp_path, monkeypatch, edge)
@@ -138,10 +140,8 @@ def test_ask_without_retry_binding_does_not_offer_approval_wait(tmp_path: Path, 
         guard_home=store.guard_home,
         workspace=tmp_path / "workspace",
     )
-    assert response["prompted"] is False
-    assert response["blocked_request_mode"] == "safe-alternative"
-    assert "approval_request_id" not in response
-    assert "approval_url" not in response
-    assert "approving it there will not let you run it" in response["reason"]
+    assert response["prompted"] is True
+    assert isinstance(response.get("approval_request_id"), str)
+    assert "approving it there will not let you run it" not in str(response.get("reason"))
     assert len(store.list_approval_requests(status="pending")) == 1
     worker.close()

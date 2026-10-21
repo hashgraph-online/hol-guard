@@ -17,6 +17,7 @@ from ..codex_hook_launch_runtime import (
 )
 from ..hook_execution_environment import stamp_hook_input_text
 from ..stable_guard_cli import prune_safe_cli_executable
+from ._modules.grok.grok_hook_invocation_template import configured_grok_payload
 from .adapter_safe_output import write_text_at_authorized_path
 from .bounded_cli_hook_envelope import (
     _canonical_event_token as _canonical_event_token,
@@ -39,6 +40,7 @@ from .bounded_cli_hook_native import (
     NATIVE_BOUNDED_HOOK_FEATURE,
     bounded_python_argv,
     daemon_start_command,
+    frozen_daemon_start_command,
     native_bridge_executable,
     take_native_handoff_environment,
 )
@@ -50,7 +52,6 @@ from .desktop_hook_proxy import (
 from .desktop_hook_proxy import (
     _trusted_desktop_hook_proxy_command,
 )
-from .grok_hook_invocation_template import configured_grok_payload
 from .hook_input_reader import read_hook_input
 
 if TYPE_CHECKING:
@@ -137,7 +138,7 @@ def _isolated_bounded_hook_command(
     return (interpreter, "-I", str(script_path.resolve(strict=False)))
 
 
-def bounded_cli_hook_command(
+def bounded_cli_hook_command(  # NOSONAR(S8495) an argv whose length depends on the launcher
     *,
     python_executable: str,
     package_root: Path,
@@ -162,7 +163,10 @@ def bounded_cli_hook_command(
         "timeout_seconds": timeout_seconds,
         "frozen_launcher": frozen_launcher,
     }
-    if not frozen_launcher and harness.strip().lower() != "grok":
+    grok = harness.strip().lower() == "grok"
+    if frozen_launcher and not grok:
+        config["start_command"] = frozen_daemon_start_command(python_executable, guard_home, cli_args)
+    elif not grok:
         config["start_command"] = daemon_start_command(python_executable, package_root, guard_home, cli_args)
     bootstrap = (
         "import sys;"
@@ -186,7 +190,11 @@ def bounded_cli_hook_command(
             raise RuntimeError("trusted Desktop hook proxy is unavailable")
     elif require_desktop_proxy:
         raise RuntimeError("trusted Desktop hook proxy requires a frozen launcher")
-    grok = harness.strip().lower() == "grok"
+    frozen_native = None if grok or not frozen_launcher else native_bridge_executable(harness, guard_home=guard_home)
+    if frozen_native is not None:
+        # The native runtime answers from the daemon and fails closed; it
+        # never runs the frozen Guard that follows its subcommand.
+        return (str(frozen_native), NATIVE_BOUNDED_HOOK_COMMAND, python_executable, _FROZEN_BRIDGE_COMMAND, config_json)
     if frozen_launcher or grok:
         isolated_command = _isolated_bounded_hook_command(
             guard_home=guard_home,
@@ -199,7 +207,7 @@ def bounded_cli_hook_command(
         if isolated_command is not None:
             # The native runtime answers the generated Grok client itself and
             # runs that same client for anything it does not answer.
-            native_executable = None if frozen_launcher else native_bridge_executable("grok")
+            native_executable = native_bridge_executable("grok", guard_home=guard_home)
             if native_executable is not None:
                 return (str(native_executable), NATIVE_BOUNDED_HOOK_COMMAND, *isolated_command, config_json)
             return (*isolated_command, config_json)
@@ -360,22 +368,10 @@ def run_bounded_cli_hook(
 
     runtime_frozen = bool(getattr(sys, "frozen", False))
     if runtime_frozen:
-        direct_cli_args = _validated_frozen_cli_args(
-            cli_args,
-            guard_home=guard_home,
-            harness=harness,
-        )
-        if direct_cli_args is None:
+        if _validated_frozen_cli_args(cli_args, guard_home=guard_home, harness=harness) is None:
             return fail()
-        command = (sys.executable, *direct_cli_args)
     elif frozen_launcher:
         return fail()
-    else:
-        command = isolated_guard_cli_command(
-            python_executable,
-            package_root,
-            _cli_args_with_json(cli_args),
-        )
     remaining = max(0.0, deadline - time.monotonic())
     if remaining <= 0:
         return fail()
@@ -390,6 +386,12 @@ def run_bounded_cli_hook(
             deadline_monotonic=deadline,
         )
     )
+    if daemon_result is None and runtime_frozen:
+        from .bounded_cli_hook_frozen_recovery import ask_after_frozen_recovery
+
+        daemon_result = ask_after_frozen_recovery(
+            guard_home=guard_home, harness=harness, input_text=input_text, cli_args=cli_args, deadline=deadline
+        )
     if time.monotonic() >= deadline:
         return fail()
     if daemon_result is not None:
@@ -410,6 +412,9 @@ def run_bounded_cli_hook(
         if daemon_stderr:
             print(daemon_stderr, file=sys.stderr)
         return daemon_exit
+    if runtime_frozen:
+        # A frozen Guard has no cold evaluator: without a recovered daemon the hook fails closed.
+        return fail()
     if harness == "grok" and _event_name(input_text).lower().replace("_", "").replace("-", "") in {
         "userpromptsubmit",
         "userpromptsubmitted",
@@ -419,6 +424,7 @@ def run_bounded_cli_hook(
         return fail()
     if time.monotonic() >= deadline:
         return fail()
+    command = isolated_guard_cli_command(python_executable, package_root, _cli_args_with_json(cli_args))
     result = run_isolated_hook_process(
         command,
         input_text=input_text,

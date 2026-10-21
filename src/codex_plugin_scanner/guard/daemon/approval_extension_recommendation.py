@@ -17,7 +17,7 @@ from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 
 RECOMMENDATION_SCHEMA = "guard.approval-extension-recommendation.v1"
 _MAX_TEXT_CHARS = 240
-_CAUTION_RISK_CLASSES = frozenset(
+CAUTION_RISK_CLASSES = frozenset(
     {
         "credential_exfiltration",
         "data_flow_exfiltration",
@@ -56,7 +56,7 @@ def _caution_reason(permission, rules) -> str | None:
     if any("destructive" in action_class for action_class in action_classes):
         return "destructive"
     risk_classes = {risk for rule in rules for risk in rule.risk_classes}
-    if risk_classes & _CAUTION_RISK_CLASSES:
+    if risk_classes & CAUTION_RISK_CLASSES:
         return "sensitive"
     return None
 

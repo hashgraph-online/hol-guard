@@ -12,10 +12,11 @@ from tests.support.ci_workflow import expand_ci_job_actions
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE_BRANCH = "release/3.2"
 
+# The installed Extension Control Center job runs on manual dispatch only, so
+# it is not a pull-request gate on any branch.
 PR_GATE_WORKFLOWS = (
     ".github/workflows/ci.yml",
     ".github/workflows/publish.yml",
-    ".github/workflows/extension-control-center-installed-ci.yml",
 )
 
 

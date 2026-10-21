@@ -104,12 +104,6 @@ def runtime_overlay(
     return overlay
 
 
-def append_found_path(found_paths: list[str], path: Path) -> None:
-    candidate = str(path)
-    if candidate not in found_paths:
-        found_paths.append(candidate)
-
-
 def _command_parts(server_config: dict[str, object]) -> tuple[str | None, tuple[str, ...]]:
     command_value = server_config.get("command")
     args_value = server_config.get("args")

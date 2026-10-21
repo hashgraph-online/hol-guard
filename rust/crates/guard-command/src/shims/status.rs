@@ -473,3 +473,188 @@ pub fn package_shim_cloud_coverage(
         "bypasses": dict_items(status.get("bypasses")),
     }))
 }
+
+/// The derived package-manager protection block of the supply-chain posture.
+///
+/// This is the authority for "which detected managers are unprotected". A
+/// manager whose shim is installed but still staged behind a pending shell
+/// restart is not unprotected — the shim exists, the shell just has not picked
+/// it up yet — so it is excluded while the activation is `restart_required`.
+/// Callers present this block; they do not recompute it.
+pub fn package_shim_protection(context: &ShimContext) -> ShimResult<Map<String, Value>> {
+    let status = package_shim_dashboard_status(context)?;
+    Ok(package_shim_protection_from_status(
+        &status,
+        &context.shim_dir(),
+    ))
+}
+
+fn sorted_unique(status: &Map<String, Value>, key: &str) -> Vec<String> {
+    string_items(status.get(key))
+        .into_iter()
+        .collect::<BTreeSet<String>>()
+        .into_iter()
+        .collect()
+}
+
+/// The same projection over an already-fetched dashboard status.
+///
+/// `default_shim_dir` is used only when the status omits its own.
+#[must_use]
+pub fn package_shim_protection_from_status(
+    status: &Map<String, Value>,
+    default_shim_dir: &str,
+) -> Map<String, Value> {
+    let shim_dir = text_or(status, "shim_dir", default_shim_dir);
+    let installed = sorted_unique(status, "installed_managers");
+    let active = sorted_unique(status, "active_managers");
+    let missing_shims = sorted_unique(status, "missing_managers");
+    let detected = sorted_unique(status, "detected_managers");
+    let protected = sorted_unique(status, "protected_managers");
+    let path_status = text_or(status, "path_status", "missing_from_path");
+
+    let detected_set: BTreeSet<&String> = detected.iter().collect();
+    let protected_set: BTreeSet<&String> = protected.iter().collect();
+    let staged: BTreeSet<&String> = if path_status == "restart_required" {
+        installed
+            .iter()
+            .filter(|manager| detected_set.contains(*manager))
+            .collect()
+    } else {
+        BTreeSet::new()
+    };
+    let unprotected: Vec<&String> = detected
+        .iter()
+        .filter(|manager| !protected_set.contains(*manager) && !staged.contains(*manager))
+        .collect();
+
+    let mut protection = Map::new();
+    protection.insert("path_status".into(), json!(path_status));
+    protection.insert(
+        "path_contains_shim_dir".into(),
+        json!(flag(status, "path_contains_shim_dir")),
+    );
+    protection.insert(
+        "restart_shell_required".into(),
+        json!(flag(status, "restart_shell_required")),
+    );
+    protection.insert(
+        "process_path_status".into(),
+        json!(text_or(status, "process_path_status", "missing")),
+    );
+    protection.insert(
+        "process_restart_required".into(),
+        json!(flag(status, "process_restart_required")),
+    );
+    protection.insert(
+        "shell_profile_configured".into(),
+        json!(flag(status, "shell_profile_configured")),
+    );
+    protection.insert(
+        "shell_profile_path".into(),
+        status
+            .get("shell_profile_path")
+            .cloned()
+            .unwrap_or(Value::Null),
+    );
+    protection.insert("shim_dir".into(), json!(shim_dir));
+    protection.insert(
+        "supported_managers".into(),
+        json!(package_shim_supported_managers()),
+    );
+    protection.insert("detected_managers".into(), json!(detected));
+    protection.insert("installed_managers".into(), json!(installed));
+    protection.insert("active_managers".into(), json!(active));
+    protection.insert("missing_shims".into(), json!(missing_shims));
+    protection.insert("protected_managers".into(), json!(protected));
+    protection.insert("unprotected_managers".into(), json!(unprotected));
+    protection
+}
+
+#[cfg(test)]
+mod protection_tests {
+    use serde_json::{json, Map, Value};
+
+    use super::package_shim_protection_from_status;
+
+    const DEFAULT_SHIM_DIR: &str = "/guard-home/package-shims/bin";
+
+    fn status(path_status: &str) -> Map<String, Value> {
+        let Value::Object(status) = json!({
+            "path_status": path_status,
+            "shim_dir": "/elsewhere/package-shims/bin",
+            "detected_managers": ["npm", "pip", "uv"],
+            "installed_managers": ["npm", "uv"],
+            "active_managers": ["npm"],
+            "missing_managers": ["pip"],
+            "protected_managers": ["npm"],
+        }) else {
+            unreachable!("object literal")
+        };
+        status
+    }
+
+    fn names(protection: &Map<String, Value>, key: &str) -> Vec<String> {
+        protection
+            .get(key)
+            .and_then(Value::as_array)
+            .expect("list")
+            .iter()
+            .filter_map(|item| item.as_str().map(str::to_owned))
+            .collect()
+    }
+
+    #[test]
+    fn a_detected_manager_without_a_shim_is_unprotected() {
+        let protection = package_shim_protection_from_status(&status("in_path"), DEFAULT_SHIM_DIR);
+        assert_eq!(names(&protection, "unprotected_managers"), ["pip", "uv"]);
+        assert_eq!(names(&protection, "protected_managers"), ["npm"]);
+    }
+
+    #[test]
+    fn an_installed_shim_awaiting_a_shell_restart_is_not_unprotected() {
+        let protection =
+            package_shim_protection_from_status(&status("restart_required"), DEFAULT_SHIM_DIR);
+        // `uv` is installed and detected, so the pending restart - not a
+        // missing shim - is why it is not protected yet.
+        assert_eq!(names(&protection, "unprotected_managers"), ["pip"]);
+    }
+
+    #[test]
+    fn an_absent_path_status_falls_back_to_missing_from_path() {
+        let mut raw = status("in_path");
+        raw.remove("path_status");
+        let protection = package_shim_protection_from_status(&raw, DEFAULT_SHIM_DIR);
+        assert_eq!(
+            protection.get("path_status").and_then(Value::as_str),
+            Some("missing_from_path")
+        );
+        // The fallback is not `restart_required`, so nothing is staged.
+        assert_eq!(names(&protection, "unprotected_managers"), ["pip", "uv"]);
+    }
+
+    #[test]
+    fn an_absent_shim_dir_falls_back_to_the_supplied_default() {
+        let mut raw = status("in_path");
+        raw.remove("shim_dir");
+        let protection = package_shim_protection_from_status(&raw, DEFAULT_SHIM_DIR);
+        assert_eq!(
+            protection.get("shim_dir").and_then(Value::as_str),
+            Some(DEFAULT_SHIM_DIR)
+        );
+    }
+
+    #[test]
+    fn manager_lists_are_sorted_and_deduplicated() {
+        let mut raw = status("in_path");
+        raw.insert(
+            "detected_managers".into(),
+            json!(["uv", "npm", "npm", "pip"]),
+        );
+        let protection = package_shim_protection_from_status(&raw, DEFAULT_SHIM_DIR);
+        assert_eq!(
+            names(&protection, "detected_managers"),
+            ["npm", "pip", "uv"]
+        );
+    }
+}

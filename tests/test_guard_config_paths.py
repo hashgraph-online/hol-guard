@@ -254,6 +254,12 @@ def test_dashboard_settings_switch_to_custom_carries_forward_effective_risk_map(
         "guard_bypass": "block",
         "cloud_advisory": "require-reapproval",
         "encoded_exfiltration": "block",
+        "package_unknown": "block",
+        "package_lockfile_drift": "require-reapproval",
+        "package_direct_source": "require-reapproval",
+        "package_custom_registry": "allow",
+        "package_install": "allow",
+        "low_trust_artifact": "require-reapproval",
     }
     assert resolve_risk_action(loaded, "network_egress", harness="codex") == "require-reapproval"
 

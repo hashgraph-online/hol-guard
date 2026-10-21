@@ -60,7 +60,7 @@ _MCP_SESSION_ACCEPTED_STATUS = {
     "mcp_stdio_session_close": frozenset({"closed", "error"}),
     "mcp_stdio_session_cancel": frozenset({"cancelled", "error"}),
 }
-_PROMPT_ANALYZE_FEATURE = "prompt-analyze-v1"
+_PROMPT_ANALYZE_FEATURE = "prompt-analyze-v2"
 
 
 def _request_id(prefix: str) -> str:
@@ -147,8 +147,27 @@ def _resident_request(
         "contained_typescript_execute": "guard-contained-typescript-execute-result.v1",
         "contained_package_script_execute": "guard-contained-package-script-execute-result.v1",
         "contained_workspace_write_execute": "guard-contained-workspace-write-execute-result.v1",
+        "containment_health_probe": "guard-containment-health-probe-result.v1",
+        "contained_execute": "guard-contained-execute-result.v1",
     }.get(operation)
-    if result_schema is not None:
+    if operation == "cloud_catalog":
+        # Producer/completion replies use a strict payload/error union, with
+        # no status field. Keep native validation refusals intact.
+        if decoded.get("schema") != "guard-cloud-catalog-result.v2":
+            return None
+        if set(decoded) == {"schema", "payload"}:
+            if not isinstance(decoded["payload"], dict):
+                return None
+        elif set(decoded) == {"schema", "error"}:
+            if not isinstance(decoded["error"], str) or decoded["error"] not in {
+                "catalog_invalid",
+                "catalog_limit",
+                "catalog_unavailable",
+            }:
+                return None
+        else:
+            return None
+    elif result_schema is not None:
         # These versioned Rust replies have no status field. Do not discard
         # valid native results or reinterpret them through a Python fallback.
         if decoded.get("schema") != result_schema or set(decoded) != {"schema", "result"}:
@@ -163,7 +182,10 @@ def _resident_request(
             "mcp_proxy_decide",
             "policy_decision_lookup",
             "local_cli_grant_decide",
+            "local_cli_hook",
+            "connector_setup_context",
             "guard_store",
+            "hook_evidence_writer",
             "local_mcp_grant_decide",
             "contributed_mcp_decide",
             "approval_proof_decide",
@@ -185,10 +207,17 @@ def _resident_request(
             "consumer_artifact_compose",
             "mcp_tool_call_identity",
             "package_context_build",
+            "policy_document_decide",
+            "command_policy_decide",
+            "command_expression_validate",
+            "reviewed_invocation_bindings_validate",
+            "tool_action_request_identity",
         }:
             accepted = frozenset({"ok", "error"})
         elif operation == "mcp_tool_policy_decide":
             accepted = frozenset({"ok", "need", "error"})
+        elif operation == "native_bash_prepare":
+            accepted = frozenset({"ok", "error", "denied", "unavailable"})
         accepted_statuses = accepted if accepted is not None else frozenset({"ok"})
         if decoded.get("status") not in accepted_statuses:
             if record_resilience and not record_success:
@@ -365,7 +394,13 @@ def contained_workspace_write_execute_native(
         operation="contained_workspace_write_execute",
         request=request,
         guard_home=guard_home,
-        timeout_seconds=timeout_seconds,
+        # The request above already hands the write its full execution budget.
+        # Waiting for exactly that long leaves nothing for the resident to spawn
+        # the process, drain its output and frame a reply, so a write that uses
+        # its whole budget would come back as a transport failure and count
+        # toward the shared native-runtime circuit. The contained runners add
+        # the same slack for the same reason.
+        timeout_seconds=timeout_seconds + _CONTAINED_RUNNER_TRANSPORT_SLACK_SECONDS,
         required_feature=_CONTAINED_EXECUTION_FEATURE,
     )
     if decoded is None:
@@ -377,6 +412,92 @@ def contained_workspace_write_execute_native(
         return _contained_workspace_write_result(result)
     except (KeyError, TypeError, ValueError):
         return None
+
+
+# ---------------------------------------------------------------------------
+# Contained execute op
+# ---------------------------------------------------------------------------
+
+# The resident spends time on sandbox setup and on reaping a timed-out child on
+# top of the contained process itself, so the transport waits longer than the
+# request's own timeout and the resident, not this client, reports a timeout.
+_CONTAINED_EXECUTE_TRANSPORT_SLACK_SECONDS = 30.0
+
+
+def contained_execute_native(
+    request: Mapping[str, object],
+    policy: Mapping[str, object],
+    *,
+    guard_home: Path,
+    run_id: str,
+) -> dict[str, object] | None:
+    """Run one contained request in the resident and return its evidence.
+
+    ``request`` and ``policy`` are the canonical containment payloads the
+    resident validates; nothing here interprets or re-derives them. ``None``
+    means the resident did not run the request, which every caller must treat
+    as unavailable rather than as a clean run.
+    """
+
+    timeout_seconds = request.get("timeout_seconds")
+    if not isinstance(timeout_seconds, int) or timeout_seconds <= 0:
+        return None
+    payload: dict[str, object] = {
+        "schema": "guard-contained-execute-request.v1",
+        "request_id": _request_id("contained_execute"),
+        "request": dict(request),
+        "policy": dict(policy),
+        "guard_home": str(guard_home),
+        "run_id": run_id,
+    }
+    decoded = _resident_request(
+        operation="contained_execute",
+        request=payload,
+        guard_home=guard_home,
+        timeout_seconds=float(timeout_seconds) + _CONTAINED_EXECUTE_TRANSPORT_SLACK_SECONDS,
+        required_feature=_CONTAINED_EXECUTION_FEATURE,
+    )
+    if decoded is None:
+        return None
+    result = decoded.get("result")
+    return result if isinstance(result, dict) else None
+
+
+# ---------------------------------------------------------------------------
+# Containment health probe op
+# ---------------------------------------------------------------------------
+
+# The resident runs a real contained process under a five second timeout and
+# may spend another five seconds reaping it, on top of resident start-up and
+# sandbox setup. This matches the resident's own ceiling for the operation
+# (CONTAINMENT_HEALTH_PROBE_TIMEOUT_CEILING_MS), which clamps anything larger.
+_CONTAINMENT_HEALTH_PROBE_SECONDS = 15.0
+
+
+def containment_health_probe_native(
+    *,
+    daemon_fingerprint: str,
+    guard_home: Path,
+) -> dict[str, object] | None:
+    """Ask the resident for current containment health evidence."""
+
+    request: dict[str, object] = {
+        "schema": "guard-containment-health-probe-request.v1",
+        "request_id": _request_id("containment_health_probe"),
+        "daemon_fingerprint": daemon_fingerprint,
+        "guard_home": str(guard_home),
+    }
+    decoded = _resident_request(
+        operation="containment_health_probe",
+        request=request,
+        guard_home=guard_home,
+        timeout_seconds=_CONTAINMENT_HEALTH_PROBE_SECONDS,
+        required_feature=_CONTAINED_EXECUTION_FEATURE,
+    )
+    if decoded is None:
+        return None
+    result = decoded.get("result")
+    return result if isinstance(result, dict) else None
 
 
 # ---------------------------------------------------------------------------
@@ -593,6 +714,7 @@ def prompt_analyze_native(
     harness: str | None = None,
     config_path: str | None = None,
     requests: Sequence[Mapping[str, object]] | None = None,
+    artifacts: Sequence[Mapping[str, object]] | None = None,
     prior_policy_present: bool | None = None,
     approved_classes: Sequence[str] | None = None,
     timeout_seconds: float = 10.0,
@@ -607,6 +729,12 @@ def prompt_analyze_native(
         not isinstance(requests, Sequence)
         or isinstance(requests, (str, bytes, bytearray))
         or not all(isinstance(item, Mapping) for item in requests)
+    ):
+        return None
+    if artifacts is not None and (
+        not isinstance(artifacts, Sequence)
+        or isinstance(artifacts, (str, bytes, bytearray))
+        or not all(isinstance(item, Mapping) for item in artifacts)
     ):
         return None
     if approved_classes is not None and (
@@ -625,6 +753,7 @@ def prompt_analyze_native(
         "harness": harness,
         "config_path": config_path,
         "requests": [dict(r) for r in requests] if requests is not None else None,
+        "artifacts": [dict(a) for a in artifacts] if artifacts is not None else None,
         "prior_policy_present": prior_policy_present,
         "approved_classes": list(approved_classes) if approved_classes is not None else None,
         "guard_home": str(guard_home),

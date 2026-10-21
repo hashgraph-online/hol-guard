@@ -61,6 +61,9 @@ use crate::pyjson::in_surrogate_plane;
 pub(crate) const BRIDGE_COMMAND: &str = "cursor-hook-bridge";
 pub(crate) const BRIDGE_FEATURE: &str = "cursor-hook-bridge-v1";
 const EVENT_FLAG: &str = "--cursor-hook-event";
+/// A frozen Guard with no system Python runs the client script itself:
+/// `<guard> __guard-cursor-hook <script> --cursor-hook-event <event>`.
+const FROZEN_CLIENT_COMMAND: &str = "__guard-cursor-hook";
 /// The harness name of the client's daemon route, `/v1/hooks/cursor`.
 const DAEMON_HARNESS: &str = "cursor";
 const PROJECT_DIR_ENV: &str = "CURSOR_PROJECT_DIR";
@@ -238,7 +241,7 @@ fn hook_object(raw: &[u8]) -> Result<(OMap, bool), Unread> {
 }
 
 /// The request the client would send for `raw`, as [`request_for`].
-#[cfg(test)]
+#[cfg(all(test, unix))]
 fn prepared_request(client: &Client, raw: &[u8]) -> Option<Request> {
     let (payload, mapped) = hook_object(raw).ok()?;
     request_for(client, &payload, mapped)
@@ -320,7 +323,7 @@ enum Reply {
 
 /// The client's stdout and exit code for the hook, answered by a live
 /// resident, the daemon or the fail-closed answer.
-#[cfg(test)]
+#[cfg(all(test, unix))]
 fn respond(client: &Client, raw: &[u8]) -> Option<(String, i32)> {
     let Reply::Answered(stdout, code) = reply(client, raw);
     Some((stdout, code))
@@ -377,7 +380,7 @@ fn client(python_argv: &[String], started: Instant) -> Option<Client> {
     let [_, isolated, script, flag, event] = python_argv else {
         return None;
     };
-    if isolated != "-I" || flag != EVENT_FLAG {
+    if (isolated != "-I" && isolated != FROZEN_CLIENT_COMMAND) || flag != EVENT_FLAG {
         return None;
     }
     let constants = read_client_constants(Path::new(script))?;
@@ -439,3 +442,7 @@ mod surrogate_tests;
 #[cfg(all(test, unix))]
 #[path = "cursor_hook_bridge_unparsed_tests.rs"]
 mod unparsed_tests;
+
+#[cfg(all(test, unix))]
+#[path = "cursor_hook_bridge_frozen_tests.rs"]
+mod frozen_tests;

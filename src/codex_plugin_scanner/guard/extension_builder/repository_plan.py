@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from functools import cache
 from pathlib import Path
 
 from . import BUILDER_VERSION
@@ -168,86 +166,46 @@ def _previous_kit(root: Path, metadata: Metadata) -> tuple[Kit | None, dict[str,
     return previous, legacy_orphans
 
 
-def _executable_identity(value: str) -> str:
-    name = value.replace("\\", "/").rsplit("/", 1)[-1].lower()
-    return name.removesuffix(".exe").removesuffix(".cmd")
-
-
-def _installed_executable_collision(metadata: Metadata) -> None:
-    # This is the installed Guard registry, never code imported from the destination
-    # checkout. Destination-only contributions are checked separately as JSON data.
-    # Core domains such as Git and Docker keep their executable names on the native
-    # program rules, not on the catalog extension record.
-    from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-
-    wanted = _executable_identity(metadata.executable)
-    covered: set[str] = set()
-    for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions:
-        if extension.extension_id == metadata.catalog_id:
-            continue
-        covered.update(_executable_identity(name) for name in extension.executables)
-    for extension_id, names in _native_program_executables().items():
-        if extension_id == metadata.catalog_id:
-            continue
-        covered.update(names)
-    if wanted in covered:
-        raise conflict("This executable already has Guard coverage; extend its existing contribution instead.")
-
-
-@cache
-def _native_program_executables() -> dict[str, frozenset[str]]:
-    from ..native_command_control_binding import _program_path
-
-    content = _program_path().read_bytes()
-    if len(content) > 4_000_000:
-        raise conflict("Installed command coverage could not be read.")
-    program = json.loads(content)
-    rules = program.get("rules") if isinstance(program, dict) else None
-    covered: dict[str, set[str]] = {}
-    if isinstance(rules, list):
-        for rule in rules:
-            if not isinstance(rule, dict):
-                continue
-            extension_id = rule.get("extension_id")
-            names = rule.get("candidate_executables")
-            if not isinstance(extension_id, str) or not isinstance(names, list):
-                continue
-            bucket = covered.setdefault(extension_id, set())
-            bucket.update(_executable_identity(name) for name in names if isinstance(name, str))
-    return {key: frozenset(value) for key, value in covered.items()}
-
-
 def _contribution_collisions(root: Path, metadata: Metadata) -> None:
-    family = "extensions" if metadata.kind == "cli" else "mcp-servers"
-    directory = checked_path(root / "contributions" / family)
-    if not directory.is_dir():
-        raise conflict("The destination contribution directory is missing.")
-    seen = 0
-    for path in directory.iterdir():
-        if path.suffix != ".json":
-            continue
-        seen += 1
-        if seen > 512:
-            raise conflict("The destination contribution inventory exceeds the supported catalog limit.")
-        payload = object_value(read_json(path))
-        if payload.get("id") == metadata.contribution_id:
-            continue
-        if metadata.kind == "mcp":
-            package = object_value(payload.get("launch")).get("package")
-            if isinstance(package, str) and package.strip().lower() == metadata.package.lower():
-                raise conflict("This MCP package already has a contribution; update that contribution instead.")
-        else:
-            values = payload.get("executables")
-            if not isinstance(values, list) or any(not isinstance(item, str) for item in values):
-                raise conflict("An existing CLI contribution has an invalid executable inventory.")
-            if any(_executable_identity(str(item)) == _executable_identity(metadata.executable) for item in values):
-                raise conflict("This executable is already owned by another source contribution.")
-    if metadata.kind == "cli":
-        _installed_executable_collision(metadata)
+    from .native_source_compiler import NativeSourceCompilerError, run_source_compiler
+
+    messages = {
+        "authoring_contribution_directory_missing": "The destination contribution directory is missing.",
+        "authoring_mcp_package_collision": (
+            "This MCP package already has a contribution; update that contribution instead."
+        ),
+        "authoring_executable_inventory_invalid": "An existing CLI contribution has an invalid executable inventory.",
+        "authoring_executable_contribution_collision": (
+            "This executable is already owned by another source contribution."
+        ),
+        "authoring_installed_executable_collision": (
+            "This executable already has Guard coverage; extend its existing contribution instead."
+        ),
+        "authoring_installed_coverage_invalid": "Installed command coverage could not be read.",
+    }
+    try:
+        run_source_compiler(
+            "authoring-admission",
+            {
+                "root": str(root.resolve()),
+                "kind": metadata.kind,
+                "contribution_id": metadata.contribution_id,
+                "catalog_id": metadata.catalog_id,
+                "executable": metadata.executable,
+                "package": metadata.package,
+            },
+        )
+    except NativeSourceCompilerError as exc:
+        raise conflict(
+            messages.get(exc.code or "", "The destination contribution inventory could not be validated.")
+        ) from exc
 
 
 def _shared_files(root: Path, metadata: Metadata) -> dict[str, str]:
     paths = [PYPROJECT_PATH, STAGING_PATH]
+    core = "contracts/extensions/core-defaults.v1.json"
+    if (root / core).exists() or (root / core).is_symlink():
+        paths.append(core)
     files = {path: text_from_bytes(read_bytes(root / path)) for path in paths}
     bindings_dir = root / BINDINGS_DIR
     if bindings_dir.is_dir():
@@ -268,7 +226,9 @@ def _edited_shared(files: dict[str, str], metadata: Metadata) -> dict[str, str]:
     if metadata.catalog_id not in classes["external"]:
         bindings[binding_path] = binding_content
     edited = {
-        PYPROJECT_PATH: edit_pyproject(files[PYPROJECT_PATH], metadata),
+        PYPROJECT_PATH: edit_pyproject(
+            files[PYPROJECT_PATH], metadata, core_profile="contracts/extensions/core-defaults.v1.json" in files
+        ),
         STAGING_PATH: edit_staging(files[STAGING_PATH], metadata),
     }
     if binding_path in bindings and binding_path not in files:

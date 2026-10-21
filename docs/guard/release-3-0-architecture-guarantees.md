@@ -2,6 +2,8 @@
 
 Status: wave-zero baseline. Audience: execution-assurance implementers and gate reviewers. Source evidence snapshot: `origin/release/3.1` at `10348fd40fa53ef60d9363bb6c37591b8bb60a61`; release identity migrated to 3.0 and revalidated in PR #1901.
 
+Superseded: contained execution now runs in the Rust runtime (`rust/crates/guard-command/src/contained_execution.rs` and `contained_runner/`), reached through the resident's `contained_execute` operation. `runtime/containment_executor.py` and `runtime/containment_backend_status.py` have been deleted; the Python paths below describe the snapshot named above, not current code.
+
 A process/function view of HOL Guard that keeps the five enforcement-adjacent planes distinct — harness hooks, the analysis decode scanner, OS containment, MDM/EDR, and evidence/Cloud — with the guarantee each actually provides.
 
 ## Process/function diagram
@@ -67,5 +69,5 @@ The word "sandbox" is reserved for OS-enforced execution containment (Seatbelt/B
 
 ## Notes
 
-- This document describes current architecture; it does not authorize new planes or remote execution.
+- This document describes the architecture at the snapshot named above; it does not authorize new planes or remote execution.
 - Containment guarantee detail lives in `release-3-0-containment-baseline.md`; execution paths in `release-3-0-execution-path-inventory.md`.

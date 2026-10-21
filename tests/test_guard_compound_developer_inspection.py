@@ -8,12 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
-    _hook_runtime_artifact,
-    _routine_semver_spec_matches,
-)
+from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime.shell_command_wrappers import is_trusted_absolute_command_path
+from tests.developer_inspection_test_support import assert_leading_cd_inspection_allowed
 from tests.git_execution_test_support import assert_host_git_proof_result
 from tests.native_command_test_support import RealNativeReviewFixture, real_native_review_fixture
 
@@ -87,7 +85,7 @@ def test_harnesses_evaluate_compound_source_inspection_as_one_unit(
         harness=harness,
     )
 
-    assert artifact is None
+    assert_leading_cd_inspection_allowed(artifact)
 
 
 @pytest.mark.parametrize("harness", ("pi", "codex", "claude-code", "gemini", "cursor"))
@@ -108,7 +106,7 @@ def test_harnesses_recover_safe_inspection_after_cross_workspace_cd(
         workspace=active_workspace,
     )
 
-    assert artifact is None
+    assert_leading_cd_inspection_allowed(artifact)
 
 
 @pytest.mark.parametrize("harness", ("pi", "codex", "claude-code", "gemini", "cursor"))
@@ -120,14 +118,13 @@ def test_harnesses_accept_safe_leading_delay_before_cross_workspace_inspection(
     workspace = home / "projects" / "workspace"
     (workspace / "src").mkdir(parents=True)
 
-    assert (
-        _artifact(
-            f"sleep 30 && cd {_shell_path(workspace)} && grep -n TODO src/example.ts | head -20",
-            home=home,
-            harness=harness,
-        )
-        is None
+    artifact = _artifact(
+        f"sleep 30 && cd {_shell_path(workspace)} && grep -n TODO src/example.ts | head -20",
+        home=home,
+        harness=harness,
     )
+
+    assert_leading_cd_inspection_allowed(artifact)
 
 
 @pytest.mark.parametrize(
@@ -154,7 +151,8 @@ def test_compound_inspection_accepts_safe_stderr_suppression(tmp_path: Path, pat
     workspace = home / "projects" / "workspace"
     (workspace / "src").mkdir(parents=True)
 
-    assert _artifact(f"cd {_shell_path(workspace)} && grep -rn {pattern} src 2>/dev/null | head -20", home=home) is None
+    command = f"cd {_shell_path(workspace)} && grep -rn {pattern} src 2>/dev/null | head -20"
+    assert_leading_cd_inspection_allowed(_artifact(command, home=home))
 
 
 @pytest.mark.parametrize("redirect", ("2>report.txt", "> report.txt", "< input.txt"))
@@ -352,22 +350,6 @@ def test_local_runner_override_requests_still_require_review(tmp_path: Path, run
     assert artifact is not None
 
 
-@pytest.mark.parametrize(
-    ("specifier", "version", "expected"),
-    (
-        ("4.1.8", "4.1.8", True),
-        ("^4.1.8", "4.9.0", True),
-        ("^4.1.8", "5.0.0", False),
-        ("^0.2.3", "0.2.9", True),
-        ("^0.2.3", "0.3.0", False),
-        ("~4.1.8", "4.1.9", True),
-        ("~4.1.8", "4.2.0", False),
-    ),
-)
-def test_routine_runner_semver_matching(specifier: str, version: str, expected: bool) -> None:
-    assert _routine_semver_spec_matches(specifier, version) is expected
-
-
 def test_compound_git_and_filesystem_inspection_requires_host_binary_proof(tmp_path: Path) -> None:
     home = tmp_path / "home"
     workspace = home / "projects" / "workspace"
@@ -407,15 +389,11 @@ def test_compound_stdin_only_python_observer_requires_host_binary_proof(tmp_path
         assert not is_trusted_absolute_command_path(Path(sys.executable), cwd=workspace, home_dir=home)
         assert artifact is not None
         assert artifact.metadata["compound_segment_count"] == 3
-        # Which fail-closed reason fires depends on where the launch identity
-        # check lands: an interpreter the host classifies as untrusted reports
-        # that identity first, and one it trusts reaches the Windows host-ACL
-        # floor.  Both are accepted; what must hold is that the compound
-        # launch is not allowed outright.
-        assert artifact.metadata["reason_code"] in {
-            "interpreter_identity_untrusted",
-            "interpreter_host_binding_unverified",
-        }
+        # Whichever floor fires first is accepted (unresolved leading-cd root, untrusted
+        # interpreter identity, or Windows host ACL); the launch is never allowed outright.
+        floors = {"shell_cwd_workspace_escape", "interpreter_identity_untrusted", "interpreter_host_binding_unverified"}
+        metadata = artifact.metadata
+        assert (metadata.get("reason_code") or metadata["shell_execution_context_reason_code"]) in floors
         assert artifact.metadata["guard_default_action"] == "require-reapproval"
     else:
         assert artifact is None
@@ -536,7 +514,8 @@ def test_compound_shell_syntax_check_is_inspection_only(tmp_path: Path) -> None:
     script.parent.mkdir()
     script.write_text("#!/bin/sh\n", encoding="utf-8")
 
-    assert _artifact(f"cd {_shell_path(workspace)} && bash -n scripts/check.sh && echo valid", home=home) is None
+    command = f"cd {_shell_path(workspace)} && bash -n scripts/check.sh && echo valid"
+    assert_leading_cd_inspection_allowed(_artifact(command, home=home))
 
 
 @pytest.mark.parametrize(

@@ -24,13 +24,7 @@ const SCOPED_APPROVAL_FAMILIES: [&str; 8] = [
     "prompt-file",
     "tool-action",
 ];
-const GUARD_CONTROL_ACTION_TYPES: [&str; 4] = [
-    "guard_control",
-    "guard-control",
-    "guard_control_operation",
-    "guard-control-operation",
-];
-const ONCE_ONLY_REASONS: [&str; 11] = [
+const ONCE_ONLY_REASONS: [&str; 12] = [
     "no_command_identity",
     "mutable_launcher",
     "compound_command",
@@ -42,8 +36,8 @@ const ONCE_ONLY_REASONS: [&str; 11] = [
     "broad_scope",
     "destructive_command",
     "git_helper_config",
+    "script_execution_binding_unavailable",
 ];
-const NATIVE_REVIEW_BINDING_PREFIX: &str = "native-review-v4:";
 const GITHUB_WORKFLOW_RECORD_SOURCE: &str = "github_workflow_approval_record";
 
 /// The derived contract plus the exact-action token bound to the request.
@@ -65,12 +59,14 @@ pub(crate) struct ScopeContract {
 pub(crate) struct View<'a> {
     pub(crate) item: &'a ApprovalScopeItemV1,
     pub(crate) envelope: Option<&'a Map<String, Value>>,
+    pub(crate) native_bash_owner_verified: bool,
 }
 
 impl<'a> View<'a> {
     pub(crate) fn new(item: &'a ApprovalScopeItemV1) -> Self {
         Self {
             item,
+            native_bash_owner_verified: false,
             envelope: item
                 .action_envelope_json
                 .as_ref()
@@ -99,7 +95,7 @@ pub(crate) fn contract(view: &View<'_>) -> ScopeContract {
     };
     let non_overridable = allow_is_non_overridable(view);
     let unverified = unverified_provider_execution(view);
-    let allow_scopes = if non_overridable {
+    let mut allow_scopes = if non_overridable {
         Vec::new()
     } else {
         reusable_allow_scopes(view, &artifact_scopes, unverified)
@@ -130,6 +126,12 @@ pub(crate) fn contract(view: &View<'_>) -> ScopeContract {
     let mut restrictions = vec!["reusable_allow_is_action_bound"];
     if native_retry_cannot_reuse_approval(view) {
         restrictions.push("retry_cannot_reuse_approval");
+        if !persistence_eligible {
+            allow_scopes.clear();
+            restrictions.push("execution_binding_unavailable");
+        } else {
+            allow_scopes.retain(|scope| *scope == "artifact");
+        }
     }
     if unverified {
         restrictions.push("provider_account_unverified_once_only");
@@ -250,18 +252,23 @@ fn tool_action_has_exact_context(view: &View<'_>) -> bool {
         || envelope_text(view, "command").is_some()
 }
 
+/// Only a request that is not a review has no allow. Every review, Guard
+/// control and package actions included, offers Allow once and Always allow
+/// (`docs/guard/approval-invariant.md`).
 pub(crate) fn allow_is_non_overridable(view: &View<'_>) -> bool {
-    if !matches!(
+    !matches!(
         text(view.item.policy_action.as_ref()),
         Some("require-reapproval" | "review")
-    ) {
-        return true;
-    }
-    envelope_text(view, "action_type")
-        .is_some_and(|action_type| GUARD_CONTROL_ACTION_TYPES.contains(&action_type))
+    )
 }
 
 fn native_retry_cannot_reuse_approval(view: &View<'_>) -> bool {
+    if native_bash_reserved(view) {
+        return !native_bash_eligible(view);
+    }
+    if envelope_text(view, "once_only_reason") == Some("script_execution_binding_unavailable") {
+        return true;
+    }
     let Some(artifact_id) = view.item.artifact_id.as_ref().and_then(Value::as_str) else {
         return false;
     };
@@ -273,7 +280,30 @@ fn native_retry_cannot_reuse_approval(view: &View<'_>) -> bool {
         .artifact_hash
         .as_ref()
         .and_then(Value::as_str)
-        .is_some_and(|hash| hash.starts_with(NATIVE_REVIEW_BINDING_PREFIX))
+        .is_some_and(|hash| {
+            crate::guard_store_native_review_consume::binding_pattern().is_match(hash)
+        })
+}
+
+fn native_bash_reserved(view: &View<'_>) -> bool {
+    crate::native_bash_review_descriptor::reserved(
+        text(view.item.artifact_type.as_ref()),
+        text(view.item.artifact_id.as_ref()),
+        view.envelope.and_then(|map| map.get("native_bash")),
+    )
+}
+
+fn native_bash_eligible(view: &View<'_>) -> bool {
+    view.native_bash_owner_verified
+        && crate::native_bash_review_descriptor::eligible(
+            text(view.item.artifact_type.as_ref()),
+            text(view.item.artifact_id.as_ref()),
+            text(view.item.artifact_hash.as_ref()),
+            text(view.item.harness.as_ref()),
+            text(view.item.raw_command_text.as_ref()).or_else(|| envelope_text(view, "command")),
+            view.item.workspace_target.as_deref(),
+            view.envelope.and_then(|map| map.get("native_bash")),
+        )
 }
 
 fn is_context_token(value: &str) -> bool {
@@ -295,20 +325,12 @@ fn exact_action_once_only_reason(view: &View<'_>) -> Option<String> {
         return Some("provider_unverified".to_owned());
     }
     if allow_is_non_overridable(view) {
-        let action_type = view
-            .envelope
-            .and_then(|envelope| envelope.get("action_type"))
-            .and_then(Value::as_str);
-        return Some(
-            if action_type.is_some_and(|value| GUARD_CONTROL_ACTION_TYPES.contains(&value)) {
-                "guard_control"
-            } else {
-                "non_overridable"
-            }
-            .to_owned(),
-        );
+        return Some("non_overridable".to_owned());
     }
     match text(view.item.artifact_type.as_ref()) {
+        Some(guard_contracts::NATIVE_BASH_REVIEW_ARTIFACT_TYPE) => {
+            return Some("unproven_launch".into())
+        }
         Some("package_request") => return Some("package_action".to_owned()),
         Some("tool_call") => {}
         _ => return None,
@@ -333,6 +355,12 @@ fn exact_action_once_only_reason(view: &View<'_>) -> Option<String> {
 pub(crate) fn exact_action_allow_persistence_eligible(view: &View<'_>) -> bool {
     if allow_is_non_overridable(view) || unverified_provider_execution(view) {
         return false;
+    }
+    if envelope_text(view, "once_only_reason") == Some("script_execution_binding_unavailable") {
+        return false;
+    }
+    if native_bash_reserved(view) {
+        return native_bash_eligible(view);
     }
     let item = view.item;
     let artifact_id = text(item.artifact_id.as_ref());

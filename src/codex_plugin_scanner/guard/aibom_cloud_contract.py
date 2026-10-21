@@ -1,4 +1,4 @@
-"""Consumer-compatible inventory events without relabeling local-only agents."""
+"""Cloud inventory events that keep each harness under its own agent type."""
 
 from __future__ import annotations
 
@@ -11,12 +11,8 @@ from .inventory_contract import GuardAgentInventorySnapshot, serialize_inventory
 def cloud_syncable_snapshots(
     snapshots: Sequence[GuardAgentInventorySnapshot],
 ) -> tuple[GuardAgentInventorySnapshot, ...]:
-    """Paseo's composite stays local until the cloud consumer accepts its type.
-
-    Native provider snapshots already carry the tools, policies and receipts.
-    Do not mislabel a Paseo snapshot as a different cloud-supported agent type.
-    """
-    return tuple(snapshot for snapshot in snapshots if snapshot.agent_type != "paseo")
+    """Every harness snapshot carries its own agent type, so none is held back."""
+    return tuple(snapshots)
 
 
 def inventory_snapshot_event(
@@ -26,9 +22,7 @@ def inventory_snapshot_event(
     device_id: object,
     generated_at: str,
 ) -> dict[str, object]:
-    """Create a cloud-compatible event and reject local-only composite inventories."""
-    if snapshot.agent_type == "paseo":
-        raise ValueError("Paseo composite inventory is local-only; sync its native provider inventories instead.")
+    """Create a cloud inventory event labelled with the snapshot's own agent type."""
     event_id = str(uuid.uuid4())
     return {
         "eventId": event_id,

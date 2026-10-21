@@ -62,9 +62,27 @@ def prompt_for_approval_gate(
     use_cooldown: bool = True,
     summary: str | None = None,
     require_fresh_totp: bool = False,
+    strict: bool = False,
 ) -> ApprovalGateInput | None:
+    """Collect the approval proof from the terminal.
+
+    ``strict`` marks decisions that always need a fresh proof (global scope or
+    strict-all mode). Otherwise an open cooldown window is honoured and no prompt
+    is shown, but only for callers that allow the cooldown (``use_cooldown``).
+    """
+
     gate = public_config(guard_home)
     if not gate.enabled:
+        return None
+    if (
+        use_cooldown
+        and not strict
+        and not gate.strict_all_decisions
+        and not gate.totp_enabled
+        and gate.cooldown_seconds > 0
+        and gate.cooldown_active
+        and not require_fresh_totp
+    ):
         return None
     if gate.totp_enabled and recent_totp_satisfied(guard_home) and not require_fresh_totp:
         return None

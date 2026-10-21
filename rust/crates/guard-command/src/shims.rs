@@ -14,6 +14,7 @@
 mod admin;
 mod audit;
 mod audit_manifest;
+mod digest_binding_sink;
 mod frozen;
 mod generate;
 mod manifest;
@@ -33,13 +34,17 @@ pub use admin::{
     activate_package_shims, install_package_shims, repair_package_shims, uninstall_package_shims,
 };
 pub use audit::record_package_shim_audit_result;
+pub use digest_binding_sink::package_shim_digest_binding_sink;
 pub use path_order::get_path_order_status;
 pub use probe::{probe_package_shim_intercepts, ProbeOptions};
 pub use profile::{
     ensure_package_shim_path_in_shell_profile, remove_guard_profile_blocks,
     strip_managed_marker_blocks,
 };
-pub use status::{package_shim_cloud_coverage, package_shim_dashboard_status, package_shim_status};
+pub use status::{
+    package_shim_cloud_coverage, package_shim_dashboard_status, package_shim_protection,
+    package_shim_protection_from_status, package_shim_status,
+};
 
 /// Sentinel assignment the generated shims carry (`<name> = True`).
 pub const FROZEN_PACKAGE_SHIM_SENTINEL: &str = "HOL_GUARD_PACKAGE_SHIM_SENTINEL";

@@ -162,8 +162,14 @@ def _native_cli_graph_failures(root: Path) -> list[str]:
         pipeline = _function_node_or_none(pipeline_module, "run_native_hook_pipeline")
         if pipeline is None:
             failures.append("CLI native pipeline dispatcher is missing")
-        elif _called_node(pipeline, "review_native_edge_decision") is None:
-            failures.append("CLI native pipeline does not reach the native edge authority")
+        elif _called_node(pipeline, "native_hook_route") is None or _called_node(pipeline, "run_route_plan") is None:
+            failures.append("CLI native pipeline does not take its route from the resident")
+        else:
+            # The resident's route names the handlers; the native edge is the handler it names first.
+            handlers = root / "src/codex_plugin_scanner/guard/cli/commands_hook_native_route_handlers.py"
+            edge = _function_node_or_none(handlers, "native_edge")
+            if edge is None or _called_node(edge, "review_native_edge_decision") is None:
+                failures.append("CLI native pipeline does not reach the native edge authority")
     for retired in ("_try_source_ref_fast_path", "record_python_semantic_hook_route", "evaluate_source_file_ref"):
         if _called_node(native_route, retired) is not None:
             failures.append(f"CLI native route still calls retired Python route {retired}")
@@ -244,7 +250,10 @@ def _contract_failures(root: Path) -> list[str]:
             (
                 "pre-tool-command-authority-v1",
                 "pre-tool-generic-authority-v1",
-                "PreToolUse(CommandModelRequestV1)",
+                # The resident PreToolUse frame carries the command model
+                # request, now wrapped in the envelope that adds the path
+                # context the lane runs in.
+                "PreToolUse(crate::oneshot::PreToolRequestV1)",
             ),
         ),
         (
@@ -263,7 +272,14 @@ def _contract_failures(root: Path) -> list[str]:
         ),
         (
             root / "rust/crates/guard-runtime/src/oneshot.rs",
-            ("fn evaluate_pre_tool_bytes", "pre_tool_response", "evaluate_pre_tool_request"),
+            (
+                "fn evaluate_pre_tool_bytes",
+                "pre_tool_response",
+                "evaluate_pre_tool_request",
+                # The lane tells the runtime where the command runs, and says
+                # so in its feature list so a caller knows the fields are read.
+                "pre-tool-path-context-v1",
+            ),
         ),
     )
     for path, tokens in checks:

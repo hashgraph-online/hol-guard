@@ -61,6 +61,13 @@ def run_approval_command(
         )
         payload["auto_open"] = _auto_open_first_pending_request(store=store, workspace=workspace)
         return payload
+    if command == "list":
+        # The same queue snapshot as the bare command, read-only: it never opens the approval center.
+        return build_runtime_snapshot(
+            store=store,
+            approval_center_url=load_guard_daemon_url(store.guard_home),
+            now=_now(),
+        )
     if command == "clear-history":
         harness = getattr(args, "harness", None)
         clear_all = bool(getattr(args, "all", False))
@@ -161,7 +168,7 @@ def run_approval_command(
                 "exit_code": 2,
             }
         gate_input = (
-            prompt_for_approval_gate(store.guard_home)
+            prompt_for_approval_gate(store.guard_home, strict=str(args.scope) == "global")
             if _approval_resolution_needs_gate(
                 store,
                 action=str(args.approval_action),

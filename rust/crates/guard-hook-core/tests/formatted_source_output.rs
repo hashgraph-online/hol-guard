@@ -23,7 +23,7 @@ impl TestRoot {
                 Err(error) => panic!("failed to create test root: {error}"),
             }
         };
-        Self(root.canonicalize().unwrap())
+        Self(host_spelling(root.canonicalize().unwrap()))
     }
 
     fn path(&self) -> &std::path::Path {
@@ -35,6 +35,25 @@ impl Drop for TestRoot {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
     }
+}
+
+/// `canonicalize` spells Windows paths in the verbatim `\\?\C:\` form, which
+/// source review refuses as a glob. Hosts send the ordinary drive form, so the
+/// fixture root uses that. A root on a share canonicalizes to `\\?\UNC\server\
+/// share\...`, whose ordinary spelling is `\\server\share\...`; without that
+/// arm the `?` survives and source classification refuses the request before
+/// the behavior under test runs.
+fn host_spelling(path: std::path::PathBuf) -> std::path::PathBuf {
+    let Some(stripped) = path.to_str().and_then(|text| text.strip_prefix(r"\\?\")) else {
+        return path;
+    };
+    if let Some(share) = stripped.strip_prefix(r"UNC\") {
+        return format!(r"\\{share}").into();
+    }
+    if stripped.as_bytes().get(1) == Some(&b':') {
+        return stripped.into();
+    }
+    path
 }
 
 fn request(root: &std::path::Path, output: &str) -> NativeHookRequestV1 {
@@ -205,6 +224,67 @@ fn resolved_directory_target_is_rechecked_before_inline_output_allow() {
     assert_ne!(
         selector_redirected_result.model_output_action,
         "allow_original"
+    );
+
+    // An ordinary feature folder inside the workspace shares a name with the
+    // external credential parts list. Its names-only listing stays visible.
+    let feature = workspace.join("src/lib/auth");
+    std::fs::create_dir_all(&feature).unwrap();
+    let mut feature_request = request(&workspace, "README.md\n");
+    feature_request
+        .payload
+        .as_object_mut()
+        .unwrap()
+        .remove("guard_source_ref");
+    feature_request.payload["tool_input"]["path"] = json!("src/lib/auth");
+    feature_request.payload["resolved_directory_target"] = json!(feature.to_string_lossy());
+    assert_eq!(
+        review_post_tool(&feature_request).model_output_action,
+        "allow_original"
+    );
+
+    // The same name inside the workspace pointing out of it is still refused.
+    let swapped = workspace.join("src/lib/secrets");
+    std::os::unix::fs::symlink(&credentials, &swapped).unwrap();
+    let mut swapped_request = feature_request.clone();
+    swapped_request.payload["tool_input"]["path"] = json!("src/lib/secrets");
+    swapped_request.payload["resolved_directory_target"] = json!(swapped.to_string_lossy());
+    assert_eq!(
+        review_post_tool(&swapped_request).reason_code,
+        "sensitive_path"
+    );
+
+    // A credential store inside the workspace keeps its review, both named
+    // directly and behind a feature-named link swapped in after PreToolUse.
+    let store = workspace.join("config/prod-secrets");
+    std::fs::create_dir_all(&store).unwrap();
+    let mut store_request = feature_request.clone();
+    store_request.payload["tool_input"]["path"] = json!("config/prod-secrets");
+    store_request.payload["resolved_directory_target"] = json!(store.to_string_lossy());
+    assert_eq!(
+        review_post_tool(&store_request).reason_code,
+        "sensitive_path"
+    );
+    let feature_link = workspace.join("src/lib/authorization");
+    std::os::unix::fs::symlink(&store, &feature_link).unwrap();
+    let mut feature_link_request = feature_request.clone();
+    feature_link_request.payload["tool_input"]["path"] = json!("src/lib/authorization");
+    feature_link_request.payload["resolved_directory_target"] =
+        json!(feature_link.to_string_lossy());
+    assert_eq!(
+        review_post_tool(&feature_link_request).reason_code,
+        "sensitive_path"
+    );
+
+    // So does a credential-named file inside the workspace.
+    let key_file = workspace.join("config/credentials");
+    std::fs::write(&key_file, "placeholder\n").unwrap();
+    let mut key_file_request = feature_request.clone();
+    key_file_request.payload["tool_input"]["path"] = json!("config/credentials");
+    key_file_request.payload["resolved_directory_target"] = json!(key_file.to_string_lossy());
+    assert_eq!(
+        review_post_tool(&key_file_request).reason_code,
+        "sensitive_path"
     );
 }
 

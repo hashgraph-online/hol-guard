@@ -23,10 +23,73 @@ pub(super) fn git_helper_context_required(
     })
 }
 
+/// Whether this segment's one `-C` route lands where Git discovers no
+/// repository.
+///
+/// Only the leading option block is read, so a `-C` that belongs to a
+/// subcommand (`git diff -C`, where it asks for copy detection) is never
+/// mistaken for a route, and a segment carrying more than one `-C` keeps the
+/// helper screen: the second is resolved against the first, which this does
+/// not model.
+///
+/// The route only says Git finds no repository. Git still reads its global
+/// and system configuration, and an inline `-c` adds to it, so the segment
+/// counts only when it carries no `-c` and its operation is one the
+/// inspection proof admits without a repository: `diff` on paths, `grep`,
+/// `apply` and `hash-object` keep running there and open files.
+pub(super) fn routes_to_no_repository(
+    segment: &crate::CommandSegmentV1,
+    context: PathContext<'_>,
+) -> bool {
+    segment
+        .executable
+        .as_deref()
+        .is_some_and(|executable| executable_basename(executable) == "git")
+        && arguments_route_to_no_repository(&segment.arguments, context)
+}
+
+/// [`routes_to_no_repository`] for a segment's arguments alone, for the
+/// proofs that already know the segment runs Git and hold its arguments.
+pub(super) fn arguments_route_to_no_repository(
+    arguments: &[String],
+    context: PathContext<'_>,
+) -> bool {
+    let mut index = 0;
+    let mut route = None;
+    while let Some(argument) = arguments.get(index) {
+        if argument == "-C" {
+            if route.is_some() {
+                return false;
+            }
+            let Some(target) = arguments.get(index + 1) else {
+                return false;
+            };
+            route = Some(target.as_str());
+            index += 2;
+            continue;
+        }
+        if argument == "-c" {
+            return false;
+        }
+        if !argument.starts_with('-') {
+            break;
+        }
+        index += 1;
+    }
+    route.is_some_and(|target| super::git_routes::git_route_without_repository(target, context))
+        && crate::command_compatibility::git_inspection_arguments(arguments, context).is_some()
+}
+
 /// Whether a Git segment's operation can start a configured helper.
 fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext<'_>) -> bool {
     let stripped = super::segment_proof::without_stderr_merge(original);
     let segment = stripped.as_ref().unwrap_or(original);
+    if routes_to_no_repository(segment, context) {
+        // Git's setup dies on a `-C` target that holds no repository, before
+        // it reads a pager, textconv, diff or filter setting, so there is no
+        // configuration to probe and nothing a helper could run in.
+        return false;
+    }
     segment.executable.as_deref().is_some_and(|executable| {
         executable_basename(executable) == "git"
             // Leading `-C`/`-P` options precede the subcommand.
@@ -54,8 +117,23 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         // an object read can fetch from a partial clone's promisor.
                         "merge-base" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref"
                         | "rev-list" => true,
+                        // blame and reflog page by default; describe honors
+                        // pager.describe when it is set.
+                        "blame" | "describe" | "reflog" => true,
                         // grep pages by default through pager.grep or core.pager.
                         "grep" => true,
+                        // A stash listing is a log that pages under
+                        // pager.stash, and `stash show` runs the diff drivers.
+                        "stash" => true,
+                        // A shortlog pages under pager.shortlog, and both
+                        // listings read the repository's configuration.
+                        "shortlog" | "check-ignore" => true,
+                        // Finding the untracked paths refreshes the index,
+                        // which starts a configured core.fsmonitor.
+                        "clean" => true,
+                        // Reading the files the patch names refreshes the
+                        // index, which starts a configured core.fsmonitor.
+                        "apply" => true,
                         _ => false,
                     }
                 })
@@ -75,6 +153,26 @@ pub(super) fn git_helpers_proven_inert(
     };
     let rest = super::segment_proof::after_read_prefix(model, context);
     let model = rest.as_ref().unwrap_or(model);
+    // `cd <dir>; <rest>` and `cd <dir> && <head>; <tail>` leave their later
+    // reads running in the new directory when the `cd` succeeded and in the
+    // original one when it failed. Inspect each read in every directory it
+    // can run in, the split the Git execution-context floor already makes.
+    if let Some((cwd, rest)) = super::safe_reads::leading_semicolon_cd(model, context) {
+        let moved = PathContext {
+            cwd: Some(&cwd),
+            ..context
+        };
+        return helpers_inert(&rest, moved, deadline, environment)
+            && helpers_inert(&rest, context, deadline, environment);
+    }
+    if let Some((cwd, rest, tail)) = super::safe_reads::leading_and_cd(model, context) {
+        let moved = PathContext {
+            cwd: Some(&cwd),
+            ..context
+        };
+        return helpers_inert(&rest, moved, deadline, environment)
+            && helpers_inert(&tail, context, deadline, environment);
+    }
     // After a verified `cd`, the Git process reads configuration from the new
     // directory, so the probe must run there rather than in the reported cwd.
     let destination = super::segment_proof::verified_cwd_compound_context(model, context);
@@ -82,6 +180,17 @@ pub(super) fn git_helpers_proven_inert(
         cwd: destination.as_deref().or(context.cwd),
         ..context
     };
+    helpers_inert(model, context, deadline, environment)
+}
+
+/// Whether every Git read in `model` is proven to start no configured helper
+/// when it runs in `context`.
+fn helpers_inert(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+    deadline: Option<std::time::Instant>,
+    environment: &guard_contracts::GuardExecutionEnvironmentV1,
+) -> bool {
     model.segments.iter().enumerate().all(|(index, original)| {
         // `git merge-base ... | xargs git log` runs its Git read as the child.
         let child = super::fanout_reads::git_xargs_child(model, index);

@@ -21,6 +21,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from .approval_rows import connector_coverage
 from .catalog import EXEMPT_ORACLES, Scenario, load_catalog
 from .contained_core import is_contained_deny
 
@@ -278,7 +279,10 @@ def known_gap_report(cases: list[dict[str, Any]], gaps: dict[str, str]) -> list[
 
 def report_sections(cases: list[dict[str, Any]], harness: str | None = None) -> dict[str, Any]:
     """The summary.json blocks every run publishes: interruption metrics and known-gap status."""
-    return {
+    sections = {
         "interruptions": summarize_interruptions(cases, harness),
         "known_gaps": known_gap_report(cases, load_known_gaps()) if KNOWN_GAPS.is_file() else [],
     }
+    if (coverage := connector_coverage(cases)) is not None:
+        sections["connector_coverage"] = coverage
+    return sections

@@ -29,7 +29,10 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           entryFileNames: "assets/guard-dashboard.js",
-          chunkFileNames: "assets/chunks/[name].js",
+          // Content-hashed chunk names keep each build's module graph apart. A tab
+          // still running an older entry then fails to fetch its old chunks (and
+          // reloads) instead of linking new chunks against its old shared modules.
+          chunkFileNames: "assets/chunks/[name]-[hash].js",
           assetFileNames: (assetInfo) => {
             if (assetInfo.names.includes("style.css")) {
               return "assets/guard-dashboard.css";

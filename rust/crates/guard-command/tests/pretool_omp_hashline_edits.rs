@@ -23,7 +23,7 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         ));
     std::fs::create_dir_all(&root).unwrap();
     let _cleanup = fixture::FixtureCleanup(root.clone());
-    let home = std::fs::canonicalize(&root).unwrap();
+    let home = fixture::canonical_spelling(&root);
     let workspace = home.join("project");
     let sibling = home.join("project-fix");
     for directory in [&workspace, &sibling] {
@@ -32,6 +32,11 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         std::fs::write(directory.join("src/a.ts"), "export const a = 1;\n").unwrap();
     }
     std::fs::write(workspace.join("src/b.ts"), "export const b = 2;\n").unwrap();
+    std::fs::write(
+        workspace.join("package.json"),
+        "{\n  \"scripts\": {\n    \"test\": \"echo none\"\n  }\n}\n",
+    )
+    .unwrap();
     std::fs::write(workspace.join(".env"), "TOKEN=synthetic\n").unwrap();
     std::fs::write(workspace.join("AGENTS.md"), "rules\n").unwrap();
     std::fs::write(workspace.join(".git/config"), "[core]\n").unwrap();
@@ -72,6 +77,17 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
             "[src/a.ts#0AC4]\nCUT 1.=1 @line\n",
             "[src/b.ts#1B2C]\nPUT >$ @line\n",
         ]),
+        // Oh My Pi keeps a row without the `+` under a `PUT` as body text,
+        // in the session folder and in a sibling clone alike.
+        patch(&["[src/a.ts#0AC4]\nPUT 1.=1:\nexport const a = 3;\n  return a;\n\n"]),
+        patch(&[&format!(
+            "[{}#0AC4]\nPUT 1.=1:\nexport const a = 3;\n",
+            sibling.join("src/a.ts").display()
+        )]),
+        patch(&["[src/a.ts#0AC4]\nPUT >$:\n+// end\nexport const b = 4;\n"]),
+        // Unified-diff `-old` rows under a `PUT` are body, not operations.
+        patch(&["[src/a.ts#0AC4]\nPUT 1.=1:\n-export const a = 1;\n+export const a = 3;\n"]),
+        patch(&["[package.json#0AC4]\nPUT 3.=3:\n-    \"test\": \"echo none\"\n+    \"test\": \"node --test\"\n"]),
     ] {
         let result = evaluate("omp", &input);
         assert_eq!(
@@ -93,6 +109,27 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
             "{input}"
         );
     }
+    // The reason names the missing path, and says where a relative one is
+    // read from.
+    let result = evaluate("omp", &patch(&[put_a, missing]));
+    assert!(
+        result
+            .reason
+            .contains("`project-fix-typo/src/a.ts` does not exist. A relative path is read from the session folder"),
+        "{}",
+        result.reason
+    );
+    let result = evaluate(
+        "omp",
+        &patch(&["[~/project-typo/src/a.ts#0AC4]\nPUT 1.=1:\n+x\n"]),
+    );
+    assert!(
+        result
+            .reason
+            .contains("`~/project-typo/src/a.ts` does not exist. Check the path"),
+        "{}",
+        result.reason
+    );
     for input in [
         patch(&["[.env#0AC4]\nPUT 1.=1:\n+TOKEN=changed\n"]),
         patch(&[put_a, "[.env#0AC4]\nPUT >$:\n+EXTRA=1\n"]),
@@ -101,6 +138,15 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         patch(&["[.git/config#0AC4]\nPUT >$:\n+[alias]\n"]),
         patch(&["[.git/hooks/pre-commit]\nPUT >$:\n+exit 0\n"]),
         patch(&["[src/a.ts#0AC4]\nREM\n"]),
+        // A bare row never turns an operation, a header or a protected file
+        // into text.
+        patch(&["[src/a.ts#0AC4]\nPUT 1.=1:\nREM\n"]),
+        patch(&["[src/a.ts#0AC4]\nPUT 1.=1:\nexport const a = 3;\n[.env#0AC4]\nTOKEN=changed\n"]),
+        patch(&["[src/a.ts#0AC4]\nPUT 1.=1:\n  [~/.zshrc#0AC4]\nexport X=1\n"]),
+        patch(&["[.env#0AC4]\nPUT 1.=1:\nTOKEN=changed\n"]),
+        patch(&["[AGENTS.md#0AC4]\nPUT >$:\nmore rules\n"]),
+        patch(&["[~/.zshrc#0AC4]\nPUT >$:\nexport X=1\n"]),
+        patch(&["[src/a.ts#0AC4]\nexport const a = 3;\n"]),
         patch(&["[src/a.ts#0AC4]\nMV ../outside.ts\n"]),
         patch(&["[~/.zshrc#0AC4]\nPUT >$:\n+export X=1\n"]),
         patch(&["[~/.ssh/config]\nPUT >$:\n+Host *\n"]),
@@ -131,7 +177,7 @@ fn oh_my_pi_header_copies_keep_the_file_write_proof() {
         ));
     std::fs::create_dir_all(&root).unwrap();
     let _cleanup = fixture::FixtureCleanup(root.clone());
-    let workspace = std::fs::canonicalize(&root).unwrap().join("project");
+    let workspace = fixture::canonical_spelling(&root).join("project");
     std::fs::create_dir_all(workspace.join("src")).unwrap();
     std::fs::create_dir_all(workspace.join(".git")).unwrap();
     std::fs::write(workspace.join("src/a.ts"), "export const a = 1;\n").unwrap();
@@ -196,5 +242,89 @@ fn oh_my_pi_header_copies_keep_the_file_write_proof() {
         json!({"input": patch(&["[.env#0AC4]\nPUT >$:\n+EXTRA=1\n"]), "path": ".env", "paths": [".env"]}),
     ] {
         assert_ne!(evaluate(tool_input.clone()), allowed, "{tool_input}");
+    }
+}
+
+#[test]
+fn todo_updates_sent_to_edit_name_no_file() {
+    let home = std::env::temp_dir();
+    let evaluate = |input: serde_json::Value| {
+        evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name": "edit", "tool_input": input}),
+            None,
+            None,
+            home.to_str(),
+            home.to_str(),
+        )
+    };
+    let todo = evaluate(json!({
+        "input": "done", "phase": "Implement game", "task": "Build canvas gameplay"
+    }));
+    assert_eq!(todo.minimum_action, "allow");
+    assert_eq!(todo.reason_code, "native_omp_edit_without_target");
+    for input in [
+        json!({"input": "[game.js#250F]\nPUT 1.=1:\n+x\n", "phase": "Implement game"}),
+        json!({"input": "*** Begin Patch\n*** Update File: game.js\n+x\n*** End Patch", "task": "t"}),
+        json!({"input": "done", "phase": "p", "path": "game.js"}),
+        json!({"input": "done\n+x", "phase": "p"}),
+        json!({"input": "done", "phase": "p", "edits": []}),
+        json!({"input": "done"}),
+        json!({"input": "game.js", "task": "t"}),
+    ] {
+        assert_ne!(
+            evaluate(input.clone()).reason_code,
+            "native_omp_edit_without_target",
+            "{input}"
+        );
+    }
+}
+
+#[test]
+fn edits_without_a_file_header_name_no_file() {
+    let home = std::env::temp_dir();
+    let evaluate = |input: serde_json::Value| {
+        evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name": "edit", "tool_input": input}),
+            None,
+            None,
+            home.to_str(),
+            home.to_str(),
+        )
+    };
+    // Calls a model meant for read and bash; Oh My Pi refused both.
+    for input in [
+        json!({"input": "test/game.test.js"}),
+        json!({"input": "node --test", "timeout": 120}),
+        json!({"input": "done"}),
+        json!({"input": "~/.ssh/id_ed25519"}),
+    ] {
+        let result = evaluate(input.clone());
+        assert_eq!(result.minimum_action, "allow", "{input}");
+        assert_eq!(
+            result.reason_code, "native_omp_edit_without_header",
+            "{input}"
+        );
+    }
+    for input in [
+        json!({"input": "[.env#0AC4]\nPUT >$:\n+EXTRA=1\n"}),
+        json!({"input": "[.env]"}),
+        json!({"input": "*** Begin Patch\n*** Add File: .env\n+X=1\n*** End Patch"}),
+        json!({"input": "*** Edit File: .env"}),
+        json!({"input": "\u{b6}.env"}),
+        json!({"input": "game.js\n+x"}),
+        json!({"input": "game.js", "path": "game.js"}),
+        json!({"input": "game.js", "timeout": "120"}),
+        json!({"input": "game.js", "edits": []}),
+        json!({"input": 7}),
+    ] {
+        assert_ne!(
+            evaluate(input.clone()).reason_code,
+            "native_omp_edit_without_header",
+            "{input}"
+        );
     }
 }

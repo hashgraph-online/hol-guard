@@ -7,12 +7,17 @@
 
 #[path = "generic_omp_eval.rs"]
 mod eval;
+#[path = "generic_omp_grep_glob.rs"]
+mod grep_glob;
+#[path = "generic_omp_learn.rs"]
+mod learn;
 #[path = "generic_omp_yield.rs"]
 mod yield_report;
 
 use super::extract::GenericSignals;
 use super::result::{generic_action, generic_result};
 use crate::native_command_controls::CompiledNativeCommandControls;
+use grep_glob::glob_directory;
 use guard_contracts::{PreToolActionTypeV1, PreToolOperationV1, PreToolResultV1};
 use serde_json::{Map, Value};
 use std::time::Instant;
@@ -95,16 +100,15 @@ pub(super) fn bounded_delegation_metadata(payload: &Value) -> bool {
         && signals.path_values.is_empty()
 }
 
-/// `learn` stores one memory note and returns the store's acknowledgement.
+/// `learn` stores one memory note, optionally with one managed skill, and
+/// returns the store's acknowledgement.
 /// Its PreToolUse stays an unknown-tool review, so under enforce the call has
-/// run only after a person approved it. Without this, that approved call's
-/// result is withheld with nothing left to approve.
+/// run only after a person approved it, and the result it returns has nothing
+/// left to approve. Withholding it would leave Oh My Pi without the
+/// acknowledgement for a call that already happened. The note shapes this
+/// covers are named in `generic_omp_learn`.
 fn learn_input(input: &Map<String, Value>) -> bool {
-    input.len() == 1
-        && input
-            .get("memory")
-            .and_then(Value::as_str)
-            .is_some_and(|memory| !memory.trim().is_empty())
+    learn::note_input(input)
 }
 
 /// `Some` only when a bounded proof applies; `None` keeps the normal path.
@@ -118,11 +122,18 @@ pub(super) fn evaluate(
         || signals.sensitive_target
         || signals.command.is_some()
         || signals.package_present
-        || !signals.url_values.is_empty()
     {
         return None;
     }
     let tool = signals.tool_name.as_deref()?;
+    if context.harness == "omp" && tool == "eval" {
+        if let Some(result) = eval::evaluate_browser(payload, context) {
+            return Some(result);
+        }
+    }
+    if !signals.url_values.is_empty() {
+        return None;
+    }
     if context.harness == "pi" && !matches!(tool, "find" | "ls" | "grep") {
         return None;
     }
@@ -150,10 +161,47 @@ pub(super) fn evaluate(
                 .then(|| delegation_result(tool, context))
         }
         "eval" => eval::evaluate(payload, signals, context),
+        "edit" => todo_shaped_edit(payload, signals, context),
         "glob" | "find" | "ls" => listing(payload, signals, context),
         "grep" => grep_scope(payload, signals, context),
+        "lsp" => lsp_read(payload, signals, context),
         _ => None,
     }
+}
+
+/// Models sometimes send a todo update (`{op, phase, task}`) to `edit`,
+/// with the op under `input`. Every edit mode names its file in `path`,
+/// `edits`, or a header line inside `input`, and a lone todo op word has no
+/// room for a header, so the call cannot change a file; Oh My Pi rejects it
+/// and the agent retries with `todo`. Any other edit keeps its normal proof.
+fn todo_shaped_edit(
+    payload: &Value,
+    signals: &GenericSignals,
+    context: &OmpContext<'_>,
+) -> Option<PreToolResultV1> {
+    let input = strict_tool_input(payload)?;
+    let op = input.get("input")?.as_str()?;
+    let todo_keys = input.iter().all(|(key, value)| match key.as_str() {
+        "input" => true,
+        "phase" | "task" | "reason" => value.is_string(),
+        _ => false,
+    });
+    let todo_op = matches!(
+        op,
+        "init" | "start" | "done" | "rm" | "drop" | "block" | "unblock" | "append" | "view"
+    );
+    (todo_keys
+        && todo_op
+        && (input.contains_key("phase") || input.contains_key("task"))
+        && signals.path_values.is_empty())
+    .then(|| {
+        generic_result(
+            generic_action(context.harness, context.event, PreToolActionTypeV1::Harness, PreToolOperationV1::Set, true, false),
+            "allow",
+            "native_omp_edit_without_target",
+            "The Rust authority found a todo update sent to edit: it names no file and has no patch header, so it cannot change any file.",
+        )
+    })
 }
 
 fn delegation_result(tool: &str, context: &OmpContext<'_>) -> PreToolResultV1 {
@@ -299,11 +347,29 @@ fn listing(
             && !super::super::sensitive_command(target)
             && !super::super::sensitive_read_path_argument(target)
     };
+    // A name inside a linked worktree this repository registers lists nothing
+    // when nothing is there, and every existing file in that worktree is
+    // already routed, so saying nothing is there reveals no more than a
+    // listing the agent may already run.
+    let registered = |target: &str| {
+        missing(target)
+            && super::super::git_routes::missing_path_in_registered_worktree(target, home, cwd)
+    };
+    if targets
+        .iter()
+        .all(|target| proven(target) || registered(target))
+    {
+        return Some(directory_allow(
+            context,
+            "native_missing_worktree_listing",
+            "The Rust authority proved this listing names a path with nothing behind it inside a linked worktree this repository registers, so it lists nothing and the tool reports the missing path itself.",
+        ));
+    }
     targets
         .iter()
         .all(|target| proven(target) || missing(target))
         .then(|| {
-            generic_result(
+            let mut result = generic_result(
                 generic_action(
                     context.harness,
                     context.event,
@@ -314,8 +380,14 @@ fn listing(
                 ),
                 "block",
                 super::evaluate::MISSING_PATH,
+                "",
+            );
+            result.reason = super::evaluate::missing_path_reason(
                 "HOL Guard did not run this listing because its path does not exist. Check the path, for example by listing its parent directory, and try again with the correct one.",
-            )
+                "listing",
+                targets.iter().find(|target| !proven(target)).copied(),
+            );
+            result
         })
 }
 
@@ -363,12 +435,21 @@ fn listing_target_proven(
     // The proof is skipped when the walk starts inside the session folder and
     // the last component is a literal ordinary name: then every name the host
     // returns ends in that name.
-    let recursive = recursive || has_glob_selector;
+    // Below a literal directory the host runs the selector with recursion
+    // off, so a one-segment selector such as `dir/*lock*` returns only that
+    // directory's own entries: the names a listing of it returns. Outside the
+    // session folder the stricter walk below still applies.
+    let single_level = has_glob_selector
+        && !recursive
+        && single_level_selector(selector)
+        && walk_inside_session(target, context);
+    let recursive = (recursive || has_glob_selector) && !single_level;
     let literal_name = has_glob_selector
         && literal_name_selector(selector)
         && walk_inside_session(target, context);
     if has_glob_selector
         && !literal_name
+        && !single_level
         && !super::super::search_scope::omp_glob_scope_proven(
             target,
             context.path.home_dir,
@@ -405,7 +486,31 @@ fn listing_target_proven(
             context.path.home_dir,
             context.path.cwd,
         )
+        || home_dot_directory_listing(target, has_glob_selector, recursive, context)
         || (!has_glob_selector && project_skill_listing(target, context))
+}
+
+/// A names-only listing of a dot-directory in the home directory, the same
+/// one `ls ~/.nvm` already gets.
+///
+/// The shared screen is bounded to the directory's own entries, because a
+/// walk below `~/.config` prints the names inside `~/.config/gh`. The host
+/// recurses only for `find` or a `pattern`, and a selector walks below its
+/// prefix, so both are left out and the entry names of one directory are
+/// what remains.
+fn home_dot_directory_listing(
+    target: &str,
+    has_glob_selector: bool,
+    recursive: bool,
+    context: &OmpContext<'_>,
+) -> bool {
+    !has_glob_selector
+        && !recursive
+        && super::super::read_paths::home_hidden_directory(
+            target,
+            context.path.home_dir,
+            context.path.cwd,
+        )
 }
 
 /// A names-only listing of the session's own project skill folders. Only a
@@ -444,6 +549,25 @@ fn project_skill_listing(target: &str, context: &OmpContext<'_>) -> bool {
             context.path.cwd,
             false,
         )
+}
+
+/// Whether a glob selector is a literal directory followed by one wildcard
+/// segment, such as `src/*.ts`. Oh My Pi matches that segment against the
+/// directory's own entries only: its glob tool passes `recursive: false` and
+/// its input schema has no field that turns recursion on (checked in Oh My Pi
+/// 18.4.12, 18.8.3 and 18.11.3). `listing` rejects any key outside that schema, and a
+/// `pattern` key keeps the walk. A selector with no literal directory gains
+/// a `**/` prefix there, and `**` crosses directories, so neither is
+/// single-level.
+fn single_level_selector(selector: &str) -> bool {
+    let Some(index) = selector.find(['*', '?', '[', '{']) else {
+        return false;
+    };
+    let Some(slash) = selector[..index].rfind('/') else {
+        return false;
+    };
+    let segment = &selector[slash + 1..];
+    !segment.is_empty() && !segment.contains('/') && !segment.contains("**")
 }
 
 /// Whether a glob selector ends in a literal file name, such as
@@ -636,29 +760,71 @@ fn walk_inside_session(target: &str, context: &OmpContext<'_>) -> bool {
     }
 }
 
-fn glob_directory(target: &str) -> Option<&str> {
-    let Some(index) = target.find(['*', '?', '[', '{']) else {
-        return Some(target);
-    };
-    let selector = target
-        .strip_prefix("~/")
-        .or_else(|| target.strip_prefix('/'))
-        .unwrap_or(target);
-    // Restrict this proof to simple globs. Alternatives and escaped syntax can
-    // synthesize traversal segments that are absent from the literal input.
-    if !contained_selector(selector)
-        || target.starts_with("//")
-        || selector.contains("..")
-        || selector.contains(['\\', '[', ']', '{', '}', '(', ')'])
-    {
+/// Oh My Pi's `lsp` tool asks the session's language servers about code.
+/// The actions its read-only sessions keep (`LSP_READONLY_ACTIONS`, checked
+/// in Oh My Pi 18.4.12, 18.8.3 and 18.11.3) only report on files. Every other action
+/// can change the workspace or reach the server unchecked: `rename` and
+/// `code_actions` apply edits across files, `rename_file` moves a file to any
+/// destination, and `request` sends a raw server request. Those go to review
+/// before they run instead of reaching the generic path, which reads the
+/// `file` key as a read. A proven read names one existing file inside the
+/// session folder and uses only the modeled keys, so its output meets the
+/// same scans and floors as a read of that file.
+fn lsp_read(
+    payload: &Value,
+    signals: &GenericSignals,
+    context: &OmpContext<'_>,
+) -> Option<PreToolResultV1> {
+    let input = strict_tool_input(payload)?;
+    let action = input.get("action").and_then(Value::as_str);
+    match action {
+        Some(
+            "diagnostics" | "definition" | "type_definition" | "implementation" | "references"
+            | "hover" | "symbols",
+        ) => {}
+        // Status reports take no file and change nothing.
+        Some("status" | "capabilities") => return None,
+        _ => {
+            return Some(generic_result(
+                generic_action(
+                    context.harness,
+                    context.event,
+                    PreToolActionTypeV1::FileWrite,
+                    PreToolOperationV1::Write,
+                    false,
+                    false,
+                ),
+                "review",
+                "native_omp_lsp_change_review",
+                "HOL Guard needs review for this language server action because it can edit or move files or send a raw server request. Read-only actions such as references, definition, hover and diagnostics on a file in this folder run without review.",
+            ))
+        }
+    }
+    let modeled = input
+        .iter()
+        .all(|(key, value)| match (key.as_str(), value) {
+            ("action" | "file", Value::String(_)) => true,
+            ("symbol" | "query", Value::String(text)) => text.len() <= 1024,
+            ("line", number) => number.as_u64().is_some_and(|line| line <= 10_000_000),
+            ("timeout", number) => number
+                .as_f64()
+                .is_some_and(|secs| (0.0..=300.0).contains(&secs)),
+            _ => false,
+        });
+    let file = input.get("file")?.as_str()?;
+    if !modeled || signals.path_values.len() != 1 || signals.path_values[0] != file {
         return None;
     }
-    let prefix = &target[..index];
-    match prefix.rsplit_once('/') {
-        Some(("", _)) => Some("/"),
-        Some((directory, _)) => Some(directory),
-        None => Some("."),
-    }
+    let (home, cwd) = (context.path.home_dir, context.path.cwd);
+    (super::super::read_paths::existing_regular_read_target(file, home, cwd)
+        && walk_inside_session(file, context))
+    .then(|| {
+        directory_allow(
+            context,
+            "native_omp_lsp_read",
+            "The Rust authority proved this language server query reports on one ordinary file in the session folder.",
+        )
+    })
 }
 
 fn grep_scope(
@@ -687,16 +853,25 @@ fn grep_scope(
     // A `file:N-M` entry searches only those lines of one file, so it carries
     // the proof `read` gives the same selector.
     let list = targets.len() > 1;
-    // A `glob` or `type` override can re-include a gitignored file, so with
-    // either one no ignore file narrows the proof.
+    // A `glob` or `type` override can re-include a gitignored file: no ignore file narrows it.
     let gitignore = input.get("gitignore").and_then(Value::as_bool) != Some(false)
         && !input.contains_key("glob")
         && !input.contains_key("type");
     let (home, cwd) = (context.path.home_dir, context.path.cwd);
+    // A plain pattern that no reachable sensitive file contains cannot print
+    // a line from one, so those files need not hold the search.
+    let clearance = super::super::search_pattern_clearance::PatternClearance::new(pattern);
+    let globs = grep_glob::EntryProofs::default();
     let proven = |target: &str| {
-        super::super::search_scope::omp_grep_scope_proven(target, home, cwd, gitignore)
-            || (list && super::super::read_paths::existing_regular_read_target(target, home, cwd))
+        super::super::search_scope::omp_grep_scope_proven(
+            target,
+            home,
+            cwd,
+            gitignore,
+            clearance.as_ref(),
+        ) || (list && super::super::read_paths::existing_regular_read_target(target, home, cwd))
             || super::super::read_paths::bounded_omp_file_selector_target(target, home, cwd)
+            || globs.proven(target, home, cwd, clearance.as_ref())
     };
     if targets.iter().all(|target| proven(target)) {
         return Some(directory_allow(
@@ -718,11 +893,31 @@ fn grep_scope(
     } else {
         "HOL Guard did not run this search because its path does not exist. Check the path, for example by listing its parent directory, and try again with the correct one."
     };
+    // The same holds for a search: a name inside a registered linked worktree
+    // with nothing behind it searches nothing, and that worktree's existing
+    // files are already in scope.
+    let registered = |target: &str| {
+        missing(target)
+            && !signals.sensitive_target
+            && !super::super::sensitive_command(target)
+            && !super::super::sensitive_read_path_argument(target)
+            && super::super::git_routes::missing_path_in_registered_worktree(target, home, cwd)
+    };
+    if targets
+        .iter()
+        .all(|target| proven(target) || registered(target))
+    {
+        return Some(directory_allow(
+            context,
+            "native_missing_worktree_search",
+            "The Rust authority proved this search names a path with nothing behind it inside a linked worktree this repository registers, so it searches nothing and the tool reports the missing path itself.",
+        ));
+    }
     targets
         .iter()
         .all(|target| proven(target) || missing(target))
         .then(|| {
-            generic_result(
+            let mut result = generic_result(
                 generic_action(
                     context.harness,
                     context.event,
@@ -733,8 +928,14 @@ fn grep_scope(
                 ),
                 "block",
                 super::evaluate::MISSING_PATH,
+                "",
+            );
+            result.reason = super::evaluate::missing_path_reason(
                 reason,
-            )
+                "search",
+                targets.iter().find(|target| !proven(target)).copied(),
+            );
+            result
         })
 }
 
@@ -792,8 +993,18 @@ pub(super) fn grep_review_note(
         return Some(GLOB_PATH_NOTE.to_owned());
     }
     let (home, cwd) = (context.path.home_dir, context.path.cwd);
+    // A file the pattern cannot match is not what holds the search.
+    let clearance = strict_tool_input(payload)?
+        .get("pattern")
+        .and_then(Value::as_str)
+        .and_then(super::super::search_pattern_clearance::PatternClearance::new);
     targets.iter().find_map(|target| {
-        let blocker = super::super::search_scope::content_search_blocker(target, home, cwd)?;
+        let blocker = super::super::search_scope::content_search_blocker(
+            target,
+            home,
+            cwd,
+            clearance.as_ref(),
+        )?;
         let blocker = blocker.to_str()?;
         let shown = match target.trim_end_matches('/') {
             "" | "." => blocker.to_owned(),
@@ -833,6 +1044,8 @@ pub(super) fn host_reference_reason(value: &str) -> Option<&'static str> {
         Some("native_omp_artifact_read")
     } else if skill_reference(value) {
         Some("native_omp_skill_read")
+    } else if proc_reference(value) {
+        Some("native_omp_proc_read")
     } else {
         None
     }
@@ -850,8 +1063,40 @@ fn artifact_reference(value: &str) -> bool {
     let number = |part: &str| {
         !part.is_empty() && part.len() <= 9 && part.bytes().all(|byte| byte.is_ascii_digit())
     };
+    number(id) && selector_chunks_ok(chunks)
+}
+
+/// `proc://` lists the session's own background jobs and `proc://<id>` shows
+/// one job's status and output, with an optional line window. The host serves
+/// both from its job table, never from a path. `proc://<id>/kill` and
+/// `/mode` are write targets that fail on a read, so they stay out: the id is
+/// one bounded token with no `/`.
+fn proc_reference(value: &str) -> bool {
+    let Some(rest) = value.strip_prefix("proc://") else {
+        return false;
+    };
+    if rest.is_empty() {
+        return true;
+    }
+    let mut chunks = rest.split(':');
+    let id = chunks.next().unwrap_or_default();
+    let token = !id.is_empty()
+        && id.len() <= 128
+        && !id.starts_with('.')
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'));
+    token && selector_chunks_ok(chunks)
+}
+
+/// The `:`-separated tail the host peels from a reference: at most one `N-M`
+/// line range and one `raw`, in either order.
+fn selector_chunks_ok<'a>(mut chunks: impl Iterator<Item = &'a str>) -> bool {
+    let number = |part: &str| {
+        !part.is_empty() && part.len() <= 9 && part.bytes().all(|byte| byte.is_ascii_digit())
+    };
     let (mut raw, mut range) = (false, false);
-    let selectors_ok = chunks.all(|chunk| {
+    chunks.all(|chunk| {
         if chunk.eq_ignore_ascii_case("raw") && !raw {
             raw = true;
             return true;
@@ -862,6 +1107,5 @@ fn artifact_reference(value: &str) -> bool {
         let fresh = is_range && !range;
         range |= is_range;
         fresh
-    });
-    number(id) && selectors_ok
+    })
 }

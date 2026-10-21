@@ -13,7 +13,9 @@ from codex_plugin_scanner.guard.native_mcp_tool_evidence import (
     NativeMcpToolEvidenceError,
     firewall_input,
     native_firewall_metadata_patch,
+    native_skill_firewall_metadata_patch,
     risk_input,
+    skill_firewall_input,
 )
 
 _CASES = json.loads(
@@ -54,6 +56,17 @@ def _firewall_artifact(source: dict) -> GuardArtifact:
     )
 
 
+def _is_skill(case: dict) -> bool:
+    return case["source"]["artifact_type"] == "skill"
+
+
+def _skill_kwargs(source: dict) -> dict:
+    return {key: value for key, value in source.items() if key != "artifact_type"}
+
+
+_ARTIFACT_FIREWALL = sorted(name for name, case in _FIREWALL.items() if not _is_skill(case))
+
+
 def _force_available(monkeypatch: pytest.MonkeyPatch) -> None:
     class Features:
         features = frozenset({module._FEATURE, module._RESIDENT_PROTOCOL_FEATURE})
@@ -87,13 +100,19 @@ def test_risk_projection_matches_shared_vector(name: str) -> None:
 @pytest.mark.parametrize("name", sorted(_FIREWALL))
 def test_firewall_projection_matches_shared_vector(name: str) -> None:
     case = _FIREWALL[name]
+    if _is_skill(case):
+        assert skill_firewall_input(**_skill_kwargs(case["source"])) == case["input"]
+        return
     assert firewall_input(_firewall_artifact(case["source"])) == case["input"]
 
 
 @pytest.mark.parametrize("name", sorted(_FIREWALL))
 def test_firewall_resident_patch_matches_shared_vector(name: str) -> None:
     case = _FIREWALL[name]
-    patch = native_firewall_metadata_patch(_firewall_artifact(case["source"]))
+    if _is_skill(case):
+        patch = native_skill_firewall_metadata_patch(**_skill_kwargs(case["source"]))
+    else:
+        patch = native_firewall_metadata_patch(_firewall_artifact(case["source"]))
     merged = {**case["metadata_before"], **(patch or {})}
     assert merged == case["expected_metadata"]
     changed = [key for key, value in (patch or {}).items() if case["metadata_before"].get(key) != value]
@@ -109,14 +128,14 @@ def test_unavailable_native_fails_closed(monkeypatch: pytest.MonkeyPatch) -> Non
         capabilities = None
 
     monkeypatch.setattr(module, "_native_runtime_status_memo", lambda: Status())
-    fw = _FIREWALL[sorted(_FIREWALL)[0]]
+    fw = _FIREWALL[_ARTIFACT_FIREWALL[0]]
     with pytest.raises(NativeMcpToolEvidenceError, match="unavailable"):
         native_firewall_metadata_patch(_firewall_artifact(fw["source"]))
 
 
 def test_client_exceptions_become_typed_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     _force_available(monkeypatch)
-    case = _FIREWALL[sorted(_FIREWALL)[0]]
+    case = _FIREWALL[_ARTIFACT_FIREWALL[0]]
     for error in (RuntimeError("thread"), OSError("pipe"), TimeoutError("slow")):
 
         def client(error: Exception = error, **_kwargs: object) -> bytes:
@@ -137,7 +156,7 @@ def test_mismatched_binding_fails_closed(monkeypatch: pytest.MonkeyPatch) -> Non
             b'"status":"ok","code":"ok","payload":{"metadata_patch":null}}'
         ),
     )
-    case = _FIREWALL[sorted(_FIREWALL)[0]]
+    case = _FIREWALL[_ARTIFACT_FIREWALL[0]]
     with pytest.raises(NativeMcpToolEvidenceError, match="result_invalid"):
         native_firewall_metadata_patch(_firewall_artifact(case["source"]))
 
@@ -173,7 +192,7 @@ def test_malformed_operation_payload_counts_as_a_resident_failure(
         ).encode()
 
     monkeypatch.setattr(module, "native_resident_client_request", client)
-    case = _FIREWALL[sorted(_FIREWALL)[0]]
+    case = _FIREWALL[_ARTIFACT_FIREWALL[0]]
     with pytest.raises(NativeMcpToolEvidenceError, match="result_invalid"):
         native_firewall_metadata_patch(_firewall_artifact(case["source"]))
     assert failures == ["native_mcp_tool_evidence_result_invalid"]
@@ -181,20 +200,23 @@ def test_malformed_operation_payload_counts_as_a_resident_failure(
 
 
 def test_non_string_server_name_fails_closed() -> None:
-    source = dict(_FIREWALL[sorted(_FIREWALL)[0]]["source"])
+    source = dict(_FIREWALL[_ARTIFACT_FIREWALL[0]]["source"])
     artifact = _firewall_artifact({**source, "metadata": {**source["metadata"], "server_name": 5}})
     with pytest.raises(NativeMcpToolEvidenceError, match="server_name_unsupported"):
         firewall_input(artifact)
 
 
 def test_unsupported_artifact_type_is_typed_error() -> None:
-    artifact = _firewall_artifact({**_FIREWALL[sorted(_FIREWALL)[0]]["source"], "artifact_type": "skill"})
-    with pytest.raises(NativeMcpToolEvidenceError, match="unsupported_artifact_type"):
-        native_firewall_metadata_patch(artifact)
+    # A skill reaches the same op through its own entry point, so the
+    # artifact-shaped one still rejects every type it does not project.
+    for artifact_type in ("skill", "browser_extension"):
+        artifact = _firewall_artifact({**_FIREWALL[_ARTIFACT_FIREWALL[0]]["source"], "artifact_type": artifact_type})
+        with pytest.raises(NativeMcpToolEvidenceError, match="unsupported_artifact_type"):
+            native_firewall_metadata_patch(artifact)
 
 
 def test_oversized_request_is_rejected_client_side(monkeypatch: pytest.MonkeyPatch) -> None:
     _force_available(monkeypatch)
-    case = _FIREWALL[sorted(_FIREWALL)[0]]
+    case = _FIREWALL[_ARTIFACT_FIREWALL[0]]
     with pytest.raises(NativeMcpToolEvidenceError, match="request_too_large"):
         native_firewall_metadata_patch(_firewall_artifact({**case["source"], "args": ["x" * (3 * 1024 * 1024)]}))

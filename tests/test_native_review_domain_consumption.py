@@ -92,7 +92,7 @@ def test_policy_bound_review_approval_retries_once_without_requeue(tmp_path: Pat
     assert _pause(store, tmp_path, result, receipt).get("approval_request_id") != request_id
 
 
-@pytest.mark.parametrize("field", ["policy_digest", "rule_digest", "runtime_identity", "control_revision"])
+@pytest.mark.parametrize("field", ["rule_digest", "runtime_identity", "control_revision"])
 def test_changed_policy_domain_does_not_consume_original_approval(tmp_path: Path, field: str) -> None:
     store = GuardStore(tmp_path / "guard-home")
     result, receipt = _review_fixture()
@@ -108,6 +108,21 @@ def test_changed_policy_domain_does_not_consume_original_approval(tmp_path: Path
     assert changed.get("approval_reuse_status") != "accepted"
     assert changed["approval_request_id"] != request_id
     assert _pause(store, tmp_path, result, receipt).get("approval_reuse_status") == "accepted"
+
+
+def test_policy_snapshot_republish_keeps_original_approval(tmp_path: Path) -> None:
+    # #4955: a republished snapshot with the same verdict, rules and runtime
+    # is the same decision, so its retry still consumes the approval, once.
+    store = GuardStore(tmp_path / "guard-home")
+    result, receipt = _review_fixture()
+    request_id = _approve(store, _pause(store, tmp_path, result, receipt))
+    republished = copy.deepcopy(receipt)
+    republished["policy_digest"] = "e" * 64
+    _resign_identity(republished)
+    retry = _pause(store, tmp_path, result, republished)
+    assert retry.get("approval_reuse_status") == "accepted"
+    assert "approval_request_id" not in retry
+    assert _pause(store, tmp_path, result, receipt).get("approval_request_id") != request_id
 
 
 def test_policy_bound_review_has_only_one_concurrent_consumer(tmp_path: Path) -> None:

@@ -5,18 +5,19 @@
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 from collections.abc import Mapping
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Protocol
 
-from ..native_github_workflow import GitHubWorkflowDescriptor, github_workflow_persisted_command_matches
+from ..native_github_workflow import (
+    GitHubWorkflowDescriptor,
+    GitHubWorkflowLineage,
+    github_workflow_validated_lineage,
+)
 from ..workflow_capabilities import (
     SignedWorkflowCapability,
     WorkflowCapabilityError,
-    canonical_framed_payload,
     format_utc_timestamp,
 )
 from .github_workflow_approval_record import GitHubWorkflowApprovalRecord
@@ -53,10 +54,10 @@ def issue_resolved_github_workflow_capability(
     """Issue one deterministic capability only after an exact persisted allow."""
 
     try:
-        request_id, record, operation, session = _validated_lineage(store, request)
+        lineage = _validated_lineage(store, request)
         if request.get("status") != "resolved" or request.get("resolution_action") != "allow":
             return False
-        capability_id = _capability_id(request_id)
+        capability_id = lineage.capability_id
         try:
             existing = store.lookup_workflow_capability(capability_id)
         except WorkflowCapabilityError as error:
@@ -64,7 +65,7 @@ def issue_resolved_github_workflow_capability(
                 raise
             existing = None
         if existing is not None:
-            return _existing_matches(existing, request_id, operation, session, record)
+            return _existing_matches(existing, lineage)
         key, key_id = store._policy_integrity_secret_material(create=False)
         if key is None or key_id is None:
             return False
@@ -73,13 +74,13 @@ def issue_resolved_github_workflow_capability(
             raise ValueError("resolution timestamp timezone required")
         signed = issue_github_workflow_capability_binding(
             store,
-            record.binding,
+            lineage.record.binding,
             capability_id=capability_id,
-            approval_provenance_id=request_id,
-            task_id=_required_string(operation, "operation_id"),
-            nonce=_digest("github-workflow-nonce", request_id),
+            approval_provenance_id=lineage.request_id,
+            task_id=lineage.operation_id,
+            nonce=lineage.nonce,
             issuer_id=_ISSUER_ID,
-            subject_id=_required_string(session, "session_id"),
+            subject_id=lineage.session_id,
             issued_at=format_utc_timestamp(issued_at),
             not_before=format_utc_timestamp(issued_at),
             expires_at=format_utc_timestamp(issued_at + _CAPABILITY_TTL),
@@ -103,18 +104,18 @@ def claim_resolved_github_workflow_authorization(
         request = store.get_approval_request(request_id)
         if request is None or request.get("status") != "resolved" or request.get("resolution_action") != "allow":
             return None
-        persisted_id, record, operation, session = _validated_lineage(store, request)
-        if persisted_id != request_id or record != descriptor.record:
+        lineage = _validated_lineage(store, request)
+        if lineage.record != descriptor.record:
             return None
-        capability_id = _capability_id(request_id)
+        capability_id = lineage.capability_id
         return claim_github_workflow_authorization(
             store,
             capability_id,
             descriptor.record.binding,
             descriptor.command_identity,
             invocation_id=f"github-invocation-{secrets.token_hex(16)}",
-            subject_id=_required_string(session, "session_id"),
-            task_id=_required_string(operation, "operation_id"),
+            subject_id=lineage.session_id,
+            task_id=lineage.operation_id,
             issuer_id=_ISSUER_ID,
             approval_provenance_id=request_id,
         )
@@ -133,11 +134,11 @@ def resolved_github_workflow_capability_preflight(
         request = store.get_approval_request(request_id)
         if request is None or request.get("status") != "resolved" or request.get("resolution_action") != "allow":
             return False
-        persisted_id, record, operation, session = _validated_lineage(store, request)
-        if persisted_id != request_id or record != descriptor.record:
+        lineage = _validated_lineage(store, request)
+        if lineage.record != descriptor.record:
             return False
-        signed = store.lookup_workflow_capability(_capability_id(request_id))
-        return signed is not None and _existing_matches(signed, request_id, operation, session, record)
+        signed = store.lookup_workflow_capability(lineage.capability_id)
+        return signed is not None and _existing_matches(signed, lineage)
     except (KeyError, OSError, TypeError, ValueError, WorkflowCapabilityError):
         return False
 
@@ -199,89 +200,40 @@ def issue_github_workflow_capability_for_resolution(
         return
 
 
-def _validated_lineage(
-    store: GitHubWorkflowRuntimeStore, request: Mapping[str, object]
-) -> tuple[str, GitHubWorkflowApprovalRecord, Mapping[str, object], Mapping[str, object]]:
+def _validated_lineage(store: GitHubWorkflowRuntimeStore, request: Mapping[str, object]) -> GitHubWorkflowLineage:
+    """The resident's verdict that these three store rows are one workflow lineage.
+
+    Python reads the rows because the resident does no store IO, and the
+    operation names the session row to read. Every comparison between them --
+    the approval linkage, the operation state, the session's surface and
+    capabilities, the one harness, the hook event, the persisted command's
+    re-derivation and the workspace binding -- is the resident's. There is no
+    Python fallback: an undecidable lineage raises, and the capability the
+    caller was about to issue, claim or preflight never exists.
+    """
     request_id = _required_string(request, "request_id")
-    record = approval_record_from_approval_request(request)
-    if record is None:
-        raise ValueError("missing GitHub workflow approval record")
     operation = store.get_guard_operation_for_approval_request(request_id)
     if operation is None:
         raise ValueError("missing Guard operation")
-    operation_request_ids = operation.get("approval_request_ids")
-    if not isinstance(operation_request_ids, list) or operation_request_ids.count(request_id) != 1:
-        raise ValueError("invalid Guard operation approval linkage")
-    if operation.get("operation_type") != "tool_call" or operation.get("status") not in {
-        "waiting_on_approval",
-        "completed",
-        "resumed",
-    }:
-        raise ValueError("invalid Guard workflow operation state")
-    session_id = _required_string(operation, "session_id")
-    session = store.get_guard_session(session_id)
-    if session is None or _required_string(session, "session_id") != session_id:
+    session = store.get_guard_session(_required_string(operation, "session_id"))
+    if session is None:
         raise ValueError("missing Guard session")
-    capabilities = session.get("capabilities")
-    if (
-        session.get("surface") != "harness-adapter"
-        or not isinstance(capabilities, list)
-        or "approval-resolution" not in capabilities
-    ):
-        raise ValueError("invalid Guard workflow session")
-    harness = _required_string(request, "harness")
-    if _required_string(operation, "harness") != harness or _required_string(session, "harness") != harness:
-        raise ValueError("Guard operation harness mismatch")
-    metadata = operation.get("metadata")
-    if not isinstance(metadata, Mapping):
-        raise ValueError("missing Guard operation metadata")
-    if metadata.get("hook_event_name") not in {
-        "PreToolUse",
-        "beforeShellExecution",
-        "preToolUse",
-    }:
-        raise ValueError("invalid Guard workflow hook event")
-    command_text = metadata.get("command_text")
-    if not isinstance(command_text, str) or not command_text:
-        raise ValueError("Guard operation command mismatch")
-    if not github_workflow_persisted_command_matches(command_text, record):
-        raise ValueError("Guard operation command mismatch")
-    operation_workspace = _required_string(metadata, "workspace")
-    session_workspace = _required_string(session, "workspace")
-    if (
-        operation_workspace != session_workspace
-        or _digest("github-workspace", str(Path(operation_workspace).resolve())) != record.binding.workspace_sha256
-    ):
-        raise ValueError("Guard operation workspace mismatch")
-    if request.get("artifact_type") != "tool_action_request":
-        raise ValueError("invalid GitHub workflow approval type")
-    return request_id, record, operation, session
+    lineage = github_workflow_validated_lineage(request, operation, session)
+    if lineage is None or lineage.request_id != request_id:
+        raise ValueError("invalid GitHub workflow lineage")
+    return lineage
 
 
-def _existing_matches(
-    signed: SignedWorkflowCapability,
-    request_id: str,
-    operation: Mapping[str, object],
-    session: Mapping[str, object],
-    record: GitHubWorkflowApprovalRecord,
-) -> bool:
+def _existing_matches(signed: SignedWorkflowCapability, lineage: GitHubWorkflowLineage) -> bool:
     claim = signed.claim
     return (
-        claim.approval_provenance_id == request_id
-        and claim.task_id == _required_string(operation, "operation_id")
-        and claim.subject_id == _required_string(session, "session_id")
+        claim.approval_provenance_id == lineage.request_id
+        and claim.task_id == lineage.operation_id
+        and claim.subject_id == lineage.session_id
         and claim.issuer_id == _ISSUER_ID
-        and claim.binding == record.binding
+        and claim.binding == lineage.record.binding
         and claim.max_uses == _CAPABILITY_MAX_USES
     )
-
-
-def _capability_id(request_id: str) -> str:
-    return f"gwc-{_digest('github-workflow-capability', request_id)}"
-
-
-def _digest(purpose: str, payload: object) -> str:
-    return hashlib.sha256(canonical_framed_payload(purpose, payload)).hexdigest()
 
 
 def _required_string(payload: Mapping[str, object], key: str) -> str:

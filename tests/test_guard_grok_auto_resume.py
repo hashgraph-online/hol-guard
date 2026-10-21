@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import io
 import json
 import sys
@@ -502,22 +501,36 @@ def test_grok_isolated_hook_resumes_after_approval(tmp_path: Path) -> None:
     assert json.loads(stdout_line)["decision"] == "allow"
 
 
-def test_grok_json_mode_uses_native_hook_response() -> None:
-    from codex_plugin_scanner.guard.cli.commands_support_interaction import (
-        _should_emit_native_hook_json_response,
-        _should_emit_native_hook_response,
+def _recorded_artifact_directive(harness: str, *, json_mode: bool, event: str, action: str) -> dict[str, object]:
+    """The artifact hook's routing the resident must reproduce for these facts."""
+
+    import gzip
+
+    fixture = Path(__file__).resolve().parents[1] / (
+        "rust/crates/guard-runtime/tests/fixtures/artifact_directive_vectors.json.gz"
+    )
+    wanted = {
+        "harness": harness,
+        "json": json_mode,
+        "event": event,
+        "policy_action": action,
+        "output_stream_present": False,
+        "replayed": False,
+        "approval_context_present": False,
+    }
+    return next(
+        vector["directive"]
+        for vector in json.loads(gzip.decompress(fixture.read_bytes()))
+        if all(vector["facts"][key] == value for key, value in wanted.items()) and not any(vector["extra"].values())
     )
 
-    args = argparse.Namespace(harness="grok", json=True)
-    assert _should_emit_native_hook_response(args) is False
-    assert (
-        _should_emit_native_hook_json_response(
-            args,
-            event_name="PreToolUse",
-            output_stream=None,
-        )
-        is True
-    )
+
+def test_grok_json_mode_uses_native_hook_response() -> None:
+    directive = _recorded_artifact_directive("grok", json_mode=True, event="PreToolUse", action="allow")
+    assert directive["route"] == "render"
+    assert directive["try_json_document"] is True
+    assert directive["emitter"] == "grok"
+    assert directive["exit_code"] is None  # grok's adapter decides it from its emit state
 
 
 def test_apply_grok_pretool_wait_rewrites_hook_specific_output(

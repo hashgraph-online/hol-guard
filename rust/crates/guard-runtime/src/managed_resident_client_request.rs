@@ -5,15 +5,30 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::{containment, handoff, lease, restart_budget, CLIENT_RETRY_DELAY};
-use crate::resident_diagnostics::{observe, Phase};
+use crate::resident_diagnostics::{note, observe, Phase};
 use crate::resident_state::{
     acquire_startup_lock, clear_stale_startup_lock, discover_home_states_prefer, next_generation,
     runtime_digest, state_scope, token_from_state, validate_package_process_identity,
     validate_runtime_process_identity,
 };
 
-// Startup may use the caller's remaining budget, never more than nine seconds.
+// Ordinary startup may use the caller's remaining budget, never more than nine
+// seconds. Daemon lifecycle cold start may use the caller's budget up to the
+// thirty-second ceiling in the parent module.
 const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(9_000);
+const DAEMON_LIFECYCLE_START_TIMEOUT: Duration =
+    Duration::from_millis(super::DAEMON_LIFECYCLE_TIMEOUT_CEILING_MS);
+
+fn startup_limit(payload: &[u8]) -> Duration {
+    let value = crate::strict_json_value(payload).ok();
+    match value
+        .as_ref()
+        .and_then(|value| value.get("operation")?.as_str())
+    {
+        Some("daemon_lifecycle_decide") => DAEMON_LIFECYCLE_START_TIMEOUT,
+        _ => CLIENT_START_TIMEOUT,
+    }
+}
 
 fn try_live_or_restart(
     state_base: &Path,
@@ -48,8 +63,9 @@ fn try_home_states(
     preferred_digest: &str,
 ) -> Result<Option<Vec<u8>>, String> {
     let runtime_digest = runtime_digest()?;
-    for (scope, _digest, state) in discover_home_states_prefer(state_base, Some(preferred_digest))?
-    {
+    let states = discover_home_states_prefer(state_base, Some(preferred_digest))?;
+    note("client_states", states.len());
+    for (scope, _digest, state) in states {
         if deadline.saturating_duration_since(Instant::now()).is_zero() {
             return Ok(None);
         }
@@ -62,6 +78,7 @@ fn try_home_states(
             &runtime_digest,
             deadline,
         ) {
+            note("client_state_foreign_retired", 1);
             continue;
         }
         let same_runtime = runtime_digest == state.runtime_sha256;
@@ -84,7 +101,11 @@ fn try_home_states(
         let identity = crate::resident_client::ExpectedProcessIdentity {
             process_id: state.process_id,
             start_marker: &state.process_start_marker,
-            digest: (!same_runtime).then_some(&state.runtime_sha256),
+            runtime: if same_runtime {
+                crate::resident_client::ExpectedRuntime::Package
+            } else {
+                crate::resident_client::ExpectedRuntime::Digest(&state.runtime_sha256)
+            },
         };
         let timeout = deadline.saturating_duration_since(Instant::now());
         if timeout.is_zero() {
@@ -108,10 +129,16 @@ fn try_home_states(
                     &runtime_digest,
                     &response,
                     deadline,
-                ) => {}
+                ) =>
+            {
+                note("client_state_foreign_rejected", 1);
+            }
             Ok(response) => return Ok(Some(response)),
             Err(error)
-                if containment::skip_failed_home_state_request(&error, same_runtime, &state) => {}
+                if containment::skip_failed_home_state_request(&error, same_runtime, &state) =>
+            {
+                note("client_state_request_skipped", 1);
+            }
             Err(error) => {
                 let code = if error.code.len() <= 96
                     && !error.code.is_empty()
@@ -127,6 +154,31 @@ fn try_home_states(
         }
     }
     Ok(None)
+}
+
+/// Whether discovery finds a live resident that runs `digest`.
+fn live_resident_of_runtime(state_base: &Path, digest: &str) -> bool {
+    // An unreadable state keeps the old behaviour of spending the budget.
+    // Discovery also returns this runtime's states whose process has exited,
+    // so a state counts as dead only when its process is provably gone or its
+    // PID now belongs to a process with another start marker. A process that
+    // cannot be inspected still counts as live.
+    match discover_home_states_prefer(state_base, Some(digest)) {
+        Ok(states) => states
+            .iter()
+            .any(|(_, _, state)| state.runtime_sha256 == digest && state_may_be_live(state)),
+        Err(_) => true,
+    }
+}
+
+fn state_may_be_live(state: &crate::resident_state::ResidentState) -> bool {
+    use crate::resident_state::{process_is_definitively_gone, process_start_marker};
+    if process_is_definitively_gone(state.process_id).unwrap_or(false) {
+        return false;
+    }
+    process_start_marker(state.process_id).map_or(true, |marker| {
+        crate::constant_time_eq(marker.as_bytes(), state.process_start_marker.as_bytes())
+    })
 }
 
 pub(super) fn client_request_with_deadline(
@@ -196,7 +248,7 @@ fn client_request_with_deadline_inner(
         let response = observe(
             Phase::ClientStartupWait,
             || -> Result<Option<Vec<u8>>, String> {
-                let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
+                let deadline = overall_deadline.min(Instant::now() + startup_limit(payload));
                 while Instant::now() < deadline {
                     if let Some(response) = try_live_or_restart(
                         state_base,
@@ -231,7 +283,21 @@ fn client_request_with_deadline_inner(
         return Ok(response);
     }
     let (generation, token, mut spawned) = observe(Phase::ClientSpawn, || -> Result<_, String> {
-        restart_budget::consume_for_spawn(state_base, &scope)?;
+        // A resident from another Guard install holds the home-wide owner
+        // lock. A spawn here could only fail on that lock, so name the owner
+        // instead of spending the restart budget on it. A live resident of
+        // this runtime holding the lock is unhealthy, not foreign: it keeps
+        // spending the budget so the restart circuit still opens.
+        match super::acquire_managed_owner_lock(state_base) {
+            Err(error)
+                if error == "native_resident_owner_busy"
+                    && !live_resident_of_runtime(state_base, &digest) =>
+            {
+                return Err(error)
+            }
+            probe => drop(probe),
+        }
+        restart_budget::consume_for_spawn(state_base, &scope, overall_deadline)?;
         let generation = next_generation(&scope, &digest)?;
         let mut token = [0u8; crate::AUTH_TOKEN_BYTES];
         getrandom::fill(&mut token).map_err(|_| "native_client_random_failed".to_owned())?;
@@ -245,7 +311,7 @@ fn client_request_with_deadline_inner(
         )?;
         Ok((generation, token, spawned))
     })?;
-    let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
+    let deadline = overall_deadline.min(Instant::now() + startup_limit(payload));
     let request_result = observe(Phase::ClientSpawnWait, || loop {
         if Instant::now() >= deadline {
             break Err("native_resident_start_timeout".to_owned());
@@ -272,6 +338,25 @@ fn client_request_with_deadline_inner(
             )?;
             Err(error)
         }
+    }
+}
+
+#[cfg(test)]
+mod startup_limit_tests {
+    use super::startup_limit;
+    use std::time::Duration;
+
+    #[test]
+    fn daemon_lifecycle_startup_keeps_the_cold_start_budget() {
+        assert_eq!(
+            startup_limit(br#"{"operation":"daemon_lifecycle_decide"}"#),
+            Duration::from_secs(30)
+        );
+        assert_eq!(
+            startup_limit(br#"{"operation":"prompt_analyze","deadline_budget_ms":30000}"#),
+            Duration::from_secs(9)
+        );
+        assert_eq!(startup_limit(br"{}"), Duration::from_secs(9));
     }
 }
 

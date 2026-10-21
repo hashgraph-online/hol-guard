@@ -1,6 +1,5 @@
-//! Workspace vectors whose expected values are the daemon's. The Python side
-//! of the same vectors is pinned by
-//! `tests/test_hook_workspace_temporary_fallthrough.py`.
+//! Workspace vectors whose expected values are the daemon's. The daemon's own
+//! side of the same vectors is pinned by `hook_path_rules_tests.rs`.
 
 use super::super::HookDirectDefer;
 use super::{normalized_workspace, workspace_candidate};

@@ -86,8 +86,10 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
                     cdpath_unset: false,
                     rustup_override_absent: false,
                     npm_config_inert: false,
+                    pip_config_inert: false,
                     shell_home_matches: false,
                     ripgrep_config_absent: false,
+                    psql_environment: Default::default(),
                 },
             )
             .is_empty(),
@@ -104,8 +106,10 @@ fn chained_sleeps_past_the_bound_cover_no_segment() {
                 cdpath_unset: false,
                 rustup_override_absent: false,
                 npm_config_inert: false,
+                pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                psql_environment: Default::default(),
             },
         ),
         vec![0, 1]
@@ -253,8 +257,10 @@ fn a_stderr_merge_does_not_invent_an_ls_target() {
         cdpath_unset: false,
         rustup_override_absent: false,
         npm_config_inert: false,
+        pip_config_inert: false,
         shell_home_matches: false,
         ripgrep_config_absent: false,
+        psql_environment: Default::default(),
     };
     let cover = |command: &str| {
         benign_command_segments(&parse_command(&request(command)).unwrap(), context)

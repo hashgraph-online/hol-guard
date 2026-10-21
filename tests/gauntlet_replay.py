@@ -20,8 +20,11 @@ from ci.gauntlet.approval_rows import offers_always
 from ci.gauntlet.fixtures import LFS_GITCONFIG
 from ci.gauntlet.host_process import realistic_environment
 from ci.gauntlet.interruptions import observation_interruptions
-from codex_plugin_scanner.guard.adapters.pi_extension_contained_tests_source import CONTAINED_TEST_HELPERS_SOURCE
-from tests.native_gate_retry import UNAVAILABLE_REASON
+from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_contained_tests_source import (
+    CONTAINED_TEST_HELPERS_SOURCE,
+)
+from tests.benign_fp_gate_connectors import connector_setup_failure
+from tests.native_gate_retry import BUDGET_MISS_REASONS
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPLAY_DOCUMENT = json.loads((FIXTURES / "gauntlet_replay_cases.json").read_text(encoding="utf-8"))
@@ -70,6 +73,10 @@ class ReplayCase:
     expect: str  # quiet | always | block
     event: str = "PreToolUse"
     tool_response: object = None
+    # Set by a case whose whole harm is reach the workspace sandbox removes: the network, the home
+    # directory, the host toolchain. The sandbox still writes inside the workspace, so a case that
+    # damages the worktree itself never carries this and keeps the strict check.
+    contained_ok: bool = False
 
     @property
     def tool_name(self) -> str:
@@ -88,6 +95,7 @@ def _entry(entry: dict[str, Any], harness: str, expect: str) -> ReplayCase:
         expect,
         entry.get("event", "PreToolUse"),
         entry.get("tool_response"),
+        bool(entry.get("contained_ok", False)),
     )
 
 
@@ -98,9 +106,11 @@ def expand() -> list[ReplayCase]:
         # a case that depends on an inherited variable.
         if entry.get("environment"):
             continue
-        mirror_pi = "omp" in entry["harnesses"] and entry["tool"] in PI_TOOLS
+        # Pi's read tool takes files; an entry that reads a folder says so and is not mirrored.
+        mirror_pi = "omp" in entry["harnesses"] and entry["tool"] in PI_TOOLS and entry.get("mirror_pi", True)
         harnesses = list(entry["harnesses"]) + (["pi"] if mirror_pi else [])
-        expect = "quiet" if entry["expect"] == "allow" else "block"
+        # A setup case keeps its expectation: a generic review there is a regression, not a block.
+        expect = {"allow": "quiet", "setup": "setup"}.get(entry["expect"], "block")
         cases.extend(_entry(entry, h, expect) for h in harnesses)
     return cases
 
@@ -183,13 +193,17 @@ def failure_reasons(case: ReplayCase, result: dict[str, object], approvals: list
 
 def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str, Any]]) -> str | None:
     """None when the case behaves as expected, otherwise a one-line failure."""
-    if result.get("reason_code") == UNAVAILABLE_REASON:
-        # A fail-closed hook says nothing about the policy, so it never satisfies a `block` case.
+    if result.get("reason_code") in BUDGET_MISS_REASONS:
+        # A fail-closed hook says nothing about the policy, so it never satisfies a `block` case,
+        # under either of the reason codes a missed budget is reported with.
         return "native review unavailable after retry"
     found = interruptions(case, result, approvals)
     allowed = not any(e["kind"] == "decision" for e in found)
     if case.expect == "quiet":
         return None if not found else f"ordinary work was interrupted: {[e['kind'] for e in found]}"
+    if case.expect == "setup":
+        failure = connector_setup_failure(approvals, result)
+        return f"not connector setup: {failure}" if failure else None
     if case.expect == "always":
         routed = result.get("reason_code") == "native_contained_execution_routed"
         if not found and (routed or omp_contained(case, result)):
@@ -199,4 +213,10 @@ def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str,
             return "review-by-design action raised no approval row to offer an Always allow"
         bad = [(a.get("tool_name"), a.get("once_only_reason")) for a in approvals if not offers_always(a)]
         return f"review row without an Always allow offer: {bad}" if bad else None
-    return "attack was allowed" if allowed and not approvals else None
+    # A contained run reaches no network, home or credential, so it protects a case whose harm is
+    # exactly that reach. It is not protection in general: the workspace sandbox still writes inside
+    # the workspace, so an attack on the worktree itself must say so on the case to count.
+    contained = case.contained_ok and (
+        result.get("reason_code") == "native_contained_execution_routed" or omp_contained(case, result)
+    )
+    return "attack was allowed" if allowed and not approvals and not contained else None

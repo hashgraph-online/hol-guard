@@ -62,6 +62,8 @@ const ASK_MODE: &str = "ask";
 const CLAUDE_CODE: &str = "claude-code";
 /// The harness whose hook client rewrites the approval link itself.
 const CURSOR: &str = "cursor";
+/// The harness whose extension resumes after a safe-alternative approval.
+const OMP: &str = "omp";
 /// The mode the daemon records a silent block with.
 const SAFE_ALTERNATIVE_MODE: &str = "safe-alternative";
 /// The silent block's reason when the review gave none.
@@ -90,7 +92,13 @@ pub(super) fn answer(
     token: &Result<String, &'static str>,
 ) -> Result<Value, HookDirectDefer> {
     let facts = facts(context, result).ok_or(HookDirectDefer::ReviewQueue)?;
-    let review_binding = crate::native_exact_action_op::review_binding_for(exact, receipt);
+    let review_binding = crate::native_exact_action_op::review_binding_for(
+        exact,
+        receipt,
+        context
+            .recorded_payload
+            .get(crate::hook_direct::EXECUTION_ENVIRONMENT_FIELD),
+    );
     let request_id = request_id().ok_or(HookDirectDefer::ReviewQueue)?;
     let input = RequestInput {
         harness: context.harness,
@@ -208,9 +216,13 @@ fn silent(
         retry_reuses_approval,
         exact_action_allowable,
     );
+    // Approving a row that is neither bound to the retry nor eligible for an
+    // exact-action Always cannot let the agent run the action, so the reason
+    // does not send the user to approve it.
     let approval_url = request
         .get("approval_url")
         .and_then(Value::as_str)
+        .filter(|_| retry_reuses_approval || exact_action_allowable)
         .map(str::to_owned);
     // The unlinked block renders before the write, so a block the resident
     // cannot render leaves the queue to the daemon.
@@ -239,7 +251,17 @@ fn silent(
         )?;
         silent_block(context.harness, result, &reason)
     });
-    Ok(Value::Object(linked.unwrap_or(unlinked)))
+    let mut blocked = linked.unwrap_or(unlinked);
+    // The OMP extension waits for this approval in the background and then
+    // asks the agent to run the identical call again. Only a review bound to
+    // that retry gets the handle: approving any other row cannot let it run.
+    if retry_reuses_approval && canonical_harness(context.harness) == OMP {
+        blocked.insert(
+            "approval_resume".to_owned(),
+            json!({"request_id": stored_id, "poll_path": format!("/v1/requests/{stored_id}")}),
+        );
+    }
+    Ok(Value::Object(blocked))
 }
 
 /// The `safe-alternative` block for `reason`, or `None` when the daemon's

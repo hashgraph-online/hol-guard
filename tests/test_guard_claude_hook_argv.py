@@ -290,9 +290,10 @@ def test_exec_hook_does_not_run_marker_embedded_in_workspace_path(tmp_path: Path
     )
 
     assert result.returncode == 0
-    # The resident writes phase timing when it answers the prompt. Those lines
+    # The resident writes phase timing and discovery counts when it answers the prompt. Those lines
     # are not the injected command. Anything else on stderr still fails.
-    unexpected = [line for line in result.stderr.splitlines() if not line.startswith("native_resident_phase ")]
+    diagnostic_prefixes = ("native_resident_phase ", "native_resident_note ")
+    unexpected = [line for line in result.stderr.splitlines() if not line.startswith(diagnostic_prefixes)]
     assert unexpected == []
     assert not marker_path.exists()
 
@@ -331,7 +332,7 @@ def test_daemon_hook_uses_the_native_bridge_when_the_runtime_offers_it(
     monkeypatch.setattr(
         native_runtime,
         "native_runtime_status",
-        lambda: _native_status((claude_hook_argv.NATIVE_CLAUDE_HOOK_FEATURE,), runtime),
+        lambda *, deadline_monotonic=None: _native_status((claude_hook_argv.NATIVE_CLAUDE_HOOK_FEATURE,), runtime),
     )
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 
@@ -358,7 +359,7 @@ def test_daemon_hook_keeps_the_python_bridge_without_the_native_feature(
     monkeypatch.setattr(
         native_runtime,
         "native_runtime_status",
-        lambda: _native_status(("resident-protocol-v2",), tmp_path / "hol-guard-runtime"),
+        lambda *, deadline_monotonic=None: _native_status(("resident-protocol-v2",), tmp_path / "hol-guard-runtime"),
     )
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 

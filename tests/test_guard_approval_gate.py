@@ -54,6 +54,7 @@ from codex_plugin_scanner.guard.runtime.self_approval import _AGENT_ENV_MARKERS
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.totp import TotpSecretStore, _temporary_atomic_path, totp_code_at_counter
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.native_permission_plan_stub import answer_persist_plans
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.support.network import stub_authenticated_urlopen
 
@@ -1935,7 +1936,7 @@ def test_approval_gate_allow_once_requires_password_prompt(tmp_path: Path, monke
     _enable_gate(store)
     prompt_calls = 0
 
-    def _approval_gate_input(_guard_home: Path) -> ApprovalGateInput:
+    def _approval_gate_input(_guard_home: Path, **_kwargs: object) -> ApprovalGateInput:
         nonlocal prompt_calls
         prompt_calls += 1
         return ApprovalGateInput(password=PASSWORD)
@@ -2121,7 +2122,10 @@ def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
     assert store.list_policy_decisions("codex") == []
 
 
-def test_approval_gate_native_permission_persistence_cannot_bypass(tmp_path: Path) -> None:
+def test_approval_gate_native_permission_persistence_cannot_bypass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answer_persist_plans(monkeypatch)
     store = _store(tmp_path)
     _enable_gate(store)
 
@@ -2138,7 +2142,10 @@ def test_approval_gate_native_permission_persistence_cannot_bypass(tmp_path: Pat
     assert store.list_policy_decisions("claude-code") == []
 
 
-def test_approval_gate_native_permission_failure_queues_guard_fallback(tmp_path: Path) -> None:
+def test_approval_gate_native_permission_failure_queues_guard_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answer_persist_plans(monkeypatch)
     store = _store(tmp_path)
     _enable_gate(store)
     artifact = GuardArtifact(

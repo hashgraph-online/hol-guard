@@ -34,7 +34,8 @@ pub(crate) fn post_claim(
 ) -> Result<(GuardAction, Option<&'static str>), String> {
     let current = parse_action(&inputs.current_policy_action)?;
     let reuse = parse_action(&inputs.reuse_action)?;
-    let mut reason = (inputs.post_claim_refresh_failed || inputs.context_changed)
+    let context_changed = context_changed(inputs)?;
+    let mut reason = (inputs.post_claim_refresh_failed || context_changed)
         .then_some(CONTEXT_CHANGED_AFTER_CLAIM);
     if inputs.has_ignored_integrity {
         reason = Some(INTEGRITY_FAILURE);
@@ -54,6 +55,54 @@ pub(crate) fn post_claim(
         action = most_restrictive_of(action, GuardAction::RequireReapproval);
     }
     Ok((action, reason))
+}
+
+/// Whether the request's context moved since the claimed approval was saved.
+///
+/// A caller that names both tokens leaves the comparison to the resident,
+/// which owns the token grammar it mints; one that compares them itself says
+/// so outright. Neither is a request the resident can answer, so it fails
+/// rather than assuming an answer that would decide a live approval.
+fn context_changed(inputs: &PostClaimInputsV1) -> Result<bool, String> {
+    match (
+        inputs.claimed_context_token.as_ref(),
+        inputs.current_context_token.as_ref(),
+    ) {
+        (Some(saved), Some(current)) => {
+            Ok(crate::context_digest::validate_context_tokens(saved, current).is_some())
+        }
+        _ => inputs
+            .context_changed
+            .ok_or_else(|| "native_hook_decision_facts_missing".to_owned()),
+    }
+}
+
+/// Say what the re-evaluated claim means for reuse, when the caller named the
+/// claimed approval's context token.
+///
+/// The claim was already consumed, so the saved authority is an allow by
+/// construction and nothing outside the resident has to name it. The stored
+/// token is read by the same grammar the resident mints, so the decision also
+/// carries whether that approval was ever bound to the context-token contract.
+pub(crate) fn post_claim_reuse(
+    inputs: &PostClaimInputsV1,
+    action: GuardAction,
+    reason: Option<&str>,
+) -> Option<Value> {
+    let claimed = inputs.claimed_context_token.as_ref()?;
+    let mut decision = guard_command::approval_reuse::evaluate_approval_reuse(
+        &Value::from(action.as_str()),
+        Some(&Value::from("allow")),
+        Some(true),
+        reason,
+        inputs.fresh_local_approval.unwrap_or(false),
+        inputs.durable_exact_approval.unwrap_or(false),
+    );
+    if claimed.as_str().is_some_and(|value| !value.is_empty()) {
+        decision.saved_artifact_hash_is_context_token =
+            Some(crate::context_digest::parse_context_token(claimed).is_some());
+    }
+    serde_json::to_value(&decision).ok()
 }
 
 fn policy_composition(

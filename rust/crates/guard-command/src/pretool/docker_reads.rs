@@ -6,6 +6,30 @@
 //! start, pull and change nothing. Every option is allowlisted. Starting an
 //! existing container is proven in `docker_start`.
 //!
+//! `docker version` and `docker compose version` print the client banner and,
+//! for the first, the daemon's version line. Neither starts a container or
+//! reads a project file.
+//!
+//! `docker buildx ls` prints the builder instances named in the client's own
+//! configuration directory, with their endpoints and platforms. It bootstraps
+//! nothing: only `buildx inspect --bootstrap` starts a builder, and that stays
+//! reviewed. `docker compose ls` prints the projects the daemon already labels
+//! its running containers with, so unlike `compose ps` it never resolves a
+//! compose file, its `.env` or its `include` sources.
+//!
+//! `docker buildx imagetools inspect <image>` asks the image's registry for the
+//! manifest (or manifest list) it publishes and prints its digest, platforms and
+//! attestations. It is registry metadata, the same kind of query as `npm view`:
+//! it pulls no layer, loads no project file, builds nothing and writes nothing
+//! locally. Exactly one image reference is allowed, and the only options are
+//! `--raw` and `--format`. A `--format` template may read only the image name,
+//! the manifest and the index (`{{.Manifest.Digest}}`, `{{json .Manifest}}`):
+//! `.Image` is the image's configuration, whose `Env` can hold a credential the
+//! image was built with, so a template naming it, or any other field, function
+//! or control action, stays reviewed. `--builder` points the query at another
+//! builder's configuration, and every other `imagetools` verb stays reviewed,
+//! `create` most of all, because it pushes a new manifest to a registry.
+//!
 //! Still reviewed:
 //! - any option before the subcommand. `-H`/`--host`, `--context` and
 //!   `--config` move the client to another daemon or configuration, and
@@ -30,18 +54,42 @@ const CONTAINER_FLAGS: [&str; 4] = ["-s", "--size", "-l", "--latest"];
 /// Image-listing flags that take no value.
 const IMAGE_FLAGS: [&str; 1] = ["--digests"];
 
+/// Builder and project listings print a fixed summary and take no flag of
+/// their own beyond the shared ones.
+const NO_FLAGS: [&str; 0] = [];
+
 /// Options whose value only filters, bounds or formats the printed summary.
 const CONTAINER_VALUES: [&str; 5] = ["-n", "--last", "-f", "--filter", "--format"];
 const IMAGE_VALUES: [&str; 3] = ["-f", "--filter", "--format"];
+/// A builder listing's `--format` is not a summary option: `--format json`
+/// serializes each builder's nodes, and a node carries the proxy
+/// configuration it was created with, which the default table omits. A proxy
+/// URL is written with its credentials in it, so the printed summary stays
+/// the fixed one.
+const BUILDER_VALUES: [&str; 0] = [];
+/// `docker compose ls` gives `--filter` no short form, so Cobra reads `-f` as
+/// the root `--file` and the value names a compose file to resolve. Only the
+/// long spelling filters.
+const PROJECT_VALUES: [&str; 2] = ["--filter", "--format"];
+/// A registry manifest query prints the manifest as published (`--raw`) or
+/// through a Go template over that one document (`--format`).
+const REGISTRY_FLAGS: [&str; 1] = ["--raw"];
+const REGISTRY_VALUES: [&str; 1] = ["--format"];
 
 /// Single-letter flags that may be clustered (`-aq`).
 const CONTAINER_SHORT: &str = "aqsl";
 const IMAGE_SHORT: &str = "aq";
+const BUILDER_SHORT: &str = "";
+const PROJECT_SHORT: &str = "aq";
+const REGISTRY_SHORT: &str = "";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Listing {
     Containers,
     Images,
+    Builders,
+    Projects,
+    Manifest,
 }
 
 pub(super) fn safe_docker_segment(
@@ -74,11 +122,26 @@ pub(super) fn safe_docker_arguments(arguments: &[String]) -> bool {
         return false;
     }
     let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    // A version banner prints the client's own build, and the server line it
+    // asks the daemon for is the same connection `docker ps` already uses. The
+    // Compose plugin prints its banner without loading a project file.
+    if matches!(
+        words.as_slice(),
+        ["version"]
+            | ["compose", "version"]
+            | ["compose", "version", "--short"]
+            | ["buildx", "version"]
+    ) {
+        return true;
+    }
     let (listing, rest) = match words.as_slice() {
         ["ps", rest @ ..] => (Listing::Containers, rest),
         ["container", "ls" | "list" | "ps", rest @ ..] => (Listing::Containers, rest),
         ["images", rest @ ..] => (Listing::Images, rest),
         ["image", "ls" | "list", rest @ ..] => (Listing::Images, rest),
+        ["buildx", "ls", rest @ ..] => (Listing::Builders, rest),
+        ["compose", "ls" | "list", rest @ ..] => (Listing::Projects, rest),
+        ["buildx", "imagetools", "inspect", rest @ ..] => (Listing::Manifest, rest),
         _ => return super::docker_start::safe_start_arguments(&words),
     };
     listing_options_safe(listing, rest)
@@ -88,6 +151,9 @@ fn listing_options_safe(listing: Listing, words: &[&str]) -> bool {
     let (flags, values, short): (&[&str], &[&str], &str) = match listing {
         Listing::Containers => (&CONTAINER_FLAGS[..], &CONTAINER_VALUES[..], CONTAINER_SHORT),
         Listing::Images => (&IMAGE_FLAGS[..], &IMAGE_VALUES[..], IMAGE_SHORT),
+        Listing::Builders => (&NO_FLAGS[..], &BUILDER_VALUES[..], BUILDER_SHORT),
+        Listing::Projects => (&NO_FLAGS[..], &PROJECT_VALUES[..], PROJECT_SHORT),
+        Listing::Manifest => (&REGISTRY_FLAGS[..], &REGISTRY_VALUES[..], REGISTRY_SHORT),
     };
     let mut positionals = 0usize;
     let mut index = 0;
@@ -119,7 +185,9 @@ fn listing_options_safe(listing: Listing, words: &[&str]) -> bool {
                     None => return false,
                 },
             };
-            if !option_value_safe(name, value) {
+            if !option_value_safe(name, value)
+                || (listing == Listing::Manifest && !manifest_format_safe(value))
+            {
                 return false;
             }
             continue;
@@ -129,10 +197,11 @@ fn listing_options_safe(listing: Listing, words: &[&str]) -> bool {
         }
     }
     // `docker images <repository[:tag]>` filters by one reference; the
-    // container listing takes none.
+    // container listing takes none. A manifest query names exactly one image.
     match listing {
-        Listing::Containers => positionals == 0,
+        Listing::Containers | Listing::Builders | Listing::Projects => positionals == 0,
         Listing::Images => positionals <= 1,
+        Listing::Manifest => positionals == 1,
     }
 }
 
@@ -156,6 +225,42 @@ fn option_value_safe(name: &str, value: &str) -> bool {
         "--format" => true,
         _ => false,
     }
+}
+
+/// A manifest query's template reads only the published name, manifest and
+/// index. The image configuration (`.Image`) can carry a build-time credential
+/// in its environment, so it is not among them.
+fn manifest_format_safe(value: &str) -> bool {
+    let mut rest = value;
+    while let Some(start) = rest.find("{{") {
+        if rest[..start].contains("}}") {
+            return false;
+        }
+        let after = &rest[start + 2..];
+        let Some(end) = after.find("}}") else {
+            return false;
+        };
+        if !manifest_action_safe(after[..end].trim()) {
+            return false;
+        }
+        rest = &after[end + 2..];
+    }
+    !rest.contains("}}")
+}
+
+fn manifest_action_safe(action: &str) -> bool {
+    let field = match action.strip_prefix("json") {
+        Some(after) if after.starts_with(char::is_whitespace) => after.trim_start(),
+        _ => action,
+    };
+    let Some(path) = field.strip_prefix('.') else {
+        return false;
+    };
+    let mut segments = path.split('.');
+    matches!(segments.next(), Some("Name" | "Manifest" | "Index"))
+        && segments.all(|segment| {
+            !segment.is_empty() && segment.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        })
 }
 
 /// `name[:tag]` or `name@digest` with registry path characters only.

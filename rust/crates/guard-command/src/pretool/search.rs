@@ -5,9 +5,12 @@ mod agent_root;
 mod fd;
 mod git_metadata;
 mod glob_class;
-mod grep;
+pub(super) mod grep;
 mod hint;
+mod names_only;
 mod options;
+mod rg;
+mod rg_whitelist;
 mod roots;
 mod sibling;
 mod tree;
@@ -16,11 +19,39 @@ pub(super) use agent_root::{
     agent_root_listing, skill_link_resolves_over_home, skill_listing_root,
 };
 use options::unsafe_search_value;
+pub(super) use rg::{rg_hidden_whitelist_reason, safe_rg_stdin_arguments};
+pub(super) use sibling::named_path as sibling_repository_named_file;
 pub(super) use tree::{
-    safe_glob_operand, safe_literal_bracket_tree, safe_recursive_search_target,
-    safe_recursive_target, safe_unmatched_glob_operand, SECRET_EXTENSIONS,
+    safe_glob_operand, safe_literal_bracket_read_target, safe_literal_bracket_tree,
+    safe_recursive_target, safe_recursive_target_through_links, safe_unmatched_glob_operand,
+    SECRET_EXTENSIONS,
 };
 pub(super) use walk_memo::with_walk_memo;
+
+/// A names-only walk (`find`) rooted at a project-metadata directory such as
+/// `.github` inside a repository work tree, the session's own or a sibling
+/// checkout. The root must be one a hidden-directory listing may name, every
+/// hidden component of its canonical path a benign metadata name, and every
+/// descendant must clear the recursive-listing screen.
+pub(super) fn metadata_directory_walk(value: &str, context: ReadContext<'_>) -> bool {
+    if value.split(['/', '\\']).any(|part| part == "..")
+        || !super::read_paths::repository_hidden_directory(value, context.home_dir, context.cwd)
+    {
+        return false;
+    }
+    let Some(root) = tree::expanded_operand(value, context)
+        .and_then(|root| std::fs::canonicalize(root).ok())
+        .filter(|root| root.is_dir())
+    else {
+        return false;
+    };
+    root.components().all(|component| match component {
+        std::path::Component::Normal(name) => name
+            .to_str()
+            .is_some_and(|name| !name.starts_with('.') || tree::hidden_allowed(name)),
+        _ => true,
+    }) && tree::walk(root, &[], &[], false, false)
+}
 fn glob_matches(pattern: &[u8], value: &[u8]) -> bool {
     let mut previous = vec![false; value.len() + 1];
     previous[0] = true;
@@ -190,6 +221,24 @@ fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {
         let open = candidate.find('{')?;
         let close = candidate[open + 1..].find('}')? + open + 1;
         let choices: Vec<&str> = candidate[open + 1..close].split(',').collect();
+        // A brace with no comma and no `..`, such as Git's `HEAD^{commit}`,
+        // `@{u}` or a Go template `{{.Server.Version}}`, is literal text to the
+        // shell and a single alternative to a glob, so it is checked as its
+        // inner text: `{.env}` and `{{.env}}` still name `.env`. A `..`
+        // sequence such as `.en{v..v}` expands in bash, so it keeps failing
+        // closed.
+        if choices.len() == 1 && !choices[0].contains("..") {
+            let trimmed = choices[0].trim_start_matches('{');
+            if !trimmed.contains('{') {
+                let nested_braces = choices[0].len() - trimmed.len();
+                let closing = "}".repeat(nested_braces);
+                let suffix = candidate[close + 1..]
+                    .strip_prefix(closing.as_str())
+                    .unwrap_or(&candidate[close + 1..]);
+                expanded.push(format!("{}{trimmed}{suffix}", &candidate[..open],));
+                continue;
+            }
+        }
         if choices.len() < 2 || expanded.len() + choices.len() > 16 {
             return None;
         }
@@ -303,6 +352,9 @@ enum SearchValueRole {
     RgGlob,
     Path,
     TypeGlob,
+    /// ripgrep `-t`/`--type`: a built-in type name, whose globs may name
+    /// hidden files.
+    RgType,
     DirectoryAction,
     Other,
 }
@@ -323,9 +375,10 @@ fn short_search_option(
             if !attached.is_empty() && unsafe_search_value(*role, attached, context) {
                 return Err(());
             }
+            // `-f FILE` supplies the patterns as `-e` does.
             return Ok((
                 attached.is_empty().then_some(*role),
-                matches!(role, SearchValueRole::Pattern),
+                matches!(role, SearchValueRole::Pattern | SearchValueRole::Path),
             ));
         }
     }
@@ -338,170 +391,52 @@ pub(super) fn safe_search_arguments_with_context(
     context: ReadContext<'_>,
 ) -> bool {
     match executable {
-        "rg" => safe_rg_arguments(arguments, context),
+        "rg" => rg::safe_rg_arguments(arguments, context),
         "fd" => fd::safe_fd_arguments(arguments, context),
         "grep" => grep::safe_grep_arguments(arguments, context),
         _ => false,
     }
 }
 
+pub(super) fn safe_rg_segment(
+    model: &crate::CanonicalCommandV1,
+    segment: &crate::CommandSegmentV1,
+    context: ReadContext<'_>,
+) -> bool {
+    rg::safe_rg_segment(model, segment, context)
+}
+
 pub(super) fn safe_grep_stdin_arguments(arguments: &[String]) -> bool {
     grep::safe_stdin_arguments(arguments)
 }
 
-pub(super) fn safe_rg_stdin_arguments(arguments: &[String]) -> bool {
-    safe_rg_arguments_inner(arguments, crate::pretool::PathContext::default(), true)
-}
+#[cfg(test)]
+mod tests {
+    use super::glob_can_select_sensitive_path;
 
-fn safe_rg_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
-    safe_rg_arguments_inner(arguments, context, false)
-}
-
-fn safe_rg_arguments_inner(
-    arguments: &[String],
-    context: ReadContext<'_>,
-    stdin_only: bool,
-) -> bool {
-    let mut pending_value: Option<SearchValueRole> = None;
-    let mut pattern_supplied = false;
-    let mut options_enabled = true;
-    let mut paths_only = false;
-    let mut config_disabled = false;
-    for argument in arguments {
-        if let Some(role) = pending_value.take() {
-            if unsafe_search_value(role, argument, context) {
-                return false;
-            }
-            if matches!(role, SearchValueRole::Pattern) {
-                pattern_supplied = true;
-            }
-            continue;
+    #[test]
+    fn brace_sequences_still_select_sensitive_names() {
+        // Git's brace suffixes and Go template fields are one literal alternative.
+        for literal in [
+            "head^{commit}",
+            "4dc51cdaa1^{tree}",
+            "head@{0}",
+            "@{u}",
+            "{{.server.version}}",
+        ] {
+            assert!(!glob_can_select_sensitive_path(literal), "{literal}");
         }
-        if options_enabled && argument == "--" {
-            options_enabled = false;
-            continue;
-        }
-        if options_enabled && argument.starts_with("--") {
-            let (name, attached) = argument.split_once('=').unwrap_or((argument.as_str(), ""));
-            if matches!(
-                name,
-                "--hidden"
-                    | "--unrestricted"
-                    | "--no-ignore"
-                    | "--no-ignore-vcs"
-                    | "--no-ignore-global"
-                    | "--no-ignore-parent"
-                    | "--no-ignore-dot"
-                    | "--no-ignore-exclude"
-                    | "--no-ignore-files"
-                    | "--follow"
-                    | "--pre"
-                    | "--pre-glob"
-                    | "--hostname-bin"
-            ) {
-                return false;
-            }
-            let role = options::rg_value_role(name);
-            config_disabled |= name == "--no-config";
-            if name == "--files" {
-                if stdin_only {
-                    return false;
-                }
-                paths_only = true;
-            }
-            if role.is_none() && !options::safe_rg_flag(name) {
-                return false;
-            }
-            if let Some(role) = role {
-                if stdin_only && matches!(role, SearchValueRole::Path) {
-                    return false;
-                }
-                if attached.is_empty() {
-                    pending_value = Some(role);
-                } else if unsafe_search_value(role, attached, context) {
-                    return false;
-                } else if matches!(role, SearchValueRole::Pattern) {
-                    pattern_supplied = true;
-                }
-            }
-            continue;
-        }
-        if options_enabled && argument.starts_with('-') && argument.len() > 1 {
-            if stdin_only
-                && argument[1..]
-                    .chars()
-                    .take_while(|option| {
-                        !matches!(
-                            option,
-                            'e' | 'g' | 'A' | 'B' | 'C' | 'E' | 'j' | 'm' | 'M' | 'r' | 't' | 'T'
-                        )
-                    })
-                    .any(|option| option == 'f')
-            {
-                return false;
-            }
-            let parsed = short_search_option(
-                argument,
-                &['u', '.', 'L'],
-                &[
-                    ('e', SearchValueRole::Pattern),
-                    ('f', SearchValueRole::Path),
-                    ('g', SearchValueRole::RgGlob),
-                    ('A', SearchValueRole::Other),
-                    ('B', SearchValueRole::Other),
-                    ('C', SearchValueRole::Other),
-                    ('E', SearchValueRole::Other),
-                    ('j', SearchValueRole::Other),
-                    ('m', SearchValueRole::Other),
-                    ('M', SearchValueRole::Other),
-                    ('r', SearchValueRole::Other),
-                    ('t', SearchValueRole::Other),
-                    ('T', SearchValueRole::Other),
-                ],
-                context,
-            );
-            let Ok((next_value, supplied_pattern)) = parsed else {
-                return false;
-            };
-            pending_value = next_value;
-            pattern_supplied |= supplied_pattern;
-            continue;
-        }
-        if paths_only || pattern_supplied {
-            if stdin_only {
-                return false;
-            }
-            // A broad search of only parent directories traverses unrelated
-            // sibling projects. Named sibling paths still use canonical
-            // provenance checks, but `rg pattern ../` remains at review.
-            let directories: Vec<_> = argument
-                .split('/')
-                .filter(|part| !part.is_empty() && *part != ".")
-                .collect();
-            if !directories.is_empty() && directories.iter().all(|part| *part == "..") {
-                return false;
-            }
-            // A shell glob that lexically could reach a hidden or credential
-            // path is still proven when every expansion is an ordinary file,
-            // or a directory below the cwd whose whole tree is ordinary.
-            if unsafe_search_value(SearchValueRole::Path, argument, context)
-                && !tree::rg_root_inside_cwd(argument, context)
-                && !sibling::rg_sibling_repository_root(argument, context)
-                && !tree::safe_recursive_search_target(argument, context)
-                && (!argument.contains(['*', '?', '['])
-                    || !tree::safe_glob_search_operand(argument, context))
-            {
-                return false;
-            }
-        } else {
-            pattern_supplied = true;
+        // Bash expands a `..` sequence: `.en{v..v}` is `.env`.
+        for selecting in [
+            ".en{v..v}",
+            ".npmr{c..c}",
+            "config/.en{v..v}",
+            ".en{v..v..1}",
+            "{.env}",
+            "{{.env}}",
+            "{.env,readme.md}",
+        ] {
+            assert!(glob_can_select_sensitive_path(selecting), "{selecting}");
         }
     }
-    // An inherited RIPGREP_CONFIG_PATH prepends its lines to these
-    // arguments, so `--pre`, `--hidden` or `--no-ignore` there would undo
-    // every check above. A stdin filter walks no files, so the config's
-    // file options have nothing to act on.
-    pending_value.is_none()
-        && (!stdin_only || pattern_supplied)
-        && (stdin_only || config_disabled || context.ripgrep_config_absent)
 }

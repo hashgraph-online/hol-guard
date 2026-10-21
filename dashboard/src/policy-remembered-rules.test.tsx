@@ -61,13 +61,14 @@ assert(pageSource.includes("PolicyPageToolbar"), "page hosts policy toolbar");
 assert(chromeSource.includes("Reload policy"), "policy toolbar exposes reload policy");
 
 assert(viewsSource.includes("Source"), "rules list shows source column");
-assert(viewsSource.includes('scopeLabel(policy.scope, "policy")'), "rules list uses policy scope labels");
-assert(viewsSource.includes("resolvePolicyRowTitle"), "rules list uses mockup row titles");
-assert(viewsSource.includes("resolvePolicyApprovalRecordLabel"), "rules list links approval record by receipt id");
-assert(viewsSource.includes("GoverningExtensionLink"), "rules link to their governing Extension when known");
-assert(!viewsSource.includes("display.rememberSentence"), "rules list omits verbose remember sentence");
-assert(viewsSource.includes("View on cloud"), "cloud rules link to Guard Cloud");
-assert(viewsSource.includes("Remove rule"), "local rules expose remove action");
-assert(viewsSource.includes("!cloudManaged"), "remove action gated to non-cloud rules");
+const rowSource = readFileSync(join(here, "policy-workspace-row.tsx"), "utf8");
+assert(rowSource.includes('scopeLabel(policy.scope, "policy")'), "rules list uses policy scope labels");
+assert(rowSource.includes("resolvePolicyRowTitle"), "rules list uses mockup row titles");
+assert(rowSource.includes("resolvePolicyApprovalRecordLabel"), "rules list links approval record by receipt id");
+assert(rowSource.includes("GoverningExtensionLink"), "rules link to their governing Extension when known");
+assert(rowSource.includes("display.rememberSentence"), "each rule states its plain-language consequence");
+assert(rowSource.includes("View on cloud"), "cloud rules link to Guard Cloud");
+assert(rowSource.includes("Remove rule"), "local rules expose remove action");
+assert(rowSource.includes("!cloudManaged"), "remove action gated to non-cloud rules");
 
 console.log("policy-remembered-rules.test.tsx: all assertions passed");

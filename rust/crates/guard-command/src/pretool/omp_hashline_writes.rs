@@ -2,11 +2,17 @@
 //!
 //! Oh My Pi's `edit` tool takes one `input` string: an optional
 //! `*** Begin Patch` line, then one `[PATH#TAG]` header per file followed by
-//! `PUT`/`CUT` operations and `+` body rows, then `*** End Patch`. The body
-//! rows are file content, not commands, so the edit gets the same bounded
-//! proof as a Codex `apply_patch`: every header must name a file that the
-//! native file write proof accepts and that is not agent instruction or VCS
-//! metadata.
+//! `PUT`/`CUT` operations and `+` body rows, then `*** End Patch`. Models
+//! often add unified-diff `-old` rows under a `PUT`; Oh My Pi drops them or
+//! keeps them as body text, and never reads them as a header or operation.
+//! Models also drop the `+` and write a bare row under a `PUT`, and Oh My Pi
+//! keeps that as body text too. A bare row is file content only while it
+//! cannot be read as anything else: it is not an operation, a `***` envelope
+//! line, a legacy `¶` header, or anything that opens with a bracket.
+//! The body rows are file content, not commands, so the edit gets the same
+//! bounded proof as a Codex `apply_patch`: every header must name a file that
+//! the native file write proof accepts and that is not agent instruction or
+//! VCS metadata.
 //!
 //! Oh My Pi's own parser forgives a lot: it unquotes paths, strips
 //! `Update File:`-style noise and leading `***`, and recovers lowercase tags.
@@ -29,8 +35,9 @@ pub(super) enum HashlineEdit {
     Routine,
     /// Every target is ordinary or names a path that does not exist, and at
     /// least one does not exist. The edit cannot apply, so the agent should
-    /// fix the path rather than wait on an approval.
-    MissingTarget,
+    /// fix the path rather than wait on an approval. Holds the first missing
+    /// path as the header wrote it.
+    MissingTarget(String),
 }
 
 /// Files a hashline `input` edits, each with whether a header carried a
@@ -47,6 +54,7 @@ pub(super) fn hashline_targets(input: &str) -> Option<Vec<(String, bool)>> {
     }
     let mut targets: Vec<(String, bool)> = Vec::new();
     let mut in_file = false;
+    let mut in_put = false;
     let mut ended = false;
     for line in lines {
         let line = line.strip_suffix('\r').unwrap_or(line);
@@ -73,14 +81,37 @@ pub(super) fn hashline_targets(input: &str) -> Option<Vec<(String, bool)>> {
                 targets.push((path.to_owned(), tagged));
             }
             in_file = true;
+            in_put = false;
             continue;
         }
         let operation = line.starts_with("PUT ") || line.starts_with("CUT ");
-        if !in_file || !(operation || line.starts_with('+')) {
+        if operation {
+            in_put = line.starts_with("PUT ");
+        }
+        let body = line.starts_with('+') || (in_put && line.starts_with('-'));
+        if !in_file {
             return None;
         }
+        if operation || body || (in_put && bare_body_row(line)) {
+            continue;
+        }
+        return None;
     }
     (!targets.is_empty()).then_some(targets)
+}
+
+/// A row under a `PUT` with no `+` that Oh My Pi keeps as file content: it
+/// does not read as an operation, an envelope line, a header or a legacy
+/// header, even after leading blanks. A row that opens with a bracket stays
+/// unproven, so an indented or decorated header can never pass as text.
+fn bare_body_row(line: &str) -> bool {
+    let row = line.trim_start();
+    let operation = ["PUT", "CUT", "REM", "MV"].iter().any(|name| {
+        row.strip_prefix(name).is_some_and(|rest| {
+            rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == ':')
+        })
+    });
+    !operation && !row.starts_with("***") && !row.starts_with(['¶', '['])
 }
 
 /// Every header path in order, repeats included, the way Oh My Pi lists them
@@ -125,10 +156,19 @@ fn header_path(line: &str) -> Option<(&str, bool)> {
     let home_relative = path
         .strip_prefix('~')
         .is_none_or(|rest| rest.starts_with('/'));
+    // A Windows drive path (`C:\Users\...` or `C:/Users/...`) is a host
+    // path: Oh My Pi only routes registered `scheme:/` names elsewhere, and
+    // no scheme is one letter. A drive-relative `C:name` stays unproven, and
+    // so does a backslash spelling off Windows, where it is one relative name.
+    let rest = match path.as_bytes() {
+        [drive, b':', b'/', ..] if drive.is_ascii_alphabetic() => &path[2..],
+        [drive, b':', b'\\', ..] if cfg!(windows) && drive.is_ascii_alphabetic() => &path[2..],
+        _ => path,
+    };
     let plain = !path.is_empty()
         && home_relative
         && !path.starts_with(['"', '\'', '*'])
-        && !path.contains(['#', ':']);
+        && !rest.contains(['#', ':']);
     plain.then_some((path, tagged))
 }
 
@@ -140,11 +180,11 @@ pub(super) fn evaluate_hashline_edit(
 ) -> Option<HashlineEdit> {
     let workspace = cwd.and_then(|root| std::fs::canonicalize(root).ok())?;
     let targets = hashline_targets(input)?;
-    let mut missing = false;
-    for (target, tagged) in &targets {
-        let target = &match target.strip_prefix("~/") {
+    let mut missing: Option<&str> = None;
+    for (written, tagged) in &targets {
+        let target = &match written.strip_prefix("~/") {
             Some(rest) => Path::new(home_dir?).join(rest).to_str()?.to_owned(),
-            None => target.clone(),
+            None => written.clone(),
         };
         // Only an ordinary name may say it is missing; a sensitive or
         // protected one keeps its review.
@@ -156,7 +196,7 @@ pub(super) fn evaluate_hashline_edit(
         // A tag is a snapshot of a file the agent read, so a tagged target
         // that does not exist is a wrong path, not a new file.
         if *tagged && missing_target() {
-            missing = true;
+            missing.get_or_insert(written);
             continue;
         }
         if super::safe_writes::bounded_structured_file_write_target(target, home_dir, cwd)
@@ -165,16 +205,38 @@ pub(super) fn evaluate_hashline_edit(
             continue;
         }
         if missing_target() {
-            missing = true;
+            missing.get_or_insert(written);
             continue;
         }
         return None;
     }
-    Some(if missing {
-        HashlineEdit::MissingTarget
-    } else {
-        HashlineEdit::Routine
+    Some(match missing {
+        Some(path) => HashlineEdit::MissingTarget(path.to_owned()),
+        None => HashlineEdit::Routine,
     })
+}
+
+/// Whether an Oh My Pi `edit` input is one plain line with no file header.
+///
+/// Every edit mode names its file in a `path` or `edits` field or in a header
+/// line: a `[PATH#TAG]` or legacy `¶` hashline header, or a `***` patch or
+/// sloppy-edit line. Oh My Pi refuses a hashline edit whose first line is not
+/// a header ("input must begin with \"[PATH#HASH]\""), and a single line has
+/// no room for both a header and content. Models send such calls when they
+/// mean another tool, such as a path they meant to read or a command they
+/// meant to run, so the call cannot change a file. Only `input` and a numeric
+/// `timeout` may be present.
+pub(super) fn headerless_edit(input: &serde_json::Map<String, serde_json::Value>) -> bool {
+    let keys = input.iter().all(|(key, value)| match key.as_str() {
+        "input" => value.is_string(),
+        "timeout" => value.is_number(),
+        _ => false,
+    });
+    let Some(line) = input.get("input").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+    keys && line.len() <= crate::MAX_COMMAND_BYTES
+        && !line.contains(['\n', '\r', '\0', '[', ']', '*', '\u{b6}'])
 }
 
 #[cfg(test)]

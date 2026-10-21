@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from ci.gauntlet import qualify, qualify_setup
+from ci.gauntlet import lane_preflight, qualify, qualify_setup
 
 SHA = "a" * 40
 
@@ -31,18 +31,72 @@ def test_retry_policy_only_retries_recoverable_outcomes_within_budget() -> None:
     )
 
 
-def test_macos_platform_maps_host_to_the_ci_wheel_target(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_host_platform_maps_host_to_the_wheel_target(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(qualify_setup.platform, "machine", lambda: "arm64")
-    assert qualify_setup.macos_platform() == ("macosx_11_0_arm64", "aarch64-apple-darwin", "11.0")
+    assert qualify_setup.host_platform() == ("macosx_11_0_arm64", "aarch64-apple-darwin", "11.0")
     monkeypatch.setattr(qualify_setup.platform, "machine", lambda: "x86_64")
-    assert qualify_setup.macos_platform() == ("macosx_13_0_x86_64", "x86_64-apple-darwin", "13.0")
+    assert qualify_setup.host_platform() == ("macosx_13_0_x86_64", "x86_64-apple-darwin", "13.0")
     monkeypatch.setattr(qualify_setup.platform, "machine", lambda: "riscv64")
     with pytest.raises(RuntimeError):
-        qualify_setup.macos_platform()
+        qualify_setup.host_platform()
     monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(qualify_setup.platform, "machine", lambda: "x86_64")
+    assert qualify_setup.host_platform() == ("linux_x86_64", "x86_64-unknown-linux-gnu", "")
+    monkeypatch.setattr(qualify_setup.platform, "machine", lambda: "aarch64")
     with pytest.raises(RuntimeError, match="--wheel"):
-        qualify_setup.macos_platform()
+        qualify_setup.host_platform()
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(qualify_setup.platform, "machine", lambda: "x86_64")
+    with pytest.raises(RuntimeError, match="--wheel"):
+        qualify_setup.host_platform()
+
+
+def test_linux_wheel_build_targets_the_host_without_a_macos_deployment_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(qualify_setup.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(qualify_setup.shutil, "which", lambda tool: "/bin/" + tool)
+    monkeypatch.setattr(qualify_setup, "git_show", lambda *_a, **_k: b"")
+    cache = tmp_path / "cache"
+    worktree = cache / "build-worktree"
+    (worktree / ".git").mkdir(parents=True)
+    (cache / "locks").mkdir(mode=0o700)
+    (tmp_path / "run" / "logs").mkdir(parents=True)
+    builds: list[dict[str, str]] = []
+
+    def fake_run_logged(argv: list[str], *, cwd: Path, log: Path, env: dict[str, str] | None = None) -> None:
+        if argv[-1] == qualify_setup.WHEEL_BUILD_SCRIPT:
+            builds.append(dict(env or {}))
+            (cwd / "native-dist").mkdir()
+            (cwd / "native-dist" / "hol_guard-1.0.0-py3-none-linux_x86_64.whl").write_bytes(b"wheel")
+            Path((env or {})["HOL_GUARD_BUNDLE_ASSET_OUTPUT"]).mkdir()
+
+    monkeypatch.setattr(qualify_setup, "run_logged", fake_run_logged)
+    monkeypatch.setattr(qualify_setup, "git_show", lambda *_a, **_k: qualify_setup.DEV_WHEEL_MARKER.encode())
+    monkeypatch.setattr(qualify_setup, "_dev_profile_supported", lambda _worktree: True)
+    monkeypatch.setattr(qualify_setup, "_write_dev_cargo_config", lambda *_a, **_k: None)
+    result = qualify_setup.ensure_wheel(cache, tmp_path / "repo", SHA, tmp_path / "run")
+    assert result["path"].endswith("-linux_x86_64.whl") and result["profile"] == "dev"
+    [env] = builds
+    assert env["PLATFORM_TAG"] == "linux_x86_64"
+    assert env["TARGET"] == "x86_64-unknown-linux-gnu"
+    assert env[qualify_setup.DEV_WHEEL_MARKER] == "1"
+    assert "MACOSX_DEPLOYMENT_TARGET" not in env
+    # The candidate's optional packs are exported beside the cached wheel.
+    assert result["release_assets"] == env["HOL_GUARD_BUNDLE_ASSET_OUTPUT"]
+
+
+def test_linux_refuses_a_release_wheel_whose_script_still_runs_the_size_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(qualify_setup.platform, "machine", lambda: "x86_64")
+    script = b"python scripts/ci/check_wheel_size.py --dist-dir native-dist\n"
+    monkeypatch.setattr(qualify_setup, "git_show", lambda *_a, **_k: script)
+    with pytest.raises(RuntimeError, match="development profile or pass --wheel"):
+        qualify_setup.ensure_wheel(tmp_path / "cache", tmp_path / "repo", SHA, tmp_path / "run", release_profile=True)
 
 
 def test_gnu_sed_detection_prefers_path_then_gnubin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -65,12 +119,15 @@ def test_gnu_sed_detection_prefers_path_then_gnubin(tmp_path: Path, monkeypatch:
         qualify_setup.gnu_sed_dir(probe=bsd)
 
 
-def test_attempt_command_and_environment(tmp_path: Path) -> None:
+@pytest.mark.parametrize("native_route", [None, "openai-codex/gpt-6.1-sol"])
+def test_attempt_command_and_environment(tmp_path: Path, native_route: str | None) -> None:
     argv = qualify.attempt_argv(
         python=tmp_path / "candidate" / ".venv" / "bin" / "python",
         effort="medium",
+        native_route=native_route,
         sdk_root=tmp_path / "sdk",
         jobs=4,
+        case_retries=2,
         host_slots=8,
         max_load=32.0,
         max_load_wait=600.0,
@@ -82,9 +139,16 @@ def test_attempt_command_and_environment(tmp_path: Path) -> None:
         max_rounds=32,
     )
     assert argv[1:3] == ["-m", "ci.gauntlet"]
-    for flag in ("--native-luna-route", "--fail-fast", "--host-slots", "--max-load", "--expected-source-sha"):
+    if native_route:
+        assert argv[argv.index("--native-route") + 1] == native_route
+        assert "--native-luna-route" not in argv
+    else:
+        assert "--native-luna-route" in argv
+        assert "--native-route" not in argv
+    for flag in ("--fail-fast", "--host-slots", "--max-load", "--expected-source-sha"):
         assert flag in argv
     assert argv[argv.index("--max-load") + 1] == "32.0"
+    assert argv[argv.index("--case-retries") + 1] == "2"
     assert argv[argv.index("--max-load-wait") + 1] == "600.0"
     assert "low" not in argv
     assert argv[argv.index("--candidate-sha") + 1] == "b" * 40
@@ -111,7 +175,7 @@ def test_attempt_command_and_environment(tmp_path: Path) -> None:
 
 
 def test_sdk_cache_installs_once_per_lock_digest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    package = json.dumps({"dependencies": {"@oh-my-pi/pi-coding-agent": "18.4.12"}}).encode()
+    package = json.dumps({"dependencies": {"@oh-my-pi/pi-coding-agent": "18.11.3"}}).encode()
     lock = b'{"lockfileVersion": 3}'
     monkeypatch.setattr(
         qualify_setup, "git_show", lambda _r, _s, path: package if path.endswith("package.json") else lock
@@ -123,13 +187,13 @@ def test_sdk_cache_installs_once_per_lock_digest(tmp_path: Path, monkeypatch: py
         assert argv[0] == "npm" and log.name == "setup.log"
         package_dir = cwd / "node_modules" / "@oh-my-pi" / "pi-coding-agent"
         package_dir.mkdir(parents=True)
-        (package_dir / "package.json").write_text('{"version": "18.4.12"}')
+        (package_dir / "package.json").write_text('{"version": "18.11.3"}')
 
     monkeypatch.setattr(qualify_setup, "run_logged", fake_logged)
     setup_log = tmp_path / "run" / "logs" / "setup.log"
     first = qualify_setup.ensure_sdk(tmp_path / "cache", tmp_path / "repo", SHA, setup_log)
     assert first["lock_sha256"] == hashlib.sha256(lock).hexdigest()
-    assert first["omp_version"] == "18.4.12"
+    assert first["omp_version"] == "18.11.3"
     assert len(calls) == 1
     # A second driver reuses the completed prefix without another npm install.
     second = qualify_setup.ensure_sdk(tmp_path / "cache", tmp_path / "repo", SHA, setup_log)
@@ -142,6 +206,7 @@ def _args(tmp_path: Path, **overrides: Any) -> SimpleNamespace:
         "candidate_sha": None,
         "attempts": 2,
         "jobs": 4,
+        "case_retries": 2,
         "host_slots": 8,
         "max_load": 32.0,
         "max_load_wait": 600.0,
@@ -150,9 +215,11 @@ def _args(tmp_path: Path, **overrides: Any) -> SimpleNamespace:
         "run_root": tmp_path / "run",
         "work_parent": tmp_path / "w",
         "wheel": None,
+        "wheel_release_assets": None,
         "sdk_root": tmp_path / "sdk",
         "release_profile_wheel": False,
         "keep_work": False,
+        "prepare_only": False,
         "timeout": 300.0,
         "max_inference_rounds": 32,
     }
@@ -164,7 +231,7 @@ def _fake_setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, summaries: list
     """Stub caches, the candidate worktree and the runner; return the verify calls."""
     sdk = tmp_path / "sdk"
     (sdk / "node_modules" / "@oh-my-pi" / "pi-coding-agent").mkdir(parents=True)
-    (sdk / "node_modules" / "@oh-my-pi" / "pi-coding-agent" / "package.json").write_text('{"version": "18.4.12"}')
+    (sdk / "node_modules" / "@oh-my-pi" / "pi-coding-agent" / "package.json").write_text('{"version": "18.11.3"}')
     monkeypatch.setattr(
         qualify_setup,
         "preflight",
@@ -177,6 +244,11 @@ def _fake_setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, summaries: list
         },
     )
     monkeypatch.setattr(qualify_setup, "ensure_commit", lambda *_a: None)
+    monkeypatch.setattr(
+        lane_preflight,
+        "check_lane",
+        lambda *_a, **_k: {"identity": "test-lane", "delivered": 2, "total_tokens": 1},
+    )
     monkeypatch.setattr(qualify_setup, "git_show", lambda *_a, **_k: b'{"lockfileVersion": 3}')
     wheel = tmp_path / "hol_guard-1.0.0-any.whl"
     wheel.write_bytes(b"wheel")
@@ -199,7 +271,16 @@ def _fake_setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, summaries: list
     monkeypatch.setattr(qualify, "prepare_candidate", fake_candidate)
     monkeypatch.setattr(qualify, "_remove_candidate", lambda *_a: True)
 
-    def fake_attempt(argv: list[str], *, cwd: Path, env: dict, log: Path) -> int:
+    def fake_attempt(
+        argv: list[str],
+        *,
+        cwd: Path,
+        env: dict,
+        log: Path,
+        on_started: Any | None = None,
+    ) -> int:
+        if on_started is not None:
+            on_started()
         evidence = Path(argv[argv.index("--output") + 1])
         summary = summaries.pop(0)
         if summary is not None:
@@ -242,7 +323,14 @@ def test_qualifying_attempt_verifies_and_returns_zero(tmp_path: Path, monkeypatc
     result = json.loads((tmp_path / "run" / "qualification.json").read_text())
     assert result["qualified"] is True and result["independent_verifier"] is True
     assert set(result["phase_seconds"]) == {
-        "preflight", "source", "wheel", "install", "live_cases", "verify", "cleanup",
+        "preflight",
+        "source",
+        "lane",
+        "wheel",
+        "install",
+        "live_cases",
+        "verify",
+        "cleanup",
     }
     assert all(seconds >= 0 for seconds in result["phase_seconds"].values())
     assert result["attempts"][0]["pass"] is True
@@ -250,6 +338,30 @@ def test_qualifying_attempt_verifies_and_returns_zero(tmp_path: Path, monkeypatc
     assert result["attempts"][0]["work_root"] == str((tmp_path / "w" / "1").resolve())
     assert not (tmp_path / "w" / "1").exists()
     assert result["attempts"][0]["work_root"] not in result["kept"]
+
+
+def test_a_driven_run_names_the_lane_it_drove(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cases = [{"id": "a", "outcome": "pass", "reason": "ok"}]
+    _fake_setup(monkeypatch, tmp_path, [_summary(cases, True)])
+    assert qualify.main(_args(tmp_path)) == 0
+    coverage = json.loads((tmp_path / "run" / "qualification.json").read_text())["coverage"]
+    assert coverage["driven"] == {"harness": "omp", "profile": "core"}
+    assert coverage["is_qualifying_lane"] is True
+    assert {"harness": "cursor", "profile": "full-tasks"} not in coverage["not_driven"]
+
+
+def test_a_preparation_only_run_drove_no_lane(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--prepare-only` installs the candidate and stops, so nothing ran."""
+    _fake_setup(monkeypatch, tmp_path, [])
+    assert qualify.main(_args(tmp_path, prepare_only=True)) == 0
+    result = json.loads((tmp_path / "run" / "qualification.json").read_text())
+    assert result["prepare_only"] is True and result["attempts"] == []
+    assert result["qualified"] is False
+    coverage = result["coverage"]
+    assert coverage["driven"] is None
+    assert coverage["is_qualifying_lane"] is False
+    assert coverage["lane"] == {"harness": "omp", "profile": "core"}
+    assert {"harness": "omp", "profile": "core"} in coverage["not_driven"]
 
 
 def test_retryable_outcomes_earn_one_fresh_attempt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -382,7 +494,40 @@ def test_qualify_requires_a_posix_host(tmp_path: Path, monkeypatch: pytest.Monke
         qualify.main(_args(tmp_path))
 
 
-def test_prepare_failure_still_cleans_the_candidate_worktree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_prepare_only_keeps_the_installed_candidate_and_runs_no_attempt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    # No summaries: any live attempt would pop from an empty list and fail the run.
+    verify_calls = _fake_setup(monkeypatch, tmp_path, [])
+    removed: list[Path] = []
+    monkeypatch.setattr(qualify, "_remove_candidate", lambda _r, candidate: removed.append(candidate) or True)
+    assert qualify.main(_args(tmp_path, prepare_only=True)) == 0
+    result = json.loads(capsys.readouterr().out)
+    candidate = (tmp_path / "run" / "candidate").resolve()
+    assert result["prepare_only"] is True and result["qualified"] is False
+    assert result["candidate"] == str(candidate) and (candidate / ".venv" / "bin").is_dir()
+    assert result["sdk"]["root"] == str((tmp_path / "sdk").resolve())
+    assert result["attempts"] == [] and result["cleanup"] == ["candidate-worktree-kept"]
+    assert removed == [] and verify_calls == []
+
+
+def test_prepare_only_needs_no_live_inference_lane(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    """Building and installing the candidate must not depend on a signed-in provider."""
+    _fake_setup(monkeypatch, tmp_path, [])
+
+    def dead_lane(*_a: Any, **_k: Any) -> dict[str, Any]:
+        raise RuntimeError("inference lane is not answering")
+
+    monkeypatch.setattr(lane_preflight, "check_lane", dead_lane)
+    assert qualify.main(_args(tmp_path, prepare_only=True)) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["prepare_only"] is True and "lane" not in result["phase_seconds"]
+
+
+@pytest.mark.parametrize("prepare_only", [False, True])
+def test_prepare_failure_still_cleans_the_candidate_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prepare_only: bool
+) -> None:
     _fake_setup(monkeypatch, tmp_path, [_summary([], True)])
 
     def fake_prepare(_repo: Path, _sha: str, run_root: Path, _wheel: Path) -> Path:
@@ -392,7 +537,7 @@ def test_prepare_failure_still_cleans_the_candidate_worktree(tmp_path: Path, mon
     removed: list[Path] = []
     monkeypatch.setattr(qualify, "prepare_candidate", fake_prepare)
     monkeypatch.setattr(qualify, "_remove_candidate", lambda _r, candidate: removed.append(candidate) or True)
-    assert qualify.main(_args(tmp_path)) == 1
+    assert qualify.main(_args(tmp_path, prepare_only=prepare_only)) == 1
     assert removed == [(tmp_path / "run" / "candidate").resolve()]
     result = json.loads((tmp_path / "run" / "qualification.json").read_text())
     assert result["cleanup"] == ["candidate-worktree-removed"]
@@ -455,3 +600,80 @@ def test_run_cli_rejects_non_finite_load_bounds(tmp_path: Path, flag: str, value
     result = subprocess.run(argv, cwd=qualify.REPO, env=env, capture_output=True, text=True, timeout=60)
     assert result.returncode == 2
     assert "finite" in result.stderr
+
+
+def test_attempt_reports_started_before_it_finishes(tmp_path: Path) -> None:
+    started: list[int] = []
+    rc = qualify.run_attempt(
+        [sys.executable, "-c", "pass"],
+        cwd=qualify.REPO,
+        env=dict(os.environ),
+        log=tmp_path / "attempt.log",
+        on_started=lambda: started.append(1),
+    )
+    assert (rc, started) == (0, [1])
+
+
+def test_an_interrupted_attempt_still_counts_as_driven(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An interrupt leaves no attempt record, and the lane was still driven."""
+
+    class Interrupting(subprocess.Popen):
+        _raised = False
+
+        def wait(self, timeout: float | None = None) -> int:
+            if not self._raised:
+                self._raised = True
+                raise KeyboardInterrupt
+            return super().wait(timeout=timeout)
+
+    monkeypatch.setattr(qualify.subprocess, "Popen", Interrupting)
+    started: list[int] = []
+    with pytest.raises(KeyboardInterrupt):
+        qualify.run_attempt(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            cwd=qualify.REPO,
+            env=dict(os.environ),
+            log=tmp_path / "attempt.log",
+            on_started=lambda: started.append(1),
+        )
+    assert started == [1]
+
+
+def test_a_cache_without_the_exported_packs_is_a_miss(tmp_path: Path) -> None:
+    """A cache filled before the export existed must not skip the rebuild."""
+    store = tmp_path / "store"
+    store.mkdir()
+    wheel = store / "hol_guard-1.0.0-any.whl"
+    wheel.write_bytes(b"wheel")
+    (store / "wheel.sha256").write_text(qualify_setup.digest_file(wheel) + "\n")
+    assert qualify_setup._cached_wheel(store, assets_required=True) is None
+    reused = qualify_setup._cached_wheel(store, assets_required=False)
+    assert reused is not None and reused["release_assets"] is None
+    (store / qualify_setup.RELEASE_ASSETS_DIRECTORY).mkdir()
+    rebuilt = qualify_setup._cached_wheel(store, assets_required=True)
+    assert rebuilt is not None
+    assert rebuilt["release_assets"] == str(store / qualify_setup.RELEASE_ASSETS_DIRECTORY)
+
+
+def test_a_supplied_wheel_carries_the_packs_its_build_exported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--wheel`` on an exporting candidate needs its matching asset directory."""
+    monkeypatch.setattr(qualify_setup, "git_show", lambda *_a, **_k: qualify_setup.ASSET_OUTPUT_MARKER.encode())
+    wheel = tmp_path / "hol_guard-1.0.0-any.whl"
+    wheel.write_bytes(b"wheel")
+    with pytest.raises(RuntimeError, match="--wheel-release-assets"):
+        qualify_setup.ensure_wheel(tmp_path / "cache", tmp_path / "repo", SHA, tmp_path / "run", wheel=wheel)
+    with pytest.raises(RuntimeError, match="not a directory"):
+        qualify_setup.ensure_wheel(
+            tmp_path / "cache",
+            tmp_path / "repo",
+            SHA,
+            tmp_path / "run",
+            wheel=wheel,
+            release_assets=tmp_path / "missing",
+        )
+    assets = tmp_path / "packs"
+    assets.mkdir()
+    result = qualify_setup.ensure_wheel(
+        tmp_path / "cache", tmp_path / "repo", SHA, tmp_path / "run", wheel=wheel, release_assets=assets
+    )
+    assert result["release_assets"] == str(assets)

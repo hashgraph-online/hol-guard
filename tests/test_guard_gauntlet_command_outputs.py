@@ -14,6 +14,7 @@ from ci.gauntlet.command_outputs import OUTPUT_SCENARIOS
 from ci.gauntlet.evidence import assess_case
 from ci.gauntlet.fixtures import SECURITY_NOTES, SOURCE, SOURCE_FILES, create_fixture, filesystem_checks
 from ci.gauntlet.proofs import required_checks
+from ci.gauntlet.script_cases import report_output, stage_script_cases
 from tests.test_guard_gauntlet_workflow_boundaries import _case, _through_live_log_redaction
 
 CATALOG = {scenario.id: scenario for scenario in load_catalog()}
@@ -53,6 +54,8 @@ OUTPUTS = {
     "quoted-workspace-copy": ["", SOURCE],
     "routed-git-inspection": [SUBDIRECTORY_STATUS, STATUS, "{{workspace}}\n"],
     "stdin-sed-transformation": ["ordinary-workflow-public\nsecond-line\n"],
+    "script-node-project-report": [report_output()],
+    "script-python-project-report": [report_output()],
 }
 CHECKED_OUTPUTS = [
     (identifier, index) for identifier, outputs in OUTPUTS.items() for index, output in enumerate(outputs) if output
@@ -106,7 +109,7 @@ def test_windows_discovery_separators_still_bind_every_source():
 
 @pytest.mark.parametrize("identifier", OUTPUTS)
 def test_pinned_omp_timing_notice_preserves_required_stdout(identifier):
-    """OMP 18.4.12 appends timing after stdout, including its trailing newline."""
+    """OMP 18.11.3 appends timing after stdout, including its trailing newline."""
     case = _observed(identifier)
     for event in case["events"]:
         if event["type"] == "tool_execution_end":
@@ -114,6 +117,35 @@ def test_pinned_omp_timing_notice_preserves_required_stdout(identifier):
             result["content"][0]["text"] += "\n\nWall time: 0.13 seconds"
             result["details"] = {"timeoutSeconds": 300, "wallTimeMs": 125.0}
     assert assess_case(CATALOG[identifier], case)["outcome"] == "pass"
+
+
+@pytest.mark.parametrize("identifier", OUTPUTS)
+def test_short_run_without_timing_notice_keeps_stdout(identifier):
+    """OMP 18.11.3 adds no timing notice below one second and says so in the result details."""
+    case = _observed(identifier)
+    for event in case["events"]:
+        if event["type"] == "tool_execution_end":
+            event["result"]["details"] = {"wallTimeNoticeEmitted": False, "timeoutSeconds": 300, "wallTimeMs": 125.0}
+    assert assess_case(CATALOG[identifier], case)["outcome"] == "pass"
+
+
+@pytest.mark.parametrize(
+    "text_suffix,details",
+    [
+        ("", {"wallTimeNoticeEmitted": False, "wallTimeMs": 1000}),
+        ("", {"wallTimeNoticeEmitted": False, "wallTimeMs": 340.6e3}),
+        ("", {"wallTimeNoticeEmitted": False, "wallTimeMs": float("nan")}),
+        ("", {"wallTimeNoticeEmitted": False, "wallTimeMs": -1}),
+        ("\n\nWall time: 0.13 seconds", {"wallTimeNoticeEmitted": False, "wallTimeMs": 125}),
+        ("", {"wallTimeNoticeEmitted": True, "wallTimeMs": 1500}),
+    ],
+)
+def test_missing_timing_notice_needs_the_sdk_to_have_skipped_it(text_suffix, details):
+    case = _observed("stdin-sed-transformation")
+    result = next(event["result"] for event in case["events"] if event["type"] == "tool_execution_end")
+    result["content"][0]["text"] += text_suffix
+    result["details"] = details
+    assert assess_case(CATALOG["stdin-sed-transformation"], case)["outcome"] == "task-incomplete"
 
 
 @pytest.mark.parametrize(
@@ -208,6 +240,8 @@ def test_real_ordinary_shell_outputs_survive_the_live_redaction_boundary(tmp_pat
     """Execute public fixture commands and verify their normalized output independently."""
     if os.name != "posix":
         pytest.skip("The live Gauntlet shell runner requires POSIX")
+    if identifier == "script-node-project-report" and shutil.which("node") is None:
+        pytest.skip("This report script requires node on PATH")
     if identifier == "search-pipeline-options" and shutil.which("rg") is None:
         pytest.skip("This fixture requires the real ripgrep executable")
     if (
@@ -216,6 +250,7 @@ def test_real_ordinary_shell_outputs_survive_the_live_redaction_boundary(tmp_pat
     ):
         pytest.skip("This exact stdin-operand regression requires GNU sed")
     fixture = create_fixture(tmp_path / "space café's output fixture")
+    stage_script_cases(fixture.workspace, identifier)
     scenario = CATALOG[identifier]
     rendered = scenario.render({"home": str(fixture.home), "workspace": str(fixture.workspace)})
     environment = {"PATH": os.environ["PATH"], "HOME": str(fixture.home), "GIT_CONFIG_NOSYSTEM": "1"}

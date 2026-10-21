@@ -14,8 +14,8 @@
 
 use super::query::{self, pre_tool_command, pre_tool_input, strip};
 use super::{render, Context, HookDirectDefer};
+use crate::hook_evidence_store_gate::StorageGateHold;
 use crate::local_store_read::STORE_FILE_NAME;
-use fs2::FileExt;
 use guard_command::hook_responses::Object;
 use guard_contracts::{GuardStoreRequestV1, NativeExactActionQueryV1, GUARD_STORE_REQUEST_SCHEMA};
 use serde_json::{json, Map, Value};
@@ -27,6 +27,7 @@ const CONSUME_METHOD: &str = "consume_native_review_approval";
 /// replaces the store holds it exclusively.
 const STORAGE_GATE_FILE_NAME: &str = "storage-access.lock";
 /// The store files the daemon keeps private after each store call.
+#[cfg(unix)]
 const STORE_FILE_SUFFIXES: [&str; 4] = ["", "-journal", "-shm", "-wal"];
 /// A hook waits this long for a busy store before the daemon takes over.
 const BUSY_TIMEOUT_MS: u64 = 250;
@@ -44,8 +45,14 @@ pub(super) fn answer(
     let NativeExactActionQueryV1::ExactAction { tool_name, .. } = exact else {
         return Err(HookDirectDefer::SavedDecision);
     };
-    let identity = crate::native_exact_action_op::review_binding_for(exact, receipt)
-        .ok_or(HookDirectDefer::SavedDecision)?;
+    let identity = crate::native_exact_action_op::review_binding_for(
+        exact,
+        receipt,
+        context
+            .recorded_payload
+            .get(crate::hook_direct::EXECUTION_ENVIRONMENT_FIELD),
+    )
+    .ok_or(HookDirectDefer::SavedDecision)?;
     let launch_target = launch_target(context.payload)?;
     let mut allowed = result.clone();
     for key in ["decision", "minimum_action", "policy_action"] {
@@ -134,11 +141,10 @@ fn launch_target(payload: &Map<String, Value>) -> Result<String, HookDirectDefer
 
 /// The daemon's storage gate, held shared until the spend commits. A gate
 /// the daemon has not created yet, or one held exclusively, defers.
-pub(super) fn storage_gate(guard_home: &Path) -> Result<File, HookDirectDefer> {
+pub(crate) fn storage_gate(guard_home: &Path) -> Result<StorageGateHold, HookDirectDefer> {
     let gate = open_no_follow(&guard_home.join(STORAGE_GATE_FILE_NAME))
         .ok_or(HookDirectDefer::SavedDecision)?;
-    FileExt::try_lock_shared(&gate).map_err(|_| HookDirectDefer::SavedDecision)?;
-    Ok(gate)
+    StorageGateHold::try_shared(gate).map_err(|_| HookDirectDefer::SavedDecision)
 }
 
 #[cfg(unix)]
@@ -151,7 +157,26 @@ fn open_no_follow(path: &Path) -> Option<File> {
         .ok()
 }
 
-#[cfg(not(unix))]
+/// The gate opened without following a link at the leaf. Python takes the
+/// same whole-file `LockFileEx` range, so this shared hold coexists with
+/// Python's shared holds, as `flock` does on POSIX, and still defers to an
+/// exclusive maintenance hold.
+#[cfg(windows)]
+fn open_no_follow(path: &Path) -> Option<File> {
+    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+        .open(path)
+        .ok()?;
+    let metadata = file.metadata().ok()?;
+    (metadata.is_file() && metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT == 0)
+        .then_some(file)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn open_no_follow(_path: &Path) -> Option<File> {
     None
 }
@@ -159,7 +184,7 @@ fn open_no_follow(_path: &Path) -> Option<File> {
 /// `_repair_store_permissions`: the store files stay owner-only, including a
 /// journal this connection created.
 #[cfg(unix)]
-pub(super) fn repair_store_permissions(guard_home: &Path) {
+pub(crate) fn repair_store_permissions(guard_home: &Path) {
     use std::os::unix::fs::PermissionsExt;
     for suffix in STORE_FILE_SUFFIXES {
         let path = guard_home.join(format!("{STORE_FILE_NAME}{suffix}"));
@@ -169,8 +194,10 @@ pub(super) fn repair_store_permissions(guard_home: &Path) {
     }
 }
 
+/// The daemon's `_set_private_mode` leaves Windows store files alone: they
+/// inherit the private Guard home's DACL.
 #[cfg(not(unix))]
-pub(super) fn repair_store_permissions(_guard_home: &Path) {}
+pub(crate) fn repair_store_permissions(_guard_home: &Path) {}
 
 #[cfg(test)]
 #[path = "hook_direct_saved_consume_tests.rs"]

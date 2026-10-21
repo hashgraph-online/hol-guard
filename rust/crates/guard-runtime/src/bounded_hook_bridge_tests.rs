@@ -9,8 +9,12 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
+use std::path::PathBuf;
+
+use super::config::{daemon_start_command, MANAGED_MARKER};
 use super::*;
 use crate::bounded_hook_bridge_render::Rendered;
+use crate::bounded_hook_bridge_render::NATIVE_HARNESSES;
 use crate::claude_hook_bridge_fixture::{
     read_request, write_private, write_response, GuardHome, Request,
 };
@@ -85,7 +89,7 @@ fn failure_output_matches_python() {
     }
 }
 
-fn argv(items: &[&str]) -> Vec<String> {
+pub(super) fn argv(items: &[&str]) -> Vec<String> {
     items.iter().map(|item| (*item).to_owned()).collect()
 }
 
@@ -119,7 +123,12 @@ fn only_the_installed_argv_shapes_carry_a_config() {
     }
 }
 
-fn config_text(changes: &[(&str, Option<Value>)]) -> String {
+/// The config of an interpreter launch, as `run` parses it.
+fn parse_config(argument: &str) -> Option<BridgeConfig> {
+    parse_launch_config(argument, false)
+}
+
+pub(super) fn config_text(changes: &[(&str, Option<Value>)]) -> String {
     let mut config = json!({
         "python_executable": "/usr/bin/python3",
         "package_root": "/opt/guard",

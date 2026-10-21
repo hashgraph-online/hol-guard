@@ -392,3 +392,54 @@ def test_command_expression_reports_invalid_runtime_regex_at_commands_path() -> 
 
     assert error.value.diagnostics[0].path == ("spec", "rules", 0, "match", "commands")
     assert error.value.diagnostics[0].code.startswith("invalid_command_regex")
+
+
+def test_command_expression_reports_an_unclosed_glob_class_at_commands_path() -> None:
+    value = _basic_mapping()
+    spec = value["spec"]
+    assert isinstance(spec, dict)
+    rules = spec["rules"]
+    assert isinstance(rules, list)
+    rule = rules[0]
+    assert isinstance(rule, dict)
+    match = rule["match"]
+    assert isinstance(match, dict)
+    match["commands"] = {
+        "combinator": "all",
+        "conditions": [{"field": "command", "operator": "glob", "value": "docker [compose"}],
+    }
+
+    with pytest.raises(PolicyDocumentError) as error:
+        parse_policy_document_yaml(_yaml(value))
+
+    assert error.value.diagnostics[0].path == ("spec", "rules", 0, "match", "commands")
+    assert error.value.diagnostics[0].code.startswith("glob_class_unclosed")
+
+
+def test_a_pattern_the_runtime_compiles_keeps_the_document_valid() -> None:
+    value = _basic_mapping()
+    spec = value["spec"]
+    assert isinstance(spec, dict)
+    rules = spec["rules"]
+    assert isinstance(rules, list)
+    rule = rules[0]
+    assert isinstance(rule, dict)
+    match = rule["match"]
+    assert isinstance(match, dict)
+    commands = {
+        "combinator": "all",
+        "conditions": [
+            {"field": "command", "operator": "regex", "value": r"^docker\s+compose\s+(up|down)$"},
+            {"field": "command", "operator": "glob", "value": "docker [a-z]*"},
+        ],
+    }
+    match["commands"] = commands
+
+    document = parse_policy_document_yaml(_yaml(value))
+
+    round_tripped = document.rules[0].match.to_mapping()["commands"]
+    assert isinstance(round_tripped, dict)
+    assert round_tripped["combinator"] == "all"
+    assert [
+        (condition["operator"], condition["value"]) for condition in round_tripped["conditions"]
+    ] == [(condition["operator"], condition["value"]) for condition in commands["conditions"]]

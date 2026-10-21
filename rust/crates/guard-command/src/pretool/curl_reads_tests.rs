@@ -23,6 +23,8 @@ fn proven_in(command: &str, context: crate::pretool::PathContext<'_>) -> bool {
 fn plain_public_reads_are_proven() {
     for command in [
         "curl https://example.com/api/health",
+        "curl -q -fsS http://127.0.0.1:3001/alpha/list",
+        "curl --disable --url https://example.com/api/health",
         "curl -sS --max-time 20 https://example.com/api/health",
         "curl -s --max-time=15 https://example.com/api/health",
         "curl -fsS https://example.com/install.txt",
@@ -46,6 +48,8 @@ fn plain_public_reads_are_proven() {
 fn bodies_files_credentials_and_routing_stay_reviewed() {
     for command in [
         "curl -L https://example.com/r",
+        "curl -s -q https://example.com/r",
+        "curl --disable --no-disable https://example.com/r",
         "curl -fsSL https://example.com/install.txt",
         "curl --location https://example.com/r",
         "curl -sL -H 'Metadata-Flavor: Google' https://example.com/r",
@@ -86,10 +90,127 @@ fn bodies_files_credentials_and_routing_stay_reviewed() {
 }
 
 #[test]
-fn local_and_reserved_destinations_stay_reviewed() {
+fn local_dev_server_reads_are_proven() {
     for command in [
         "curl http://localhost:3000/",
         "curl http://127.0.0.1/",
+        "curl -fsS http://127.0.0.1:4173/game.js",
+        "curl -sI https://localhost:8443/health",
+        "curl -s -o /dev/null -w '%{http_code}' http://LOCALHOST:3001/",
+        "curl -s --url http://127.0.0.1:8080/api/items?page=2",
+    ] {
+        assert!(proven(command), "{command}");
+    }
+}
+
+#[test]
+fn a_dev_port_in_the_daemon_range_follows_the_daemon_state() {
+    let home = std::env::temp_dir().join(format!("curl-reads-daemon-{}", std::process::id()));
+    let guard = home.join(".hol-guard");
+    std::fs::create_dir_all(&guard).unwrap();
+    let home_dir = home.to_str().unwrap();
+    let context = crate::pretool::PathContext {
+        home_dir: Some(home_dir),
+        ..Default::default()
+    };
+    let command = "curl -s http://localhost:5173/";
+    assert!(!proven_in(command, context), "no daemon state");
+    std::fs::write(guard.join("daemon-state.json"), r#"{"port": 4781}"#).unwrap();
+    assert!(proven_in(command, context), "daemon on 4781");
+    std::fs::write(guard.join("daemon-state.json"), r#"{"port": 5173}"#).unwrap();
+    assert!(!proven_in(command, context), "daemon on 5173");
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+/// An agent starts its own server on a port it picked and then reads it back.
+/// The port is nothing well known, so only Guard's own daemon state can say it
+/// is free, and every local service keeps its review.
+#[test]
+fn a_port_the_agent_chose_for_its_own_server_is_proven() {
+    let home = std::env::temp_dir().join(format!("curl-reads-chosen-{}", std::process::id()));
+    let guard = home.join(".hol-guard");
+    std::fs::create_dir_all(&guard).unwrap();
+    let home_dir = home.to_str().unwrap();
+    let context = crate::pretool::PathContext {
+        home_dir: Some(home_dir),
+        ..Default::default()
+    };
+    let command = "curl -s --max-time 3 http://127.0.0.1:9303/json/version";
+    assert!(!proven_in(command, context), "no daemon state");
+    std::fs::write(guard.join("daemon-state.json"), r#"{"port": 4781}"#).unwrap();
+    assert!(proven_in(command, context), "daemon on 4781");
+    for proven_command in [
+        "curl -s http://127.0.0.1:9303/json/list",
+        "curl -s http://localhost:5474/requests/b934a610",
+        "curl -s http://127.0.0.1:31999/health",
+    ] {
+        assert!(proven_in(proven_command, context), "{proven_command}");
+    }
+    for reviewed in [
+        // Stores, brokers, model servers, proxies and automation drivers.
+        "curl -s http://127.0.0.1:5432/",
+        "curl -s http://127.0.0.1:6379/",
+        "curl -s http://127.0.0.1:11434/api/tags",
+        "curl -s http://127.0.0.1:9000/minio/health/live",
+        "curl -s http://127.0.0.1:1080/",
+        "curl -s http://127.0.0.1:9515/status",
+        // Blocks a service binds whole: MongoDB, VNC, X11 and the kubelet.
+        "curl -s http://127.0.0.1:27018/",
+        "curl -s http://127.0.0.1:5901/",
+        "curl -s http://127.0.0.1:6010/",
+        "curl -s http://127.0.0.1:10252/metrics",
+        // The ephemeral range, where no server waits for a named client.
+        "curl -s http://127.0.0.1:49152/",
+        // The daemon's own port stays unreachable whatever else is proven.
+        "curl -s http://127.0.0.1:4781/v1/requests?status=pending",
+        // Only a read: a body or a redirect keeps the review here too.
+        "curl -s -d x=1 http://127.0.0.1:9303/json/version",
+        "curl -sL http://127.0.0.1:9303/json/version",
+    ] {
+        assert!(!proven_in(reviewed, context), "{reviewed}");
+    }
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn local_admin_ports_and_other_loopback_spellings_stay_reviewed() {
+    for command in [
+        "curl http://127.0.0.1:2375/containers/json",
+        "curl http://localhost:2376/info",
+        "curl http://127.0.0.1:2379/v2/keys",
+        "curl http://localhost:6443/api",
+        "curl http://127.0.0.1:8001/api/v1/secrets",
+        "curl http://127.0.0.1:8200/v1/secret/data/app",
+        "curl http://localhost:8500/v1/kv/?recurse",
+        "curl http://127.0.0.1:9222/json",
+        "curl http://127.0.0.1:9229/json/list",
+        "curl http://localhost:10250/pods",
+        "curl http://localhost:2019/config/",
+        // Data and node APIs off the dev-server list.
+        "curl http://127.0.0.1:9200/_search",
+        "curl http://127.0.0.1:4001/v2/keys",
+        "curl http://localhost:10249/metrics",
+        "curl http://localhost:8086/query?q=SHOW+DATABASES",
+        // Guard's daemon: its default port, a fixed one and an ephemeral one.
+        "curl -s http://127.0.0.1:4781/v1/requests?status=pending",
+        "curl -s http://127.0.0.1:7392/v1/requests?status=pending",
+        "curl -s http://localhost:54321/v1/requests",
+        "curl http://127.0.0.2:3000/",
+        "curl http://localhost.:3000/",
+        "curl http://app.localhost:3000/",
+        "curl http://user@localhost:3000/",
+        "curl -L http://127.0.0.1:3000/",
+        "curl -X POST http://localhost:3000/api/items",
+        "curl -d x=1 http://localhost:3000/api/items",
+        "curl localhost:3000/",
+    ] {
+        assert!(!proven(command), "{command}");
+    }
+}
+
+#[test]
+fn local_and_reserved_destinations_stay_reviewed() {
+    for command in [
         "curl http://[::1]/",
         "curl http://[fd00::1]/",
         "curl http://169.254.169.254/latest/meta-data/",

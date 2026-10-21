@@ -38,7 +38,9 @@ use crate::guard_store_json::dumps_sorted;
 
 pub(crate) const LOCAL_ONCE_LEGACY_AUTHORITY_KIND: &str = "legacy";
 const LOCAL_ONCE_INTEGRITY_PURPOSE: &str = "guard-local-once-approval";
-const NON_CONSUMING_POLICY_MATCH_LIMIT: i64 = 256;
+/// The ceiling a non-consuming lookup stops fetching at. The document path
+/// reports the same ceiling, so both read it from the one contract constant.
+const NON_CONSUMING_POLICY_MATCH_LIMIT: i64 = guard_contracts::POLICY_DOCUMENT_MATCH_LIMIT as i64;
 pub(crate) const POLICY_LOOKUP_COLUMNS: &str = "decision_id, harness, scope, artifact_id, action, \
      artifact_hash, workspace, publisher, source, reason, owner, expires_at, updated_at, \
      integrity_version, integrity_generation, payload_hash, payload_mac, integrity_key_id, \
@@ -56,7 +58,7 @@ const POLICY_BUNDLE_SOURCE: &str = "policy-bundle";
 /// get a runtime exact-match key. `mcp`/`prompt-env-read`/`prompt-file` are
 /// approval families but *not* runtime-exact: they intentionally produce no
 /// key so a `family:mcp` allow row still resolves a concrete `*:mcp:*` lookup.
-const SCOPED_RUNTIME_EXACT_FAMILIES: [&str; 5] = [
+pub(crate) const SCOPED_RUNTIME_EXACT_FAMILIES: [&str; 5] = [
     "file-read",
     "mcp-tool",
     "package-request",
@@ -68,7 +70,7 @@ const SCOPED_RUNTIME_EXACT_FAMILIES: [&str; 5] = [
 /// set a scoped artifact may collapse to. `parts[2]` of `harness:scope:family:…`
 /// only becomes a family key when it's an approval family; otherwise unrelated
 /// namespaces would shadow family-scoped rows.
-const SCOPED_APPROVAL_FAMILIES: [&str; 8] = [
+pub(crate) const SCOPED_APPROVAL_FAMILIES: [&str; 8] = [
     "file-read",
     "mcp",
     "mcp-tool",
@@ -1016,7 +1018,7 @@ pub(crate) fn policy_row_payload(
     Value::Object(map)
 }
 
-fn policy_row_specificity(row: &Value, harness: &str) -> (u8, u8, u8, u8, u8, u8) {
+pub(crate) fn policy_row_specificity(row: &Value, harness: &str) -> (u8, u8, u8, u8, u8, u8) {
     let scope = match row_value(row, "scope").as_str().unwrap_or("") {
         "artifact" => 5,
         "workspace" => 4,
@@ -1040,7 +1042,7 @@ fn policy_row_specificity(row: &Value, harness: &str) -> (u8, u8, u8, u8, u8, u8
     )
 }
 
-fn policy_row_outranks(candidate: &Value, selected: &Value, harness: &str) -> bool {
+pub(crate) fn policy_row_outranks(candidate: &Value, selected: &Value, harness: &str) -> bool {
     let candidate_severity =
         guard_action_severity(&row_value(candidate, "action"), GuardAction::Block);
     let selected_severity =
@@ -1326,12 +1328,25 @@ pub(crate) fn evaluate_policy_decision_lookup_request(
     })
 }
 
-fn evaluate(request: &PolicyDecisionLookupRequestV1) -> Result<Value, String> {
+/// One lookup on its own store connection: the `lookup_result` payload, with
+/// the consuming path serialized in its own transaction. In-process callers
+/// that hold a store themselves resolve a lookup through this rather than
+/// reading `policy_decisions` directly, so a decision they go on to claim
+/// carries the authority revision and integrity payload the claim compares.
+pub(crate) fn evaluate(request: &PolicyDecisionLookupRequestV1) -> Result<Value, String> {
     if request.schema != POLICY_DECISION_LOOKUP_REQUEST_SCHEMA {
         return Err("native_policy_decision_lookup_schema_mismatch".to_owned());
     }
     if let Some(groups) = &request.probe_groups {
         return crate::policy_lookup_groups::evaluate(request, groups);
+    }
+    if let Some(portable) = &request.portable_workspace {
+        return crate::policy_lookup_portable::evaluate(request, portable);
+    }
+    // The binding is only re-read under the claim's write lock, which no other
+    // branch of this op takes.
+    if request.evidence_binding.is_some() {
+        return Err("native_policy_decision_lookup_invalid".to_owned());
     }
     let current_time = canonical_utc_timestamp(&request.now)
         .ok_or_else(|| "native_policy_decision_lookup_invalid_now".to_owned())?;
@@ -1370,7 +1385,11 @@ pub(crate) fn evaluate_non_consuming(
     request: &PolicyDecisionLookupRequestV1,
     conn: &Connection,
 ) -> Result<Value, String> {
-    if request.consume_one_shot || request.schema != POLICY_DECISION_LOOKUP_REQUEST_SCHEMA {
+    if request.consume_one_shot
+        || request.portable_workspace.is_some()
+        || request.evidence_binding.is_some()
+        || request.schema != POLICY_DECISION_LOOKUP_REQUEST_SCHEMA
+    {
         return Err("native_policy_decision_lookup_invalid".to_owned());
     }
     let current_time = canonical_utc_timestamp(&request.now)

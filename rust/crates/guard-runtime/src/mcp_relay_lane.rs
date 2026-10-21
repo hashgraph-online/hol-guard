@@ -14,7 +14,8 @@
 //! and a call the lane still cannot decide is refused. Every other reason,
 //! including one this module does not know, hands the session to the Python
 //! proxy (`hands_off`): the relay execs the exact proxy argv it was given,
-//! with its environment unchanged.
+//! with its environment unchanged (on Windows it runs the proxy as a child
+//! on the same stdio and returns its exit status).
 //!
 //! The readiness answer only steers which launcher runs. Each call is still
 //! admitted by the resident's `mcp_relay_decide`, which repeats every check
@@ -23,7 +24,10 @@
 
 use std::io::Write;
 use std::net::{TcpStream, ToSocketAddrs};
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -194,6 +198,7 @@ pub(crate) fn note(gate: &Gate) {
 /// before any stdin byte is read and before the MCP server is started, so
 /// the proxy gets the host's untouched stdio, argv and environment. Returns
 /// only when the exec failed.
+#[cfg(unix)]
 pub(crate) fn hand_off(python_argv: &[String]) -> i32 {
     let Some((program, args)) = python_argv.split_first() else {
         return 2;
@@ -201,6 +206,45 @@ pub(crate) fn hand_off(python_argv: &[String]) -> i32 {
     let error = Command::new(program).args(args).exec();
     eprintln!("{LINE_PREFIX}python proxy launch failed: {error}");
     1
+}
+
+/// Windows has no exec: run the Python proxy on the inherited stdio, argv
+/// and environment and return its exit status. The proxy joins a
+/// kill-on-close JobObject, so it cannot outlive this process.
+#[cfg(windows)]
+pub(crate) fn hand_off(python_argv: &[String]) -> i32 {
+    let Some((program, args)) = python_argv.split_first() else {
+        return 2;
+    };
+    let spawned = Command::new(program)
+        .args(args)
+        .creation_flags(guard_runtime_windows_process::CHILD_TREE_CREATION_FLAGS)
+        .spawn();
+    let mut child = match spawned {
+        Ok(child) => child,
+        Err(error) => {
+            eprintln!("{LINE_PREFIX}python proxy launch failed: {error}");
+            return 1;
+        }
+    };
+    let tree = match guard_runtime_windows_process::ChildTree::adopt_suspended(&child) {
+        Ok(tree) => tree,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            eprintln!("{LINE_PREFIX}python proxy launch failed: {error}");
+            return 1;
+        }
+    };
+    let status = child.wait();
+    drop(tree);
+    match status {
+        Ok(status) => crate::mcp_relay_launch::exit_code(status),
+        Err(error) => {
+            eprintln!("{LINE_PREFIX}python proxy wait failed: {error}");
+            1
+        }
+    }
 }
 
 /// The daemon the session's Guard home names, with its token.
@@ -295,6 +339,7 @@ impl DaemonKick {
     }
 
     /// Start `guard daemon ensure` detached; the session never waits on it.
+    #[cfg(unix)]
     fn spawn_ensure(&mut self) {
         let Some(argv) = self.ensure.take() else {
             return;
@@ -313,6 +358,35 @@ impl DaemonKick {
             .spawn();
         if let Ok(mut shell) = spawned {
             let _ = shell.wait();
+        }
+    }
+
+    /// Start `guard daemon ensure` detached, in its own process group and,
+    /// where the job allows it, outside the relay's job, as the Python daemon
+    /// launcher does; the session never waits on it.
+    #[cfg(windows)]
+    fn spawn_ensure(&mut self) {
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
+        let Some((program, args)) = self.ensure.take().and_then(|argv| {
+            let (program, args) = argv.split_first()?;
+            Some((program.clone(), args.to_vec()))
+        }) else {
+            return;
+        };
+        let detached = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP;
+        for flags in [detached | CREATE_BREAKAWAY_FROM_JOB, detached] {
+            let spawned = Command::new(&program)
+                .args(&args)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .creation_flags(flags)
+                .spawn();
+            if spawned.is_ok() {
+                return;
+            }
         }
     }
 }

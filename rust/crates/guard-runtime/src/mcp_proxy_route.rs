@@ -26,12 +26,29 @@ struct Routed {
     route: Value,
 }
 
-fn package_route(source: Option<&str>, inline: bool, remember: Option<bool>) -> Value {
+fn package_route(
+    decision: &McpToolFactsV1,
+    source: Option<&str>,
+    inline: bool,
+    remember: Option<bool>,
+) -> Value {
     json!({
         "kind": "package",
         "tool_source": source,
+        // A named source rewrites the tool decision to `allow`, so the action
+        // it enforces is derived here rather than left at the pre-rewrite one.
+        "decision_policy_action": source.map(|_| enforcement("allow", decision).as_str()),
         "inline_record": inline,
         "remember": remember,
+    })
+}
+
+/// The observe-mode downgrade as the caller presents it on the decision.
+fn override_payload(decision: &McpToolFactsV1) -> Value {
+    json!({
+        "action": decision.action,
+        "source": decision.source,
+        "policy_action": enforcement(&decision.action, decision).as_str(),
     })
 }
 
@@ -73,9 +90,7 @@ fn observe_override(query: &McpRouteToolCallQueryV1) -> Option<McpToolFactsV1> {
 fn route(query: &McpRouteToolCallQueryV1) -> Result<Routed, Value> {
     let overridden = observe_override(query);
     let decision = overridden.as_ref().unwrap_or(&query.decision);
-    let override_decision = overridden
-        .as_ref()
-        .map(|d| json!({ "action": d.action, "source": d.source }));
+    let override_decision = overridden.as_ref().map(override_payload);
     let done = |tool_policy_action: Option<GuardAction>, route: Value| {
         Ok(Routed {
             override_decision: override_decision.clone(),
@@ -100,7 +115,7 @@ fn route(query: &McpRouteToolCallQueryV1) -> Result<Routed, Value> {
             return Err(need("package_policy"));
         };
         if saved || executable {
-            return done(Some(policy), package_route(None, false, None));
+            return done(Some(policy), package_route(decision, None, false, None));
         }
         if query.asks_for_approval {
             let Some(allowed) = query.native_prompt_allows else {
@@ -109,7 +124,7 @@ fn route(query: &McpRouteToolCallQueryV1) -> Result<Routed, Value> {
             if allowed {
                 return done(
                     Some(policy),
-                    package_route(Some("native-approved"), false, None),
+                    package_route(decision, Some("native-approved"), false, None),
                 );
             }
             if query.inline_available {
@@ -118,7 +133,7 @@ fn route(query: &McpRouteToolCallQueryV1) -> Result<Routed, Value> {
                     Some(McpInlineApprovalV1::Allow) => {
                         return done(
                             Some(policy),
-                            package_route(Some("inline-approved"), true, Some(remember)),
+                            package_route(decision, Some("inline-approved"), true, Some(remember)),
                         )
                     }
                     Some(McpInlineApprovalV1::Denied) => {
@@ -131,7 +146,7 @@ fn route(query: &McpRouteToolCallQueryV1) -> Result<Routed, Value> {
         if query.mode == "observe" {
             return done(
                 Some(policy),
-                package_route(Some("policy-allow"), false, None),
+                package_route(decision, Some("policy-allow"), false, None),
             );
         }
         return done(Some(policy), queue_route(policy));
@@ -180,7 +195,8 @@ pub(crate) fn route_tool_call(query: &McpRouteToolCallQueryV1) -> Value {
         // applies after the observe-mode downgrade, so a need carries it.
         Err(mut request) => {
             request["decision_override"] = observe_override(query)
-                .map(|d| json!({ "action": d.action, "source": d.source }))
+                .as_ref()
+                .map(override_payload)
                 .unwrap_or(Value::Null);
             request
         }

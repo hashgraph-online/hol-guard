@@ -1,4 +1,4 @@
-use super::{code_loading_setting, project, project_reviewed};
+use super::{bindable_setting, code_loading_setting, project, project_reviewed};
 
 #[test]
 fn inert_prefixes_are_removed_in_place() {
@@ -159,6 +159,7 @@ fn private_temp_settings_project_only_for_review() {
         r#"OUT_DIR="$TMPDIR/report-test" bunx vitest run a.test.ts"#,
         r#"OUT_DIR="${TMPDIR}/report-test" PORT=4173 bunx vitest run a.test.ts"#,
         "OUT_DIR=$TMPDIR/report-test bunx vitest run a.test.ts",
+        r#"OUT_DIR="${TMPDIR:-/tmp}/report-test" bunx vitest run a.test.ts"#,
     ] {
         let reviewed =
             project_reviewed(command, Default::default()).unwrap_or_else(|| panic!("{command}"));
@@ -170,6 +171,9 @@ fn private_temp_settings_project_only_for_review() {
         r#"OUT_DIR="$HOME/report-test" bunx vitest run a.test.ts"#,
         r#"OUT_DIR="$TMPDIRS/x" bunx vitest run a.test.ts"#,
         r#"OUT_DIR="${TMPDIR:-/Users/nobody}/x" bunx vitest run a.test.ts"#,
+        r#"OUT_DIR="${TMPDIR:-/tmpx}/x" bunx vitest run a.test.ts"#,
+        r#"OUT_DIR="${TMPDIR:=/tmp}/x" bunx vitest run a.test.ts"#,
+        r#"OUT_DIR="${TMPDIR:-/tmp/$HOME}/x" bunx vitest run a.test.ts"#,
         r#"OUT_DIR="$TMPDIR/$(id -un)" bunx vitest run a.test.ts"#,
         r#"OUT_DIR="$TMPDIR/*" bunx vitest run a.test.ts"#,
         r#"OUT_DIR='$TMPDIR/x' bunx vitest run a.test.ts"#,
@@ -262,6 +266,80 @@ fn search_paths_are_reviewed_in_front_of_their_own_toolchain() {
 }
 
 #[test]
+fn only_plain_data_settings_are_data_the_read_only_profiles_drop() {
+    for command in [
+        "REPORT_DIR=/tmp/report vitest run",
+        "POSTHOG_REPORT_DIR=/tmp/posthog-report-tests LC_ALL=C bunx vitest run",
+        "PORT=4173 REPORT_DIR=out vitest run",
+    ] {
+        let reviewed =
+            project_reviewed(command, Default::default()).unwrap_or_else(|| panic!("{command}"));
+        // Without the restricted launchers no setting is dropped.
+        assert_eq!(reviewed.data_only, cfg!(unix), "{command}");
+    }
+    for command in [
+        // An expansion, a search path, a temporary directory the profile
+        // sets itself, a name the profile forwards, or an option-like value.
+        "OUT_DIR=$TMPDIR/report-test bunx vitest run a.test.ts",
+        "REPORT_DIR=out PYTHONPATH=. python x.py",
+        "REPORT_DIR=out TMPDIR=/tmp/x vitest run",
+        "REPORT_DIR=out VIRTUAL_ENV=/ws/.venv pytest -q",
+        "REPORT_DIR=out NODE_PATH=/ws/node_modules vitest run",
+        "REPORT_DIR=-r vitest run",
+    ] {
+        assert!(
+            !project_reviewed(command, Default::default())
+                .is_some_and(|reviewed| reviewed.data_only),
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn a_data_setting_keeps_only_a_profile_that_drops_it() {
+    use super::super::result::{generic_action, generic_result};
+    use guard_contracts::{PreToolActionTypeV1, PreToolOperationV1};
+    let verdict = |minimum_action: &str, reason_code: &str| {
+        let action = generic_action(
+            "omp",
+            "PreToolUse",
+            PreToolActionTypeV1::Package,
+            PreToolOperationV1::Execute,
+            true,
+            false,
+        );
+        generic_result(action, minimum_action, reason_code, "verdict")
+    };
+    let reviewed = |data_only| super::ReviewedProjection {
+        command: "vitest run".into(),
+        setting: "REPORT_DIR".into(),
+        data_only,
+    };
+    let vitest = "native_vitest_readonly_containment_required";
+    let raw = || verdict("review", "native_package_review");
+    let joined = super::join_reviewed(verdict("sandbox-required", vitest), raw(), &reviewed(true));
+    assert_eq!(
+        (joined.minimum_action.as_str(), joined.reason_code.as_str()),
+        ("sandbox-required", vitest)
+    );
+    // The workspace sandbox would run the text without its settings.
+    for (reason_code, data_only) in [
+        (vitest, false),
+        ("native_workspace_containment_required", true),
+    ] {
+        let joined = super::join_reviewed(
+            verdict("sandbox-required", reason_code),
+            raw(),
+            &reviewed(data_only),
+        );
+        assert_eq!(
+            joined.reason_code, "native_command_review_required",
+            "{reason_code}"
+        );
+    }
+}
+
+#[test]
 fn code_loading_settings_are_named_for_the_block_reason() {
     for (command, setting) in [
         ("NODE_PATH=/ws/node_modules node x.mjs", Some("NODE_PATH")),
@@ -293,4 +371,40 @@ fn prefixes_before_guard_launchers_are_never_projected() {
     ] {
         assert_eq!(project(command), None, "{command}");
     }
+}
+
+#[test]
+fn a_one_time_approval_binds_only_plain_reviewable_settings() {
+    for (name, value) in [
+        ("DEPLOY_ALLOW_BACKGROUND", "1"),
+        ("REPORT_WINDOW", "7d"),
+        ("RELEASE_CHANNEL", "beta.2"),
+        ("EMPTY_FLAG", ""),
+    ] {
+        assert!(bindable_setting(name, value), "{name}={value}");
+    }
+    for (name, value) in [
+        // Names that swap the program, the loader, the shell or credentials.
+        ("PATH", "/tmp/bin"),
+        ("HOME", "/tmp/home"),
+        ("BASH_ENV", "x"),
+        ("LD_PRELOAD", "x"),
+        ("GIT_SSH_COMMAND", "x"),
+        ("HOL_GUARD_HOME", "x"),
+        ("NODE_OPTIONS", "--max-old-space-size=4096"),
+        ("NODE_PATH", "/work/node_modules"),
+        ("DEPLOY_TOKEN", "x"),
+        ("HTTPS_PROXY", "x"),
+        // Values a program could read as a path, a list or text to parse.
+        ("DEPLOY_TARGET", "/etc/hosts"),
+        ("DEPLOY_TARGET", "$(id)"),
+        ("DEPLOY_TARGET", "a b"),
+        ("DEPLOY_TARGET", "-rf"),
+        ("DEPLOY_TARGET", "~/x"),
+        ("1BAD", "1"),
+        ("BAD-NAME", "1"),
+    ] {
+        assert!(!bindable_setting(name, value), "{name}={value}");
+    }
+    assert!(!bindable_setting("DEPLOY_TARGET", &"x".repeat(129)));
 }

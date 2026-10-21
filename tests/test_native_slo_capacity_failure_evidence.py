@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.codex_daemon_hook_auth import _DaemonResponseError
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_daemon_hook_auth import _DaemonResponseError
 from scripts import native_slo_capacity as capacity
 from scripts.native_slo_adapter import Observation
 from scripts.native_slo_failure_details import failure_details

@@ -100,6 +100,8 @@ pub(super) fn forward(
     let routed = Routed::Forward {
         source: OBSERVE_SOURCE.to_owned(),
         policy_action,
+        // The observed forward saves nothing; only an inline approval does.
+        remember: false,
     };
     Ok((routed, (!append.is_empty()).then_some(append)))
 }

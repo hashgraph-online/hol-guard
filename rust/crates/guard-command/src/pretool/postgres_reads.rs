@@ -16,6 +16,10 @@
 
 use std::path::Path;
 
+#[path = "psql_reads.rs"]
+mod psql_reads;
+pub(super) use psql_reads::{psql_reads_startup_files, safe_psql_arguments};
+
 pub(super) fn safe_pg_ctl_arguments(arguments: &[String]) -> bool {
     if arguments
         .iter()
@@ -93,7 +97,10 @@ pub(super) fn trusted_pg_ctl_path(executable: &str, context: super::PathContext<
 
 #[cfg(test)]
 mod tests {
-    use super::{safe_pg_ctl_arguments, trusted_pg_ctl_path};
+    use super::safe_pg_ctl_arguments;
+    #[cfg(unix)]
+    use super::trusted_pg_ctl_path;
+    #[cfg(unix)]
     use crate::pretool::PathContext;
 
     fn safe(command: &str) -> bool {

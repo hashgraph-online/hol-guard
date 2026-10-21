@@ -88,6 +88,35 @@ fn search_children_run_silently() {
 }
 
 #[test]
+fn a_root_spelled_with_the_workspace_path_fans_out_like_the_relative_root() {
+    let fixture = fixture();
+    let ws = fixture.workspace.as_str();
+    for command in [
+        format!("find {ws}/src -type f -name '*.ts' -exec grep -l main {{}} \\;"),
+        format!("find {ws}/src -type f -name '*.ts' -exec cat {{}} +"),
+        format!("find {ws}/src {ws}/test -type f -name '*.ts' -print0 | xargs -0 grep -l main"),
+        format!("find {ws} -type f -name '*.ts' -exec head -n 5 {{}} +"),
+    ] {
+        assert_eq!(action(&fixture, ws, &command), "allow", "{command}");
+    }
+    let home = fixture.home.as_str();
+    for command in [
+        // Resolves outside the workspace, or through a link or a parent.
+        format!("find {home} -type f -name '*.ts' -exec cat {{}} +"),
+        format!("find {home}/.ssh -type f -name '*.ts' -exec cat {{}} +"),
+        format!("find {ws}/linked -type f -name '*.ts' -exec cat {{}} +"),
+        format!("find {ws}/src/../linked -type f -name '*.ts' -exec cat {{}} +"),
+        format!("find {ws}/.. -type f -name '*.ts' -exec cat {{}} +"),
+        format!("find {ws}/missing -type f -name '*.ts' -exec cat {{}} +"),
+        // The type test and the extension test still apply.
+        format!("find {ws}/src -name '*.ts' -exec grep -l main {{}} \\;"),
+        format!("find {ws}/src -type f -exec cat {{}} +"),
+    ] {
+        assert_ne!(action(&fixture, ws, &command), "allow", "{command}");
+    }
+}
+
+#[test]
 fn unproven_fanout_stays_reviewed() {
     let fixture = fixture();
     let ws = fixture.workspace.as_str();

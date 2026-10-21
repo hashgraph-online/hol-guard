@@ -20,6 +20,16 @@ pub(super) fn requires_review(
     )
 }
 
+/// Whether the segment is the patch check. The check is not a read this floor
+/// owns: it prints its report whatever the configuration says, and the helper
+/// proof answers for the index it refreshes. An unprovable configuration
+/// therefore leaves the check its own review floor rather than this one's.
+fn patch_check(arguments: &[String], context: super::PathContext<'_>) -> bool {
+    crate::command_compatibility::git_inspection_arguments(arguments, context)
+        .and_then(|remaining| remaining.first())
+        .is_some_and(|operation| operation.as_str() == "apply")
+}
+
 /// The earlier steps that alone keep the command's Git reads under the
 /// floor: every Git read was proven helper-free, but a step before it could
 /// not be proven to leave Git's configuration unchanged. Run alone, each read
@@ -153,7 +163,22 @@ fn verdict(
                 .executable
                 .as_deref()
                 .filter(|executable| super::executable_basename(executable) == "git")
+                .filter(|_| !patch_check(&arguments[index], read_context))
                 .and_then(|executable| {
+                    // Git dies in its own setup on a `-C` target that holds
+                    // no repository, before it reads a pager, textconv or
+                    // filter setting, so no configured helper runs. The
+                    // probe cannot answer for that read either: there is no
+                    // repository configuration to read, and the directory
+                    // may not be there to probe in at all. Operations that
+                    // keep running without a repository, and inline `-c`
+                    // settings, are not such a route and stay probed.
+                    if super::git_helper_context::routes_to_no_repository(
+                        segments[index],
+                        read_context,
+                    ) {
+                        return Some(true);
+                    }
                     super::git_config::execution_free(
                         executable,
                         &arguments[index],
@@ -388,6 +413,7 @@ fn may_inspect(arguments: &[String]) -> bool {
                         | "show-ref"
                         | "for-each-ref"
                         | "rev-list"
+                        | "stash"
                 )
             }
         }

@@ -218,8 +218,9 @@ export function useQueueBulkApprove(props: {
   );
 
   const canConfirm = useMemo(
-    () => credentialError === null && confirmMatches && selectedGroupCount > 0,
-    [credentialError, confirmMatches, selectedGroupCount],
+    () => credentialError === null && confirmMatches && selectedGroupCount > 0 &&
+      (selectionStats.retryBlockedActionCount ?? 0) === 0,
+    [credentialError, confirmMatches, selectedGroupCount, selectionStats.retryBlockedActionCount],
   );
 
   const resetBulkFlow = useCallback(() => {
@@ -321,6 +322,10 @@ export function useQueueBulkApprove(props: {
     if (drawerStep === "submitting" || drawerStep === "completed" || selectedBulkGroups.length === 0) {
       return;
     }
+    if ((selectionStats.retryBlockedActionCount ?? 0) > 0) {
+      setBulkApproveError("Run once is unavailable for part of this selection. Open those requests individually.");
+      return;
+    }
     const ids = bulkApprovePrimaryIds(selectedBulkGroups);
     const approvedActionCount = bulkApproveActionCount(selectedBulkGroups);
     const credentialErrorCheck = validateBulkApproveCredentials(props.approvalGate, {
@@ -362,6 +367,7 @@ export function useQueueBulkApprove(props: {
     props.onBulkApprove,
     riskDisclosure,
     selectedBulkGroups,
+    selectionStats.retryBlockedActionCount,
   ]);
 
   const bulkSelectableMap = useMemo(() => {

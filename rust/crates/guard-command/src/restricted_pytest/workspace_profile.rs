@@ -1,5 +1,6 @@
 //! Seatbelt composition for `workspace-contained-v1`, kept apart from
 //! `compose_macos_profile` so the existing profile bytes stay fixed.
+use super::super::workspace_grant::GrantRules;
 use super::*;
 use crate::harness_config_names::{
     GITHUB_AGENT_DIRECTORIES, HARNESS_CONFIG_FILES, HARNESS_DIRECTORIES, HARNESS_INSTRUCTION_FILES,
@@ -32,6 +33,21 @@ const PRIVILEGE_NAMES: &[&str] = &[
     "killall",
     "pkill",
 ];
+
+/// The privileged names, under each system directory that holds them. A
+/// profile that grants exec over a directory rather than a list of binaries
+/// denies these back out, so widening the grant never widens privilege.
+pub(super) fn privileged_executables() -> Vec<PathBuf> {
+    ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+        .iter()
+        .flat_map(|dir| {
+            PRIVILEGE_NAMES
+                .iter()
+                .map(move |name| Path::new(dir).join(name))
+        })
+        .collect()
+}
+
 /// The libinfo endpoint Apple's own `system.sb` grants for user and group
 /// lookups. Credential, keychain and directory-administration services stay
 /// unreachable.
@@ -267,6 +283,23 @@ pub(super) fn denial_patterns(
     Ok(patterns)
 }
 
+/// The network a run's inline Node source needs when it serves and fetches
+/// only on literal loopback ports, derived again from the exact command
+/// about to run: each port may be bound, accepted on and connected to on
+/// the loopback address. Every other address stays denied by default.
+pub(super) fn loopback_rules(ports: &[u16]) -> Vec<String> {
+    ports
+        .iter()
+        .flat_map(|port| {
+            [
+                format!("(allow network-bind (local ip \"localhost:{port}\"))"),
+                format!("(allow network-inbound (local ip \"localhost:{port}\"))"),
+                format!("(allow network-outbound (remote ip \"localhost:{port}\"))"),
+            ]
+        })
+        .collect()
+}
+
 fn regex_rule(operations: &str, pattern: &str) -> String {
     format!("(deny {operations} (regex {}))", seatbelt_string(pattern))
 }
@@ -275,6 +308,17 @@ pub(super) fn compose(
     input: &Input,
     system_roots: &[PathBuf],
     files: &[PathBuf],
+) -> Result<String, RestrictedPytestError> {
+    compose_with(input, system_roots, files, &GrantRules::default())
+}
+
+/// `compose` plus a local CLI grant's checked rules, which never follow the
+/// credential denials.
+pub(super) fn compose_with(
+    input: &Input,
+    system_roots: &[PathBuf],
+    files: &[PathBuf],
+    grant: &GrantRules,
 ) -> Result<String, RestrictedPytestError> {
     let workspace = &input.workspace;
     if !workspace.is_absolute() || !input.private_root.is_absolute() {
@@ -285,14 +329,32 @@ pub(super) fn compose(
         .as_ref()
         .map(|linked| linked.checked(workspace))
         .transpose()?;
-    let mut extra_reads = existing(&[
-        "/bin",
-        "/usr/bin",
+    // The only read grants a workspace run takes beyond the system and its
+    // toolchain are scripts the command launches, each one regular file.
+    let mut scripts = input
+        .read_only_roots
+        .iter()
+        .filter(|r| !grant.reads.contains(*r));
+    if scripts.any(|root| {
+        !root.is_absolute()
+            || root.starts_with(workspace)
+            || !std::fs::symlink_metadata(root).is_ok_and(|meta| meta.file_type().is_file())
+            || root.canonicalize().ok().as_deref() != Some(root.as_path())
+            || root.to_str().is_none_or(|text| {
+                crate::secret_path_probe::is_request_secret_path(text, None, None)
+            })
+    }) {
+        return Err(invalid());
+    }
+    let mut extra_reads = existing(super::launch_roots::MAC_PROGRAM_ROOTS);
+    extra_reads.extend(existing(&[
         "/private/var/select",
         "/private/var/db/timezone",
-    ]);
+    ]));
     extra_reads.extend(input.exec_roots.iter().cloned());
     extra_reads.extend(input.read_only_roots.iter().cloned());
+    let mut writable = vec![workspace.clone(), input.private_root.clone()];
+    writable.extend(grant.writes.iter().cloned());
     let mut roots = vec![workspace.clone(), input.private_root.clone()];
     roots.extend(linked.map(|linked| linked.checkout().to_path_buf()));
     roots.extend_from_slice(system_roots);
@@ -314,18 +376,28 @@ pub(super) fn compose(
     metadata.extend(existing(ROOT_LINKS));
     let mut files = files.to_vec();
     files.extend(existing(TOOLCHAIN_FILES));
-    let mut executable = vec![workspace.clone()];
+    // A toolchain that links a binary and then runs it — `go test`, a cgo
+    // build, a compiled test runner — writes it into the private directory
+    // the plan gives the run for temporary files. That directory is the run's
+    // own and already writable, as the workspace is, and the workspace is
+    // executable too, so running what this command itself just built reaches
+    // nothing the command could not already run.
+    let mut executable = vec![workspace.clone(), input.private_root.clone()];
     executable.extend(linked.map(|linked| linked.checkout().to_path_buf()));
-    executable.extend(existing(&["/bin", "/usr/bin"]));
+    // The same sealed directories the reachability check names, so a command
+    // judged containable is one the profile can actually run. The tools that
+    // change the machine live here too, and they are stopped by what this
+    // profile withholds rather than by where they sit: `(deny default)`
+    // refuses the system operations `umount`, `nvram`, `shutdown` and `pfctl`
+    // need, every mach service but the user-database lookup is unreachable so
+    // `networksetup`, `systemsetup`, `diskutil` and `launchctl` cannot reach
+    // configd, diskarbitrationd or launchd, nothing outside the workspace and
+    // the run's private directory is writable, and the run is not root. The
+    // privilege names above stay denied by literal path across all four
+    // directories, as they already were.
+    executable.extend(existing(super::launch_roots::MAC_PROGRAM_ROOTS));
     executable.extend(input.exec_roots.iter().cloned());
-    let privileged: Vec<PathBuf> = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
-        .iter()
-        .flat_map(|dir| {
-            PRIVILEGE_NAMES
-                .iter()
-                .map(move |name| Path::new(dir).join(name))
-        })
-        .collect();
+    let privileged = privileged_executables();
     let mut lines = vec![
         "(version 1)".to_owned(),
         "(deny default)".to_owned(),
@@ -353,7 +425,7 @@ pub(super) fn compose(
         ),
         format!(
             "(allow file-write* {} (literal \"/dev/null\"))",
-            filter(&[workspace.clone(), input.private_root.clone()], "subpath")
+            filter(&writable, "subpath")
         ),
         // Moving the workspace itself would put it beyond every rule below.
         format!(
@@ -423,6 +495,15 @@ pub(super) fn compose(
     for pattern in denial_patterns(workspace, &input.write_denials)? {
         lines.push(regex_rule("file-write*", &pattern));
     }
+    // The daemon's state is read again here, at launch: the port it settled
+    // on may have changed since the command was judged.
+    let home = std::env::var("HOME").ok();
+    lines.extend(loopback_rules(&crate::pretool::launch_loopback_ports(
+        &input.command,
+        input.cwd.to_str(),
+        home.as_deref(),
+    )));
+    lines.extend(grant.network.iter().cloned());
     // Last, so no earlier allow can reopen a credential for reading or writing.
     for pattern in patterns() {
         lines.push(regex_rule("file-read* file-write*", &pattern));

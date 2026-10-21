@@ -1,13 +1,19 @@
 //! The MCP servers whose relay sessions the resident hands to the proxy.
 //!
-//! The resident decides no call the proxy sends through its package policy
-//! or a Composio provider lookup, and the relay cannot hand a call back once
-//! the MCP server runs: such a call is refused. A server whose catalog offers
-//! a tool that can carry such a call therefore runs under the Python proxy,
-//! which decides those calls as it does without the relay. That holds for a
-//! tool the package parser reads as a shell (`_SHELL_TOOL_NAMES`), a tool
-//! whose input schema declares a key the proxy reads as the command
-//! (`_command_argument`), and a Composio tool.
+//! The relay cannot hand a call back once the MCP server runs, so a call the
+//! resident does not decide is refused rather than proxied. A server whose
+//! catalog offers a tool that can only carry such a call therefore runs under
+//! the Python proxy instead.
+//!
+//! The resident decides a call that installs or runs a package itself
+//! (`mcp_relay_decide_package.rs`), so a tool the package parser reads as a
+//! shell (`_SHELL_TOOL_NAMES`) and a tool whose input schema declares a key
+//! the proxy reads as the command (`_command_argument`) no longer hold their
+//! server back; a package call the lane cannot settle defers, and that defer
+//! marks the server for the proxy the same way an unknown server's first
+//! session does. What remains is a Composio tool, whose provider lookup the
+//! resident does not answer (`delegated_tool`), and a definition with no
+//! usable name, which names no tool the catalog can decide against.
 //!
 //! The relay learns a catalog only after it started the server, so the
 //! resident remembers each server's catalog for later sessions:
@@ -27,7 +33,6 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use guard_command::package_intent_parser::shell_tool_name;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -39,9 +44,6 @@ pub(crate) const SERVER_UNKNOWN: &str = "mcp_relay_session_server_unknown";
 pub(crate) const SERVER_PROXY_TOOLS: &str = "mcp_relay_session_server_proxy_tools";
 const MAX_SERVERS: usize = 1024;
 const MAX_KEY_BYTES: usize = 8 * 1024;
-/// `_command_argument`: the argument keys the proxy reads as the command.
-const COMMAND_KEYS: [&str; 4] = ["command", "cmd", "shell_command", "shellCommand"];
-const SCHEMA_KEYS: [&str; 2] = ["inputSchema", "input_schema"];
 
 /// The server a session runs, as the relay and the proxy both name it.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -126,30 +128,13 @@ pub(crate) fn proxy_tool(tool: &Value) -> bool {
     let Some(name) = tool.get("name").and_then(Value::as_str) else {
         return true;
     };
-    shell_named(name) || composio_tool(name) || declares_command(tool)
-}
-
-/// The parser trims with `str::trim` and the proxy with `str.strip`, which
-/// also strips U+001C to U+001F; either reading counts.
-fn shell_named(name: &str) -> bool {
-    let stripped =
-        name.trim_matches(|c: char| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c));
-    shell_tool_name(name) || shell_tool_name(stripped)
+    composio_tool(name)
 }
 
 /// A tool the proxy routes through a Composio provider lookup.
 pub(crate) fn composio_tool(name: &str) -> bool {
     let tail = name.rsplit("__").next().unwrap_or(name);
     tail.to_ascii_lowercase().starts_with("composio_")
-}
-
-fn declares_command(tool: &Value) -> bool {
-    SCHEMA_KEYS.iter().any(|schema| {
-        tool.get(*schema)
-            .and_then(|schema| schema.get("properties"))
-            .and_then(Value::as_object)
-            .is_some_and(|properties| COMMAND_KEYS.iter().any(|key| properties.contains_key(*key)))
-    })
 }
 
 #[cfg(test)]

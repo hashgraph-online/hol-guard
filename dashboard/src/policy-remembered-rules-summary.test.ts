@@ -19,7 +19,7 @@ assert(!bundleCardSource.includes("grid-cols-3"), "bundle card avoids equal-thir
 assert(!bundleCardSource.includes("Latest sync needs attention"), "bundle card drops legacy wrapped subtitle copy");
 assert(bundleCardSource.includes("cloudBundleCopy.detail"), "attention state uses detail alert");
 assert(bundleCardSource.includes("self-start"), "bundle card does not stretch with siblings");
-assert(rememberedTabSource.includes("lg:items-start"), "summary row avoids equal-height stretch");
-assert(rememberedTabSource.includes("1.55fr"), "bundle card gets wider column than active mode");
+assert(rememberedTabSource.includes("Sync and protection details"), "sync details collapse below the rules list");
+assert(rememberedTabSource.includes("1.55fr"), "bundle card gets wider column than active mode inside details");
 
 console.log("policy-remembered-rules-summary.test.ts: all assertions passed");

@@ -59,7 +59,7 @@ pub(crate) fn assert_rows(actual: &Value, expected: &Value, label: &str) {
     }
 }
 
-fn build_database(path: &Path, vectors: &Value, scenario: &Value) {
+pub(crate) fn build_database(path: &Path, vectors: &Value, scenario: &Value) {
     let connection = Connection::open(path).unwrap();
     connection.execute_batch("pragma journal_mode=wal").ok();
     // Command activity never writes the review outbox, but every write finalizes
@@ -87,7 +87,7 @@ fn native_method(python_method: &str) -> &str {
     }
 }
 
-fn run_step(home: &Path, source: &str, step: &Value) -> Value {
+pub(crate) fn run_step(home: &Path, source: &str, step: &Value) -> Value {
     let args: Map<String, Value> = step["wire_args"].as_object().unwrap().clone();
     let request = GuardStoreRequestV1 {
         schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),

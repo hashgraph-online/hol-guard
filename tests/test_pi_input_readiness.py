@@ -34,6 +34,7 @@ const pi = { on(name, callback) { callbacks[name] = callback; } };
 let connection = {stateId: 'daemon-a'}, ready = true, setupCalls = 0;
 function loadGuardDaemonConnection() { return connection; }
 function invalidateInputApprovalResumes() { inputApprovalResumeGeneration++; }
+function invalidateToolApprovalResumes() {}
 function invalidateApprovalContinuations() {}
 function handlerAbortSignal(ctx) { return ctx.signal; }
 function captureInputApprovalResumeBinding() { return null; }
@@ -143,6 +144,7 @@ let inputApprovalResumeGeneration = 0, setupCalls = 0, reviews = 0, finished = f
 const pi = {on(name, callback) {callbacks[name] = callback;}};
 function loadGuardDaemonConnection() {return {stateId: 'fixture'};}
 function invalidateInputApprovalResumes() {inputApprovalResumeGeneration++;}
+function invalidateToolApprovalResumes() {}
 function captureInputApprovalResumeBinding() {return null;}
 function handlerAbortSignal(ctx) {return ctx.signal;}
 async function daemonWorkspaceReadiness() {

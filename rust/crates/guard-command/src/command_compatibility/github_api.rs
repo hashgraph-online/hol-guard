@@ -1,6 +1,9 @@
 //! Static REST capability attribution. GraphQL and external bodies need a richer proof.
 use super::{one, Capabilities};
 
+/// `gh api` short options that take a value: `-q` is `--jq`, `-t` is `--template`.
+const SHORT_VALUE_OPTIONS: [&str; 8] = ["-f", "-F", "-H", "-X", "-h", "-p", "-q", "-t"];
+
 fn field_is_static(value: &str) -> bool {
     !value.contains(['$', '`', '@', '\0', '\n', '\r'])
 }
@@ -121,18 +124,20 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
             endpoint = Some(&arguments[index + 1]);
             break;
         }
-        let (mut name, mut attached) = argument
-            .split_once('=')
-            .map_or((argument.as_str(), None), |(a, b)| (a, Some(b)));
-        if attached.is_none()
-            && argument.len() > 2
-            && ["-f", "-F", "-H", "-X", "-h", "-p"]
-                .iter()
-                .any(|prefix| argument.starts_with(prefix))
-        {
-            name = &argument[..2];
-            attached = Some(&argument[2..]);
-        }
+        // pflag reads an attached short value (`-q.sha`, `-q=.sha`, `-fkey=v`)
+        // before any `=`, dropping one leading `=`; long options split at `=`.
+        let short = argument
+            .get(..2)
+            .filter(|head| argument.len() > 2 && SHORT_VALUE_OPTIONS.contains(head));
+        let (name, attached) = match short {
+            Some(head) => (
+                head,
+                Some(argument[2..].strip_prefix('=').unwrap_or(&argument[2..])),
+            ),
+            None => argument
+                .split_once('=')
+                .map_or((argument.as_str(), None), |(a, b)| (a, Some(b))),
+        };
         if matches!(
             name,
             "--allow-escape-sequences"
@@ -167,6 +172,8 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
                 | "-f"
                 | "-h"
                 | "-p"
+                | "-q"
+                | "-t"
         ) {
             let value = if let Some(value) = attached {
                 value
@@ -199,7 +206,7 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
                     fields.push((key, value));
                 }
                 "--header" | "-H" if !safe_header(value) => return None,
-                "--jq" if !jq_is_static(value) => return None,
+                "--jq" | "-q" if !jq_is_static(value) => return None,
                 "--input" => return None,
                 _ => {}
             }
@@ -393,6 +400,55 @@ mod encoded_endpoint_tests {
             let arguments: Vec<String> = arguments.into_iter().map(String::from).collect();
             assert_eq!(classify(&arguments), Some(vec!["read_remote"]));
         }
+    }
+
+    #[test]
+    fn short_jq_and_template_aliases_match_their_long_forms() {
+        let endpoint = "repos/example-org/service-api/git/ref/tags/v3.45.0";
+        for (option, value) in [
+            ("-q", ".object.sha"),
+            ("--jq", ".object.sha"),
+            ("-t", "{{.object.sha}}"),
+            ("--template", "{{.object.sha}}"),
+        ] {
+            for arguments in [
+                vec![endpoint.to_owned(), option.to_owned(), value.to_owned()],
+                vec![endpoint.to_owned(), format!("{option}={value}")],
+            ] {
+                assert_eq!(
+                    classify(&arguments),
+                    Some(vec!["read_remote"]),
+                    "{arguments:?}"
+                );
+            }
+        }
+        for attached in [
+            "-q.object.sha",
+            "-q=.object.sha",
+            "-q.a | select(.b == \"c\")",
+        ] {
+            let arguments = vec![endpoint.to_owned(), attached.to_owned()];
+            assert_eq!(
+                classify(&arguments),
+                Some(vec!["read_remote"]),
+                "{attached}"
+            );
+        }
+        for unsafe_filter in [vec!["-q", "env"], vec!["-qenv.HOME"], vec!["-q", "$x"]] {
+            let mut arguments = vec![endpoint.to_owned()];
+            arguments.extend(unsafe_filter.iter().map(|value| (*value).to_owned()));
+            assert_eq!(classify(&arguments), None, "{arguments:?}");
+        }
+        let write: Vec<String> = ["-X", "DELETE", endpoint, "-q", ".ref"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        assert_eq!(classify(&write), Some(vec!["delete_remote"]));
+        let field: Vec<String> = ["-fname=value", endpoint]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        assert_eq!(classify(&field), Some(vec!["mutate_remote"]));
     }
 
     #[test]

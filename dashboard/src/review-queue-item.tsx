@@ -29,10 +29,12 @@ import {
 import type { GuardApprovalRequest } from "./guard-types";
 import {
   formatQueueRequestDate,
+  queueCommandExtensionId,
   resolveQueueCategory,
   riskScore,
   type QueueCategoryId,
 } from "./queue-state";
+import { ExtensionBrandMark } from "./protection-center/components/extension-brand-mark";
 import type { RequestReadState } from "./request-read-state";
 
 type RiskLevel = "high" | "medium" | "low";
@@ -66,6 +68,7 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
   const riskLabel = nativeDisplayOnly ? "Risk: unassessed" : `Risk: ${riskLevel}`;
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
+  const extensionId = queueCommandExtensionId(item);
   const preview = queueItemPreview(item);
   const isRead = readState.isRead(item.request_id);
   const watchOnlyObservation = isWatchOnlyObservation(item);
@@ -173,7 +176,11 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
               active ? "bg-brand-blue/10 text-brand-blue" : "bg-slate-50 text-slate-500"
             }`}
           >
-            <CategoryIcon className="h-4 w-4" aria-hidden="true" />
+            {extensionId && category.id !== "guard_bypass" ? (
+              <ExtensionBrandMark extension_id={extensionId} size="sm" />
+            ) : (
+              <CategoryIcon className="h-4 w-4" aria-hidden="true" />
+            )}
             <span className="pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100">
               {category.label}
             </span>

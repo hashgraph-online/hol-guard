@@ -527,6 +527,22 @@ def test_daemon_launch_drops_a_relative_native_runtime_override(
     assert "HOL_GUARD_NATIVE_BINARY" not in child_env
 
 
+def test_daemon_launch_forwards_only_an_absolute_source_compiler_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Startup asks the compiler whether a release bundle is installed, so a
+    # source checkout's daemon must see the compiler its caller named.
+    compiler = tmp_path / "guard-command-source"
+    monkeypatch.setenv("HOL_GUARD_NATIVE_SOURCE_COMPILER", str(compiler))
+    monkeypatch.setenv("HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER", "relative/guard-command-source")
+
+    child_env = daemon_manager_module._daemon_launcher_env(home_dir=tmp_path)
+
+    assert child_env["HOL_GUARD_NATIVE_SOURCE_COMPILER"] == str(compiler)
+    assert "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER" not in child_env
+
+
 def test_ephemeral_daemon_launch_retains_server_idle_default(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

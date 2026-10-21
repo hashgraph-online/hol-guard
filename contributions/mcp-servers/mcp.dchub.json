@@ -1,0 +1,167 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.dchub",
+  "version": "1.0.0",
+  "name": "DC Hub MCP",
+  "description": "DC Hub is the live data layer for data-center site selection. Its Data Center Power Index (DCPI) is a daily score of where data centers can get grid power, across 300+ markets. Read tools keep Guard's usual handling. Tools that create or recover a key, save to an account, send email or webhooks, accept terms, request an introduction or file a report are gated on review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "cloud.dchub",
+    "displayName": "DC Hub",
+    "url": "https://dchub.cloud"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniBolt",
+    "background": "#0F172A"
+  },
+  "homepage": "https://dchub.cloud",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://dchub.cloud/mcp",
+    "serverNames": [
+      "dchub",
+      "dc-hub"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-account-creation",
+    "external-shared-state-write",
+    "external-message-egress",
+    "external-webhook-registration",
+    "external-terms-acceptance",
+    "external-third-party-introduction"
+  ],
+  "tools": [
+    {
+      "name": "search",
+      "state": "inherit"
+    },
+    {
+      "name": "execute_plan",
+      "state": "review"
+    },
+    {
+      "name": "rank_markets",
+      "state": "inherit"
+    },
+    {
+      "name": "analyze_site",
+      "state": "inherit"
+    },
+    {
+      "name": "get_grid_data",
+      "state": "inherit"
+    },
+    {
+      "name": "get_interconnection_queue",
+      "state": "inherit"
+    },
+    {
+      "name": "get_market_intel",
+      "state": "inherit"
+    },
+    {
+      "name": "get_energy_prices",
+      "state": "inherit"
+    },
+    {
+      "name": "search_facilities",
+      "state": "inherit"
+    },
+    {
+      "name": "get_power_pipeline",
+      "state": "inherit"
+    },
+    {
+      "name": "claim_free_key",
+      "state": "review"
+    },
+    {
+      "name": "save_to_shortlist",
+      "state": "review"
+    },
+    {
+      "name": "set_shortlist_alert",
+      "state": "review"
+    },
+    {
+      "name": "save_site",
+      "state": "review"
+    },
+    {
+      "name": "set_market_alert",
+      "state": "review"
+    },
+    {
+      "name": "subscribe_digest",
+      "state": "review"
+    },
+    {
+      "name": "set_site_alert",
+      "state": "review"
+    },
+    {
+      "name": "research_task",
+      "state": "review"
+    },
+    {
+      "name": "register_standing_intent",
+      "state": "review"
+    },
+    {
+      "name": "delete_standing_intent",
+      "state": "review"
+    },
+    {
+      "name": "bind_email",
+      "state": "review"
+    },
+    {
+      "name": "recover_my_key",
+      "state": "review"
+    },
+    {
+      "name": "request_capacity_intro",
+      "state": "review"
+    },
+    {
+      "name": "accept_capacity_terms",
+      "state": "review"
+    },
+    {
+      "name": "unlock_more_data",
+      "state": "review"
+    },
+    {
+      "name": "report_finding",
+      "state": "review"
+    },
+    {
+      "name": "read_inbox",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://dchub.cloud",
+    "https://dchub.cloud/llms.txt",
+    "https://dchub.cloud/.well-known/mcp/server-card.json",
+    "https://github.com/azmartone67/dchub-mcp-server"
+  ],
+  "saferAlternatives": [
+    "Start keyless with the read tools search, rank_markets and analyze_site; they only read DC Hub data. execute_plan stays on Review because it runs a multi-step plan of other DC Hub tools server-side in one call, so Guard cannot gate each step.",
+    "Keep claim_free_key, bind_email and recover_my_key on Review: they create, bind or email a key for your user.",
+    "Keep save_site, save_to_shortlist and the set_*_alert, subscribe_digest and research_task tools on Review: they write to an account or start email.",
+    "register_standing_intent webhook kinds (new_deal_in_market, news_keyword, permitting_change) POST signed webhooks to a URL you give, so confirm the destination URL during review. delete_standing_intent is permanent.",
+    "register_standing_intent with kind=\"capacity\" files a standing Capacity Source requirement that DC Hub follows up by email, so confirm the requirement, the contact details and that your user accepts the capacity terms.",
+    "Keep read_inbox on Review: it marks partner notes as read on first call, so a second session sees none.",
+    "accept_capacity_terms and request_capacity_intro accept terms or contact a capacity provider for your user; only run them after your user agrees."
+  ]
+}

@@ -5,10 +5,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from .action_lattice import guard_action_severity
 from .project_identity import (
     enrich_project_identity_metadata,
     is_portable_project_identity,
@@ -16,11 +14,14 @@ from .project_identity import (
     resolve_portable_project_identity,
 )
 from .store_base import PolicyDecisionLookupResult
-from .store_policy import _DEGRADED_AUTHORITY_REVISION, _most_restrictive_policy_lookup, memory_lookup_candidates
+from .store_policy import _DEGRADED_AUTHORITY_REVISION
+from .store_policy import POLICY_DECISION_LOOKUP_FEATURE as _LOOKUP
+from .store_policy import POLICY_LOOKUP_MEMORY_FEATURE as _MEMORY
+from .store_policy import PORTABLE_COMPOSITION_LOOKUP_FEATURE as _PORTABLE_COMPOSITION
+from .store_policy import RUNTIME_SAVED_REUSE_FEATURE as _SAVED_REUSE
 
 _PROJECT_IDENTITY_CACHE_MAX_ITEMS = 128
 _PROJECT_IDENTITY_CACHE: dict[tuple[str, int], str] = {}
-_PORTABLE_PERMISSION_FLOOR = guard_action_severity("review")
 
 
 def _cached_portable_project_identity(workspace: str) -> str | None:
@@ -49,48 +50,6 @@ def _cached_portable_project_identity(workspace: str) -> str | None:
 
 def _text(value: object) -> str | None:
     return value if isinstance(value, str) else None
-
-
-def _portable_lookup_without_permission_elevation(
-    lookup: PolicyDecisionLookupResult,
-) -> PolicyDecisionLookupResult:
-    """Keep portable selectors restrictive-only and never reuse one-shot authority.
-
-    Git metadata lives inside the workspace and can be forged by that
-    workspace. A portable selector is therefore useful for carrying managed
-    restrictions across clones, but it cannot safely prove that a permissive
-    approval belongs to the current local workspace. Local-path authority is
-    the only source allowed to lower enforcement below review.
-    """
-    decision = lookup.get("decision")
-    if not isinstance(decision, dict):
-        return lookup
-    approval_id = decision.get("approval_id")
-    action_severity = guard_action_severity(decision.get("action"), unknown_action="block")
-    if approval_id is not None or action_severity < _PORTABLE_PERMISSION_FLOOR:
-        return {**lookup, "decision": None}
-    return lookup
-
-
-def _without_authority_revision(lookup: PolicyDecisionLookupResult) -> PolicyDecisionLookupResult:
-    """Remove the preview-only authority revision from an enforcement result."""
-    decision = lookup.get("decision")
-    if not isinstance(decision, dict) or "_approval_authority_revision" not in decision:
-        return lookup
-    sanitized_decision = dict(decision)
-    sanitized_decision.pop("_approval_authority_revision", None)
-    return {**lookup, "decision": sanitized_decision}
-
-
-def _restrictive_only_lookup(lookup: PolicyDecisionLookupResult) -> PolicyDecisionLookupResult:
-    """Fail closed after a saved allow cannot be atomically claimed."""
-    decision = lookup.get("decision")
-    sanitized = _without_authority_revision(lookup)
-    if not isinstance(decision, dict):
-        return sanitized
-    if guard_action_severity(decision.get("action"), unknown_action="block") >= _PORTABLE_PERMISSION_FLOOR:
-        return sanitized
-    return {**sanitized, "decision": None}
 
 
 # Store mixins are composed dynamically in ``GuardStore``. Sibling mixins use
@@ -127,9 +86,9 @@ class StorePortableProjectMemoryMixin:
     ) -> dict[str, Any] | None:
         """Peek saved decisions for several ``(artifact_id, artifact_hash)`` probes in one resident call.
 
-        Each probe composes its direct, exact-command and memory ids most
-        restrictive (with the portable Git workspace); across probes a strictly
-        more severe decision wins. Nothing is consumed. The first probe names
+        The resident expands each probe's direct id with its exact-command and
+        memory ids and composes them most restrictive (with the portable Git
+        workspace); across probes a strictly more severe decision wins. Nothing is consumed. The first probe names
         the current action: the resident also checks a saved allow's context
         token against its hash, explains a miss, and composes the reuse verdict
         for ``current_action``. Returns ``decision``, ``ignored_local_integrity``,
@@ -140,22 +99,75 @@ class StorePortableProjectMemoryMixin:
         evidence = self.policy_lookup_evidence()
         if evidence.degraded_trust_status is not None:
             return None
-        groups: list[dict[str, object]] = []
-        for artifact_id, artifact_hash in probes:
-            exact_ids, memory_id = memory_lookup_candidates(
+        reuse = {"current_action": current_action, "approval_context_inputs": dict(approval_context_inputs)}
+        memory = (memory_command, memory_artifact_type, memory_artifact_name)
+        return self._send_memory_probe_groups(
+            evidence, harness, probes, workspace, publisher, runtime_exact_match_context, memory, reuse
+        )
+
+    def resolve_policy_decision_lookup_with_memory_pattern(
+        self,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None = None,
+        workspace: str | None = None,
+        publisher: str | None = None,
+        now: str | None = None,
+        runtime_exact_match_context: str | None = None,
+        *,
+        memory_command: str | None = None,
+        memory_artifact_type: str | None = None,
+        memory_artifact_name: str | None = None,
+        consume_one_shot: bool = True,
+    ) -> PolicyDecisionLookupResult:
+        """Peek the direct, exact-command and memory candidates in one resident call.
+
+        The resident composes them most restrictive with the portable Git
+        workspace, as the consuming path below does one probe at a time.
+        """
+        if consume_one_shot or not artifact_id or not artifact_hash:
+            return super().resolve_policy_decision_lookup_with_memory_pattern(
                 harness,
                 artifact_id,
+                artifact_hash=artifact_hash,
+                workspace=workspace,
+                publisher=publisher,
+                now=now,
+                runtime_exact_match_context=runtime_exact_match_context,
                 memory_command=memory_command,
                 memory_artifact_type=memory_artifact_type,
                 memory_artifact_name=memory_artifact_name,
-                guard_home=Path(self.guard_home),
+                consume_one_shot=consume_one_shot,
             )
-            groups.append(
-                {
-                    "artifact_hash": artifact_hash,
-                    "candidate_artifact_ids": [artifact_id, *exact_ids, *([memory_id] if memory_id else [])],
-                }
-            )
+        evidence = self.policy_lookup_evidence(now=now)
+        if evidence.degraded_trust_status is not None:
+            return {
+                "decision": None,
+                "ignored_local_integrity": None,
+                "trust_status": evidence.degraded_trust_status,
+                "authority_revision": _DEGRADED_AUTHORITY_REVISION,
+            }
+        memory = (memory_command, memory_artifact_type, memory_artifact_name)
+        return self._send_memory_probe_groups(
+            evidence, harness, [(artifact_id, artifact_hash)], workspace, publisher, runtime_exact_match_context, memory
+        )
+
+    def _send_memory_probe_groups(
+        self,
+        evidence: Any,
+        harness: str,
+        probes: Sequence[tuple[str, str | None]],
+        workspace: str | None,
+        publisher: str | None,
+        runtime_exact_match_context: str | None,
+        memory: tuple[str | None, str | None, str | None],
+        reuse: Mapping[str, object] | None = None,
+    ) -> Any:
+        """Send direct-id probe groups for the resident to expand and compose.
+
+        Without ``reuse`` the request names one probe and answers its full
+        ``lookup_result``.
+        """
         request = self.policy_decision_lookup_request(
             evidence,
             harness=harness,
@@ -166,26 +178,40 @@ class StorePortableProjectMemoryMixin:
             runtime_exact_match_context=runtime_exact_match_context,
             consume_one_shot=False,
         )
+        command, artifact_type, artifact_name = memory
         request["probe_groups"] = {
             "portable_workspace": self._portable_project_workspace(workspace),
-            "groups": groups,
-            "reuse": {"current_action": current_action, "approval_context_inputs": dict(approval_context_inputs)},
+            "groups": [{"artifact_hash": h, "candidate_artifact_ids": [i]} for i, h in probes],
+            **({"reuse": reuse} if reuse is not None else {}),
+            "memory": {
+                "command": command,
+                "artifact_type": artifact_type,
+                "artifact_name": artifact_name,
+                "harness": harness,
+            },
         }
-        return self.send_policy_decision_lookup(request)
+        # Gated on the expansion capability, not the lookup's: the groups above
+        # carry only their direct id, so a runtime that does not expand them
+        # would answer a narrower question than was asked, and the
+        # probe-groups contract would reject the ``memory`` field anyway. The
+        # named missing capability says that; a serde error would not.
+        return self.send_policy_decision_lookup(request, required_feature=_MEMORY)
 
     def resolve_runtime_saved_decision(
         self,
         current: Mapping[str, object],
         legacy: Mapping[str, object],
         alias: Mapping[str, object] | None,
-    ) -> tuple[PolicyDecisionLookupResult, dict[str, Any] | None]:
+        reuse: Mapping[str, object] | None = None,
+    ) -> tuple[PolicyDecisionLookupResult, dict[str, Any] | None, dict[str, Any] | None]:
         """Resolve a runtime hook evaluation's saved decision in one resident call.
 
         ``current`` and ``legacy`` probe the request hash and the legacy content
         hash with their exact-command and memory candidates; ``alias`` probes
         the Claude alias of a legacy ``claude-code:`` artifact when neither
-        matched. Nothing is consumed. Returns the lookup carrying the trust and
-        integrity evidence, and the decision this artifact may use.
+        matched. Nothing is consumed. Returns the trust and integrity evidence,
+        the decision this artifact may use and, with ``reuse``, the resident's
+        ``saved_reuse`` (a degraded store builds only its query).
         """
         evidence = self.policy_lookup_evidence()
         if evidence.degraded_trust_status is not None:
@@ -195,7 +221,8 @@ class StorePortableProjectMemoryMixin:
                 "trust_status": evidence.degraded_trust_status,
                 "authority_revision": _DEGRADED_AUTHORITY_REVISION,
             }
-            return degraded, None
+            query = None if reuse is None else {"query": self._degraded_saved_reuse_query(current, reuse)}
+            return degraded, None, query
         probes = {"current": current, "legacy": legacy, **({"alias": alias} if alias is not None else {})}
         runtime = {
             name: {**probe, "portable_workspace": self._portable_project_workspace(_text(probe.get("workspace")))}
@@ -211,40 +238,43 @@ class StorePortableProjectMemoryMixin:
             runtime_exact_match_context=_text(current.get("exact_match_context")),
             consume_one_shot=False,
         )
-        request["probe_groups"] = {"groups": [], "runtime": runtime}
-        payload = self.send_policy_decision_lookup(request)
-        return payload["lookup"], payload["decision"]
+        request["probe_groups"] = {"groups": [], "runtime": {**runtime, **({"reuse": reuse} if reuse else {})}}
+        payload = self.send_policy_decision_lookup(request, required_feature=_SAVED_REUSE if reuse else _LOOKUP)
+        return payload["lookup"], payload["decision"], None if reuse is None else payload.get("saved_reuse")
 
-    def mcp_policy_lookup_input(
-        self,
-        harness: str,
-        artifact_id: str,
-        *,
-        workspace: str | None,
-        memory_command: str | None,
-        memory_artifact_type: str | None,
-        memory_artifact_name: str | None,
-    ) -> dict[str, object]:
+    def _degraded_saved_reuse_query(self, current: Mapping[str, object], reuse: Mapping[str, object]) -> dict[str, Any]:
+        """The ``saved_reuse`` query of a store that serves no saved decision."""
+        from .runtime.approval_context import approval_context_tokens_validation_reason as validate
+
+        token, keys = reuse.get("cursor_native_token"), ("artifact_id", "artifact_hash", "workspace", "publisher")
+        reason, stored_hash = (
+            self.approval_reuse_diagnostic(str(current["harness"]), *(_text(current.get(key)) for key in keys))
+            if token is None
+            else (None, None)
+        )
+        return {
+            "current_action": reuse["current_action"],
+            **dict.fromkeys(("stored_action", "stored_artifact_hash", "stored_validation_reason"), None),
+            **dict.fromkeys(("stored_present", "integrity_failure"), False),
+            "cursor_native_present": token is not None,
+            "cursor_validation_reason": None if token is None else validate(token, current["artifact_hash"]),
+            "diagnostic_reason": reason,
+            "diagnostic_stored_hash": stored_hash,
+        }
+
+    def mcp_policy_lookup_input(self, *, workspace: str | None) -> dict[str, object]:
         """Ship the keyring-facing evidence once so the resident can read saved policy itself.
 
         The resident runs the same non-consuming probes this class composes in
         ``resolve_policy_decision_lookup`` (direct, exact-command and memory ids,
-        portable Git workspace, most restrictive wins) over one store connection.
+        portable Git workspace, most restrictive wins) over one store connection,
+        deriving the candidate ids from the tool-call subject.
         """
         evidence = self.policy_lookup_evidence()
-        exact_ids, memory_id = memory_lookup_candidates(
-            harness,
-            artifact_id,
-            memory_command=memory_command,
-            memory_artifact_type=memory_artifact_type,
-            memory_artifact_name=memory_artifact_name,
-            guard_home=Path(self.guard_home),
-        )
         lookup: dict[str, object] = {
             "store_path": str(self.path),
             "guard_home": str(self.guard_home),
             "now": evidence.now,
-            "candidate_artifact_ids": [artifact_id, *exact_ids, *([memory_id] if memory_id else [])],
             "portable_workspace": self._portable_project_workspace(workspace),
             "integrity_state": evidence.integrity_state,
             "integrity_key_b64": evidence.integrity_key_b64,
@@ -269,6 +299,13 @@ class StorePortableProjectMemoryMixin:
         consume_one_shot: bool = True,
         local_once_only: bool = False,
     ) -> PolicyDecisionLookupResult:
+        """Resolve the lookup with this clone's portable project identity composed in.
+
+        Python keeps deriving the identity because
+        ``_portable_project_workspace`` answers ``None`` for a workspace whose
+        identity the resident would have to defer on, which a store lookup has
+        no way to do.
+        """
         portable_workspace = None if local_once_only else self._portable_project_workspace(workspace)
         if portable_workspace is None:
             return super().resolve_policy_decision_lookup(
@@ -283,68 +320,37 @@ class StorePortableProjectMemoryMixin:
                 local_once_only=local_once_only,
             )
 
-        # Portable Git metadata is classification, not authentication. Always
-        # inspect portable authority without consuming it, then discard any
-        # one-shot or permission-lowering decision before composition. This
-        # prevents a forged repository identity from inheriting an allow/warn
-        # or burning reusable one-shot authority belonging to another clone.
-        portable_preview = _portable_lookup_without_permission_elevation(
-            super().resolve_policy_decision_lookup(
-                harness,
-                artifact_id,
-                artifact_hash=artifact_hash,
-                workspace=portable_workspace,
-                publisher=publisher,
-                now=now,
-                runtime_exact_match_context=runtime_exact_match_context,
-                consume_one_shot=False,
-            )
-        )
-        normalized_workspace = workspace.strip() if isinstance(workspace, str) else None
-        if portable_workspace == normalized_workspace:
-            return portable_preview if not consume_one_shot else _without_authority_revision(portable_preview)
-
-        # Preview local authority as well. A local one-shot must not be claimed
-        # before a stronger portable restriction has had a chance to win.
-        local_preview = super().resolve_policy_decision_lookup(
-            harness,
-            artifact_id,
+        # Portable Git metadata is classification, not authentication: it lives
+        # inside the workspace and can be forged by that workspace. The resident
+        # therefore previews the portable selector without consuming it, discards
+        # any one-shot or permission-lowering decision it carries, composes that
+        # with the local preview most restrictive, and only then claims the
+        # effective allow — all over one store connection, under its own write
+        # lock. Composing here instead would make Python choose the verdict and
+        # would leave a window between the preview and the claim.
+        evidence = self.policy_lookup_evidence(now=now, claim_binding=consume_one_shot)
+        if evidence.degraded_trust_status is not None:
+            return {
+                "decision": None,
+                "ignored_local_integrity": None,
+                "trust_status": evidence.degraded_trust_status,
+                "authority_revision": _DEGRADED_AUTHORITY_REVISION,
+            }
+        request = self.policy_decision_lookup_request(
+            evidence,
+            harness=harness,
+            artifact_id=artifact_id,
             artifact_hash=artifact_hash,
             workspace=workspace,
             publisher=publisher,
-            now=now,
             runtime_exact_match_context=runtime_exact_match_context,
-            consume_one_shot=False,
+            consume_one_shot=consume_one_shot,
+            portable_workspace=portable_workspace,
         )
-        effective_preview = _most_restrictive_policy_lookup([local_preview, portable_preview])
-        if not consume_one_shot:
-            return effective_preview
-
-        effective_decision = effective_preview.get("decision")
-        if not isinstance(effective_decision, dict) or effective_decision.get("action") != "allow":
-            return _without_authority_revision(effective_preview)
-
-        # Portable permission-lowering decisions were removed above, so any
-        # effective allow came from local authority. Claim that exact preview
-        # atomically. The embedded authority revision prevents a stale allow
-        # from surviving a concurrent policy or approval change.
-        if self.claim_approval_reuse_decision(effective_decision, now=now):
-            return _without_authority_revision(effective_preview)
-
-        # Authority changed between preview and claim. Recompute without
-        # consuming anything and retain only restrictive policy; a permission
-        # can be presented again on the caller's next approval cycle.
-        refreshed = self.resolve_policy_decision_lookup(
-            harness,
-            artifact_id,
-            artifact_hash=artifact_hash,
-            workspace=workspace,
-            publisher=publisher,
-            now=now,
-            runtime_exact_match_context=runtime_exact_match_context,
-            consume_one_shot=False,
+        return cast(
+            "PolicyDecisionLookupResult",
+            self.send_policy_decision_lookup(request, required_feature=_PORTABLE_COMPOSITION),
         )
-        return _restrictive_only_lookup(refreshed)
 
     @staticmethod
     def _portable_project_workspace(workspace: str | None) -> str | None:

@@ -37,6 +37,7 @@ def _native_current_action(
     skill_directory_identity_reusable: bool | None,
     scoring: Mapping[str, object],
     composer: Callable[..., dict[str, object]],
+    low_trust_action: str | None = None,
 ) -> dict[str, object]:
     """Ask the resident for the scoring recommendation and current action.
 
@@ -59,6 +60,8 @@ def _native_current_action(
                 "config_default_action": config.default_action,
                 "skill_directory_identity_reusable": skill_directory_identity_reusable,
                 **scoring,
+                # Sent only when set, so requests without it keep their digest.
+                **({"low_trust_action": low_trust_action} if low_trust_action is not None else {}),
             },
             guard_home=getattr(store, "guard_home", None),
         )

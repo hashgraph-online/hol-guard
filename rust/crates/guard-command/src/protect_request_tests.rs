@@ -92,3 +92,18 @@ fn unrepresentable_registration_json_is_a_typed_error() {
         Err(ProtectParseError::UnsupportedPayload)
     );
 }
+
+#[test]
+fn yarn_add_cwd_names_a_directory_not_a_package() {
+    let command: Vec<String> = ["yarn", "add", "--cwd", "/tmp/project", "left-pad"]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+    let request = parse_protect_command(&command).expect("yarn add parses");
+    let names: Vec<_> = request
+        .targets
+        .iter()
+        .filter_map(|target| target.package_name.clone())
+        .collect();
+    assert_eq!(names, ["left-pad"]);
+}

@@ -333,7 +333,13 @@ fn artifact(run: &Run, input: &Input) -> Result<Option<Value>, PostToolError> {
         content = classify_content(run, &input.response_text, false)?;
     }
     if content.is_empty()
-        || source_inspection_can_skip(run, input, &source.command, &content)?
+        || source_inspection_can_skip(
+            run,
+            input,
+            &source.command,
+            &content,
+            sensitive_file_request.is_some(),
+        )?
         || focused_pytest_can_skip(run, input, &source.command, &content)?
     {
         return Ok(None);

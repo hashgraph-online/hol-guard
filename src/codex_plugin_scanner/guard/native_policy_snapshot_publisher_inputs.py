@@ -69,6 +69,13 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
             *self._external_policy_paths(),
             *self._workspace_policy_paths(),
         )
+        # SQLite moves the database's ctime when the last mmap connection
+        # closes, without a write. Database changes are only a republish hint
+        # (the periodic reconcile compares the compiled policy), so ctime is
+        # left out for them; a real write still moves mtime or size.
+        database_paths = {
+            str(self.guard_home / name) for name in ("guard.db", "guard.db-wal", "guard.db-shm", "guard.db-journal")
+        }
         seen_paths: set[str] = set()
         for path in paths:
             path_key = str(path)
@@ -83,7 +90,12 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
                 values.append(
                     (
                         path_key,
-                        (metadata.st_mtime_ns, metadata.st_size, metadata.st_ino, metadata.st_ctime_ns),
+                        (
+                            metadata.st_mtime_ns,
+                            metadata.st_size,
+                            metadata.st_ino,
+                            0 if path_key in database_paths else metadata.st_ctime_ns,
+                        ),
                     )
                 )
         return tuple(values)
@@ -299,6 +311,25 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
                 self._acked = False
                 self._condition.notify_all()
             raise
+
+    def _committed_control_authority(self) -> dict[str, object] | None:
+        """Read the committed control marker without compiling the projection.
+
+        The marker is written under the mutation lease on every control
+        projection, so it moves when another process commits one. Reading it
+        costs one authenticated private-state read and takes no lease, which
+        is what lets the review fence compare committed control state inside a
+        hook budget. It never creates key material: a store with none has no
+        marker to authenticate.
+        """
+
+        from .native_command_control_authority_store import read_command_control_authority
+        from .native_policy_snapshot_codec import derive_native_policy_verifier_key
+
+        material = self.store._policy_integrity_secret_material(create=False)
+        if material is None or not isinstance(material[0], bytes):
+            return None
+        return read_command_control_authority(self.store, derive_native_policy_verifier_key(material[0]))
 
     def _compiled_business_source(self):
         from .business_policy_document_import import read_business_source_for_store

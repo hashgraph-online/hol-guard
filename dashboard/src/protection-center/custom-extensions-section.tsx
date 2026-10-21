@@ -58,6 +58,8 @@ function CustomExtensionEmptyState(props: {
   onAdd: () => void;
   onClearFilters?: () => void;
   onClearSearch: () => void;
+  /** Offer Add beside Clear search when nothing has been added to search. */
+  addWithSearch?: boolean;
 }) {
   let title = "No custom extensions yet.";
   let detail = "Add a tool you run yourself or connect an MCP server. Connectors in your host apps appear here automatically.";
@@ -84,10 +86,18 @@ function CustomExtensionEmptyState(props: {
           </button>
         ) : null
       ) : props.search ? (
-        <button type="button" onClick={props.onClearSearch} className="guard-extensions-chip mt-3">
-          <HiMiniXMark className="size-4" aria-hidden="true" />
-          Clear search
-        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button type="button" onClick={props.onClearSearch} className="guard-extensions-chip">
+            <HiMiniXMark className="size-4" aria-hidden="true" />
+            Clear search
+          </button>
+          {props.addWithSearch ? (
+            <button type="button" onClick={props.onAdd} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark">
+              <HiMiniPlus className="size-4" aria-hidden="true" />
+              Add custom extension
+            </button>
+          ) : null}
+        </div>
       ) : (
         <>
           <button type="button" onClick={props.onAdd} className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark">
@@ -123,6 +133,17 @@ interface CustomExtensionsSectionProps {
   onClearFilters?: () => void;
   /** Host connector discovery status and retry, owned by the catalog page. */
   discoveryControl?: ReactNode;
+  /**
+   * Set when a list switch above the section already names it and carries the
+   * Add action: the heading stays for assistive tech and the section drops its
+   * own top margin, Add button and repeated title.
+   */
+  embedded?: boolean;
+  /**
+   * Embedded only: nothing has been added, so this list's empty state is where
+   * Add lives, including while a search typed here is still set.
+   */
+  addInEmptyState?: boolean;
 }
 
 export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
@@ -160,13 +181,18 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
   // With nothing added yet the empty state carries the one Add action.
   const firstRun = all.length === 0 && search === "" && !filteredOut;
   return (
-    <section className="mt-10" aria-labelledby="custom-extensions-heading" data-testid="custom-extensions-section">
+    <section className={props.embedded ? "mt-4" : "mt-10"} aria-labelledby="custom-extensions-heading" data-testid="custom-extensions-section">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 id="custom-extensions-heading" className="text-xl font-semibold tracking-tight text-brand-dark">Custom extensions</h2>
-          <p className="mt-1 max-w-xl text-sm text-slate-500">Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions.</p>
+          <h2
+            id="custom-extensions-heading"
+            className={props.embedded ? "sr-only" : "text-xl font-semibold tracking-tight text-brand-dark"}
+          >
+            Custom extensions
+          </h2>
+          <p className={props.embedded ? "max-w-xl text-sm text-slate-500" : "mt-1 max-w-xl text-sm text-slate-500"}>Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions.</p>
         </div>
-        {firstRun ? null : (
+        {firstRun || props.embedded ? null : (
           <button type="button" onClick={props.onAdd} className="inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xl px-3 text-sm font-semibold text-brand-blue sm:self-end">
             <HiMiniPlus className="size-4" aria-hidden="true" />
             Add custom extension
@@ -194,6 +220,7 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
           onAdd={props.onAdd}
           onClearFilters={props.onClearFilters}
           onClearSearch={handleClearSearch}
+          addWithSearch={props.embedded === true && props.addInEmptyState === true}
         />
       ) : (
         <div className="mt-4" id={rowsId}>

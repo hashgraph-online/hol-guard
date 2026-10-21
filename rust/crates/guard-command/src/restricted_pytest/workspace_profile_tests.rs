@@ -382,6 +382,11 @@ fn a_linked_worktree_writes_only_shared_stores_and_its_admin_entry() {
             .any(|line| line.starts_with(prefix) && line.contains(needle))
     };
     assert!(line("(allow process-exec", "(subpath \"/w/main\")"));
+    // A linked binary the run just built lives in its private directory.
+    assert!(line(
+        "(allow process-exec",
+        &format!("(subpath \"{}\")", value.private_root.display())
+    ));
     assert!(line("(allow file-read*", "(subpath \"/w/main\")"));
     for tree in ["objects", "refs", "logs"] {
         let needle = format!("(subpath \"/w/main/.git/{tree}\")");
@@ -459,4 +464,28 @@ fn longest_literal(profile: &str) -> usize {
     }
     assert!(!quoted);
     longest
+}
+
+#[test]
+fn a_read_grant_is_one_regular_file_and_nothing_else() {
+    let directory = std::env::temp_dir().join(format!("guard-read-grant-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let directory = directory.canonicalize().unwrap();
+    let script = directory.join("check.py");
+    std::fs::write(&script, "print(1)\n").unwrap();
+    let link = directory.join("link.py");
+    std::os::unix::fs::symlink(&script, &link).unwrap();
+    let granted = |roots: Vec<PathBuf>| {
+        let mut value = input("/w/proj");
+        value.read_only_roots = roots;
+        workspace_profile::compose(&value, &[], &[])
+    };
+    let profile = granted(vec![script.clone()]).unwrap();
+    assert!(profile.contains(&script.to_string_lossy().into_owned()));
+    assert!(granted(vec![directory.clone()]).is_err());
+    assert!(granted(vec![link]).is_err());
+    assert!(granted(vec![PathBuf::from("check.py")]).is_err());
+    assert!(granted(vec![PathBuf::from("/w/proj/check.py")]).is_err());
+    assert!(granted(vec![directory.join("missing.py")]).is_err());
+    let _ = std::fs::remove_dir_all(&directory);
 }

@@ -1,6 +1,41 @@
-use super::{normalized_harness, MAX_SELECTOR_VALUE_BYTES, VALID_ACTIONS, VALID_RISK_KEYS};
+use super::{normalized_harness, MAX_SELECTOR_VALUE_BYTES};
 use guard_policy_snapshot::EffectiveNativePolicyV3;
 use std::collections::BTreeMap;
+
+const VALID_ACTIONS: &[&str] = &[
+    "allow",
+    "warn",
+    "review",
+    "require-reapproval",
+    "sandbox-required",
+    "block",
+];
+
+const VALID_RISK_KEYS: &[&str] = &[
+    "local_secret_read",
+    "credential_exfiltration",
+    "data_flow_exfiltration",
+    "destructive_shell",
+    "encoded_execution",
+    "network_egress",
+    "prompt_injection",
+    "mcp_dangerous_tool",
+    "malicious_skill",
+    "package_script",
+    "persistence",
+    "guard_bypass",
+    "cloud_advisory",
+    "encoded_exfiltration",
+    "package_unknown",
+    "package_lockfile_drift",
+    "package_direct_source",
+    "package_custom_registry",
+    "package_install",
+    "low_trust_artifact",
+    "execution",
+    "supply_chain",
+    "policy_bypass",
+];
 
 /// Generation-owned indexes. The signed policy is retained unchanged; only
 /// derived selector keys are canonicalized here, before snapshot publication.

@@ -90,6 +90,52 @@ fn observed_mcp_tool(harness: &str, tool_name: &str) -> Option<ObservedTool> {
     })
 }
 
+/// The connector an `observed-mcp:<harness>:<namespace>` marker names
+/// (`_source`, `store_mcp_provider_permissions.py`). The namespace must parse
+/// back to itself, so a marker cannot name a connector it does not identify.
+pub(crate) struct MarkerSource {
+    harness: String,
+    namespace: String,
+}
+
+impl MarkerSource {
+    /// The MCP server identity the connector is enrolled under.
+    pub(crate) fn identity_hash(&self) -> String {
+        ObservedTool {
+            namespace: self.namespace.clone(),
+            qualified_name: String::new(),
+            harness: self.harness.clone(),
+        }
+        .server_identity_hash()
+    }
+
+    /// `provider_action_selector(source, slug)`: one provider action of this
+    /// connector, across every account it serves.
+    pub(crate) fn action_selector(&self, slug: &str) -> Option<String> {
+        let mut bytes = slug.bytes();
+        let first = bytes.next()?;
+        if !first.is_ascii_alphanumeric()
+            || slug.len() > 128
+            || !bytes.all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
+        {
+            return None;
+        }
+        Some(format!(
+            "{}:{}:composio:all-accounts:{slug}",
+            self.harness, self.namespace
+        ))
+    }
+}
+
+pub(crate) fn marker_source(marker: &str) -> Option<MarkerSource> {
+    let (harness, namespace) = marker.strip_prefix(OBSERVED_MCP_PREFIX)?.split_once(':')?;
+    let tool = observed_mcp_tool(harness, &format!("{namespace}probe"))?;
+    (tool.namespace == namespace).then_some(MarkerSource {
+        harness: tool.harness,
+        namespace: tool.namespace,
+    })
+}
+
 /// `is_local_cli_id`: `local-cli.[a-z0-9]+(-[a-z0-9]+){0,8}`.
 pub(crate) fn is_local_cli_id(value: &str) -> bool {
     let Some(rest) = value.strip_prefix("local-cli.") else {
@@ -109,15 +155,24 @@ fn text(row: &Row, name: &str) -> Option<String> {
     row.get(name).and_then(Value::as_str).map(str::to_owned)
 }
 
+/// Oldest schema with every column these reads use. Version 12 only added
+/// the declaration columns, which these reads never touch.
+const MIN_READ_SCHEMA_VERSION: i64 = 11;
+
 /// The Python writer migrates an older store before this read; a store from
 /// a newer Guard, or one whose schema marker is damaged, stays unread.
-fn require_current_schema(connection: &Connection) -> StoreResult<bool> {
+pub(crate) fn require_current_schema(connection: &Connection) -> StoreResult<bool> {
     let unreadable = |_| StoreError::Invalid("native_guard_store_local_cli_schema_unreadable");
     if !local_store_read::table_exists(connection, "local_cli_observation").map_err(unreadable)? {
         return Ok(false);
     }
     match local_store_read::schema_version(connection).map_err(unreadable)? {
-        Some(local_store_read::SUPPORTED_SCHEMA_VERSION) => Ok(true),
+        Some(version)
+            if (MIN_READ_SCHEMA_VERSION..=local_store_read::SUPPORTED_SCHEMA_VERSION)
+                .contains(&version) =>
+        {
+            Ok(true)
+        }
         _ => Err(StoreError::Invalid(
             "native_guard_store_local_cli_schema_unreadable",
         )),

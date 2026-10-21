@@ -4,8 +4,14 @@
 //! owns event and action normalization, composition of the current action,
 //! the lookups it permits, the final action, receipt/activity dispositions and
 //! the response directive. It also settles Copilot tool calls
-//! (`copilot_settle`). Every query is pure and fails closed: a malformed
-//! request yields a `native_hook_decision_*` error, never a default verdict.
+//! (`copilot_settle`) and picks the artifact hook's response
+//! (`artifact_directive`), the route its review-tier verdicts take
+//! (`artifact_review_route`), its saved-approval reuse plan
+//! (`artifact_reuse_step`), what a native approval saves
+//! (`native_permission_persist_plan`) and the route the hook pipeline
+//! dispatches a prepared payload through (`hook_route`). Every query is pure
+//! and fails closed: a malformed request yields a `native_hook_decision_*`
+//! error, never a default verdict.
 
 use guard_contracts::{
     HookCompositionV1, HookDecisionPayloadV1, HookDecisionQueryV1, HookDecisionRequestV1,
@@ -13,8 +19,14 @@ use guard_contracts::{
     HOOK_DECISION_RESULT_SCHEMA,
 };
 
+use crate::hook_decision_artifact_directive::artifact_directive;
+use crate::hook_decision_artifact_reuse_step::artifact_reuse_step;
+use crate::hook_decision_artifact_review_route::artifact_review_route;
 use crate::hook_decision_compose::{compose, Composed};
-use crate::hook_decision_finalize::{finalize, post_claim};
+use crate::hook_decision_finalize::{finalize, post_claim, post_claim_reuse};
+use crate::hook_decision_hook_route::hook_route;
+use crate::hook_decision_native_facts::{verdict_handoff, VerdictHandoff};
+use crate::hook_decision_native_permission_persist::native_permission_persist_plan;
 use crate::hook_decision_settle::settle;
 
 pub(crate) fn evaluate_hook_decision_request(
@@ -54,26 +66,35 @@ fn request_digest(request: &HookDecisionRequestV1) -> Result<String, String> {
 
 pub(crate) fn decide(query: &HookDecisionQueryV1) -> Result<HookDecisionPayloadV1, String> {
     match query {
-        HookDecisionQueryV1::ComposeCurrent { inputs } => Ok(match compose(inputs) {
-            Err(missing) => HookDecisionPayloadV1::ComposeCurrent {
-                event_name: guard_contracts::hook_event_name(&inputs.event_fields),
-                needs_facts: vec![missing.to_owned()],
-                composition: None,
-            },
-            Ok(composed) => HookDecisionPayloadV1::ComposeCurrent {
-                event_name: composed.event_name.clone(),
-                needs_facts: Vec::new(),
-                composition: Some(Box::new(composition(inputs.has_command_text, &composed))),
-            },
-        }),
+        HookDecisionQueryV1::ComposeCurrent { inputs } => {
+            // The verdict this composition derives is the one `Finalize` asks
+            // for next, so it is recorded for that query alone.
+            let _handoff = verdict_handoff(VerdictHandoff::Record);
+            Ok(match compose(inputs) {
+                Err(missing) => HookDecisionPayloadV1::ComposeCurrent {
+                    event_name: guard_contracts::hook_event_name(&inputs.event_fields),
+                    needs_facts: vec![missing.to_owned()],
+                    composition: None,
+                },
+                Ok(composed) => HookDecisionPayloadV1::ComposeCurrent {
+                    event_name: composed.event_name.clone(),
+                    needs_facts: Vec::new(),
+                    composition: Some(Box::new(composition(inputs.has_command_text, &composed))),
+                },
+            })
+        }
         HookDecisionQueryV1::PostClaimReuse { inputs } => {
             let (action, reason) = post_claim(inputs)?;
             Ok(HookDecisionPayloadV1::PostClaimReuse {
                 current_action: action.as_str().to_owned(),
                 validation_reason: reason.map(str::to_owned),
+                reuse: post_claim_reuse(inputs, action, reason),
             })
         }
         HookDecisionQueryV1::Finalize { inputs, settled } => {
+            // Takes the verdict the matching `ComposeCurrent` derived moments
+            // ago for these exact inputs, and recomputes when there is none.
+            let _handoff = verdict_handoff(VerdictHandoff::Take);
             let composed =
                 compose(inputs).map_err(|_| "native_hook_decision_facts_missing".to_owned())?;
             Ok(HookDecisionPayloadV1::Finalize(Box::new(finalize(
@@ -90,6 +111,25 @@ pub(crate) fn decide(query: &HookDecisionQueryV1) -> Result<HookDecisionPayloadV
                 plan: None,
             },
         }),
+        HookDecisionQueryV1::ArtifactDirective { inputs } => Ok(
+            HookDecisionPayloadV1::ArtifactDirective(Box::new(artifact_directive(inputs)?)),
+        ),
+        HookDecisionQueryV1::NativePermissionPersistPlan { inputs } => {
+            Ok(HookDecisionPayloadV1::NativePermissionPersistPlan(
+                Box::new(native_permission_persist_plan(inputs)?),
+            ))
+        }
+        HookDecisionQueryV1::ArtifactReviewRoute { inputs } => Ok(
+            HookDecisionPayloadV1::ArtifactReviewRoute(Box::new(artifact_review_route(inputs)?)),
+        ),
+        HookDecisionQueryV1::ArtifactReuseStep { inputs } => {
+            Ok(HookDecisionPayloadV1::ArtifactReuseStep {
+                plan: Box::new(artifact_reuse_step(inputs)?),
+            })
+        }
+        HookDecisionQueryV1::HookRoute { inputs } => Ok(HookDecisionPayloadV1::HookRoute(
+            Box::new(hook_route(inputs)?),
+        )),
     }
 }
 

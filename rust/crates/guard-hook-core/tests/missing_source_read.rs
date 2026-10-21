@@ -19,7 +19,7 @@ impl TestRoot {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         std::fs::create_dir(&root).unwrap();
-        Self(root.canonicalize().unwrap())
+        Self(host_spelling(root.canonicalize().unwrap()))
     }
 }
 
@@ -27,6 +27,25 @@ impl Drop for TestRoot {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
     }
+}
+
+/// `canonicalize` spells Windows paths in the verbatim `\\?\C:\` form, which
+/// source review refuses as a glob. Hosts send the ordinary drive form, so the
+/// fixture root uses that. A root on a share canonicalizes to `\\?\UNC\server\
+/// share\...`, whose ordinary spelling is `\\server\share\...`; without that
+/// arm the `?` survives and source classification refuses the request before
+/// the behavior under test runs.
+fn host_spelling(path: std::path::PathBuf) -> std::path::PathBuf {
+    let Some(stripped) = path.to_str().and_then(|text| text.strip_prefix(r"\\?\")) else {
+        return path;
+    };
+    if let Some(share) = stripped.strip_prefix(r"UNC\") {
+        return format!(r"\\{share}").into();
+    }
+    if stripped.as_bytes().get(1) == Some(&b':') {
+        return stripped.into();
+    }
+    path
 }
 
 /// An Oh My Pi `read` result as the extension sends it: a source reference

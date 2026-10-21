@@ -112,11 +112,17 @@ def refresh_integrity_state(store: object) -> bool:
     whether the stored row moved, which a key the publisher just minted does.
     """
 
+    return _refresh_integrity_state(store) is True
+
+
+def _refresh_integrity_state(store: object) -> bool | None:
+    """Return whether the row moved, or None when refresh did not complete."""
+
     connect = getattr(store, "_connect", None)
     refresh = getattr(store, "_refresh_policy_integrity_state", None)
     load = getattr(store, "_load_policy_integrity_state", None)
     if not callable(connect) or not callable(refresh) or not callable(load):
-        return False
+        return None
     try:
         with cast("AbstractContextManager[object]", connect()) as connection:
             before = load(connection)
@@ -124,7 +130,7 @@ def refresh_integrity_state(store: object) -> bool:
             return load(connection) != before
     except (OSError, RuntimeError, ValueError, sqlite3.Error):
         # The row stays as it was; a stale or missing one fails closed.
-        return False
+        return None
 
 
 def with_saved_decision_state(
@@ -196,7 +202,8 @@ class NativePolicySnapshotSavedStateMixin:
         stamp = _database_stamp(publisher.guard_home)
         if stamp == self._integrity_checked_stamp:
             return
+        if _refresh_integrity_state(publisher.store) is None:
+            return
         self._integrity_checked_stamp = stamp
-        refresh_integrity_state(publisher.store)
         if _integrity_state(publisher.store) != bound:
             publisher._rebind_direct_lane()

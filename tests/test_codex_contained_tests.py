@@ -6,14 +6,12 @@ import json
 import shlex
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters import codex_contained_tests as route
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
-from codex_plugin_scanner.guard.adapters.codex_hook_response import codex_hook_response
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_hook_response import codex_hook_response
 
 
 def receipt() -> dict[str, object]:
@@ -78,8 +76,9 @@ def test_current_codex_rewrites_to_the_contained_sink(tmp_path, monkeypatch):
         None,
         "codex-cli 0.130.0",
         "codex-cli 0.131.0-alpha.3",
-        "codex-cli 0.132.0-alpha.1",
-        "codex-cli 2.0.0-rc.1",
+        "codex-cli 0.130.0-alpha.1",
+        "codex-cli 0.163.0-",
+        "codex-cli 0.163.0-alpha_3",
         "codex 0.162.1",
         "codex-cli 1.0",
     ],
@@ -98,7 +97,19 @@ def test_old_or_unknown_codex_keeps_the_denial_with_an_update_hint(tmp_path, mon
     assert shaped["hookSpecificOutput"]["permissionDecisionReason"].endswith(route.UPDATE_HINT)
 
 
-@pytest.mark.parametrize("version", ["codex-cli 0.131.0", "codex-cli 0.131.1", "codex-cli 0.132.0", "codex-cli 1.0.0"])
+@pytest.mark.parametrize(
+    "version",
+    [
+        "codex-cli 0.131.0",
+        "codex-cli 0.131.1",
+        "codex-cli 0.132.0",
+        "codex-cli 1.0.0",
+        "codex-cli 0.131.1-alpha.1",
+        "codex-cli 0.132.0-alpha.1",
+        "codex-cli 0.163.0-alpha.3",
+        "codex-cli 2.0.0-rc.1",
+    ],
+)
 def test_releases_from_0_131_apply_updated_input(monkeypatch, version):
     capable(monkeypatch, version)
     assert route.codex_applies_updated_input(Path("/bin/codex"))
@@ -196,40 +207,6 @@ def test_version_probe_stops_at_the_hook_deadline(tmp_path, monkeypatch):
     assert recorded["timeout"] == 0.25
 
 
-def test_bridge_rewrite_uses_the_home_bound_into_the_hook(tmp_path, monkeypatch):
-    capable(monkeypatch, "codex-cli 0.162.1")
-    hook_home = tmp_path / "hook-home"
-    stdout = bridge._bridge_output(
-        receipt(),
-        event_name="PreToolUse",
-        hook_input=hook_input(tmp_path),
-        state_path=tmp_path / "guard" / "daemon-state.json",
-        deadline=time.monotonic() + 30,
-        query=f"guard-home={tmp_path / 'guard'}&home={hook_home}",
-    )
-    shaped = json.loads(stdout)
-    argv = shlex.split(shaped["hookSpecificOutput"]["updatedInput"]["command"])
-    assert argv[argv.index("--home") + 1] == str(hook_home)
-    assert argv[argv.index("--home") + 1] != str(Path.home())
-    assert argv[argv.index("--guard-home") + 1] == str(tmp_path / "guard")
-    Path(argv[argv.index("--request-file") + 1]).unlink()
-
-
-def test_bridge_without_an_absolute_home_keeps_the_denial(tmp_path, monkeypatch):
-    capable(monkeypatch, "codex-cli 0.162.1")
-    stdout = bridge._bridge_output(
-        receipt(),
-        event_name="PreToolUse",
-        hook_input=hook_input(tmp_path),
-        state_path=tmp_path / "guard" / "daemon-state.json",
-        deadline=time.monotonic() + 30,
-        query="home=relative-home&home=/also/not/single",
-    )
-    shaped = json.loads(stdout)
-    assert shaped["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "updatedInput" not in shaped["hookSpecificOutput"]
-
-
 def test_other_platforms_and_missing_guard_home_pass_through(tmp_path, monkeypatch):
     capable(monkeypatch, "codex-cli 0.162.1")
     native = receipt()
@@ -288,3 +265,46 @@ def test_policy_deny_overrides_an_updated_input_allow():
     )
     assert shaped["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "updatedInput" not in shaped["hookSpecificOutput"]
+
+
+@pytest.mark.parametrize(
+    ("name", "codex"),
+    [
+        ("codex", True),
+        ("codex-aarch64-apple-darwin", True),
+        ("codex-x86_64-unknown-linux-musl", True),
+        ("node", False),
+        ("bun", False),
+        ("codex-evil", False),
+        ("codex-", False),
+        ("codex-aarch64-apple-darwin-extra", False),
+        ("my-codex", False),
+        ("codex.js", False),
+    ],
+)
+def test_codex_is_its_own_binary_or_an_official_release_binary(name, codex):
+    assert route.is_codex_binary_name(name) is codex
+
+
+def test_linux_finds_a_release_binary_and_skips_its_node_launcher(monkeypatch):
+    executables = {
+        "/proc/40/exe": "/usr/bin/bash",
+        "/proc/30/exe": "/opt/codex/codex-x86_64-unknown-linux-musl",
+        "/proc/20/exe": "/usr/bin/node",
+    }
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(route.os, "getppid", lambda: 40)
+    monkeypatch.setattr(route.os, "readlink", lambda path: executables[path])
+    parents = {"/proc/40/stat": "40 (bash) S 30 1 1", "/proc/30/stat": "30 (codex) S 20 1 1"}
+    monkeypatch.setattr(route.Path, "read_text", lambda self, **_kwargs: parents[str(self)])
+    assert route.launching_codex_executable() == Path("/opt/codex/codex-x86_64-unknown-linux-musl")
+
+
+def test_linux_does_not_take_an_unofficial_codex_name(monkeypatch):
+    executables = {"/proc/40/exe": "/tmp/codex-evil", "/proc/30/exe": "/usr/bin/node"}
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(route.os, "getppid", lambda: 40)
+    monkeypatch.setattr(route.os, "readlink", lambda path: executables[path])
+    parents = {"/proc/40/stat": "40 (codex-evil) S 30 1 1", "/proc/30/stat": "30 (node) S 1 1 1"}
+    monkeypatch.setattr(route.Path, "read_text", lambda self, **_kwargs: parents[str(self)])
+    assert route.launching_codex_executable() is None

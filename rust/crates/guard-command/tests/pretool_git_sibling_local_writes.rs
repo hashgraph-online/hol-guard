@@ -142,6 +142,9 @@ fn stash_restores_and_identity_variables_are_local_writes() {
     for command in [
         "git stash list",
         "git stash list -n 5",
+        "git stash show",
+        "git stash show -p stash@{0}",
+        "git stash show --stat --name-only 1",
         "git stash apply",
         "git stash apply --index",
         "git stash pop -q 0",
@@ -157,7 +160,9 @@ fn stash_restores_and_identity_variables_are_local_writes() {
         "git stash clear",
         "git stash apply stash@{0} stash@{1}",
         "git stash list -p",
-        "git stash show -p",
+        "git stash show --ext-diff",
+        "git stash show --textconv stash@{0}",
+        "git stash show stash@{0} stash@{1}",
         "git config core.pager 'sh -c id'; git log",
         "git -c core.pager='sh -c id' log",
         "git -c core.pager='sh -c id' stash list",
@@ -175,6 +180,13 @@ fn stash_restores_and_identity_variables_are_local_writes() {
     }
     for (key, value, command) in [
         ("pager.stash", "sh -c id", "git stash list"),
+        ("pager.stash", "sh -c id", "git stash show -p"),
+        // `show_stash` asks for the diff pager besides, so `pager.diff` starts
+        // a program of its own where `pager.stash` leaves the choice open, for
+        // a summary form as much as for a patch.
+        ("pager.diff", "sh -c id", "git stash show -p"),
+        ("pager.diff", "sh -c id", "git stash show --stat"),
+        ("diff.external", "sh -c id", "git stash show -p"),
         ("pager.log", "sh -c id", "git stash list"),
         ("pager.status", "sh -c id", "git stash pop"),
         ("merge.custom.driver", "sh -c id", "git stash apply"),
@@ -194,6 +206,33 @@ fn stash_restores_and_identity_variables_are_local_writes() {
         assert!(allowed(&session, command), "{command}");
         session.config(&[key, value]);
         assert_reviewed(&session, command);
+        session.config(&["--unset-all", key]);
+    }
+    // A stash read carries its own options into the proof, so the request
+    // that keeps a configured driver out of the diff keeps its answer too.
+    for (key, value, kept_out, still_reviewed) in [
+        (
+            "diff.external",
+            "sh -c id",
+            "git stash show -p --no-ext-diff",
+            "git stash show -p",
+        ),
+        (
+            "diff.ts.textconv",
+            "sh -c id",
+            "git stash show -p --no-textconv",
+            "git stash show -p",
+        ),
+        (
+            "diff.ts.textconv",
+            "sh -c id",
+            "git stash show --stat",
+            "git stash show -p",
+        ),
+    ] {
+        session.config(&[key, value]);
+        assert!(allowed(&session, kept_out), "{kept_out}");
+        assert_reviewed(&session, still_reviewed);
         session.config(&["--unset-all", key]);
     }
 }
@@ -244,6 +283,38 @@ fn stash_listing_keeps_its_proof_beside_fallbacks_and_github_reads() {
         format!("cd {sib} && git stash list || git push origin main"),
         format!("cd {sib} && git stash list || gh pr merge 1 --repo example-org/app-portal"),
         format!("cd {sib} && git stash list || cat ~/.ssh/id_rsa"),
+    ] {
+        assert_reviewed(&session, &command);
+    }
+}
+
+#[test]
+fn sibling_commit_identity_flags_match_the_identity_variables() {
+    let (session, service) = sibling("sibling-author");
+    let sib = service.display();
+    // `--author` and `--reset-author` only set the commit's metadata, like
+    // the `GIT_AUTHOR_*` variables a commit already accepts.
+    for command in [
+        format!("git -C {sib} commit --amend --author=\"A <a@example.test>\" --no-edit | tail -1"),
+        format!("git -C {sib} commit --amend --author \"A <a@example.test>\" --no-edit"),
+        format!("git -C {sib} commit --amend --reset-author --no-edit | tail -1"),
+        format!("git -C {sib} commit -qm x --author='A <a@example.test>'"),
+    ] {
+        assert_allowed(&session, &command);
+    }
+    // In this main checkout a plain commit may take the workspace sandbox.
+    assert_quiet(&session, "git commit --amend --reset-author --no-edit");
+    for command in [
+        // A substitution in the quoted author still runs a program.
+        format!("git -C {sib} commit --amend --author=\"$(id)\" --no-edit"),
+        format!("git -C {sib} commit --amend --author"),
+        format!(
+            "git -C {sib} -c core.hooksPath=/tmp/hooks commit --amend --reset-author --no-edit"
+        ),
+        format!("git -C {sib} commit --amend --reset-author"),
+        format!("git -C {sib} commit --amend --no-edit -e"),
+        format!("git -C {sib} commit -F message.txt"),
+        format!("git -C {sib} commit -c HEAD"),
     ] {
         assert_reviewed(&session, &command);
     }

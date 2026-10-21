@@ -42,6 +42,7 @@ def test_sqlite_codes_keep_extended_io_variants_and_do_not_quarantine_contention
     samples = {
         "busy": _coded("database is busy", 5),
         "locked": _coded("database is locked", 6),
+        "protocol": _coded("locking protocol", 15),
         "ioerr_read": _coded("disk I/O error", ioerr_read),
         "ioerr_write": _coded("disk I/O error", ioerr_write),
         "full": _coded("database or disk is full", 13),
@@ -51,6 +52,7 @@ def test_sqlite_codes_keep_extended_io_variants_and_do_not_quarantine_contention
     assert kinds == {
         "busy": "busy",
         "locked": "locked",
+        "protocol": "busy",
         "ioerr_read": "io",
         "ioerr_write": "io",
         "full": "full",
@@ -188,3 +190,28 @@ def test_generated_store_stays_healthy_at_budget_sizes(tmp_path: Path, mebibytes
         f"S1 pass store_mib={mebibytes} size_bytes={size_bytes} quick_check=ok "
         f"elapsed_ms={elapsed_ms:.1f} quarantined=false"
     )
+
+
+def test_lost_wal_index_race_reopens_instead_of_failing_the_operation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reader that gave up on the WAL index race gets a fresh connection."""
+
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    original_identity = store.path.stat().st_ino
+    connect_once = store._connect_once  # pyright: ignore[reportPrivateUsage]
+    attempts: list[int] = []
+
+    def lose_first_race():
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise _coded("locking protocol", 15)
+        return connect_once()
+
+    monkeypatch.setattr(store, "_connect_once", lose_first_race)
+    with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
+        assert connection.execute("pragma quick_check").fetchone()[0] == "ok"
+    assert len(attempts) == 2
+    assert store.path.stat().st_ino == original_identity
+    assert _quarantine_names(store.guard_home) == []

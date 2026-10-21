@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from hashlib import sha256
 
 import pytest
 
@@ -9,7 +10,6 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtensionRegistry,
 )
-from codex_plugin_scanner.guard.runtime.command_matcher_contracts import MatcherContractError, canonical_contract_digest
 from codex_plugin_scanner.guard.runtime.command_permission_catalog import (
     COMMAND_PERMISSION_SCHEMA_VERSION,
     CommandPermissionCatalog,
@@ -116,9 +116,7 @@ def test_registry_digest_changes_when_generated_matcher_contract_changes() -> No
     rule = extension.rules[rule_index]
     changed_rule = replace(
         rule,
-        matcher_contract_digest=canonical_contract_digest(
-            {"matcher_contract_digest": rule.matcher_contract_digest, "required_flags": ["--identity-test"]}
-        ),
+        matcher_contract_digest=sha256(rule.matcher_contract_digest.encode("utf-8")).hexdigest(),
     )
     changed_extension = replace(
         extension,
@@ -159,31 +157,6 @@ def test_registry_digest_changes_when_generated_matcher_contract_changes() -> No
         for item in safe_variant_rules
         for variant in item.safe_variants
     )
-
-
-def test_matcher_contract_rejects_unsupported_values() -> None:
-    with pytest.raises(MatcherContractError, match="unsupported catalog contract value"):
-        canonical_contract_digest(object())
-
-
-@pytest.mark.parametrize(
-    "mapping",
-    [
-        {1: "integer-key"},
-        {"1": "string-key", 1: "integer-key"},
-        {1: "integer-key", "1": "string-key"},
-    ],
-)
-def test_matcher_contract_rejects_non_string_mapping_keys(mapping: dict[object, str]) -> None:
-    with pytest.raises(MatcherContractError, match="catalog contract mappings require string keys"):
-        canonical_contract_digest(mapping)
-
-
-def test_matcher_contract_string_mapping_order_is_deterministic() -> None:
-    first = {"beta": "two", "alpha": "one"}
-    second = {"alpha": "one", "beta": "two"}
-
-    assert canonical_contract_digest(first) == canonical_contract_digest(second)
 
 
 def test_permission_catalog_rejects_duplicate_mappings_cycles_and_invalid_references() -> None:

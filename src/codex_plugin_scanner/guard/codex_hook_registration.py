@@ -18,6 +18,8 @@ from .codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND
 from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
 from .codex_hook_file_integrity import split_hook_command
 from .codex_hook_owner_commands import has_codex_harness_tokens, python_codex_hook_command
+from .codex_hook_owner_message import owner_conflict_message
+from .codex_hook_self_binding import codex_hook_binds_guard_home
 from .frozen_runtime_commands import frozen_codex_bridge_tokens_are_live
 
 
@@ -223,10 +225,23 @@ def missing_guard_hook_program(command: str, *, windows: bool | None = None) -> 
     return None
 
 
-def require_codex_hook_owner(command: str, *, ownership: str, windows: bool | None = None) -> None:
+def require_codex_hook_owner(
+    command: str,
+    *,
+    ownership: str,
+    windows: bool | None = None,
+    coordinate: str | None = None,
+    source_path: str | None = None,
+) -> None:
     """Reject competing Guard handlers without silently adopting or deleting them.
 
     Launcher syntax is conflict evidence, never proof of a live managed bridge.
+    A handler whose program sits inside a root this install owns is claimed
+    before it ever reaches here; see :mod:`.codex_hook_self_binding`. What is
+    left is a handler Guard genuinely cannot speak for, so the message has to
+    carry everything the person needs to settle it themselves: where the
+    handler is, what it runs, that Guard changed nothing, and the one edit
+    that clears it.
     """
     tokens = hook_command_tokens(command, windows=windows)
     python_launcher = bool(tokens and hook_token_name(tokens[0], windows=windows).lower().startswith("python"))
@@ -236,17 +251,13 @@ def require_codex_hook_owner(command: str, *, ownership: str, windows: bool | No
         else _is_live_guard_codex_hook_command(command, windows=windows)
     )
     if ownership == "unmanaged" and guard_hook:
-        missing = missing_guard_hook_program(command, windows=windows)
-        if missing is not None:
-            raise RuntimeError(
-                f"codex_hook_owner_conflict: A Codex Guard handler runs {missing}, which no longer exists, "
-                "so Codex is not protected. It has no verified ownership binding, so Guard will not remove it. "
-                "Delete that handler from your Codex hooks configuration, then run `hol-guard install codex`; "
-                "existing hooks have been preserved."
-            )
         raise RuntimeError(
-            "codex_hook_owner_conflict: An existing Codex Guard handler has no verified ownership binding. "
-            "Resolve its installation owner before retrying install; existing hooks have been preserved."
+            owner_conflict_message(
+                command,
+                missing=missing_guard_hook_program(command, windows=windows),
+                coordinate=coordinate,
+                source_path=source_path,
+            )
         )
 
 
@@ -350,25 +361,39 @@ def install_managed_codex_hook_groups(
     managed_groups: Mapping[str, dict[str, object]],
     *,
     current_guard_home: Path,
+    current_package_root: Path | None = None,
 ) -> None:
-    """Append after authenticated and explicitly adopted bindings are removed.
+    """Append after authenticated, adopted and self-bound bindings are removed.
 
-    Remaining Guard handlers have no proven owner; matching command syntax
-    alone cannot authorize their replacement or duplication.
+    A remaining Guard handler bound to ``current_guard_home`` - naming it, and
+    running a program inside a root this install controls - is an earlier
+    generation of this same installation, which a reinstall may replace. Any
+    other Guard handler has no proven owner, and matching command syntax alone
+    cannot authorize replacing or duplicating it.
     """
     for event_name in managed_groups:
         existing = hooks.get(event_name)
-        for group in existing if isinstance(existing, list) else []:
+        for group_index, group in enumerate(existing if isinstance(existing, list) else []):
             if not isinstance(group, Mapping) or not _hook_entry_is_active(group):
                 continue
             handlers = group.get("hooks")
-            for handler in handlers if isinstance(handlers, list) else [group]:
+            for handler_index, handler in enumerate(handlers if isinstance(handlers, list) else [group]):
                 if (
                     isinstance(handler, Mapping)
                     and _hook_entry_is_active(handler)
                     and isinstance((command := handler.get("command")), str)
                 ):
-                    require_codex_hook_owner(command, ownership="unmanaged")
+                    require_codex_hook_owner(
+                        command,
+                        ownership=(
+                            "self_install_binding"
+                            if codex_hook_binds_guard_home(
+                                command, current_guard_home, package_root=current_package_root
+                            )
+                            else "unmanaged"
+                        ),
+                        coordinate=f"{event_name}/group[{group_index}]/handler[{handler_index}]",
+                    )
     for event_name, managed_group in managed_groups.items():
         existing = hooks.get(event_name)
         hooks[event_name] = [

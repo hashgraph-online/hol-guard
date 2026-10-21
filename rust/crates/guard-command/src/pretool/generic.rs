@@ -10,12 +10,33 @@ mod command_rewrite;
 pub(crate) mod contained_publish;
 #[path = "env_prefix_projection.rs"]
 mod env_prefix_projection;
+pub use env_prefix_projection::bindable_setting;
+#[path = "generic_cline_view.rs"]
+mod cline_view;
 #[path = "generic_extract.rs"]
 mod extract;
 #[path = "generic_omp.rs"]
 mod omp;
 #[path = "generic_omp_bash_cwd.rs"]
 mod omp_bash_cwd;
+
+/// Resolve the host's tool-level directory for an execution-owner preview.
+/// This is path observation only; the owner must still judge current policy.
+pub fn omp_bash_execution_directory(
+    payload: &serde_json::Value,
+    home_dir: Option<&str>,
+    session: Option<&str>,
+) -> Result<Option<String>, &'static str> {
+    match omp_bash_cwd::resolve(payload, home_dir, session) {
+        omp_bash_cwd::BashCwd::Session => Ok(session.map(str::to_owned)),
+        omp_bash_cwd::BashCwd::Within(path) | omp_bash_cwd::BashCwd::Outside(path) => {
+            Ok(Some(path))
+        }
+        omp_bash_cwd::BashCwd::Missing | omp_bash_cwd::BashCwd::Unresolved => {
+            Err("bash_working_directory_unavailable")
+        }
+    }
+}
 #[cfg(all(test, unix))]
 #[path = "generic_omp_bash_cwd_tests.rs"]
 mod omp_bash_cwd_tests;
@@ -23,10 +44,14 @@ mod omp_bash_cwd_tests;
 mod open_quote;
 #[path = "generic_pure_eval.rs"]
 mod pure_eval;
+#[path = "generic_read_note.rs"]
+mod read_note;
 #[path = "redirect_projection.rs"]
 mod redirect_projection;
 #[path = "generic_result.rs"]
 mod result;
+#[path = "venv_activation_projection.rs"]
+mod venv_activation_projection;
 #[path = "workspace_redirects.rs"]
 pub(crate) mod workspace_redirects;
 use command_rewrite::payload_with_command;
@@ -42,6 +67,14 @@ use super::evaluate_pre_tool_with_execution_context;
 use extract::extract_generic_signals;
 use result::{generic_action, generic_error_result, generic_result};
 use std::time::Instant;
+
+/// The command a virtualenv activation hands its verdict to, or `None` when
+/// the activation is not one the scan can read through. The pre-tool pass
+/// answers for the projected command, so a caller that routes that answer
+/// somewhere which plans the call again has to plan the same text.
+pub fn venv_activation_target(command: &str, context: super::PathContext<'_>) -> Option<String> {
+    venv_activation_projection::project(command, context)
+}
 
 /// Bounded caller-supplied context, never authenticated provider facts.
 pub struct UntrustedCommandContext {
@@ -98,6 +131,8 @@ pub fn bounded_task_metadata_output(payload: &serde_json::Value, harness: &str) 
     }
     agent_metadata::bounded_task_list(&input, Some(tool))
 }
+#[path = "generic_github.rs"]
+mod github;
 #[path = "generic_tools.rs"]
 mod tools;
 #[path = "generic_web_fetch.rs"]
@@ -146,8 +181,10 @@ pub fn evaluate_pre_tool_envelope_with_context(
             cdpath_unset: false,
             rustup_override_absent: false,
             npm_config_inert: false,
+            pip_config_inert: false,
             shell_home_matches: false,
             ripgrep_config_absent: false,
+            psql_environment: Default::default(),
         },
         None,
     )
@@ -162,10 +199,17 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     context: super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
-    let mut context = context;
-    let projected_payload;
+    let mut context =
+        super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
+    let (projected_payload, cline_payload);
     let mut payload = payload;
     let within;
+    if harness == "cline" {
+        if let Some(view) = cline_view::evaluated_view(payload) {
+            cline_payload = view;
+            payload = &cline_payload;
+        }
+    }
     if harness == "omp"
         && event == "PreToolUse"
         && payload.get("tool_name").and_then(Value::as_str) == Some("bash")
@@ -227,9 +271,19 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
             .as_deref()
             .and_then(env_prefix_projection::code_loading_setting)
         {
-            result.reason = format!(
-                "HOL Guard blocked this command because the {setting} setting can load code that the installed extension controls cannot check. Run the command without it."
-            );
+            result.reason = match command
+                .as_deref()
+                .and_then(env_prefix_projection::node_heap_only_setting)
+            {
+                // A memory size is the usual reason to set it; say how to
+                // raise the heap in a form the sandbox accepts.
+                Some(mib) => format!(
+                    "HOL Guard blocked this command because the {setting} setting can load code that the installed extension controls cannot check. To give Node more memory, pass the option to node itself and run the tool's script from node_modules, for example `node --max-old-space-size={mib} node_modules/typescript/bin/tsc --noEmit`. Guard runs that form in its read-only sandbox."
+                ),
+                None => format!(
+                    "HOL Guard blocked this command because the {setting} setting can load code that the installed extension controls cannot check. Run the command without it."
+                ),
+            };
         } else if let Some(setting) = command
             .as_deref()
             .and_then(env_prefix_projection::substituted_setting)
@@ -248,7 +302,7 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
             .as_deref()
             .is_some_and(open_quote::leaves_quote_open)
         {
-            result.reason = "HOL Guard blocked this command because it leaves a quote open, so the shell cannot run it as written. Close or remove the stray quote and run it again.".into();
+            result.reason = "HOL Guard blocked this command because it has a shell syntax error: it leaves a quote open, so the shell cannot run it as written. Close or remove the stray quote and run it again.".into();
         }
     }
     result
@@ -309,6 +363,10 @@ fn evaluate_envelope(
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
     };
+    signals.github_read_only = harness == "omp"
+        && event == "PreToolUse"
+        && omp::strict_tool_input(payload)
+            .is_some_and(|input| github::read_only_call(input, signals.tool_name.as_deref()));
     // A search pattern is data, not a command: a proven Claude `Grep` scope
     // skips the command authority but still passes the command controls below.
     let search_scope_proven = event == "PreToolUse"
@@ -403,6 +461,42 @@ fn evaluate_envelope(
     {
         return contained;
     }
+    // Activating a virtualenv exports settings and runs nothing else, so the
+    // command after it carries the verdict, as an inert environment prefix
+    // does: the unprojected pass fails only on the `source` itself. A rule
+    // that gates the plain form keeps its fail-closed answer for this one.
+    if let Some(projected) = signals
+        .command
+        .as_deref()
+        .filter(|_| !search_scope_proven && !apply_patch_proven)
+        .and_then(|command| venv_activation_projection::project(command, context))
+    {
+        let projected_payload = payload_with_command(
+            payload,
+            signals.command.as_deref().unwrap_or_default(),
+            &projected,
+        );
+        if projected_payload != *payload {
+            let projected = evaluate_envelope(
+                harness,
+                event,
+                &projected_payload,
+                controls,
+                deadline,
+                context,
+                execution_environment,
+                project_redirects,
+            );
+            if projected.minimum_action == "allow"
+                || (projected.minimum_action == "sandbox-required"
+                    && crate::hook_responses::contained_execution_profile(&projected.reason_code)
+                        .is_some())
+                || !extension_rule_matched(&projected)
+            {
+                return projected;
+            }
+        }
+    }
     // An inert environment prefix cannot change how the rest of the command
     // runs, so the command without it carries the whole verdict.
     if let Some(projected) = signals
@@ -485,6 +579,7 @@ fn evaluate_envelope(
                 && super::workspace_contained::carry_settings(
                     &mut projected,
                     signals.command.as_deref().unwrap_or_default(),
+                    &reviewed.command,
                     context,
                     execution_environment,
                     harness,
@@ -493,7 +588,7 @@ fn evaluate_envelope(
             {
                 return projected;
             }
-            return env_prefix_projection::join_reviewed(projected, raw, &reviewed.setting);
+            return env_prefix_projection::join_reviewed(projected, raw, &reviewed);
         }
     }
 
@@ -566,7 +661,7 @@ fn evaluate_envelope(
             evaluate_pre_tool_with_execution_context(
                 &CommandModelRequestV1 {
                     command: command.to_owned(),
-                    dialect: "posix".to_owned(),
+                    dialect: tools::command_dialect(signals.tool_name.as_deref()).to_owned(),
                     transport: "shell_string".to_owned(),
                     extraction_provenance: "pre-tool-generic".to_owned(),
                 },
@@ -615,7 +710,7 @@ fn evaluate_envelope(
             ),
             "allow",
             "native_exact_safe_file_write",
-            "The Rust authority proved every file this patch adds or updates is an ordinary workspace file that clears sensitive-path checks.",
+            "The Rust authority proved every file this patch adds or updates is an ordinary file in the verified workspace, a registered worktree, the verified user home, or a private user-owned temporary directory and clears sensitive-path checks.",
         )
     } else if let Some(edit) = omp_hashline_edit {
         let action = generic_action(
@@ -635,13 +730,34 @@ fn evaluate_envelope(
             ),
             // The edit cannot apply, so stopping it costs nothing. Saying why
             // lets the agent fix the path instead of waiting on an approval.
-            super::omp_hashline_writes::HashlineEdit::MissingTarget => generic_result(
-                action,
-                "block",
-                evaluate::MISSING_PATH,
-                "HOL Guard did not run this edit because a file it names does not exist. Check the path, for example by listing its parent directory, and try again with the correct one.",
-            ),
+            super::omp_hashline_writes::HashlineEdit::MissingTarget(path) => {
+                let mut result = generic_result(action, "block", evaluate::MISSING_PATH, "");
+                result.reason = evaluate::missing_path_reason(
+                    "HOL Guard did not run this edit because a file it names does not exist. Check the path, for example by listing its parent directory, and try again with the correct one.",
+                    "edit",
+                    Some(&path),
+                );
+                result
+            }
         }
+    } else if harness == "omp"
+        && event == "PreToolUse"
+        && signals.tool_name.as_deref() == Some("edit")
+        && omp::strict_tool_input(payload).is_some_and(super::omp_hashline_writes::headerless_edit)
+    {
+        generic_result(
+            generic_action(
+                harness,
+                event,
+                PreToolActionTypeV1::Harness,
+                PreToolOperationV1::Set,
+                true,
+                false,
+            ),
+            "allow",
+            "native_omp_edit_without_header",
+            "The Rust authority found an edit with no file header: Oh My Pi refuses it, so it cannot change any file.",
+        )
     } else if let Some(omp_result) = omp_result {
         omp_result
     } else if let Some(pure_result) = pure_eval::evaluate(harness, event, payload, &signals) {
@@ -677,6 +793,8 @@ fn evaluate_envelope(
     if result.reason_code == "native_file_read_review" {
         if let Some(note) = omp::grep_review_note(payload, &signals, &omp_context) {
             result.reason = format!("{} {note}", result.reason);
+        } else if let Some(reason) = read_note::read_review_reason(&signals, &omp_context) {
+            result.reason = reason;
         }
     }
     if event == "UserPromptSubmit" {
@@ -767,27 +885,38 @@ fn evaluate_envelope(
             .unwrap_or_else(|| "HOL Guard requires review because this Git read may execute a configured helper, or its effective configuration could not be verified.".into());
     }
     let contained_test_reason = command_model.and_then(|model| {
-        super::restricted_tests::readonly_test_reason(model).or_else(|| {
-            super::contained_wrapper::contained_core(
-                model,
-                super::PathContext {
-                    home_dir,
-                    cwd,
-                    ..context
-                },
-            )
-            .and_then(|core| super::restricted_tests::readonly_test_reason(&core))
-            .filter(|reason| *reason != "native_git_readonly_containment_required")
-        })
+        super::restricted_test_commands::package_script::contained_test_reason(
+            model,
+            super::PathContext {
+                home_dir,
+                cwd,
+                ..context
+            },
+        )
     });
-    // macOS runs every credential-filtering profile. Windows runs only the
-    // Python profile, in an AppContainer, for Claude Code, whose Git Bash shell
-    // runs the POSIX-quoted sink. Only harnesses that rewrite into the contained
-    // sink get the receipt; others would see a bare deny.
-    if (cfg!(target_os = "macos")
-        || (cfg!(windows)
-            && harness == "claude-code"
-            && contained_test_reason == Some("native_python_eval_readonly_containment_required")))
+    // macOS runs every credential-filtering profile. Windows runs the Python
+    // and Node evaluation profiles, the read-only pytest profile, the Vite
+    // build and the read-only Node tools (lint, typecheck and format checks)
+    // in an AppContainer, for harnesses whose shell runs a sink command
+    // written for it: Claude Code (Git Bash) and the Pi family (a bash
+    // implementation) take the POSIX-quoted one for all of them, Codex a
+    // PowerShell one for the Python profile only. Only harnesses that rewrite
+    // into the contained sink get the receipt; others would see a bare deny.
+    let windows_contained = match contained_test_reason {
+        Some("native_python_eval_readonly_containment_required") => {
+            matches!(harness, "claude-code" | "codex" | "omp" | "oh-my-pi" | "pi")
+        }
+        Some(
+            "native_node_build_output_containment_required"
+            | "native_node_tool_readonly_containment_required"
+            | "native_node_eval_readonly_containment_required"
+            | "native_pytest_readonly_containment_required",
+        ) => {
+            matches!(harness, "claude-code" | "omp" | "oh-my-pi" | "pi")
+        }
+        _ => false,
+    };
+    if (cfg!(target_os = "macos") || (cfg!(windows) && windows_contained))
         && event == "PreToolUse"
         && matches!(
             harness,
@@ -834,7 +963,7 @@ fn evaluate_envelope(
                     .permission_observations
                     .iter()
                     .all(|observation| {
-                        super::restricted_tests::package_permission_contained(
+                        super::restricted_test_commands::package_permission_contained(
                             contained_test_reason,
                             command_model,
                         ) && observation.extension_id == "command.package.node"
@@ -844,6 +973,19 @@ fn evaluate_envelope(
                     })
         })
         && contained_test_reason.is_some()
+        // Inline source that needs the network would only fail in a sandbox
+        // that withholds it; it keeps its review.
+        && command_model.is_none_or(|model| {
+            !super::script_content::inline_uses_network(
+                model,
+                signals.command.as_deref(),
+                super::PathContext {
+                    home_dir,
+                    cwd,
+                    ..context
+                },
+            )
+        })
     {
         result.minimum_action = "sandbox-required".into();
         result.policy_action = "sandbox-required".into();
@@ -856,6 +998,19 @@ fn evaluate_envelope(
         )
         .into();
     }
+    // A proven fast-forward of origin runs directly, as the pull it splits
+    // does; the sandbox would cut the fetch beside it off the network.
+    super::git_remote_ops::settle_fast_forward(
+        &mut result,
+        command_model,
+        super::PathContext {
+            home_dir,
+            cwd,
+            ..context
+        },
+        deadline,
+        execution_environment,
+    );
     super::workspace_contained::convert(
         &mut result,
         &pre_floor,

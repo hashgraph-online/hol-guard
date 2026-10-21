@@ -36,9 +36,12 @@ from .full_tasks import (
     authorization,
     create_full_task_fixture,
     full_task_checks,
+    full_task_evidence,
     load_full_tasks,
 )
 from .host_process import clean_environment, realistic_environment, run_process
+from .observed_extension import generate_observed_extension
+from .parallel import validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .source_identity import source_identity
 
@@ -146,7 +149,7 @@ def run_full_task(
             before = worker.store.count_approval_requests(status=None)
             extension, settings = private / "hol-guard.ts", private / "settings.json"
             settings.write_text("{}\n")
-            probe._generate_extension(extension, guard_home=guard_home, home=fixture.home, settings_path=settings)
+            generate_observed_extension(extension, guard_home=guard_home, home=fixture.home, settings_path=settings)
             case["guard_extension_sha256"] = digest_file(extension)
             environment = realistic_environment(
                 clean_environment(fixture.home, agent_dir, fixture.canary), fixture.home
@@ -225,6 +228,7 @@ def run_full_task(
             if fixture is not None:
                 try:
                     case["filesystem"] = full_task_checks(fixture, task.id)
+                    case["oracle_evidence"] = full_task_evidence(fixture, task.id)
                 except Exception as exc:
                     case.setdefault("execution_error", "checks-" + type(exc).__name__)
     case["ended_at"] = time.time()
@@ -322,10 +326,14 @@ def run_full_tasks(
     omp: str | None = None,
     work_root: Path | None = None,
     world: RemoteWorld | None = None,
+    jobs: int = 1,
 ) -> dict[str, Any]:
-    """Run the full-task profile sequentially and write the false-positive report."""
+    """Run the full-task profile (``jobs`` isolated workers at once) and write the false-positive report."""
     if mode not in MODES:
         raise ValueError("full-task mode must be discover or enforce")
+    jobs = validate_jobs(jobs)
+    if jobs != 1 and world is not None:
+        raise ValueError("a real-GitHub world runs one task at a time; omit --jobs")
     output = output.resolve()
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     executable = omp or shutil.which("omp")
@@ -344,7 +352,9 @@ def run_full_tasks(
     selected = [task for task in tasks if not selected_ids or task.id in selected_ids]
     if world is None and any(task.id in REMOTE_TASKS for task in selected):
         raise ValueError("GitHub tasks run against real GitHub; use --full-task-docker")
-    root = create_run_root((work_root or output.parent).resolve())
+    parent = (work_root or output.parent).resolve()
+    parent.mkdir(parents=True, exist_ok=True)
+    root = create_run_root(parent)
     report: dict[str, Any] = {
         "started_at": datetime.now(timezone.utc).isoformat(),
         "schema": "hol.guard-gauntlet.full-tasks.v1",
@@ -355,26 +365,54 @@ def run_full_tasks(
         "provider": provider.get("identity"),
         "mode": mode,
         "merge_qualified": False,
+        "jobs": jobs,
         "cases": [],
     }
-    cases = []
-    for index, task in enumerate(selected, start=1):
-        case = run_full_task(
-            task,
+    cases: list[dict[str, Any]] = []
+    rows: dict[str, dict[str, Any]] = {}
+
+    def record(task: Scenario, case: dict[str, Any]) -> None:
+        """Keep summary rows in selection order; progress lines print as tasks finish."""
+        cases.append(case)
+        rows[task.id] = {"id": task.id, **case["assessment"], "elapsed_seconds": case["elapsed_seconds"]}
+        report["cases"] = [rows[t.id] for t in selected if t.id in rows]
+        print(json.dumps({"task": task.id, **case["assessment"]}), flush=True)
+        (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
+
+    if jobs == 1:
+        for index, task in enumerate(selected, start=1):
+            record(
+                task,
+                run_full_task(
+                    task,
+                    root=root,
+                    public=output / "cases",
+                    executable=executable,
+                    identity=identity,
+                    provider=provider,
+                    timeout=model_timeout,
+                    mode=mode,
+                    index=index,
+                    world=world,
+                ),
+            )
+    else:
+        from .full_task_parallel import schedule_full_tasks
+
+        schedule_full_tasks(
+            selected,
+            jobs=jobs,
             root=root,
             public=output / "cases",
             executable=executable,
             identity=identity,
-            provider=provider,
+            build_sha=capabilities.build_sha,
             timeout=model_timeout,
             mode=mode,
-            index=index,
-            world=world,
+            spec_extra={"provider": provider},
+            on_case=record,
         )
-        cases.append(case)
-        report["cases"].append({"id": task.id, **case["assessment"], "elapsed_seconds": case["elapsed_seconds"]})
-        print(json.dumps({"task": task.id, **case["assessment"]}), flush=True)
-        (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
+        cases[:] = [case for task in selected for case in cases if case["id"] == task.id]
     return finish_report(report, cases, mode, output)
 
 

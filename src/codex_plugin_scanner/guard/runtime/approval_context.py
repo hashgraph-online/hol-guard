@@ -9,15 +9,12 @@ approval evidence through the policy store.
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
-import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, TypeGuard, cast
+from typing import Literal, cast
 
 from ..native_context import _UNBOUND_PREFIX
 from .extension_control_runtime import current_extension_control_binding_digest
@@ -31,23 +28,6 @@ ApprovalContextValidationFailure = Literal[
     "approval_reuse_policy_changed",
     "approval_reuse_sandbox_changed",
 ]
-
-_TOKEN_VERSION = 1
-_TOKEN_FIELDS = frozenset({"version", "identity", "content", "capabilities", "policy", "sandbox"})
-_ENCODED_PAYLOAD_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
-_SHA256_HEX_PATTERN = re.compile(r"^[0-9a-f]{64}$")
-_MAX_TOKEN_LENGTH = 2048
-
-
-@dataclass(frozen=True, slots=True)
-class ApprovalContextToken:
-    """Parsed, non-secret approval-context component digests."""
-
-    identity_hash: str
-    content_hash: str
-    capabilities_hash: str
-    policy_hash: str
-    sandbox_hash: str
 
 
 class NativeContextDigestUnavailableError(RuntimeError):
@@ -176,50 +156,39 @@ def build_approval_context_token(
     return cast(str, result["token"])
 
 
-def parse_approval_context_token(token: object) -> ApprovalContextToken | None:
-    """Parse a well-formed v1 token, returning ``None`` for legacy/malformed input."""
+def approval_context_token_is_well_formed(token: object, *, keep_prefixed_when_unavailable: bool = False) -> bool:
+    """Whether a stored value is a well-formed v1 approval-context token.
 
+    The token grammar has exactly one owner: the native authority that mints
+    the token and compares two of them.  Callers here only need to tell a
+    context token apart from a legacy artifact hash, so they ask that owner
+    rather than decoding the token a second time — a second decoder could
+    disagree about what counts as a token, and the narrower of the two
+    opinions would decide whether a saved approval binds.
+
+    An unreachable authority answers ``False`` by default.  Where the answer
+    decides reuse, that is the restrictive direction: a value that cannot be
+    shown to be a context token is treated as a legacy hash and never mints
+    reuse on its own.  A policy key works the other way round, because a
+    harness or global row drops a hash that is not a token and so binds to the
+    whole artifact family, and the stored Claude permission key would fall
+    back to an exact-command key that omits the policy and sandbox components.
+    ``keep_prefixed_when_unavailable`` lets those callers keep any value
+    carrying the token prefix while the authority is down, which keeps the
+    narrower key.
+    """
+
+    # Only the prefix is read here, so a legacy hash costs no native round trip.
     if not isinstance(token, str) or not token.startswith(APPROVAL_CONTEXT_TOKEN_PREFIX):
-        return None
-    if len(token) > _MAX_TOKEN_LENGTH:
-        return None
-    encoded = token[len(APPROVAL_CONTEXT_TOKEN_PREFIX) :]
-    if not encoded or _ENCODED_PAYLOAD_PATTERN.fullmatch(encoded) is None:
-        return None
-    padding = "=" * (-len(encoded) % 4)
+        return False
     try:
-        raw_payload = base64.b64decode(
-            f"{encoded}{padding}".encode("ascii"),
-            altchars=b"-_",
-            validate=True,
+        result = _context_digest_result(
+            "approval_context_token_well_formed",
+            {"token": token},
         )
-        payload = json.loads(raw_payload.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError, json.JSONDecodeError):
-        return None
-    if not isinstance(payload, Mapping) or set(payload) != _TOKEN_FIELDS:
-        return None
-    if payload.get("version") != _TOKEN_VERSION:
-        return None
-    identity_hash = payload.get("identity")
-    content_hash = payload.get("content")
-    capabilities_hash = payload.get("capabilities")
-    policy_hash = payload.get("policy")
-    sandbox_hash = payload.get("sandbox")
-    if not (
-        _is_sha256_hex(identity_hash)
-        and _is_sha256_hex(content_hash)
-        and _is_sha256_hex(capabilities_hash)
-        and _is_sha256_hex(policy_hash)
-        and _is_sha256_hex(sandbox_hash)
-    ):
-        return None
-    return ApprovalContextToken(
-        identity_hash=identity_hash,
-        content_hash=content_hash,
-        capabilities_hash=capabilities_hash,
-        policy_hash=policy_hash,
-        sandbox_hash=sandbox_hash,
-    )
+    except (NativeContextDigestUnavailableError, TypeError):
+        return keep_prefixed_when_unavailable
+    return result.get("approval_context_token_well_formed") is True
 
 
 def approval_context_tokens_validation_reason(
@@ -429,7 +398,3 @@ def build_configured_environment_hash(
         # reject this sentinel rather than treat it as an exact binding.
         return f"{_UNBOUND_PREFIX}configured-environment"
     return cast(str, result["digest"])
-
-
-def _is_sha256_hex(value: object) -> TypeGuard[str]:
-    return isinstance(value, str) and _SHA256_HEX_PATTERN.fullmatch(value) is not None

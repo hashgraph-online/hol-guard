@@ -1,22 +1,28 @@
-//! Windows backend for the read-only Python evaluation profile.
+//! Windows backend for the read-only Python and Node evaluation profiles, and
+//! the `contained-readonly-windows` entry the local Node tool profiles share
+//! (`windows_node_build`).
 //!
 //! The resident plans `python <script>` / `python -c` launches for an
-//! interpreter installed under a trusted install root, and the
+//! interpreter installed under a trusted install root, `node <script>` /
+//! `node -e` launches for an installed Node.js runtime, and the
 //! `contained-readonly-windows` entry runs the plan inside the LPAC snapshot
 //! runner: a credential-filtered copy of the workspace, private HOME/TEMP, no
 //! network capability and a kill-on-close job. The live workspace and the
 //! user profile are never granted to the container.
-use guard_command::contained_argv::{inline_eval, python_runtime_args};
+use guard_command::contained_argv::{
+    inline_eval, node_runtime_args, node_script_index, python_runtime_args,
+};
 use guard_command::restricted_command::{normalized_command, RestrictedPytestError};
 use regex::Regex;
 use serde_json::{json, Value};
 use std::ffi::OsString;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 pub(crate) const PROFILE: &str = "python-eval-readonly-v1";
+pub(crate) const NODE_PROFILE: &str = "node-eval-readonly-v1";
 pub(crate) const BACKEND: &str = "windows-appcontainer";
 pub(crate) const COMMAND: &str = "contained-readonly-windows";
 const INVALID: &str = "inline_eval_invalid_command";
@@ -25,9 +31,18 @@ const MAX_TIMEOUT_SECONDS: u64 = 86_400;
 const MAX_ENTRIES: usize = 20_000;
 const MAX_BYTES: usize = 256 * 1024 * 1024;
 const OUTPUT_CAP: usize = 1024 * 1024;
-/// Never needed by an installed interpreter and often large; `.git` may also
-/// hold remote credentials in its config.
-const WITHHELD_DIRECTORIES: [&str; 4] = [".git", ".venv", "node_modules", "__pycache__"];
+/// A build's installed dependencies; a mid-sized Vite app is well below.
+const MAX_DEPENDENCY_ENTRIES: usize = 200_000;
+const MAX_DEPENDENCY_BYTES: usize = 2 * 1024 * 1024 * 1024;
+/// Directories that never enter a snapshot, whatever the run keeps: never
+/// needed by an installed interpreter and often large, and `.git` may hold
+/// remote credentials in its config. A run is allowed to name the virtual
+/// environment it needs, so this list is what naming one must never drag in
+/// with it.
+const WITHHELD_DIRECTORIES: [&str; 3] = [".git", "node_modules", "__pycache__"];
+/// Withheld unless it is the environment the run was launched from, which
+/// `keep` names. A `.venv` nested inside that one is still withheld.
+const ENVIRONMENT_DIRECTORIES: [&str; 1] = [".venv"];
 /// Presentation and locale only; nothing here selects code to load.
 const INHERITED_ENVIRONMENT: [&str; 22] = [
     "SystemRoot",
@@ -62,7 +77,7 @@ fn error(reason_code: &str, message: &str) -> RestrictedPytestError {
 }
 
 /// `canonicalize` returns verbatim paths; callers and Python use drive paths.
-fn canonical(path: &Path) -> Option<PathBuf> {
+pub(crate) fn canonical(path: &Path) -> Option<PathBuf> {
     let resolved = path.canonicalize().ok()?;
     let text = resolved.to_str()?;
     Some(match text.strip_prefix(r"\\?\") {
@@ -71,7 +86,7 @@ fn canonical(path: &Path) -> Option<PathBuf> {
     })
 }
 
-fn trusted_executable(path: &Path) -> Result<PathBuf, RestrictedPytestError> {
+pub(crate) fn trusted_executable(path: &Path) -> Result<PathBuf, RestrictedPytestError> {
     let executable = canonical(path)
         .filter(|path| path.is_file())
         .ok_or_else(|| error(UNAVAILABLE, "The Python interpreter could not be resolved."))?;
@@ -127,14 +142,14 @@ fn locate(name: &str, search_path: &str) -> Option<PathBuf> {
     })
 }
 
-fn first_on_path(names: &[String], search_path: &str) -> Option<PathBuf> {
+pub(crate) fn first_on_path(names: &[String], search_path: &str) -> Option<PathBuf> {
     std::env::split_paths(search_path)
         .filter(|directory| directory.is_absolute())
         .flat_map(|directory| names.iter().map(move |name| directory.join(name)))
         .find(|path| path.is_file())
 }
 
-fn workspace_and_cwd(
+pub(crate) fn workspace_and_cwd(
     workspace: &Path,
     cwd: &Path,
 ) -> Result<(PathBuf, PathBuf), RestrictedPytestError> {
@@ -167,6 +182,41 @@ fn python_name(executable: &str) -> bool {
         })
 }
 
+fn node_name(executable: &str) -> bool {
+    let name = Path::new(executable)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    matches!(
+        name.strip_suffix(".exe").unwrap_or(&name),
+        "node" | "nodejs"
+    )
+}
+
+/// The `node` the shell would run: the first `PATH` match, which must be a
+/// full Node.js image (`windows_node_build::node_executable`).
+fn resolve_node(name: &str, search_path: &str) -> Result<PathBuf, RestrictedPytestError> {
+    let candidate = Path::new(name);
+    if candidate.is_absolute() {
+        return crate::windows_node_build::node_executable(candidate);
+    }
+    if candidate.components().count() != 1 {
+        return Err(error(
+            INVALID,
+            "Relative interpreter paths are not supported.",
+        ));
+    }
+    let names = if candidate.extension().is_some() {
+        vec![name.to_owned()]
+    } else {
+        vec![name.to_owned(), format!("{name}.exe")]
+    };
+    let path = first_on_path(&names, search_path)
+        .ok_or_else(|| error(UNAVAILABLE, "The Node.js runtime could not be resolved."))?;
+    crate::windows_node_build::node_executable(&path)
+}
+
 fn plan_inline(input: &Value) -> Result<Value, RestrictedPytestError> {
     let invalid = || error(INVALID, "Protected evaluation requires direct inline argv.");
     let command: Vec<String> = input
@@ -183,11 +233,28 @@ fn plan_inline(input: &Value) -> Result<Value, RestrictedPytestError> {
         &path("cwd").ok_or_else(invalid)?,
     )?;
     let argv = normalized_command(&command)?;
-    if !inline_eval(&argv)? || !python_name(&argv[0]) {
+    let node = node_name(&argv[0]);
+    if !inline_eval(&argv)? || !(node || python_name(&argv[0])) {
         return Err(invalid());
     }
-    let index = 1 + python_runtime_args(&argv).unwrap_or_default().len();
-    if !matches!(argv.get(index).map(String::as_str), Some("-c" | "-m")) {
+    let (index, inline) = if node {
+        (1 + node_runtime_args(&argv)?.len(), &["-e", "--eval"][..])
+    } else {
+        (
+            1 + python_runtime_args(&argv).unwrap_or_default().len(),
+            &["-c", "-m"][..],
+        )
+    };
+    if !argv
+        .get(index)
+        .is_some_and(|flag| inline.contains(&flag.as_str()))
+    {
+        // Node skips the same neutral flags `inline_eval` admitted.
+        let index = if node {
+            node_script_index(&argv, index).ok_or_else(invalid)?
+        } else {
+            index
+        };
         let script = argv
             .get(index)
             .and_then(|script| canonical(&cwd.join(script)));
@@ -199,7 +266,11 @@ fn plan_inline(input: &Value) -> Result<Value, RestrictedPytestError> {
         .get("search_path")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let executable = resolve_executable(&argv[0], search_path)?;
+    let executable = if node {
+        resolve_node(&argv[0], search_path)?
+    } else {
+        resolve_executable(&argv[0], search_path)?
+    };
     let runtime = std::env::current_exe()
         .ok()
         .and_then(|path| canonical(&path))
@@ -207,7 +278,7 @@ fn plan_inline(input: &Value) -> Result<Value, RestrictedPytestError> {
     let mut launch = vec![executable.to_string_lossy().into_owned()];
     launch.extend(argv[1..].iter().cloned());
     Ok(json!({
-        "profile_version": PROFILE,
+        "profile_version": if node { NODE_PROFILE } else { PROFILE },
         "backend": BACKEND,
         "backend_executable": runtime,
         "workspace": workspace,
@@ -237,6 +308,21 @@ struct Launch {
     timeout: Duration,
     executable: PathBuf,
     arguments: Vec<OsString>,
+    /// A Node.js launch, which takes no Python settings.
+    node: bool,
+    build: Option<NodeBuild>,
+    /// A contained pytest launch: the workspace-relative virtual environment
+    /// the snapshot has to keep, and the path from the run's directory to its
+    /// executables. Both are relative because the snapshot root is created at
+    /// launch, after the plan was written.
+    environment: Option<PathBuf>,
+    environment_binaries: Option<PathBuf>,
+}
+
+/// The staged dependencies and published outputs of a node build launch.
+struct NodeBuild {
+    dependencies: Vec<(PathBuf, PathBuf)>,
+    outputs: Vec<PathBuf>,
 }
 
 fn parse(arguments: &[String]) -> Result<Launch, RestrictedPytestError> {
@@ -246,43 +332,174 @@ fn parse(arguments: &[String]) -> Result<Launch, RestrictedPytestError> {
         .position(|argument| argument == "--")
         .map(|index| (&arguments[1..index], &arguments[index + 1..]))
         .ok_or_else(invalid)?;
-    let value = |name: &str| match options {
-        [a, b, c, d, e, f] if a == "--workspace" && c == "--cwd" && e == "--timeout-seconds" => {
-            Some(match name {
-                "workspace" => b,
-                "cwd" => d,
-                _ => f,
-            })
+    let (mut profile, mut workspace, mut cwd, mut timeout) = (None, None, None, None);
+    let mut outputs = Vec::new();
+    for pair in options.chunks(2) {
+        let [name, value] = pair else {
+            return Err(invalid());
+        };
+        let slot = match name.as_str() {
+            "--profile" => &mut profile,
+            "--workspace" => &mut workspace,
+            "--cwd" => &mut cwd,
+            "--timeout-seconds" => &mut timeout,
+            "--output" => {
+                outputs.push(PathBuf::from(value));
+                continue;
+            }
+            _ => return Err(invalid()),
+        };
+        if slot.replace(value.as_str()).is_some() {
+            return Err(invalid());
         }
-        _ => None,
+    }
+    // A staged run copies the install's dependencies and the runtime into a
+    // writable private snapshot. Only the build profile publishes anything
+    // back from it, so only the build profile declares an output; a tool that
+    // reports declares none and leaves the live workspace untouched.
+    let (build, node, publishes, pytest) = match profile {
+        None => (false, false, false, false),
+        Some(NODE_PROFILE) => (false, true, false, false),
+        Some(profile) if profile == crate::windows_pytest::PROFILE => (false, false, false, true),
+        Some(profile) if profile == crate::windows_node_build::PROFILE => (true, true, true, false),
+        Some(profile) if profile == crate::windows_node_build::TOOL_PROFILE => {
+            (true, true, false, false)
+        }
+        Some(_) => return Err(invalid()),
     };
-    let timeout = value("timeout")
+    if publishes == outputs.is_empty() {
+        return Err(invalid());
+    }
+    let timeout = timeout
         .and_then(|value| value.parse::<u64>().ok())
         .filter(|seconds| (1..=MAX_TIMEOUT_SECONDS).contains(seconds))
         .ok_or_else(invalid)?;
     let (workspace, cwd) = workspace_and_cwd(
-        Path::new(value("workspace").ok_or_else(invalid)?),
-        Path::new(value("cwd").ok_or_else(invalid)?),
+        Path::new(workspace.ok_or_else(invalid)?),
+        Path::new(cwd.ok_or_else(invalid)?),
     )?;
     let (executable, rest) = command.split_first().ok_or_else(invalid)?;
-    if !python_name(executable) {
+    if pytest {
+        // The interpreter is the environment's own copy inside the snapshot,
+        // so the run keeps that environment's prefix, `site-packages` and
+        // `.pth` processing; the plan named it relative to the workspace.
+        let (environment, interpreter) =
+            crate::windows_pytest::staged_interpreter(Path::new(executable)).ok_or_else(invalid)?;
+        let relative_cwd = cwd.strip_prefix(&workspace).map_err(|_| invalid())?;
+        let binaries = crate::windows_pytest::relative_from(
+            relative_cwd,
+            interpreter.parent().ok_or_else(invalid)?,
+        );
+        return Ok(Launch {
+            workspace,
+            cwd,
+            timeout: Duration::from_secs(timeout),
+            executable: interpreter,
+            arguments: rest.iter().map(OsString::from).collect(),
+            node: false,
+            build: None,
+            environment: Some(environment),
+            environment_binaries: Some(binaries),
+        });
+    }
+    if node && !build {
+        // Node's JavaScript realpath lstats the drive root, which an LPAC
+        // token cannot do; the snapshot holds no links to resolve.
+        let arguments = ["--preserve-symlinks", "--preserve-symlinks-main"]
+            .into_iter()
+            .map(OsString::from)
+            .chain(rest.iter().map(OsString::from))
+            .collect();
+        return Ok(Launch {
+            workspace,
+            cwd,
+            timeout: Duration::from_secs(timeout),
+            executable: crate::windows_node_build::node_executable(Path::new(executable))?,
+            arguments,
+            node: true,
+            build: None,
+            environment: None,
+            environment_binaries: None,
+        });
+    }
+    if !build {
+        if !python_name(executable) {
+            return Err(invalid());
+        }
+        return Ok(Launch {
+            workspace,
+            cwd,
+            timeout: Duration::from_secs(timeout),
+            executable: trusted_executable(Path::new(executable))?,
+            arguments: rest.iter().map(OsString::from).collect(),
+            node: false,
+            build: None,
+            environment: None,
+            environment_binaries: None,
+        });
+    }
+    let executable = crate::windows_node_build::node_executable(Path::new(executable))?;
+    let runtime = rest
+        .iter()
+        .take_while(|argument| crate::windows_node_build::runtime_option(argument))
+        .count();
+    if runtime > 1 {
         return Err(invalid());
     }
+    let (entry, tail) = rest[runtime..].split_first().ok_or_else(invalid)?;
+    let dependencies = crate::windows_node_build::dependencies(&workspace, &cwd)?;
+    let relative_cwd = cwd.strip_prefix(&workspace).map_err(|_| invalid())?;
+    let entry =
+        crate::windows_node_build::staged_entry(Path::new(entry), &dependencies, relative_cwd)
+            .ok_or_else(invalid)?;
+    let outputs = outputs
+        .iter()
+        .map(|output| crate::windows_node_build::output_location(output, &workspace))
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(invalid)?;
+    // Node's JavaScript realpath lstats the drive root before walking a path,
+    // which an LPAC token cannot do. The staged copy holds no links, so its
+    // module loaders resolve the same files without that realpath.
+    let mut arguments: Vec<OsString> = ["--preserve-symlinks", "--preserve-symlinks-main"]
+        .into_iter()
+        .chain(rest[..runtime].iter().map(String::as_str))
+        .map(OsString::from)
+        .collect();
+    arguments.push(entry.into_os_string());
+    arguments.extend(tail.iter().map(OsString::from));
     Ok(Launch {
         workspace,
         cwd,
         timeout: Duration::from_secs(timeout),
-        executable: trusted_executable(Path::new(executable))?,
-        arguments: rest.iter().map(OsString::from).collect(),
+        executable,
+        arguments,
+        node: true,
+        build: Some(NodeBuild {
+            dependencies,
+            outputs,
+        }),
+        environment: None,
+        environment_binaries: None,
     })
 }
 
-fn environment(executable: &Path) -> Vec<(OsString, OsString)> {
+fn environment(
+    executable: &Path,
+    node: bool,
+    binaries: Option<&Path>,
+) -> Vec<(OsString, OsString)> {
     let mut environment: Vec<(OsString, OsString)> = INHERITED_ENVIRONMENT
         .iter()
+        .filter(|name| !node || !name.starts_with("PYTHON"))
         .filter_map(|name| std::env::var_os(name).map(|value| (OsString::from(name), value)))
         .collect();
-    let mut path = vec![executable.parent().unwrap_or(executable).to_path_buf()];
+    // A contained pytest run's interpreter lives inside the snapshot, whose
+    // root the plan could not name, so its `PATH` entry is relative to the
+    // run's own directory instead of to the executable.
+    let mut path = match binaries {
+        Some(binaries) => vec![binaries.to_path_buf()],
+        None => vec![executable.parent().unwrap_or(executable).to_path_buf()],
+    };
     if let Some(root) = std::env::var_os("SystemRoot") {
         let root = PathBuf::from(root);
         path.push(root.join("System32"));
@@ -291,23 +508,65 @@ fn environment(executable: &Path) -> Vec<(OsString, OsString)> {
     if let Ok(path) = std::env::join_paths(path) {
         environment.push(("PATH".into(), path));
     }
-    environment.push(("PYTHONNOUSERSITE".into(), "1".into()));
-    environment.push(("PYTHONDONTWRITEBYTECODE".into(), "1".into()));
+    if !node {
+        environment.push(("PYTHONNOUSERSITE".into(), "1".into()));
+        environment.push(("PYTHONDONTWRITEBYTECODE".into(), "1".into()));
+    }
+    if binaries.is_some() {
+        // The snapshot is read-only and discarded, so pytest's own cache has
+        // nowhere to land; the plugin would fail the run writing it.
+        environment.push(("PYTEST_ADDOPTS".into(), "-p no:cacheprovider".into()));
+    }
     environment
 }
 
-fn withheld(patterns: &[Regex]) -> impl Fn(&Path) -> bool + '_ {
+/// `keep` is a virtual environment a contained pytest run reads from: it is
+/// copied although `.venv` is withheld from every other profile, while the
+/// bulky and credential-bearing directories inside it are withheld as usual.
+fn withheld<'a>(patterns: &'a [Regex], keep: Option<&'a Path>) -> impl Fn(&Path) -> bool + 'a {
     move |relative: &Path| {
         let text = relative
             .components()
             .map(|component| component.as_os_str().to_string_lossy())
             .collect::<Vec<_>>()
             .join("/");
-        relative.components().any(|component| {
-            WITHHELD_DIRECTORIES
+        let named = |component: &Component, names: &[&str]| {
+            names
                 .iter()
                 .any(|name| component.as_os_str().eq_ignore_ascii_case(name))
-        }) || patterns.iter().any(|pattern| pattern.is_match(&text))
+        };
+        // `keep` exempts an environment directory from its own name, never
+        // from this list: an environment rooted at `.git` would otherwise
+        // carry the repository's metadata into the snapshot with it.
+        if relative
+            .components()
+            .any(|component| named(&component, &WITHHELD_DIRECTORIES))
+        {
+            return true;
+        }
+        let scanned = keep
+            .and_then(|keep| relative.strip_prefix(keep).ok())
+            .unwrap_or(relative);
+        scanned
+            .components()
+            .any(|component| named(&component, &ENVIRONMENT_DIRECTORIES))
+            || patterns.iter().any(|pattern| pattern.is_match(&text))
+    }
+}
+
+/// Dependencies keep their own bulky directories; only credential material
+/// and Git metadata stay out.
+fn dependency_withheld(patterns: &[Regex]) -> impl Fn(&Path) -> bool + '_ {
+    move |relative: &Path| {
+        let text = relative
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        relative
+            .components()
+            .any(|component| component.as_os_str().eq_ignore_ascii_case(".git"))
+            || patterns.iter().any(|pattern| pattern.is_match(&text))
     }
 }
 
@@ -318,9 +577,40 @@ fn launch(arguments: &[String]) -> Result<i32, RestrictedPytestError> {
         .map(|pattern| Regex::new(pattern))
         .collect::<Result<_, _>>()
         .map_err(|_| error(UNAVAILABLE, "Credential patterns are unavailable."))?;
-    let withhold = withheld(&patterns);
-    let environment = environment(&launch.executable);
+    let withhold = withheld(&patterns, launch.environment.as_deref());
+    let withhold_dependency = dependency_withheld(&patterns);
+    let environment = environment(
+        &launch.executable,
+        launch.node,
+        launch.environment_binaries.as_deref(),
+    );
+    // A virtual environment is an installed tree, not a source checkout, so a
+    // run that copies one needs the budget a staged dependency gets.
+    let (max_entries, max_bytes) = match launch.environment {
+        Some(_) => (MAX_DEPENDENCY_ENTRIES, MAX_DEPENDENCY_BYTES),
+        None => (MAX_ENTRIES, MAX_BYTES),
+    };
     let cancel = AtomicBool::new(false);
+    if let Some(build) = &launch.build {
+        if build.outputs.iter().any(|output| withhold(output)) {
+            return Err(error(
+                INVALID,
+                "Build output must not be a withheld directory.",
+            ));
+        }
+    }
+    let build = launch
+        .build
+        .as_ref()
+        .map(|build| guard_contained_process::BuildRun {
+            dependencies: &build.dependencies,
+            withhold_dependency: &withhold_dependency,
+            max_dependency_entries: MAX_DEPENDENCY_ENTRIES,
+            max_dependency_bytes: MAX_DEPENDENCY_BYTES,
+            outputs: &build.outputs,
+            max_output_entries: MAX_ENTRIES,
+            max_output_bytes: MAX_BYTES,
+        });
     let output = guard_contained_process::run_readonly_snapshot(
         guard_contained_process::ReadonlySnapshotRun {
             workspace: &launch.workspace,
@@ -329,8 +619,8 @@ fn launch(arguments: &[String]) -> Result<i32, RestrictedPytestError> {
             arguments: &launch.arguments,
             environment: &environment,
             withhold: &withhold,
-            max_entries: MAX_ENTRIES,
-            max_bytes: MAX_BYTES,
+            max_entries,
+            max_bytes,
             output_cap: OUTPUT_CAP,
             deadline: Instant::now() + launch.timeout,
             cancel: &cancel,
@@ -339,6 +629,8 @@ fn launch(arguments: &[String]) -> Result<i32, RestrictedPytestError> {
                 committed_memory_bytes: Some(4 * 1024 * 1024 * 1024),
                 active_processes: Some(32),
             },
+            build,
+            stage_executable: launch.node,
         },
     )
     .map_err(|failure| {

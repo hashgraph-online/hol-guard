@@ -20,7 +20,7 @@ _OTHER_INPUT_KEYS = ("toolInput", "arguments")
 
 def _reject() -> RestrictedPytestError:
     return RestrictedPytestError(
-        "contained_test_authorization_failed", "Guard could not resolve the directory this command runs in."
+        "contained_run_authorization_failed", "Guard could not resolve the directory this command runs in."
     )
 
 

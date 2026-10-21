@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from ._modules.grok.grok_hook_invocation_template import GROK_HOOK_INVOCATION_TEMPLATE
+from ._modules.grok.grok_hook_readiness_template import GROK_HOOK_READINESS_TEMPLATE
 from .bounded_cli_hook_script_native import BOUNDED_HOOK_NATIVE_TEMPLATE
-from .grok_hook_invocation_template import GROK_HOOK_INVOCATION_TEMPLATE
-from .grok_hook_readiness_template import GROK_HOOK_READINESS_TEMPLATE
 from .hook_http_deadline import HOOK_HTTP_DEADLINE_TEMPLATE
 from .hook_input_reader import HOOK_INPUT_READER_TEMPLATE
 

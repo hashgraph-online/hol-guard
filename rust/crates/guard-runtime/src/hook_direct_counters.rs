@@ -63,7 +63,6 @@ const OUTCOMES: [Option<HookDirectDefer>; OUTCOME_SLOTS] = [
     Some(HookDirectDefer::ReviewQueue),
     Some(HookDirectDefer::RuntimeSuperseded),
     Some(HookDirectDefer::StructuredMediation),
-    Some(HookDirectDefer::Lane(DirectLaneDefer::Unsupported)),
     Some(HookDirectDefer::Lane(DirectLaneDefer::Unbound)),
     Some(HookDirectDefer::Lane(DirectLaneDefer::SnapshotUnavailable)),
     Some(HookDirectDefer::Lane(DirectLaneDefer::AckMissing)),
@@ -72,7 +71,7 @@ const OUTCOMES: [Option<HookDirectDefer>; OUTCOME_SLOTS] = [
     Some(HookDirectDefer::Lane(DirectLaneDefer::WorkspaceUnknown)),
     Some(HookDirectDefer::Lane(DirectLaneDefer::InputChanged)),
 ];
-const OUTCOME_SLOTS: usize = 31;
+const OUTCOME_SLOTS: usize = 30;
 const ANSWER: &str = "answer";
 
 /// The counting slot of a harness name.
@@ -129,14 +128,13 @@ fn outcome_slot(outcome: Option<HookDirectDefer>) -> usize {
         HookDirectDefer::RuntimeSuperseded => 21,
         HookDirectDefer::StructuredMediation => 22,
         HookDirectDefer::Lane(lane) => match lane {
-            DirectLaneDefer::Unsupported => 23,
-            DirectLaneDefer::Unbound => 24,
-            DirectLaneDefer::SnapshotUnavailable => 25,
-            DirectLaneDefer::AckMissing => 26,
-            DirectLaneDefer::AckMismatch => 27,
-            DirectLaneDefer::AckExpired => 28,
-            DirectLaneDefer::WorkspaceUnknown => 29,
-            DirectLaneDefer::InputChanged => 30,
+            DirectLaneDefer::Unbound => 23,
+            DirectLaneDefer::SnapshotUnavailable => 24,
+            DirectLaneDefer::AckMissing => 25,
+            DirectLaneDefer::AckMismatch => 26,
+            DirectLaneDefer::AckExpired => 27,
+            DirectLaneDefer::WorkspaceUnknown => 28,
+            DirectLaneDefer::InputChanged => 29,
         },
     }
 }

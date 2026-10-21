@@ -11,31 +11,11 @@ import type { GuardRuntimeSnapshot } from "./guard-types";
 import { resolveCloudPolicyControlsUrl } from "./policy-workspace-helpers";
 
 const REVIEW_SCOPE_LADDER = [
-  {
-    label: "Once",
-    detail: "One time only.",
-    icon: HiMiniArrowPath,
-  },
-  {
-    label: "This cwd",
-    detail: "Reuse in this working directory.",
-    icon: HiMiniFolder,
-  },
-  {
-    label: "This project",
-    detail: "Reuse across this project.",
-    icon: HiMiniFolder,
-  },
-  {
-    label: "This harness",
-    detail: "Reuse across this tool harness.",
-    icon: HiMiniGlobeAlt,
-  },
-  {
-    label: "Team policy",
-    detail: "Organization-wide policy.",
-    icon: HiMiniUsers,
-  },
+  { label: "Once", detail: "One time only.", icon: HiMiniArrowPath },
+  { label: "This cwd", detail: "Reuse in this working directory.", icon: HiMiniFolder },
+  { label: "This project", detail: "Reuse across this project.", icon: HiMiniFolder },
+  { label: "This harness", detail: "Reuse across this tool harness.", icon: HiMiniGlobeAlt },
+  { label: "Team policy", detail: "Organization-wide policy.", icon: HiMiniUsers },
 ] as const;
 
 type PolicyRememberedRulesRightRailProps = {
@@ -53,21 +33,26 @@ export function PolicyRememberedRulesRightRail({
 
   return (
     <aside className="space-y-4 lg:sticky lg:top-4">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="font-medium text-brand-dark">How Guard decides</p>
-        <p className="mt-1 text-xs leading-relaxed text-slate-500">
-          Extension posture is evaluated before contextual rules. This page never duplicates the Extension editor.
-        </p>
+      <details className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" open>
+        <summary className="cursor-pointer list-none font-medium text-brand-dark marker:hidden [&::-webkit-details-marker]:hidden">
+          How Guard decides
+          <span className="mt-1 block text-xs font-normal leading-relaxed text-slate-500">
+            Extension posture is evaluated before contextual rules. This page never duplicates the Extension editor.
+          </span>
+        </summary>
         <ol className="mt-3 space-y-2 text-xs leading-5 text-brand-dark/75">
           {decisionOrder.map((step, index) => <li key={step}><strong>{index + 1}.</strong> {step}</li>)}
         </ol>
         <a href="/extensions" className="mt-3 inline-flex text-sm font-semibold text-brand-blue hover:underline">Open Extensions</a>
-      </div>
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <p className="font-medium text-brand-dark">Approvals are still fast</p>
-        <p className="mt-1 text-xs leading-relaxed text-slate-500">
-          When you approve in Inbox, you pick how broadly Guard should remember the decision.
-        </p>
+      </details>
+
+      <details className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <summary className="cursor-pointer list-none font-medium text-brand-dark marker:hidden [&::-webkit-details-marker]:hidden">
+          Approvals are still fast
+          <span className="mt-1 block text-xs font-normal leading-relaxed text-slate-500">
+            When you approve in Inbox, you pick how broadly Guard should remember the decision.
+          </span>
+        </summary>
         <ul className="mt-3 space-y-2.5">
           {REVIEW_SCOPE_LADDER.map((step) => {
             const Icon = step.icon;
@@ -84,7 +69,7 @@ export function PolicyRememberedRulesRightRail({
             );
           })}
         </ul>
-      </div>
+      </details>
 
       <div className="rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 text-sm text-slate-600 shadow-sm">
         <div className="flex items-start gap-3">

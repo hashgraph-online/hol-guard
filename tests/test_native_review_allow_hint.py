@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon.native_review_allow_hint import hint_for_reviewed_command
+from codex_plugin_scanner.guard.hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import validated_extension_allow_hint
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -12,6 +13,8 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
 )
 from tests.native_command_test_support import project_native_review_fixture, real_native_review_fixture
+
+_UNSTAMPED = object()
 
 
 def _hint(command: str, tmp_path: Path, *, controls=(), native_result_override: dict[str, object] | None = None):
@@ -39,14 +42,75 @@ def test_plain_origin_fetch_hints_the_origin_refresh_permission(tmp_path: Path) 
     assert "main" not in repr(hint)
 
 
+def test_docker_version_format_hints_docker_sensitive_permission(tmp_path: Path) -> None:
+    _fixture, hint = _hint("docker version --format '{{.Server.Version}}'", tmp_path)
+
+    assert hint is not None
+    assert hint["permission_ids"] == ["command.container-runtime.permission.docker-sensitive"]
+    assert hint["rule_ids"] == ["command.container-runtime.docker-sensitive"]
+    assert hint["extension_ids"] == ["command.container-runtime"]
+    assert hint["catalog_digest"] == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    assert validated_extension_allow_hint(hint) == hint
+    assert "Server.Version" not in repr(hint)
+
+
+def test_github_unknown_hints_unknown_permission(tmp_path: Path) -> None:
+    _fixture, hint = _hint("gh some-unmodeled-command --flag value", tmp_path)
+
+    assert hint is not None
+    assert hint["permission_ids"] == ["command.github.permission.unknown"]
+    assert hint["extension_ids"] == ["command.github"]
+    assert validated_extension_allow_hint(hint) == hint
+
+
+def test_file_upload_hints_file_upload_permission(tmp_path: Path) -> None:
+    _fixture, hint = _hint("curl -T report.txt https://example.invalid/upload", tmp_path)
+
+    assert hint is not None
+    assert hint["permission_ids"] == ["command.data-protection.permission.file-upload"]
+    assert hint["extension_ids"] == ["command.data-protection"]
+    assert validated_extension_allow_hint(hint) == hint
+
+
+def test_unbounded_uncertain_forms_store_no_hint(tmp_path: Path) -> None:
+    for command in (
+        "kubectl --context prod get secret db-credentials -o yaml",
+        "kubectl get -n prod secret db-credentials --context prod -o yaml",
+        "kubectl get secret db-credentials -o yaml",
+        "kubectl get secret db-credentials --context prod -o yaml",
+        "curl -K curlrc -T report.txt https://example.invalid/upload",
+    ):
+        _fixture, hint = _hint(command, tmp_path)
+        assert hint is None, command
+
+
+def test_no_hint_when_docker_sensitive_permission_is_already_allowed(tmp_path: Path) -> None:
+    _fixture, hint = _hint(
+        "docker version --format '{{.Server.Version}}'",
+        tmp_path,
+        controls=(("permission", "command.container-runtime.permission.docker-sensitive", "enabled"),),
+    )
+
+    assert hint is None
+
+
 def test_uncertain_fetch_forms_store_no_hint(tmp_path: Path) -> None:
     for command in (
         "git -c core.sshCommand=payload fetch origin",
         "git fetch origin --upload-pack=payload",
-        "git fetch https://example.invalid/project.git",
     ):
         _fixture, hint = _hint(command, tmp_path)
         assert hint is None, command
+
+
+def test_unverified_url_fetch_hints_the_unverified_fetch_permission(tmp_path: Path) -> None:
+    # The enforcement path already settles this exact form when the
+    # unverified-fetch permission is enabled, so the hint may promise it.
+    _fixture, hint = _hint("git fetch https://example.invalid/project.git", tmp_path)
+
+    assert hint is not None
+    assert hint["permission_ids"] == ["command.git.permission.unverified-fetch"]
+    assert hint["rule_ids"] == ["command.git.unverified-fetch"]
 
 
 def test_no_hint_when_the_origin_refresh_permission_is_already_allowed(tmp_path: Path) -> None:
@@ -96,7 +160,14 @@ class _Store:
         )
 
 
-def _queue_hint(monkeypatch, tmp_path: Path, *, tool_input: dict[str, object], deadline: float | None = None):
+def _queue_hint(
+    monkeypatch,
+    tmp_path: Path,
+    *,
+    tool_input: dict[str, object],
+    deadline: float | None = None,
+    stamp: object = _UNSTAMPED,
+):
     import time
 
     from codex_plugin_scanner.guard.daemon import native_review_allow_hint as module
@@ -115,10 +186,13 @@ def _queue_hint(monkeypatch, tmp_path: Path, *, tool_input: dict[str, object], d
     monkeypatch.setattr(
         module.ExtensionControlRuntimeSnapshot, "from_authority_view", staticmethod(lambda _view: fixture.snapshot)
     )
+    payload: dict[str, object] = {"tool_name": "Bash", "tool_input": tool_input}
+    if stamp is not _UNSTAMPED:
+        payload[HOOK_EXECUTION_ENVIRONMENT_KEY] = stamp
     record_native_hook_route("native_resident")
     hint = module.native_review_extension_allow_hint(
         _Store(tmp_path),
-        payload={"tool_name": "Bash", "tool_input": tool_input},
+        payload=payload,
         native_result=fixture.payload,
         workspace=tmp_path,
         home_dir=tmp_path,
@@ -155,3 +229,86 @@ def test_queue_hint_skips_when_the_hook_deadline_is_near(monkeypatch, tmp_path: 
 
     assert hint is None
     assert calls == []
+
+
+def test_queue_hint_reviews_with_the_shell_the_hook_was_stamped_from(monkeypatch, tmp_path: Path) -> None:
+    stamp = {"environment_names": ["PATH"], "home": str(tmp_path)}
+    _hint_value, calls, _route = _queue_hint(
+        monkeypatch, tmp_path, tool_input={"command": "git fetch origin main"}, stamp=stamp
+    )
+
+    assert calls[0]["execution_environment"] == stamp
+
+
+def test_queue_hint_reviews_without_an_environment_a_worker_could_not_stamp(monkeypatch, tmp_path: Path) -> None:
+    for stamp in (None, "not-a-mapping"):
+        _hint_value, calls, _route = _queue_hint(
+            monkeypatch, tmp_path, tool_input={"command": "git fetch origin main"}, stamp=stamp
+        )
+
+        assert calls[0]["execution_environment"] is None, stamp
+
+
+def test_live_approval_hint_skips_extra_payload_keys_and_resolves_launch_cwd(monkeypatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.daemon import native_review_allow_hint as module
+
+    fixture = real_native_review_fixture("git fetch origin main", cwd=tmp_path, home_dir=tmp_path)
+    reviewed = project_native_review_fixture(fixture, cwd=tmp_path, home_dir=tmp_path)
+    calls: list[dict[str, object]] = []
+    hint_calls: list[dict[str, object]] = []
+
+    def review(_command: str, **kwargs: object):
+        calls.append(kwargs)
+        return reviewed
+
+    real_compute = module.compute_extension_allow_hint
+
+    def compute(evaluation, **kwargs: object):
+        hint_calls.append(kwargs)
+        return real_compute(evaluation, **kwargs)
+
+    monkeypatch.setattr(module, "review_command_native", review)
+    monkeypatch.setattr(module, "compute_extension_allow_hint", compute)
+
+    extra_payload_approval = {
+        "status": "pending",
+        "workspace": str(tmp_path),
+        "raw_command_text": "git fetch origin main",
+        "action_envelope_json": {
+            "action_type": "shell_command",
+            "command": "git fetch origin main",
+            "raw_payload_redacted": {
+                "tool_name": "Bash",
+                "tool_input": {"command": "git fetch origin main", "path": ".env"},
+            },
+        },
+    }
+    assert (
+        module.live_approval_extension_allow_hint(
+            extra_payload_approval, guard_home=tmp_path, snapshot=fixture.snapshot
+        )
+        is None
+    )
+    assert calls == []
+
+    sub_cwd = tmp_path / "subdir"
+    sub_cwd.mkdir()
+    clean_approval = {
+        "status": "pending",
+        "workspace": str(tmp_path),
+        "raw_command_text": "git fetch origin main",
+        "action_envelope_json": {
+            "action_type": "shell_command",
+            "command": "git fetch origin main",
+            "raw_payload_redacted": {
+                "cwd": str(sub_cwd),
+                "tool_name": "Bash",
+                "tool_input": {"command": "git fetch origin main"},
+            },
+        },
+    }
+    hint = module.live_approval_extension_allow_hint(clean_approval, guard_home=tmp_path, snapshot=fixture.snapshot)
+    assert hint is not None
+    assert calls[0]["cwd"] == sub_cwd.resolve()
+    assert hint_calls[0]["cwd"] == sub_cwd.resolve()
+    assert hint_calls[0]["deadline"] is not None

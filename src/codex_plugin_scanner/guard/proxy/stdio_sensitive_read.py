@@ -11,6 +11,7 @@ answer the read is not forwarded.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -35,7 +36,7 @@ from ..native_mcp_sensitive_read import (
 from ..native_sensitive_request import NativeSensitiveRequestError
 from ..receipts import build_receipt
 from ..runtime.secret_file_request_services.request_models import FileReadRequestMatch
-from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
+from ..runtime.secret_file_requests import extract_sensitive_file_read_request_artifact
 
 if TYPE_CHECKING:
     from .stdio import StdioGuardProxy
@@ -43,10 +44,14 @@ if TYPE_CHECKING:
 NotForwarded = tuple[str, dict[str, Any]]
 
 
-def _artifact(proxy: StdioGuardProxy, request: FileReadRequestMatch) -> GuardArtifact:
-    return build_file_read_request_artifact(
+def _request(
+    proxy: StdioGuardProxy, tool_name: str, arguments: object
+) -> tuple[FileReadRequestMatch | None, GuardArtifact | None]:
+    return extract_sensitive_file_read_request_artifact(
+        tool_name,
+        arguments,
+        cwd=proxy.cwd,
         harness=proxy.harness,
-        request=request,
         config_path=str(proxy._policy_path()),
         source_scope="project" if proxy.cwd is not None else "global",
     )
@@ -150,17 +155,13 @@ def evaluate_sensitive_read(
     """Evaluate one ``tools/call``; ``None`` means forward it to the child."""
 
     try:
-        request = extract_sensitive_file_read_request(
-            tool_name,
-            params.get("arguments") if isinstance(params, dict) else None,
-            cwd=proxy.cwd,
-        )
+        request, artifact = _request(proxy, tool_name, params.get("arguments") if isinstance(params, dict) else None)
     except NativeSensitiveRequestError:
         return _fail_closed_unclassified(event, tool_name)
-    if request is None:
+    if request is None or artifact is None:
         return None
     try:
-        return _evaluate(proxy, request, tool_name=tool_name, event=event)
+        return _evaluate(proxy, request, artifact, tool_name=tool_name, event=event)
     except NativeMcpProxyDecisionError:
         return _fail_closed(event, tool_name, request)
 
@@ -168,13 +169,13 @@ def evaluate_sensitive_read(
 def _evaluate(
     proxy: StdioGuardProxy,
     request: FileReadRequestMatch,
+    artifact: GuardArtifact,
     *,
     tool_name: str,
     event: dict[str, Any],
 ) -> NotForwarded | None:
     store = proxy.guard_store
     home = _resolve_digest_home(getattr(store, "guard_home", None))
-    artifact = _artifact(proxy, request)
     current_action, token = _context(proxy, artifact, proxy.guard_config, home)
     saved_decision, lookup = _lookup(proxy, artifact, token, diagnose=True)
 
@@ -212,7 +213,12 @@ def _evaluate(
                 decision = reuse("refresh_failed")
             else:
                 proxy.guard_config = fresh_config
-                artifact = _artifact(proxy, request)
+                # The refreshed config can name a different policy file. Nothing
+                # else about the artifact depends on it — the request, and so the
+                # identity the review is keyed under, is the one already
+                # classified — so restate the policy path rather than asking the
+                # resident to classify the same call a second time.
+                artifact = replace(artifact, config_path=str(proxy._policy_path()))
                 current_action, token = _context(proxy, artifact, fresh_config, home)
                 _saved, lookup = _lookup(proxy, artifact, token, diagnose=False)
                 decision = reuse("postclaim", claimed_allow_hash=claimed_hash)

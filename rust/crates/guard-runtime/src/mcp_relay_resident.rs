@@ -34,15 +34,19 @@ use std::time::{Duration, Instant};
 use serde_json::{json, Map, Value};
 
 use crate::claude_hook_bridge_http::remaining;
+use crate::managed_policy_load::ManagedPolicySource;
 use crate::mcp_relay_args::RelayArgs;
 use crate::mcp_relay_authority::{
     blocked_response, no_decision_response, tool_name, ClaimTicket, ForwardTicket, RelayAuthority,
     ToolCallVerdict,
 };
 use crate::mcp_relay_catalog::{CatalogSnapshot, RelayCatalog};
+use crate::mcp_relay_decide::inline::Reply as InlineReply;
 use crate::mcp_relay_launch::Launch;
+use crate::mcp_relay_package_eval::{evaluate_package_request, PackageEvalFacts};
 use crate::mcp_relay_pending::COMMIT_RESULT_SCHEMA;
 use crate::resident_state::ResidentState;
+use crate::supply_chain_eval_transport::ResidentEvalTransport;
 
 const STATE_DIRECTORY: &str = "native-runtime";
 const RESULT_SCHEMA: &str = "guard-mcp-relay-decide-result.v1";
@@ -71,6 +75,8 @@ pub(crate) struct RelayFacts {
     /// The proxy's own `PATH`, as set.
     path: Option<String>,
     launcher_home: String,
+    /// The relay's working directory, which the proxy reports as its own.
+    cwd: Option<String>,
 }
 
 /// The process facts the proxy reads from its own environment.
@@ -94,6 +100,9 @@ impl ProcessFacts {
 struct Resident {
     state: ResidentState,
     token: Vec<u8>,
+    /// The digest this relay's own durable copy is published under, when it
+    /// runs as one.
+    durable_digest: Option<String>,
 }
 
 /// The decision authority the relay ships with.
@@ -108,6 +117,13 @@ pub(crate) struct ResidentRelayAuthority {
     warming: bool,
     /// The relayed catalog's report, until the resident records it.
     report: Option<report::CatalogReport>,
+    /// `_inline_prompt_available`: the client declared the `elicitation`
+    /// capability in its `initialize`, so a route may ask for the prompt.
+    inline_available: bool,
+    /// The answer to the prompt the relay just raised, which the next decide
+    /// of that same call carries. One slot: the relay hands the answer over
+    /// with nothing else running, and the next request spends it.
+    inline_answer: Option<InlineReply>,
 }
 
 /// What a commit request did with one ticket.
@@ -167,6 +183,8 @@ impl ResidentRelayAuthority {
             kick: None,
             warming: false,
             report: None,
+            inline_available: false,
+            inline_answer: None,
         }
     }
 
@@ -222,9 +240,136 @@ impl ResidentRelayAuthority {
                 return None;
             }
         }
-        let output = send(&fresh, payload, deadline).ok()?;
+        // The fresh resident is held whether or not its send landed: it is the
+        // one this round went to, so it is the one a caller reading the lane's
+        // runtime records the round against. A send that failed because the
+        // resident is gone fails the same way on the next call, which
+        // rediscovers from there.
+        let output = send(&fresh, payload, deadline);
         self.resident = Some(fresh);
-        Some(output)
+        output.ok()
+    }
+
+    /// Build the claim request one round sends.
+    fn claim_payload(
+        &self,
+        ticket: &str,
+        evaluation: Option<Map<String, Value>>,
+    ) -> Option<Vec<u8>> {
+        let facts = self.facts.as_ref()?;
+        let mut request = json!({"guard_home": facts.guard_home, "ticket": ticket});
+        if let Some(evaluation) = evaluation {
+            request
+                .as_object_mut()?
+                .insert("package_evaluation".to_string(), Value::Object(evaluation));
+        }
+        serde_json::to_vec(&json!({"operation": "mcp_relay_claim", "request": request})).ok()
+    }
+
+    /// Send one claim round to the resident that decided the call.
+    ///
+    /// Only that resident holds the claim, and a round that spends it is never
+    /// repeated: a lost answer spends nothing twice.
+    fn send_claim(&self, payload: &[u8]) -> Option<Vec<u8>> {
+        let resident = self.resident.as_ref()?;
+        send(resident, payload, Instant::now() + CLAIM_TIMEOUT).ok()
+    }
+
+    /// Evaluate the package request one call carries, and build the decide
+    /// request that carries the verdict back.
+    ///
+    /// The evaluation travels on the lane the decision travels on, and its
+    /// rounds are requests like any other (`ResidentLane`). An evaluation that
+    /// settles on no verdict, a call whose intent this process does not read
+    /// and an environment the proxy could not have sent all leave the call
+    /// undecided, which fails it closed.
+    fn evaluated(&mut self, request: &Value) -> Option<Vec<u8>> {
+        let environment = request::process_environment()?;
+        // The decide path's evaluation is the pre-claim one, which the proxy
+        // runs with no external-archive network of its own.
+        let evaluation = self.evaluation(request, false)?;
+        request::evaluated_request(request, environment, evaluation)
+    }
+
+    /// Evaluate the package request one call carries.
+    ///
+    /// `external_archive_network` is the authorization the proxy gives the
+    /// evaluation it runs after a claim and withholds from the one it runs
+    /// before (`runtime_mcp.py:1832`).
+    fn evaluation(
+        &mut self,
+        request: &Value,
+        external_archive_network: bool,
+    ) -> Option<Map<String, Value>> {
+        let intent = crate::mcp_relay_decide::relayed_package_intent(request.clone())?;
+        let session = self.facts.as_ref()?;
+        let guard_home = session.guard_home.clone();
+        let workspace = session.workspace.clone();
+        let harness = session.harness.clone();
+        let source_scope = session.source_scope.clone();
+        let config_path = session.config_path.clone();
+        let facts = PackageEvalFacts {
+            guard_home: &guard_home,
+            workspace: workspace.as_deref(),
+            harness: &harness,
+            source_scope: &source_scope,
+            config_path: &config_path,
+        };
+        let home = PathBuf::from(&guard_home);
+        let mut transport = ResidentEvalTransport::new(self, &home);
+        let settled = evaluate_package_request(
+            &facts,
+            &intent,
+            external_archive_network,
+            &ManagedPolicySource::native(),
+            &mut transport,
+        )
+        .ok()?;
+        // Neither evaluation retains a verified archive: `package_eval_request`
+        // asks for none, so no answer here binds one. An evaluation that
+        // demands the binding is answered as the refusal instead
+        // (`mcp_relay_decide_package_archive.rs`). A retained blob would make
+        // that answer wrong, and this process has no path to the proxy's
+        // binding, so the call fails closed.
+        if !settled.retained_archives.is_empty() {
+            // `_cleanup_external_archive_downloads` (`runtime_mcp.py:1795`):
+            // whatever answers the call, no staged blob outlives it.
+            for archive in &settled.retained_archives {
+                archive.cleanup();
+            }
+            return None;
+        }
+        settled.payload.as_object().cloned()
+    }
+
+    /// Tell the resident this call has no evaluation to decide from.
+    ///
+    /// The relay has already failed this call closed; the resident answers
+    /// with the refusal the lane names, and that defer hands this server's
+    /// later sessions to the proxy, which decides such calls without the
+    /// relay (`mcp_relay_servers.rs`). Without it a server whose package
+    /// calls the lane cannot settle would refuse them in every session.
+    fn mark_unsettled(&mut self, guard_home: &Path, request: &Value) {
+        let Some(payload) = request::unsettled_payload(request) else {
+            return;
+        };
+        let _ = self.exchange(guard_home, &payload);
+    }
+}
+
+/// A package evaluation borrows the same lane a decision travels on: the
+/// resident is already discovered, its direct-lane identity already checked,
+/// and an evaluation's rounds are requests like any other.
+impl crate::supply_chain_eval_transport::ResidentLane for ResidentRelayAuthority {
+    fn exchange_until(&mut self, payload: &[u8], deadline: Instant) -> Option<Vec<u8>> {
+        let guard_home = PathBuf::from(&self.facts.as_ref()?.guard_home);
+        ResidentRelayAuthority::exchange_until(self, &guard_home, payload, deadline)
+    }
+
+    fn runtime_sha256(&self) -> Option<String> {
+        self.resident
+            .as_ref()
+            .map(|resident| resident.state.runtime_sha256.clone())
     }
 }
 
@@ -242,7 +387,18 @@ impl RelayAuthority for ResidentRelayAuthority {
             defer::note(defer::FACTS_UNAVAILABLE);
             return no_decision();
         };
-        let Some((message, payload, expected)) = prepare(facts, message, order, catalog) else {
+        // The answer belongs to this call: the relay raised its prompt with
+        // nothing else running, so the next request it sends spends it.
+        let inline = json!({
+            "available": self.inline_available,
+            "answer": self.inline_answer.take(),
+        });
+        let Some((message, request, expected)) = prepare(facts, message, order, catalog, &inline)
+        else {
+            defer::note(defer::REQUEST_UNSENDABLE);
+            return no_decision();
+        };
+        let Some(payload) = request::decide_payload(&request) else {
             defer::note(defer::REQUEST_UNSENDABLE);
             return no_decision();
         };
@@ -250,6 +406,18 @@ impl RelayAuthority for ResidentRelayAuthority {
         self.warm_up();
         let mut output = self.exchange(&guard_home, &payload);
         if reply_of(output.as_deref()).is_none() && self.rekick(output.as_deref()) {
+            output = self.exchange(&guard_home, &payload);
+        }
+        // A package call is decided from an evaluation whose archive and
+        // registry rounds this relay performs, which the decide round trip
+        // cannot hold. The resident asks for it once and the same call is sent
+        // again with it attached.
+        if matches!(reply_of(output.as_deref()), Some(Reply::Evaluate { .. })) {
+            let Some(payload) = self.evaluated(&request) else {
+                self.mark_unsettled(&guard_home, &request);
+                defer::note(defer::PACKAGE_UNEVALUATED);
+                return no_decision();
+            };
             output = self.exchange(&guard_home, &payload);
         }
         match output.as_deref().and_then(reply) {
@@ -262,13 +430,22 @@ impl RelayAuthority for ResidentRelayAuthority {
                 message,
                 expected,
                 claim: ticket,
+                request,
             }),
+            Some(Reply::Elicit { params }) => ToolCallVerdict::Elicit(params),
             Some(Reply::Block { message, data }) => ToolCallVerdict::Respond(blocked_response(
                 id,
                 &tool_name(params),
                 Some(&message),
                 Some(data),
             )),
+            // The evaluation travels with the second send, so a second request
+            // for one is an answer this exchange cannot take.
+            Some(Reply::Evaluate { .. }) => {
+                self.mark_unsettled(&guard_home, &request);
+                defer::note(defer::PACKAGE_UNDECIDED);
+                no_decision()
+            }
             None => {
                 defer::note(&defer::reply_cause(output.as_deref()));
                 no_decision()
@@ -278,19 +455,25 @@ impl RelayAuthority for ResidentRelayAuthority {
 
     fn claim(&mut self, ticket: ClaimTicket) -> ToolCallVerdict {
         let no_decision = ToolCallVerdict::Respond(ticket.no_decision());
-        let (Some(facts), Some(resident)) = (self.facts.as_ref(), self.resident.as_ref()) else {
+        let Some(payload) = self.claim_payload(&ticket.claim, None) else {
             return no_decision;
         };
-        let payload = json!({
-            "operation": "mcp_relay_claim",
-            "request": {"guard_home": facts.guard_home, "ticket": ticket.claim},
-        });
-        let Ok(payload) = serde_json::to_vec(&payload) else {
-            return no_decision;
-        };
-        // Only the resident that decided the call holds its claim, and a
-        // claim request is never repeated: a lost answer spends nothing twice.
-        let answered = send(resident, &payload, Instant::now() + CLAIM_TIMEOUT).ok();
+        let mut answered = self.send_claim(&payload);
+        let asked = answered.as_deref().and_then(reply);
+        // A package call's claim is spent against an evaluation the authority
+        // runs after the claim, whose archive and registry rounds this relay
+        // performs. The claim request cannot carry them either, so the
+        // authority holds the same rows against a fresh ticket and asks for
+        // the evaluation. The round that asked spent nothing.
+        if let Some(Reply::Evaluate { ticket: Some(held) }) = asked {
+            let Some(evaluation) = self.evaluation(&ticket.request, true) else {
+                return no_decision;
+            };
+            let Some(payload) = self.claim_payload(&held, Some(evaluation)) else {
+                return no_decision;
+            };
+            answered = self.send_claim(&payload);
+        }
         match answered.as_deref().and_then(reply) {
             Some(Reply::Forward { ticket: evidence }) => ToolCallVerdict::Forward(ForwardTicket {
                 message: ticket.message,
@@ -311,7 +494,14 @@ impl RelayAuthority for ResidentRelayAuthority {
                     Some(data),
                 ))
             }
-            Some(Reply::Claim { .. }) | None => no_decision,
+            // The decision the claim settles was already made, so a second
+            // claim and a prompt are answers this exchange cannot take. The
+            // evaluation travels with the second claim, so a second request
+            // for one cannot be taken either.
+            Some(Reply::Claim { .. })
+            | Some(Reply::Elicit { .. })
+            | Some(Reply::Evaluate { .. })
+            | None => no_decision,
         }
     }
 
@@ -338,6 +528,25 @@ impl RelayAuthority for ResidentRelayAuthority {
         self.poll_report();
     }
 
+    fn client_capabilities(&mut self, params: Option<&Value>) {
+        // `_record_client_capabilities`: only a declared `elicitation` object
+        // offers the prompt, so anything else leaves the queue route alone.
+        self.inline_available = params
+            .and_then(|params| params.get("capabilities"))
+            .and_then(Value::as_object)
+            .is_some_and(|capabilities| {
+                capabilities
+                    .get("elicitation")
+                    .is_some_and(Value::is_object)
+            });
+    }
+
+    fn elicited(&mut self, answer: Option<&Value>) {
+        // `_request_inline_approval` answers an unanswered prompt with a
+        // cancel, which falls through to the approval queue.
+        self.inline_answer = Some(answer.map_or(InlineReply::Fallthrough, InlineReply::classify));
+    }
+
     fn catalog_complete(&mut self, tools: &[Value]) {
         self.report_server(tools);
     }
@@ -353,11 +562,12 @@ fn prepare(
     message: &Value,
     order: Option<&[String]>,
     catalog: &RelayCatalog,
-) -> Option<(Value, Vec<u8>, CatalogSnapshot)> {
+    inline: &Value,
+) -> Option<(Value, Value, CatalogSnapshot)> {
     let frame = python_canonical(message).filter(|frame| frame.get("id") == message.get("id"))?;
     let call = frame.get("params")?.as_object()?;
-    let (payload, expected) = decide_request(facts, call, order, catalog)?;
-    Some((frame, payload, expected))
+    let (request, expected) = decide_request(facts, call, order, catalog, inline)?;
+    Some((frame, request, expected))
 }
 
 /// How the resident answered one commit.
@@ -379,9 +589,26 @@ fn committed(output: &[u8]) -> Sent {
 /// What the resident decided.
 #[derive(Debug, Clone, PartialEq)]
 enum Reply {
-    Forward { ticket: String },
-    Claim { ticket: String },
-    Block { message: String, data: Value },
+    Forward {
+        ticket: String,
+    },
+    Claim {
+        ticket: String,
+    },
+    Block {
+        message: String,
+        data: Value,
+    },
+    /// Raise the client's inline prompt, then decide this call again.
+    Elicit {
+        params: Value,
+    },
+    /// Evaluate the package request this call carries, then ask again with
+    /// the evaluation attached: a decide with no ticket is decided again, and
+    /// a claim carries the ticket its rows are held against again.
+    Evaluate {
+        ticket: Option<String>,
+    },
 }
 
 fn reply_of(output: Option<&[u8]>) -> Option<Reply> {
@@ -403,6 +630,13 @@ fn reply(output: &[u8]) -> Option<Reply> {
     match result.get("outcome")?.as_str()? {
         "forward" => Some(Reply::Forward { ticket: ticket()? }),
         "claim" => Some(Reply::Claim { ticket: ticket()? }),
+        "evaluate" => Some(Reply::Evaluate { ticket: ticket() }),
+        "elicit" => Some(Reply::Elicit {
+            params: result
+                .get("params")
+                .filter(|params| params.is_object())?
+                .clone(),
+        }),
         "block" => Some(Reply::Block {
             message: result.get("message")?.as_str()?.to_owned(),
             data: result.get("data").filter(|data| data.is_object())?.clone(),
@@ -411,21 +645,28 @@ fn reply(output: &[u8]) -> Option<Reply> {
     }
 }
 
-/// The first live resident of this executable, with its token.
+/// The first live resident of this caller's own runtime, with its token.
 fn discover(state_base: &Path) -> Option<Resident> {
     // Discovery checks the directory's privacy; it must already exist.
     if !std::fs::symlink_metadata(state_base).is_ok_and(|metadata| metadata.is_dir()) {
         return None;
     }
+    let durable_digest = crate::resident_state::durable_runtime_digest(state_base);
     let states = crate::resident_state::discover_same_executable_states(state_base).ok()?;
     states.into_iter().find_map(|(_scope, _digest, state)| {
-        crate::resident_state::validate_same_executable_process_identity(
+        crate::resident_state::validate_direct_lane_process_identity(
             state.process_id,
             &state.process_start_marker,
+            &state.runtime_sha256,
+            durable_digest.as_deref(),
         )
         .ok()?;
         let token = crate::resident_state::token_from_state(&state).ok()?;
-        Some(Resident { state, token })
+        Some(Resident {
+            state,
+            token,
+            durable_digest: durable_digest.clone(),
+        })
     })
 }
 
@@ -439,7 +680,10 @@ fn send(resident: &Resident, payload: &[u8], deadline: Instant) -> Result<Vec<u8
     let identity = crate::resident_client::ExpectedProcessIdentity {
         process_id: resident.state.process_id,
         start_marker: &resident.state.process_start_marker,
-        digest: None,
+        runtime: crate::resident_client::ExpectedRuntime::for_direct_lane(
+            &resident.state.runtime_sha256,
+            resident.durable_digest.as_deref(),
+        ),
     };
     crate::resident_client::send_request_for_digest_detailed(
         &resident.state.transport,

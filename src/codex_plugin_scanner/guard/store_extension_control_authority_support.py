@@ -11,6 +11,7 @@ import sqlite3
 import sys
 from collections.abc import Generator, Mapping
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
@@ -112,6 +113,8 @@ class _ExtensionControlAuthoritySupportMixin:
     def read_persisted_extension_control_authority(self) -> ExtensionControlAuthorityView:
         """Read the authenticated authority using its persisted catalog identity."""
 
+        from .native_command_control_authority_io import NativeCommandControlAuthorityUnavailableError
+
         catalog_digest = self._extension_control_last_catalog_digest
         try:
             with self._extension_control_authority_lock():
@@ -123,6 +126,9 @@ class _ExtensionControlAuthoritySupportMixin:
                 if row is not None:
                     catalog_digest = _row_str(row, "catalog_digest")
                 return self._read_extension_control_authority_locked(catalog_digest)
+        except NativeCommandControlAuthorityUnavailableError:
+            # A busy lease is an outage, not a verdict on this authority.
+            raise
         except ExtensionControlAuthorityError:
             return self._tampered_view(catalog_digest)
         except Exception:
@@ -224,10 +230,16 @@ class _ExtensionControlAuthoritySupportMixin:
         return self._authority_ref_prefix() + _ANCHOR_REF_SUFFIX
 
     @contextmanager
-    def _extension_control_authority_lock(self, *, shared: bool = False) -> Generator[None, None, None]:
-        from .native_command_control_authority_io import hold_command_control_authority_lock
+    def _extension_control_authority_lock(
+        self, *, shared: bool = False, timeout_seconds: float | None = None
+    ) -> Generator[None, None, None]:
+        from .native_command_control_authority_io import (
+            AUTHORITY_LOCK_TIMEOUT_SECONDS,
+            hold_command_control_authority_lock,
+        )
 
-        with hold_command_control_authority_lock(cast(Path, self.guard_home), shared=shared):
+        budget = AUTHORITY_LOCK_TIMEOUT_SECONDS if timeout_seconds is None else timeout_seconds
+        with hold_command_control_authority_lock(cast(Path, self.guard_home), shared=shared, timeout_seconds=budget):
             yield
 
     @staticmethod
@@ -301,6 +313,20 @@ class _ExtensionControlAuthoritySupportMixin:
             else AuthorityHealth.DEGRADED_UNACKNOWLEDGED
         )
         return ExtensionControlAuthorityView(health, 0, catalog_digest, ())
+
+    def extension_control_authority_unreadable_view(self, catalog_digest: str) -> ExtensionControlAuthorityView:
+        """The view for a caller that could not read the authority and cannot fail.
+
+        It carries no layers, so nothing taken from it widens what Guard
+        allows. A caller that can wait retries instead: an unread authority is
+        not a reading, and only the one caller that must still start uses this.
+
+        It is marked unread so nothing downstream mistakes it for a verdict on
+        the authority. Acknowledging degraded mode off a view like this would
+        persist an outage the daemon never observed.
+        """
+
+        return replace(self._degraded_view(catalog_digest), unread=True)
 
     @staticmethod
     def _tampered_view(catalog_digest: str) -> ExtensionControlAuthorityView:

@@ -3,9 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon.dashboard_bundle import (
+    dashboard_build_id,
     is_pinned_path,
     pin_dashboard_bundle,
     pinned_dashboard_file,
+    stamp_dashboard_build,
 )
 
 
@@ -51,3 +53,35 @@ def test_lookup_pins_on_first_use_when_startup_did_not(tmp_path: Path) -> None:
     assert pinned_dashboard_file(static_dir, "assets/guard-dashboard.js") == b"entry first"
     _write_bundle(static_dir, "second")
     assert pinned_dashboard_file(static_dir, "assets/guard-dashboard.js") == b"entry first"
+
+
+def test_build_id_follows_the_pinned_bundle_not_the_disk(tmp_path: Path) -> None:
+    static_dir = tmp_path / "static"
+    _write_bundle(static_dir, "old")
+    pin_dashboard_bundle(static_dir)
+    pinned_id = dashboard_build_id(static_dir)
+
+    _write_bundle(static_dir, "new")
+
+    assert pinned_id is not None
+    assert dashboard_build_id(static_dir) == pinned_id
+
+    other_dir = tmp_path / "other"
+    _write_bundle(other_dir, "new")
+    assert dashboard_build_id(other_dir) not in (None, pinned_id)
+
+
+def test_build_id_is_none_without_a_bundled_dashboard(tmp_path: Path) -> None:
+    static_dir = tmp_path / "empty"
+    static_dir.mkdir()
+
+    assert dashboard_build_id(static_dir) is None
+    assert stamp_dashboard_build(b"<html><head></head></html>", None) == b"<html><head></head></html>"
+
+
+def test_shell_is_stamped_once_inside_head() -> None:
+    stamped = stamp_dashboard_build(b"<html><head><title>x</title></head><body></body></html>", "abc123")
+
+    assert stamped.count(b'<meta name="guard-dashboard-build" content="abc123" />') == 1
+    assert stamped.index(b"guard-dashboard-build") < stamped.index(b"</head>")
+    assert stamp_dashboard_build(b"<html></html>", "abc123") == b"<html></html>"

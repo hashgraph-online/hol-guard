@@ -1,20 +1,23 @@
 //! Local Git writes that keep every change reachable: `git add`, a non-forced
 //! `git rm`, `git commit -m`, a new branch at `HEAD` or at a start point that
 //! replaces no untracked file, a non-forced branch rename, a plain stash push,
-//! `git stash apply` or `pop` of one entry, `git stash list`, and a `git
-//! merge` or `git cherry-pick` (`git_local_writes_merge`), with Git reads the
-//! configuration probe proves helper-free around them.
+//! `git stash apply` or `pop` of one entry, `git stash list`, a `git merge`
+//! or `git cherry-pick` (`git_local_writes_merge`) and a `git rebase` onto a
+//! local ref or `--continue` (`git_local_writes_rebase`), with Git reads the configuration
+//! probe proves helper-free around them.
 //! The workspace sandbox runs them in a main checkout, but a linked worktree
 //! keeps its index, refs and objects in the shared Git directory the sandbox
 //! cannot write, and some hosts have no sandbox, so they would stop at review.
 //! Here the session's own Git is proven to start no program: no filter other
-//! than the user's Git LFS install, no fsmonitor, signing, diff program,
-//! lazy fetch, submodule recursion or configured hook, and none of the hook
-//! files the command runs. `git rm` without `-f` refuses a file that differs
-//! from `HEAD`, and a commit, branch or stash only adds history. `git commit
-//! --amend` replaces the local tip, but the reflog still reaches the old
-//! commit, and rewriting what a remote holds still needs a reviewed forced
-//! push. `git add -f` stays reviewed: it is how an ignored secret file gets
+//! than the user's Git LFS install, no fsmonitor, configured signing, diff
+//! program, lazy fetch, submodule recursion or configured hook, and none of
+//! the hook files the command runs. A commit the command itself signs (`-S`)
+//! must start the user's installed signing program
+//! (`git_local_writes_signing`). `git rm` without `-f` refuses a file that
+//! differs from `HEAD`, and a commit, branch or stash only adds history.
+//! `git commit --amend` replaces the local tip, but the reflog still reaches
+//! the old commit, and rewriting what a remote holds still needs a reviewed
+//! forced push. `git add -f` stays reviewed: it is how an ignored secret file gets
 //! staged. `git branch -M` stays reviewed: it overwrites an existing branch.
 //!
 //! The same chain may end by publishing that work: one `git push origin
@@ -33,18 +36,25 @@ use guard_contracts::{
 };
 use std::time::Instant;
 
+#[path = "git_local_writes_config.rs"]
+mod config;
 #[path = "git_local_writes_forms.rs"]
 mod forms;
+#[path = "git_local_writes_hooks.rs"]
+mod hooks;
 #[path = "git_local_writes_merge.rs"]
 mod merge;
+#[path = "git_local_writes_rebase.rs"]
+mod rebase;
 #[path = "git_local_writes_route.rs"]
 mod route;
+#[path = "git_local_writes_signing.rs"]
+mod signing;
 #[path = "git_local_writes_start.rs"]
 mod start;
 
-use forms::{
-    add, branch_rename, commit, created_branch, moves_head, rm, stash_list, stash_restore,
-};
+use forms::{created_branch, moves_head};
+use hooks::{write_hooks, CHECKOUT_HOOKS, COMMIT_HOOKS};
 
 pub(crate) const REASON: &str = "native_exact_safe_git_local_write";
 pub(crate) const PUBLISH_REASON: &str = "native_exact_safe_git_publish_chain";
@@ -60,6 +70,7 @@ const RULES: &[&str] = &[
     "command.git.stash",
     "command.git.merge",
     "command.git.cherry-pick",
+    "command.git.rebase",
 ];
 
 /// The rule a proven `git push origin <branch>` step may raise.
@@ -77,26 +88,6 @@ const READ_RULES: &[&str] = &[
     "command.git.ls-files",
     "command.git.grep",
     "command.git.worktree",
-];
-
-const INDEX_HOOKS: &[&str] = &["post-index-change"];
-const COMMIT_HOOKS: &[&str] = &[
-    "pre-commit",
-    "prepare-commit-msg",
-    "commit-msg",
-    "post-commit",
-    "post-rewrite",
-    "post-index-change",
-    "reference-transaction",
-    "pre-auto-gc",
-];
-const BRANCH_HOOKS: &[&str] = &["reference-transaction"];
-/// `git stash list` writes nothing and runs no hook.
-const LIST_HOOKS: &[&str] = &[];
-const CHECKOUT_HOOKS: &[&str] = &[
-    "post-checkout",
-    "post-index-change",
-    "reference-transaction",
 ];
 
 /// Turn a generic review whose only matched rules are the ones above into an
@@ -140,6 +131,7 @@ pub(super) fn settle(
         deadline,
         execution_environment,
     ) else {
+        super::git_init_chain::settle(result, model, context, deadline, execution_environment);
         return;
     };
     result.minimum_action = "allow".into();
@@ -345,9 +337,35 @@ fn proven(
             .keys()
             .any(|key| key.to_ascii_lowercase().starts_with("includeif.onbranch"));
     let merging = writes.iter().any(|(_, hooks)| *hooks == merge::HOOKS);
+    let rebases: Vec<usize> = writes
+        .iter()
+        .filter(|(_, hooks)| *hooks == rebase::HOOKS)
+        .map(|(index, _)| *index)
+        .collect();
+    let rebasing = !rebases.is_empty();
+    // `commit.gpgsign` signs every commit Git creates, so a commit then runs
+    // the signing program as if it had asked with `-S`. Merges and rebases
+    // already refuse it through `merge::inert`.
+    let committing = writes.iter().any(|(_, hooks)| *hooks == COMMIT_HOOKS);
+    let signs = (committing && signs_by_default(&effective))
+        || writes
+            .iter()
+            .any(|(index, _)| forms::signs(&model.segments[*index]));
+    let (external_off, textconv_off) = config::diff_drivers_disarmed(model, &writes, &stashed);
     if branch_scoped
-        || !inert(&effective, &repository)
-        || (merging && !merge::inert(&effective, &repository))
+        || !config::inert_with(&effective, &repository, external_off, textconv_off)
+        || ((merging || rebasing) && !merge::inert(&effective, &repository))
+        || !rebases
+            .iter()
+            .all(|index| rebase::proven(&probe, &model.segments[*index], &effective))
+        || (signs
+            && !signing::trusted(
+                &effective,
+                &repository,
+                &probe.home,
+                &probe.cwd,
+                execution_environment,
+            ))
         || forms::aliased(&effective, model)
         || !probe.hooks_inert(writes.iter().flat_map(|(_, hooks)| hooks.iter().copied()))
         || !stashed.iter().all(|index| {
@@ -420,6 +438,16 @@ pub(in crate::pretool) fn configured_read(
         && super::git_reads::safe_git_arguments(&segment.arguments, true, context)
 }
 
+/// `git add` or an unsigned `git commit -m` in a form proven here, given the
+/// words after `git`; the steps `git_init_chain` runs in a new repository.
+pub(in crate::pretool) fn index_or_commit(words: &[&str]) -> bool {
+    match words.split_first() {
+        Some((&"add", rest)) => forms::add(rest),
+        Some((&"commit", rest)) => forms::commit_form(rest) == Some(false),
+        _ => false,
+    }
+}
+
 /// Whether every setting in front of the Git step only names the commit
 /// identity or adjusts output; none can choose a program Git runs.
 fn identity_only(segment: &CommandSegmentV1) -> bool {
@@ -429,69 +457,18 @@ fn identity_only(segment: &CommandSegmentV1) -> bool {
         .all(|name| crate::command_compatibility::inert_git_environment_name(name))
 }
 
-/// The hooks a proven write form runs, or `None` when `original` is not one.
-/// Leading Git options such as `-c` are refused: they can point the command
-/// at another configuration. A leading `-C <dir>` reaches here only after
-/// the route proof dropped it.
-fn write_hooks(original: &CommandSegmentV1) -> Option<(&'static [&'static str], Option<String>)> {
-    let stripped = super::segment_proof::without_stderr_merge(original);
-    let segment = stripped.as_ref().unwrap_or(original);
-    if segment.executable.as_deref() != Some("git")
-        || segment.pipeline_index != 0
-        || segment.path_overridden
-        || !segment.wrapper_chain.is_empty()
-        || !identity_only(segment)
-        || segment.text.contains(['>', '<', '$', '`', '\n', '\r'])
-    {
-        return None;
-    }
-    let words: Vec<&str> = segment.arguments.iter().map(String::as_str).collect();
-    let hooks = match words.split_first()? {
-        (&"add", rest) => add(rest).then_some(INDEX_HOOKS),
-        (&"rm", rest) => rm(rest).then_some(INDEX_HOOKS),
-        (&"commit", rest) => commit(rest).then_some(COMMIT_HOOKS),
-        (&"branch", rest) => branch_rename(rest).then_some(BRANCH_HOOKS),
-        (&"merge", rest) => merge::merge(rest).then_some(merge::HOOKS),
-        (&"cherry-pick", rest) => merge::cherry_pick(rest).then_some(merge::HOOKS),
-        (&"stash", [action, rest @ ..]) if *action == "list" => {
-            stash_list(rest).then_some(LIST_HOOKS)
-        }
-        (&"stash", [action, rest @ ..]) if matches!(*action, "apply" | "pop") => {
-            stash_restore(rest).then_some(CHECKOUT_HOOKS)
-        }
-        _ => super::workspace_contained::keeping_arguments(&segment.arguments)
-            .then_some(CHECKOUT_HOOKS),
-    };
-    if let Some(hooks) = hooks {
-        return Some((hooks, None));
-    }
-    let point = start::start_point(&segment.arguments)?;
-    Some((CHECKOUT_HOOKS, Some(point.to_owned())))
+/// Whether the effective configuration signs commits without `-S`.
+pub(in crate::pretool) fn signs_by_default(effective: &GitConfig) -> bool {
+    effective.get("commit.gpgsign").is_some_and(|values| {
+        values
+            .iter()
+            .any(|value| !super::git_remote_ops::pull::disabled(value))
+    })
 }
 
 /// Whether the effective configuration lets these writes start no program.
+/// Commit signing is left to the caller: only a write that creates a commit
+/// runs the signing program, and [`signs_by_default`] reports it.
 pub(in crate::pretool) fn inert(effective: &GitConfig, repository: &GitConfig) -> bool {
-    !super::git_remote_ops::pull::repository_lfs_program(repository)
-        && !effective.iter().any(|(key, values)| {
-            let enabled = values
-                .iter()
-                .any(|value| !super::git_remote_ops::pull::disabled(value));
-            (key.starts_with("filter.")
-                && (!super::git_remote_ops::pull::standard_lfs(key, values)
-                    || repository.contains_key(key)))
-                || key.starts_with("hook.")
-                || key == "core.worktree"
-                || key == "core.virtualfilesystem"
-                || key == "diff.external"
-                || key == "extensions.partialclone"
-                || (key.starts_with("diff.")
-                    && (key.ends_with(".textconv") || key.ends_with(".command")))
-                || (key.starts_with("trailer.")
-                    && (key.ends_with(".command") || key.ends_with(".cmd")))
-                || (key.starts_with("remote.") && key.ends_with(".promisor") && enabled)
-                || (matches!(
-                    key.as_str(),
-                    "core.fsmonitor" | "commit.gpgsign" | "submodule.recurse"
-                ) && enabled)
-        })
+    config::inert_with(effective, repository, false, false)
 }

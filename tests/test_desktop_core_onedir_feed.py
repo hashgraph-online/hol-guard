@@ -439,6 +439,20 @@ class TestSealOnedir:
             json.dumps({"schema": "hol-guard-native-runtime.v1", "runtime_sha256": "0" * 64, "runtime_size": 1}),
             encoding="utf-8",
         )
+        # Both manifests pin the same executable, so a real onedir tree always
+        # carries both and the sealer rebinds both.
+        (native / "source-compiler-manifest.json").write_text(
+            json.dumps(
+                {
+                    "schema": "hol-guard-native-source-compiler.v2",
+                    "executable": "hol-guard-runtime",
+                    "base_program_digest": "c" * 64,
+                    "compiler_sha256": "0" * 64,
+                    "compiler_size": 1,
+                }
+            ),
+            encoding="utf-8",
+        )
         return native
 
     def test_reseal_updates_manifest(self, tmp_path: Path) -> None:
@@ -449,6 +463,10 @@ class TestSealOnedir:
         runtime = (native / "hol-guard-runtime").read_bytes()
         assert payload["runtime_sha256"] == hashlib.sha256(runtime).hexdigest()
         assert payload["runtime_size"] == len(runtime)
+        compiler = json.loads((native / "source-compiler-manifest.json").read_text(encoding="utf-8"))
+        assert compiler["compiler_sha256"] == hashlib.sha256(runtime).hexdigest()
+        assert compiler["compiler_size"] == len(runtime)
+        assert compiler["base_program_digest"] == "c" * 64
 
     def test_matching_manifest_is_left_untouched(self, tmp_path: Path) -> None:
         module = _load(SEALER, "seal_pyinstaller_native_manifest")
@@ -465,9 +483,24 @@ class TestSealOnedir:
             ),
             encoding="utf-8",
         )
+        compiler_manifest = native / "source-compiler-manifest.json"
+        compiler_manifest.write_text(
+            json.dumps(
+                {
+                    "schema": "hol-guard-native-source-compiler.v2",
+                    "executable": "hol-guard-runtime",
+                    "base_program_digest": "c" * 64,
+                    "compiler_sha256": hashlib.sha256(runtime).hexdigest(),
+                    "compiler_size": len(runtime),
+                }
+            ),
+            encoding="utf-8",
+        )
         before = manifest.read_bytes()
+        compiler_before = compiler_manifest.read_bytes()
         module.seal_onedir(tmp_path / "tree")
         assert manifest.read_bytes() == before
+        assert compiler_manifest.read_bytes() == compiler_before
 
     def test_missing_files_raise(self, tmp_path: Path) -> None:
         module = _load(SEALER, "seal_pyinstaller_native_manifest")

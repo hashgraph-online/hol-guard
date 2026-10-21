@@ -96,6 +96,14 @@ pub(super) fn relay_facts(
             None => None,
         },
         launcher_home: launcher_home(process.home.as_ref()?)?,
+        // `str(Path.cwd())`, which the queue write and the approval read-back
+        // both carry. A path this process cannot name stays unset, exactly as
+        // the proxy leaves it when `os.getcwd()` fails.
+        cwd: process
+            .cwd
+            .as_ref()
+            .and_then(|cwd| cwd.to_str())
+            .map(str::to_owned),
     })
 }
 
@@ -159,13 +167,16 @@ pub(super) fn launcher_home(home: &OsString) -> Option<String> {
 
 /// The resident request for one call and the catalog it is decided against,
 /// or `None` when the call is not sent. `params` are already
-/// `python_canonical`, as the proxy decoded them.
+/// `python_canonical`, as the proxy decoded them. The request is handed back
+/// as a value, because a package call is decided from this same request sent
+/// once more with its evaluation attached (`evaluated_request`).
 pub(super) fn decide_request(
     facts: &RelayFacts,
     params: &Map<String, Value>,
     order: Option<&[String]>,
     catalog: &RelayCatalog,
-) -> Option<(Vec<u8>, CatalogSnapshot)> {
+    inline: &Value,
+) -> Option<(Value, CatalogSnapshot)> {
     let name = params
         .get("name")
         .and_then(Value::as_str)
@@ -219,11 +230,62 @@ pub(super) fn decide_request(
         "launcher_path": facts.launcher_path,
         "path": facts.path,
         "launcher_home": facts.launcher_home,
+        "cwd": facts.cwd,
         "catalog_state": expected.state,
         "params": params,
+        "inline": inline,
     });
+    Some((request, expected))
+}
+
+/// One decide request as the bytes the resident reads it from.
+pub(super) fn decide_payload(request: &Value) -> Option<Vec<u8>> {
     let payload = json!({"operation": "mcp_relay_decide", "request": request});
-    Some((serde_json::to_vec(&payload).ok()?, expected))
+    serde_json::to_vec(&payload).ok()
+}
+
+/// The same decide request again, carrying the evaluation the relay performed
+/// and the facts of the process it performed it in.
+///
+/// Only a package call is sent twice, and only the second send carries these:
+/// the execution context the package policy digests is built from the
+/// relaying process's own environment (`_environment_facts`), which no other
+/// call is decided from.
+pub(super) fn evaluated_request(
+    request: &Value,
+    environment: Map<String, Value>,
+    evaluation: Map<String, Value>,
+) -> Option<Vec<u8>> {
+    let mut request = request.as_object()?.clone();
+    request.insert("environment".to_owned(), Value::Object(environment));
+    request.insert("package_evaluation".to_owned(), Value::Object(evaluation));
+    decide_payload(&Value::Object(request))
+}
+
+/// The same decide request again, saying the relay has no evaluation to send.
+///
+/// The lane decides nothing without one, so the resident answers this with the
+/// refusal and hands this server's later sessions to the proxy
+/// (`mcp_relay_decide.rs`). The relay keeps its own fail-closed answer; it
+/// sends this for the mark, not for a verdict.
+pub(super) fn unsettled_payload(request: &Value) -> Option<Vec<u8>> {
+    let mut request = request.as_object()?.clone();
+    request.insert("package_evaluation_unsettled".to_owned(), Value::Bool(true));
+    decide_payload(&Value::Object(request))
+}
+
+/// `dict(os.environ)` of the relaying process. A variable this process cannot
+/// read as UTF-8 is one the proxy could not have sent either (`json.dumps`
+/// raises on a surrogate), so the call is not re-sent at all.
+pub(super) fn process_environment() -> Option<Map<String, Value>> {
+    std::env::vars_os()
+        .map(|(key, value)| {
+            Some((
+                key.into_string().ok()?,
+                Value::String(value.into_string().ok()?),
+            ))
+        })
+        .collect()
 }
 
 /// Tools the proxy routes through a Composio provider lookup, which the

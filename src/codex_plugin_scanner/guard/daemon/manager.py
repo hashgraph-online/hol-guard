@@ -50,6 +50,7 @@ from ..windows_paths import (
     windows_process_liveness,
     windows_terminate_process_if_creation_time,
 )
+from .atomic_replace import replace_file
 from .auth_token import auth_token_path as _auth_token_path
 from .auth_token import load_guard_daemon_auth_token as load_guard_daemon_auth_token
 from .discovery import (
@@ -108,6 +109,9 @@ _GUARD_DAEMON_RECOVERY_RESERVATION_MAX_BYTES = 4096
 _GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS = 30.0
 _START_CLASSIFICATION_RESERVE_SECONDS = 3.0
 _START_CLASSIFICATION_RESERVE_FRACTION = 0.25
+# One readiness poll may ask the resident who published daemon state. Cap that
+# ask so a missed answer is retried instead of spending the whole start budget.
+_SPAWNED_URL_POLL_LIFECYCLE_SECONDS = 5.0
 _GUARD_DAEMON_PROCESS_QUERY_TIMEOUT_SECONDS = 5.0
 _GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES = 1024 * 1024
 _GUARD_DAEMON_PROCESS_QUERY_MONITOR_INTERVAL_SECONDS = 0.01
@@ -272,6 +276,12 @@ def _bind_native_runtime_override(env: dict[str, str]) -> None:
     if binary and Path(binary).is_absolute() and mode in {"shadow", "force"}:
         env["HOL_GUARD_NATIVE"] = mode
         env["HOL_GUARD_NATIVE_BINARY"] = binary
+    # Daemon startup asks the source compiler whether this installation carries
+    # a release bundle. A source checkout names its compiler the same way; the
+    # compiler refuses either override when a packaged compiler is present.
+    for key in ("HOL_GUARD_NATIVE_SOURCE_COMPILER", "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER"):
+        if (compiler := os.environ.get(key)) and Path(compiler).is_absolute():
+            env[key] = compiler
 
 
 def _trusted_daemon_prefix(value: str) -> Path:
@@ -2293,7 +2303,7 @@ def _write_private_atomic_text(path: Path, text: str) -> None:
             os.fsync(handle.fileno())
         os.close(descriptor)
         descriptor = -1
-        os.replace(temporary_path, path)
+        replace_file(temporary_path, path)
         _set_private_mode(path, _GUARD_DAEMON_PRIVATE_FILE_MODE)
     finally:
         if descriptor >= 0:
@@ -2620,7 +2630,33 @@ def _guard_daemon_pid_is_spawned_launch(pid: int, expected_pid: int) -> bool:
         return False
     if pid == expected_pid:
         return True
-    return _guard_daemon_parent_pid(pid) == expected_pid and _guard_daemon_pid_is_running(expected_pid)
+    if not _guard_daemon_pid_is_running(expected_pid):
+        return False
+    if os.name == "nt":
+        # Windows does not prove a parent pid. The onefile bootloader that
+        # Desktop spawned and the daemon child that published state share one
+        # serve command for this home and port. That is the same attribution
+        # that keeps the child as still starting, so the first wait can adopt it.
+        # An older process is a previous daemon, not this child. A lifecycle
+        # miss is inconclusive for this poll and must not abort startup.
+        spawned_created = windows_process_creation_time(expected_pid)
+        candidate_created = windows_process_creation_time(pid)
+        if (
+            isinstance(spawned_created, int)
+            and isinstance(candidate_created, int)
+            and candidate_created < spawned_created
+        ):
+            return False
+        from .start_classification import _pid_in_process_tree
+
+        token = bind_daemon_lifecycle_deadline(time.monotonic() + _SPAWNED_URL_POLL_LIFECYCLE_SECONDS)
+        try:
+            return _pid_in_process_tree(pid, expected_pid)
+        except (NativeDaemonLifecycleError, TimeoutError):
+            return False
+        finally:
+            reset_daemon_lifecycle_deadline(token)
+    return _guard_daemon_parent_pid(pid) == expected_pid
 
 
 def _guard_daemon_pid_is_proven_dead(pid: int) -> bool:
@@ -2894,15 +2930,26 @@ def _wait_for_guard_daemon_url(
 ) -> str | None:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        url = (
-            load_guard_daemon_url(guard_home)
-            if require_current_runtime
-            else _live_guard_daemon_url(
-                guard_home,
-                require_current_runtime=False,
-                expected_pid=expected_pid,
-            )
-        )
+        try:
+            if require_current_runtime:
+                url = load_guard_daemon_url(guard_home)
+            else:
+                # The spawned-launch check and the state gate share this resident.
+                # A missed answer has to stay inside the poll. Escaping here used
+                # to tear down a child that had already published state.
+                token = bind_daemon_lifecycle_deadline(
+                    min(deadline, time.monotonic() + _SPAWNED_URL_POLL_LIFECYCLE_SECONDS)
+                )
+                try:
+                    url = _live_guard_daemon_url(
+                        guard_home,
+                        require_current_runtime=False,
+                        expected_pid=expected_pid,
+                    )
+                finally:
+                    reset_daemon_lifecycle_deadline(token)
+        except (NativeDaemonLifecycleError, TimeoutError):
+            url = None
         if url is not None:
             return url
         if process is not None and process.poll() is not None:

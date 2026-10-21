@@ -259,7 +259,7 @@ pub trait SupplyChainStore {
     );
     /// `store.get_approval_request(request_id)` -> dict | None
     fn get_approval_request(&self, request_id: &str) -> Option<Value>;
-    /// `store.resolve_policy_decision_lookup(...) -> (decision, ignored_local_integrity)`
+    /// `store.resolve_policy_decision_lookup(...) -> (decision, ignored_local_integrity, error)`
     #[allow(clippy::too_many_arguments)]
     fn resolve_policy_decision_lookup(
         &self,
@@ -305,6 +305,9 @@ pub trait SupplyChainStore {
 pub struct PolicyDecisionLookup {
     pub decision: Option<Value>,
     pub ignored_local_integrity: Option<Value>,
+    /// Set when the lookup could not run. Absent after a successful lookup,
+    /// including one that found no saved decision.
+    pub error: Option<String>,
 }
 
 /// `.runtime.runner` seam.
@@ -640,6 +643,9 @@ pub struct GuardConfig {
     /// `harness_risk_actions` (config.py :419).
     pub harness_risk_actions:
         Option<std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>>,
+    /// `harness_postures` (config.py :421), canonically keyed as
+    /// `coerce_loaded_harness_postures` leaves them.
+    pub harness_postures: Option<std::collections::BTreeMap<String, String>>,
     /// `managed_policy_status` (config.py :426).
     pub managed_policy_status: String,
     /// `managed_policy_hash` (config.py :427).
@@ -1015,10 +1021,20 @@ impl Timestamp {
         let s = (day_secs % 60) as u32;
         (y, m, d, h, mi, s, micros)
     }
-    /// `datetime.isoformat()` — `+00:00` suffix, seconds precision.
+    /// `datetime.isoformat()` — `+00:00` suffix, `timespec="auto"`: six
+    /// fractional digits, left out only when the instant lands exactly on a
+    /// second. The fraction is not decoration. Rows stamped by this helper are
+    /// compared as text by SQLite, and `+` (0x2B) sorts below `.` (0x2E), so a
+    /// second-precision stamp reads as older than every microsecond-precision
+    /// stamp within the same second — which silently drops rows from
+    /// `occurred_at >= ?` windows Python opens with its own clock.
     pub fn isoformat(&self) -> String {
-        let (y, m, d, h, mi, s, _) = self.utc_parts();
-        format!("{y:04}-{m:02}-{d:02}T{h:02}:{mi:02}:{s:02}+00:00")
+        let (y, m, d, h, mi, s, micros) = self.utc_parts();
+        let date = format!("{y:04}-{m:02}-{d:02}T{h:02}:{mi:02}:{s:02}");
+        if micros == 0 {
+            return format!("{date}+00:00");
+        }
+        format!("{date}.{micros:06}+00:00")
     }
 }
 
@@ -1064,6 +1080,12 @@ pub const VALID_RISK_ACTION_KEYS: &[&str] = &[
     "guard_bypass",
     "cloud_advisory",
     "encoded_exfiltration",
+    "package_unknown",
+    "package_lockfile_drift",
+    "package_direct_source",
+    "package_custom_registry",
+    "package_install",
+    "low_trust_artifact",
 ];
 
 /// `DEFAULT_SECURITY_LEVEL` (config.py).
@@ -1153,7 +1175,8 @@ fn isoformat_utc(t: Timestamp) -> String {
     t.isoformat()
 }
 
-/// `datetime.now(tz=timezone.utc).isoformat()` — seconds precision, `+00:00`.
+/// `datetime.now(tz=timezone.utc).isoformat()` — microsecond precision,
+/// `+00:00`.
 pub fn utc_now_iso() -> String {
     Timestamp::now_utc().isoformat()
 }
@@ -1642,6 +1665,24 @@ pub fn resolve_risk_action(
     if !VALID_RISK_ACTION_KEYS.contains(&risk_class) {
         return None;
     }
+    let resolved = resolve_configured_risk_action(config, risk_class, harness);
+    if harness_posture_override(config, harness) == Some("extra_careful") {
+        // A per-harness Extra careful override only ever strengthens.
+        return stricter_risk_action(
+            resolved,
+            posture_risk_actions("extra_careful").and_then(|rows| rows.get(risk_class).cloned()),
+        );
+    }
+    resolved
+}
+
+/// The explicit-then-default half of `resolve_risk_action`, before the
+/// per-harness Extra careful floor.
+fn resolve_configured_risk_action(
+    config: &GuardConfig,
+    risk_class: &str,
+    harness: Option<&str>,
+) -> Option<String> {
     if let Some(h) = harness {
         if let Some(harness_map) = config.harness_risk_actions.as_ref() {
             if let Some(inner) = harness_map.get(h) {
@@ -1657,6 +1698,38 @@ pub fn resolve_risk_action(
         }
     }
     posture_or_level_defaults(config).get(risk_class).cloned()
+}
+
+/// `harness_posture.harness_posture_override` (:120-126) against the mirror.
+/// `runtime_harness_key` resolves a registered id or alias and otherwise falls
+/// back to the normalized name, so an unregistered harness simply matches no
+/// override.
+fn harness_posture_override<'a>(config: &'a GuardConfig, harness: Option<&str>) -> Option<&'a str> {
+    let raw = harness?;
+    let postures = config.harness_postures.as_ref()?;
+    let normalized = raw.trim().to_lowercase().replace('_', "-");
+    if normalized.is_empty() {
+        return None;
+    }
+    let key =
+        crate::harness_identity::canonical_harness_id(&normalized).unwrap_or(normalized.as_str());
+    postures.get(key).map(String::as_str)
+}
+
+/// `harness_posture.stricter_risk_action` (:209-214).
+fn stricter_risk_action(base: Option<String>, floor: Option<String>) -> Option<String> {
+    match (base, floor) {
+        (None, floor) => floor,
+        (base, None) => base,
+        (Some(base), Some(floor)) => Some(
+            crate::action_lattice::most_restrictive_guard_action(
+                &[Value::String(base), Value::String(floor)],
+                crate::effect_decision::GuardAction::Block,
+            )
+            .as_str()
+            .to_owned(),
+        ),
+    }
 }
 
 /// `_posture_or_level_defaults` (config.py :1053-1058).
@@ -1694,6 +1767,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "warn"),
                 ("cloud_advisory", "allow"),
                 ("encoded_exfiltration", "warn"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "warn"),
             ],
         ),
         (
@@ -1713,6 +1792,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "warn"),
                 ("cloud_advisory", "allow"),
                 ("encoded_exfiltration", "warn"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "warn"),
             ],
         ),
         (
@@ -1732,6 +1817,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "warn"),
                 ("encoded_exfiltration", "require-reapproval"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
         (
@@ -1751,6 +1842,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "require-reapproval"),
                 ("encoded_exfiltration", "block"),
+                ("package_unknown", "block"),
+                ("package_lockfile_drift", "require-reapproval"),
+                ("package_direct_source", "require-reapproval"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
         (
@@ -1770,6 +1867,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "block"),
                 ("encoded_exfiltration", "block"),
+                ("package_unknown", "block"),
+                ("package_lockfile_drift", "block"),
+                ("package_direct_source", "block"),
+                ("package_custom_registry", "block"),
+                ("package_install", "block"),
+                ("low_trust_artifact", "block"),
             ],
         ),
         (
@@ -1789,6 +1892,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "warn"),
                 ("encoded_exfiltration", "require-reapproval"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
     ];
@@ -1835,6 +1944,12 @@ fn posture_risk_rows(posture: &str) -> Option<&'static [(&'static str, &'static 
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "allow"),
                 ("encoded_exfiltration", "block"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
         (
@@ -1854,6 +1969,12 @@ fn posture_risk_rows(posture: &str) -> Option<&'static [(&'static str, &'static 
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "require-reapproval"),
                 ("encoded_exfiltration", "block"),
+                ("package_unknown", "require-reapproval"),
+                ("package_lockfile_drift", "require-reapproval"),
+                ("package_direct_source", "require-reapproval"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
     ];
@@ -2044,33 +2165,23 @@ pub fn build_supply_chain_status_payload(
     payload
 }
 
-/// `_build_package_manager_protection` (:3171-3190).
+/// `_build_package_manager_protection`: the resident's protection projection.
+///
+/// The shape and the "which detected managers are unprotected" rule live in
+/// [`crate::shims::package_shim_protection_from_status`]; this only supplies
+/// the dashboard status and the default shim directory.
 pub fn build_package_manager_protection(
     store: &dyn SupplyChainStore,
     shims: &dyn ShimsApi,
 ) -> Map<String, Value> {
     let home_dir = expand_tilde_inner(Path::new("~"));
-    let status = dict_payload(Some(&shims.package_shim_dashboard_status(
-        &home_dir,
-        None,
-        store.guard_home(),
-    )))
+    let guard_home = store.guard_home();
+    let status = dict_payload(Some(
+        &shims.package_shim_dashboard_status(&home_dir, None, guard_home),
+    ))
     .unwrap_or_default();
-    let managed = status
-        .get("managed")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let supported_managers = shims.package_shim_supported_managers();
-    let mut protection = Map::new();
-    protection.insert("managed".into(), json!(managed));
-    protection.insert("supported_managers".into(), json!(supported_managers));
-    if let Some(s) = status.get("state") {
-        protection.insert("state".into(), s.clone());
-    }
-    if let Some(s) = status.get("detail") {
-        protection.insert("detail".into(), s.clone());
-    }
-    protection
+    let default_shim_dir = guard_home.join("package-shims").join("bin");
+    crate::shims::package_shim_protection_from_status(&status, &default_shim_dir.to_string_lossy())
 }
 
 /// `_call_sync_with_optional_auth_context` — retries with refreshed auth when
@@ -2338,10 +2449,9 @@ fn oauth_entitlement(
 /// `_connect_state_entitlement` (:156) — reconnect verdict from the persisted
 /// guard-connect state when it asserts a failed/expired connect.
 fn connect_state_entitlement(
-    store: &dyn SupplyChainStore,
-    now: &Timestamp,
+    facts: &PackageFirewallEntitlementFacts,
 ) -> Option<Map<String, Value>> {
-    let oauth_payload = store.get_sync_payload("oauth_local_credentials");
+    let oauth_payload = facts.oauth_payload.clone();
     let oauth_fields = oauth_entitlement_fields_from_sync_payload(oauth_payload.as_ref());
     if let Some(fields) = &oauth_fields {
         if let Some(plan_id) = entitlement_optional_string(fields.get("supply_chain_plan_id")) {
@@ -2350,8 +2460,7 @@ fn connect_state_entitlement(
             }
         }
     }
-    let latest_state = store.get_effective_guard_connect_state(&now.isoformat());
-    let latest_state = latest_state.as_ref()?.as_object()?;
+    let latest_state = facts.connect_state.as_ref()?.as_object()?;
     let status = entitlement_optional_string(latest_state.get("status"));
     let milestone = entitlement_optional_string(latest_state.get("milestone"));
     let missing_oauth_after_success = status.as_deref() == Some("connected")
@@ -2428,10 +2537,9 @@ fn reconnect_required_entitlement(
 }
 
 /// `_connect_required_entitlement` (:214).
-fn connect_required_entitlement(store: &dyn SupplyChainStore) -> Map<String, Value> {
-    let oauth_payload = store.get_sync_payload("oauth_local_credentials");
+fn connect_required_entitlement(facts: &PackageFirewallEntitlementFacts) -> Map<String, Value> {
     let mut tier = "unknown".to_string();
-    if let Some(Value::Object(p)) = &oauth_payload {
+    if let Some(Value::Object(p)) = &facts.oauth_payload {
         if let Some(plan_id) = entitlement_optional_string(p.get("supply_chain_plan_id")) {
             tier = plan_id.to_lowercase();
         }
@@ -2453,11 +2561,11 @@ fn connect_required_entitlement(store: &dyn SupplyChainStore) -> Map<String, Val
 /// `_requires_guard_cloud_connect` (:229) — whether a fresh Guard Cloud
 /// connect is required before trusting the bundle/OAuth claim.
 fn requires_guard_cloud_connect(
-    store: &dyn SupplyChainStore,
+    facts: &PackageFirewallEntitlementFacts,
     bundle: Option<&Map<String, Value>>,
     _oauth: Option<&Map<String, Value>>,
 ) -> bool {
-    let oauth_health = store.get_oauth_local_credential_health();
+    let oauth_health = facts.oauth_health.clone();
     let oauth_configured = oauth_health
         .as_ref()
         .and_then(|h| h.get("configured"))
@@ -2467,11 +2575,10 @@ fn requires_guard_cloud_connect(
         .as_ref()
         .and_then(|h| h.get("state"))
         .and_then(Value::as_str);
-    let cloud_profile = store.get_cloud_sync_profile();
     if oauth_configured && oauth_state == Some("healthy") {
         return false;
     }
-    if cloud_profile.is_some() {
+    if facts.has_cloud_sync_profile {
         return false;
     }
     if oauth_configured {
@@ -2485,17 +2592,47 @@ fn requires_guard_cloud_connect(
             .unwrap_or(false))
 }
 
+/// Everything the entitlement resolution reads, gathered once.
+///
+/// The resolution itself is a pure function of these facts, so a caller that
+/// already holds the store rows — the resident answering a compose query for a
+/// hook or CLI flow — resolves the same entitlement without a store of its own.
+#[derive(Debug, Clone, Default)]
+pub struct PackageFirewallEntitlementFacts {
+    /// The `supply_chain_bundle_entitlement` sync payload.
+    pub bundle_payload: Option<Value>,
+    /// The `oauth_local_credentials` sync payload.
+    pub oauth_payload: Option<Value>,
+    /// The OAuth local-credential health record.
+    pub oauth_health: Option<Value>,
+    /// The effective Guard connect state as of `now`.
+    pub connect_state: Option<Value>,
+    /// A cloud sync profile exists for this home.
+    pub has_cloud_sync_profile: bool,
+}
+
 /// `resolve_package_firewall_entitlement` (:275) — read-only entitlement
 /// resolution. Ported 1:1 from Python.
 pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map<String, Value> {
     let now = Timestamp::now_utc();
-    let bundle = bundle_entitlement(
-        store
-            .get_sync_payload("supply_chain_bundle_entitlement")
-            .as_ref(),
-    );
-    let oauth_health = store.get_oauth_local_credential_health();
-    let oauth_payload = store.get_sync_payload("oauth_local_credentials");
+    let facts = PackageFirewallEntitlementFacts {
+        bundle_payload: store.get_sync_payload("supply_chain_bundle_entitlement"),
+        oauth_payload: store.get_sync_payload("oauth_local_credentials"),
+        oauth_health: store.get_oauth_local_credential_health().map(Value::Object),
+        connect_state: store.get_effective_guard_connect_state(&now.isoformat()),
+        has_cloud_sync_profile: store.get_cloud_sync_profile().is_some(),
+    };
+    resolve_package_firewall_entitlement_from_facts(&facts, &now)
+}
+
+/// The entitlement these facts resolve to at `now`.
+pub fn resolve_package_firewall_entitlement_from_facts(
+    facts: &PackageFirewallEntitlementFacts,
+    now: &Timestamp,
+) -> Map<String, Value> {
+    let bundle = bundle_entitlement(facts.bundle_payload.as_ref());
+    let oauth_health = facts.oauth_health.clone();
+    let oauth_payload = facts.oauth_payload.clone();
     // Python gates `oauth_fields` on a healthy credential so a degraded secret
     // cannot mint a paid/unpaid claim from stale metadata.
     let oauth_fields = if oauth_health
@@ -2508,8 +2645,8 @@ pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map
     } else {
         None
     };
-    let oauth = oauth_entitlement(oauth_fields.as_ref(), &now);
-    let connect_state = connect_state_entitlement(store, &now);
+    let oauth = oauth_entitlement(oauth_fields.as_ref(), now);
+    let connect_state = connect_state_entitlement(facts);
     let is_healthy_profile = oauth_health
         .as_ref()
         .and_then(|h| h.get("state"))
@@ -2524,7 +2661,7 @@ pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map
             return state;
         }
     }
-    if requires_guard_cloud_connect(store, bundle.as_ref(), oauth.as_ref()) {
+    if requires_guard_cloud_connect(facts, bundle.as_ref(), oauth.as_ref()) {
         if bundle
             .as_ref()
             .is_some_and(|b| b.get("allowed").and_then(Value::as_bool).unwrap_or(false))
@@ -2535,7 +2672,7 @@ pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map
                 oauth_payload.as_ref(),
             );
         }
-        return connect_required_entitlement(store);
+        return connect_required_entitlement(facts);
     }
     if bundle
         .as_ref()
@@ -2574,7 +2711,7 @@ pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map
     if let Some(o) = &oauth {
         return o.clone();
     }
-    connect_required_entitlement(store)
+    connect_required_entitlement(facts)
 }
 
 // ---------------------------------------------------------------------------
@@ -3184,7 +3321,6 @@ pub(crate) fn stored_package_policy_is_stale_policy_bundle_family(
 
 /// `.local_supply_chain._package_policy_workspace_candidates` (:2620-2637).
 /// Returns the ordered runtime workspace candidates for stored overrides.
-#[allow(dead_code)]
 fn package_policy_workspace_candidates(
     artifact: &GuardArtifact,
     artifact_hash: &str,
@@ -3555,6 +3691,7 @@ fn workspace_scan_intent(
         execution_context_hashes: Vec::new(),
         execution_context_cwds: Vec::new(),
         execution_context_reason_codes: Vec::new(),
+        routine_local_runner: false,
     })
 }
 
@@ -4288,15 +4425,19 @@ pub fn build_supply_chain_explain_payload(
 }
 
 /// `_package_evaluation_requires_external_archive_binding` (:1263-1285).
-#[allow(dead_code)]
-fn package_evaluation_requires_external_archive_binding(
+pub fn package_evaluation_requires_external_archive_binding(
     evaluation: &PackageRequestEvaluation,
 ) -> bool {
     let source_hashes = evaluation.external_archive_source_hashes();
-    if source_hashes
-        .iter()
-        .any(|h| h.as_str().is_some_and(|s| s.len() == 64))
-    {
+    if source_hashes.iter().any(|h| {
+        // Python measures the hash in characters, and Python is the authority
+        // this lane must agree with. Counting bytes instead moved the trigger
+        // in both directions -- a 64-character hash that encodes to more than
+        // 64 bytes stopped demanding a binding, and a 64-byte string shorter
+        // than 64 characters started demanding one. Neither is the digest this
+        // looks for; matching Python is the contract, not a tighter rule.
+        h.as_str().is_some_and(|s| s.chars().count() == 64)
+    }) {
         return true;
     }
     if evaluation
@@ -4523,11 +4664,20 @@ fn build_package_protect_authority(
     }))
 }
 
+const PACKAGE_POLICY_LOOKUP_ERROR: &str = "package_policy_lookup_error";
+
+fn evaluation_with_lookup_error(
+    evaluation: &PackageRequestEvaluation,
+    code: &str,
+) -> PackageRequestEvaluation {
+    evaluation.with_fields(&[(PACKAGE_POLICY_LOOKUP_ERROR, Value::String(code.to_string()))])
+}
+
 /// `_final_package_protect_authority` (:1497-1694).
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
 #[allow(dead_code)]
-fn final_package_protect_authority(
+pub(crate) fn final_package_protect_authority(
     initial: PackageProtectAuthority,
     initial_saved_evaluation: &PackageRequestEvaluation,
     saved_approval_pending: bool,
@@ -4572,6 +4722,7 @@ fn final_package_protect_authority(
     let mut saved_approval_claimed = false;
     let mut saved_approval_claim_disposition: Option<String> = None;
     let mut saved_approval_claim_failure: Option<PackageRequestEvaluation> = None;
+    let mut claim_lookup_error: Option<String> = None;
 
     let observe_mode = current_config
         .as_ref()
@@ -4594,17 +4745,22 @@ fn final_package_protect_authority(
             paths_api,
             approval_context_api,
         );
-        let claimed_action = protect_action_for_policy_action(Some(&Value::String(
-            claimed_resolution
-                .evaluation
-                .policy_action()
-                .unwrap_or_default(),
-        )));
-        if !is_execution_permitted(&claimed_action) {
+        if let Some(code) = claimed_resolution.lookup_error {
+            claim_lookup_error = Some(code);
             saved_approval_claim_failure = Some(claimed_resolution.evaluation);
         } else {
-            saved_approval_claimed = true;
-            saved_approval_claim_disposition = claimed_resolution.claim_disposition;
+            let claimed_action = protect_action_for_policy_action(Some(&Value::String(
+                claimed_resolution
+                    .evaluation
+                    .policy_action()
+                    .unwrap_or_default(),
+            )));
+            if !is_execution_permitted(&claimed_action) {
+                saved_approval_claim_failure = Some(claimed_resolution.evaluation);
+            } else {
+                saved_approval_claimed = true;
+                saved_approval_claim_disposition = claimed_resolution.claim_disposition;
+            }
         }
     }
 
@@ -4713,19 +4869,20 @@ fn final_package_protect_authority(
     ));
 
     if let Some(failure_eval) = saved_approval_claim_failure {
-        return Ok((
-            current.clone(),
-            PackageRequestEvaluation::new(Value::Object(
-                ppo::package_evaluation_with_current_policy_action(
-                    eval_api,
-                    failure_eval.value.as_object().map_or(&*EMPTY_MAP, |m| m),
-                    normalize_guard_action(
-                        current.current_action.as_ref().unwrap_or(&Value::Null),
-                        GuardAction::Block,
-                    ),
+        let mut evaluation = PackageRequestEvaluation::new(Value::Object(
+            ppo::package_evaluation_with_current_policy_action(
+                eval_api,
+                failure_eval.value.as_object().map_or(&*EMPTY_MAP, |m| m),
+                normalize_guard_action(
+                    current.current_action.as_ref().unwrap_or(&Value::Null),
+                    GuardAction::Block,
                 ),
-            )),
+            ),
         ));
+        if let Some(code) = claim_lookup_error {
+            evaluation = evaluation_with_lookup_error(&evaluation, &code);
+        }
+        return Ok((current.clone(), evaluation));
     }
 
     if current.observe_mode {
@@ -4756,7 +4913,7 @@ fn final_package_protect_authority(
                 )),
             ));
         }
-        let refreshed_saved_policy = apply_stored_package_policy_override(
+        let refreshed = apply_stored_package_policy_override(
             &current_evaluation,
             store,
             &current.artifact,
@@ -4771,6 +4928,15 @@ fn final_package_protect_authority(
             paths_api,
             approval_context_api,
         );
+        if let Some(code) = refreshed.lookup_error.as_deref() {
+            // The claim was already taken. A failed re-read is not confirmation
+            // that the saved allow still applies, so the review evaluation stands.
+            return Ok((
+                current,
+                evaluation_with_lookup_error(&current_evaluation, code),
+            ));
+        }
+        let refreshed_saved_policy = refreshed.evaluation;
         if ppo::evaluation_uses_saved_package_approval(&refreshed_saved_policy.value) {
             return Ok((current, refreshed_saved_policy));
         }
@@ -4873,7 +5039,7 @@ fn final_package_protect_authority(
         ));
     }
 
-    let resolved = apply_stored_package_policy_override(
+    let applied = apply_stored_package_policy_override(
         &current_evaluation,
         store,
         &current.artifact,
@@ -4888,6 +5054,13 @@ fn final_package_protect_authority(
         paths_api,
         approval_context_api,
     );
+    if let Some(code) = applied.lookup_error.as_deref() {
+        return Ok((
+            current,
+            evaluation_with_lookup_error(&current_evaluation, code),
+        ));
+    }
+    let resolved = applied.evaluation;
     if ppo::evaluation_uses_saved_package_approval(&resolved.value) {
         let reuse = evaluate_approval_reuse(
             &current.current_action.clone().unwrap_or(Value::Null),
@@ -5283,8 +5456,7 @@ fn build_package_execution_context(
 
 /// `approval_scope_support.package_request_runtime_workspace_scope` —
 /// return the only workspace identity valid for a package-policy lookup.
-#[allow(dead_code)]
-fn package_request_runtime_workspace_scope(
+pub fn package_request_runtime_workspace_scope(
     artifact_id: Option<&str>,
     artifact_hash: Option<&str>,
     artifact_type: Option<&str>,
@@ -5530,6 +5702,7 @@ fn compose_current_package_policy_action(
 struct StoredPackagePolicyResolution {
     evaluation: PackageRequestEvaluation,
     claim_disposition: Option<String>,
+    lookup_error: Option<String>,
 }
 
 /// `_resolve_stored_package_policy_override` — attempt to claim a saved
@@ -5543,74 +5716,133 @@ fn resolve_stored_package_policy_override(
     artifact_hash: &str,
     workspace_dir: &Path,
     now: &str,
-    _execution_context: Option<&PackageExecutionContext>,
+    execution_context: Option<&PackageExecutionContext>,
     _current_action: Option<&Value>,
     claim_saved_approval: bool,
     _intent_parser: &dyn PackageIntentParserApi,
     _eval_api: &dyn PackageEvalApi,
-    _paths_api: &dyn PathSupportApi,
+    paths_api: &dyn PathSupportApi,
     approval_context_api: &dyn ApprovalContextApi,
 ) -> StoredPackagePolicyResolution {
-    // Look up the saved approval for this artifact.
-    let lookup = store.resolve_policy_decision_lookup(
-        &artifact.artifact_id,
-        artifact.artifact_id.as_str(),
-        Some(artifact_hash),
-        workspace_dir.to_string_lossy().as_ref(),
-        artifact.publisher.as_deref(),
-        now,
-        false,
+    let unchanged = || StoredPackagePolicyResolution {
+        evaluation: evaluation.clone(),
+        claim_disposition: None,
+        lookup_error: None,
+    };
+    // `native_package_policy_resolve._hydrate` — probe the workspace
+    // identities a package-policy lookup may answer for, in order, and take
+    // the first saved decision. The only valid identity is the runtime
+    // workspace scope token, never the workspace path itself.
+    let workspaces = package_policy_workspace_candidates(
+        artifact,
+        artifact_hash,
+        workspace_dir,
+        execution_context,
+        paths_api,
     );
-    let Some(saved) = lookup.decision else {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: None,
-        };
+    let mut saved_decision: Option<Value> = None;
+    for workspace in &workspaces {
+        let lookup = store.resolve_policy_decision_lookup(
+            &artifact.harness,
+            artifact.artifact_id.as_str(),
+            Some(artifact_hash),
+            workspace,
+            artifact.publisher.as_deref(),
+            now,
+            false,
+        );
+        if let Some(code) = lookup.error.as_deref() {
+            // A store failure is not an empty lookup. The review verdict
+            // stands. The event is written when the store can take it; the
+            // code is also returned, because this same store may be unable
+            // to record the event.
+            store.add_event(
+                "package_policy_lookup_failed",
+                &json!({ "code": code }),
+                now,
+            );
+            return StoredPackagePolicyResolution {
+                evaluation: evaluation.clone(),
+                claim_disposition: None,
+                lookup_error: Some(code.to_string()),
+            };
+        }
+        // A row whose local integrity did not verify stops the probe: Python
+        // hands that case to the daemon authority, which this lane has no seam
+        // for, so the review verdict stands rather than a row being reused on
+        // unverified integrity.
+        if lookup.ignored_local_integrity.is_some() {
+            return unchanged();
+        }
+        if lookup.decision.is_some() {
+            saved_decision = lookup.decision;
+            break;
+        }
+    }
+    let Some(saved) = saved_decision else {
+        return unchanged();
     };
     if !claim_saved_approval {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: None,
-        };
+        return unchanged();
     }
     // Attempt to claim the saved approval — verify artifact-hash match and
     // freshness via the approval_context seam.
     let decision_id = saved.get("decision_id").and_then(Value::as_i64);
     let Some(did) = decision_id else {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: None,
-        };
+        return unchanged();
     };
+    // Only a saved allow is reused. A row recording any other action is read
+    // by the saved-policy lanes that own it, never claimed as an approval.
+    if saved.get("action").and_then(Value::as_str) != Some("allow") {
+        return unchanged();
+    }
     let saved_hash = saved.get("artifact_hash").and_then(Value::as_str);
     if saved_hash != Some(artifact_hash) {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: Some("artifact_hash_mismatch".to_string()),
-        };
+        return unchanged();
     }
     // Check freshness — expiry, approval-context token, etc.
-    if let Some(reason) = approval_context_api.approval_context_tokens_validation_reason(
-        saved.get("artifact_hash").unwrap_or(&Value::Null),
-        &Value::String(artifact_hash.to_string()),
-    ) {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: Some(reason),
-        };
+    if approval_context_api
+        .approval_context_tokens_validation_reason(
+            saved.get("artifact_hash").unwrap_or(&Value::Null),
+            &Value::String(artifact_hash.to_string()),
+        )
+        .is_some()
+    {
+        return unchanged();
+    }
+    // The disposition the row reports is the store's, and only the two values
+    // the caller's vocabulary carries: a single-use row reads as `consumed`,
+    // a durable one as `retained`.
+    let disposition = match store.approval_reuse_claim_disposition(&saved).as_deref() {
+        Some(value @ ("consumed" | "retained")) => Some(value.to_owned()),
+        _ => None,
+    };
+    // The store claims the row before the evaluation reports the approval
+    // (`_run_claim`, kind `store`). A refused claim — another caller took the
+    // single-use row, or the row no longer stands — leaves the review verdict
+    // the package lane settled, so an unclaimed row is never read as approved.
+    if !store.claim_approval_reuse_decision(&saved, now) {
+        return unchanged();
     }
     // Apply the saved approval — rewrite decision fields.
-    let eval_mut = evaluation.clone();
-    eval_mut.with_fields(&[
+    let claimed = evaluation.with_fields(&[
         ("decision", json!("allow")),
         ("policy_action", json!("allow")),
         ("saved_approval_applied", Value::Bool(true)),
         ("saved_approval_decision_id", json!(did)),
     ]);
     StoredPackagePolicyResolution {
-        evaluation: eval_mut,
-        claim_disposition: Some("claimed".to_string()),
+        evaluation: claimed,
+        claim_disposition: disposition,
+        lookup_error: None,
     }
+}
+
+/// A stored package-policy override. `lookup_error` is set when the lookup
+/// could not run; `evaluation` is then the review verdict unchanged.
+pub struct AppliedStoredPackagePolicy {
+    pub evaluation: PackageRequestEvaluation,
+    pub lookup_error: Option<String>,
 }
 
 /// `_apply_stored_package_policy_override` — claim the saved approval when the
@@ -5630,8 +5862,8 @@ pub fn apply_stored_package_policy_override(
     eval_api: &dyn PackageEvalApi,
     paths_api: &dyn PathSupportApi,
     approval_context_api: &dyn ApprovalContextApi,
-) -> PackageRequestEvaluation {
-    resolve_stored_package_policy_override(
+) -> AppliedStoredPackagePolicy {
+    let resolved = resolve_stored_package_policy_override(
         evaluation,
         store,
         artifact,
@@ -5645,8 +5877,11 @@ pub fn apply_stored_package_policy_override(
         eval_api,
         paths_api,
         approval_context_api,
-    )
-    .evaluation
+    );
+    AppliedStoredPackagePolicy {
+        evaluation: resolved.evaluation,
+        lookup_error: resolved.lookup_error,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -5821,8 +6056,7 @@ fn package_policy_gate_context(
 /// local mirror does not model yet (`artifact_actions`, `publisher_actions`,
 /// `harness_actions`, `sandbox_analysis`, `resolve_action_override`, `mode`)
 /// ride through `config.extra` until the full config port lands.
-#[allow(dead_code)]
-fn package_config_policy_context(
+pub fn package_config_policy_context(
     artifact: &GuardArtifact,
     config: Option<&GuardConfig>,
 ) -> Map<String, Value> {
@@ -6438,7 +6672,7 @@ fn build_package_protect_payload(
         ));
     }
 
-    let (final_authority, final_evaluation) = final_package_protect_authority(
+    let (final_authority, mut final_evaluation) = final_package_protect_authority(
         authority.clone(),
         &evaluation,
         ppo::evaluation_uses_saved_package_approval(&evaluation.value),
@@ -6456,6 +6690,13 @@ fn build_package_protect_payload(
         paths_api,
         approval_context_api,
     )?;
+    if let Some(code) = final_evaluation
+        .value
+        .as_object_mut()
+        .and_then(|fields| fields.remove(PACKAGE_POLICY_LOOKUP_ERROR))
+    {
+        payload.insert(PACKAGE_POLICY_LOOKUP_ERROR.to_owned(), code);
+    }
     let final_execution_action =
         package_execution_policy_action(&final_authority, &final_evaluation);
     if !is_execution_permitted(&final_execution_action) {

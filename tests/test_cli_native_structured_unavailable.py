@@ -181,6 +181,7 @@ def _native_success_result() -> tuple[dict[str, object], int]:
     return {
         "decision": "allow",
         "model_output_action": "allow_original",
+        "output_masked": False,
         "reason": "native edge allowed",
         "reason_code": "native_allow",
         "reviewed_output_sha256": "a" * 64,
@@ -233,6 +234,8 @@ def test_cli_native_success_projects_worker_structured_mediation_without_mutatin
     assert response["model_output_action"] == "allow_original"
     assert response["reviewed_output_sha256"] == "a" * 64
     assert response["reviewed_excerpt"] == "native output"
+    assert response["native_edge_output_masked"] is False
+    assert response["decision"] == "allow"
     assert response["existing_field"] == "preserved"
 
 
@@ -306,3 +309,13 @@ def test_cli_native_unavailable_preserves_native_recording_posture(
     assert rc == 0
     assert response["decision"] == decision
     assert response["reason_code"] == reason_code
+
+
+def test_cli_native_edge_reply_without_a_masking_answer_withholds_the_output() -> None:
+    # The edge decides masking. A reply this build cannot read its answer from
+    # keeps the output away from the model rather than guessing from the words
+    # that happen to be present.
+    response = _project_worker_result({"decision": "allow", "model_output_action": "allow_original"})
+
+    assert response["native_edge_output_masked"] is True
+    assert response["decision"] == "block"

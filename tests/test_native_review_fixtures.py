@@ -38,12 +38,23 @@ def _edge(harness: str, *, url: str = "https://example.test", action_type: str =
     }
 
 
+# The root payload keys a harness's retry replaces for the same action, as in
+# `request_payload_identity` (rust/crates/guard-runtime/src/edge_identity.rs).
+TRANSPORT_CALL_ID_KEYS = {
+    "pi": ("tool_call_id",),
+    "omp": ("tool_call_id",),
+    "claude-code": ("tool_use_id",),
+    "codex": ("tool_use_id",),
+}
+
+
 def request_digest_for_fixture(harness: str, payload: object, workspace: object) -> str:
     """Shared receipt fixture implementation, not a pytest test function."""
     semantic = dict(payload) if isinstance(payload, dict) else payload
     if isinstance(semantic, dict):
-        if harness in {"pi", "omp"} and isinstance(semantic.get("session_id"), str) and semantic["session_id"]:
-            semantic.pop("tool_call_id", None)
+        if isinstance(semantic.get("session_id"), str) and semantic["session_id"]:
+            for key in TRANSPORT_CALL_ID_KEYS.get(harness, ()):
+                semantic.pop(key, None)
         for key in (
             "event",
             "eventName",

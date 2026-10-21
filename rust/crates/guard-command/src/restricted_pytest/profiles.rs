@@ -1,6 +1,7 @@
 //! Native OS policy construction for a contained launch plan.
 use super::authority::{ancestor_paths, dedupe_parent_paths, runtime_roots};
 use super::credentials::{denials, patterns, seatbelt_string};
+use super::framework_grants::{framework_grants, sealed_on_disk, FrameworkGrants};
 use super::*;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -24,10 +25,21 @@ struct Input {
     linked_git: Option<super::workspace_linked::LinkedGit>,
     #[serde(rename = "search_path")]
     _search_path: String,
+    /// `workspace-contained-grant-v1` only: the plan's grant capabilities.
+    capabilities: Vec<String>,
+    /// `workspace-contained-grant-v1` only: the home a state directory must
+    /// sit in; without it no state capability composes.
+    home: Option<PathBuf>,
 }
 
+#[cfg(test)]
+#[path = "workspace_grant_profile_tests.rs"]
+mod workspace_grant_profile_tests;
 #[path = "workspace_profile.rs"]
 pub(super) mod workspace_profile;
+#[cfg(test)]
+#[path = "workspace_profile_loopback_tests.rs"]
+mod workspace_profile_loopback_tests;
 #[cfg(test)]
 #[path = "workspace_profile_tests.rs"]
 mod workspace_profile_tests;
@@ -129,8 +141,30 @@ fn collection_link_metadata(input: &Input) -> Result<Vec<PathBuf>, RestrictedPyt
 }
 
 fn macos_profile(input: &Input) -> Result<String, RestrictedPytestError> {
+    // Capabilities widen only the grant profile; on any other they are refused.
+    if !input.capabilities.is_empty()
+        && input.profile_version != super::workspace_grant::GRANT_PROFILE
+    {
+        return Err(RestrictedPytestError::new(
+            PYTEST_INVALID_COMMAND_REASON_CODE,
+            "Invalid restricted execution request.",
+        ));
+    }
     if input.profile_version == WORKSPACE_CONTAINED_PROFILE {
         return workspace_profile::compose(input, &existing(MAC_ROOTS), &existing(MAC_FILES));
+    }
+    if input.profile_version == super::workspace_grant::GRANT_PROFILE {
+        let rules = super::workspace_grant::rules(
+            &input.capabilities,
+            &input.read_only_roots,
+            input.home.as_deref(),
+        )?;
+        return workspace_profile::compose_with(
+            input,
+            &existing(MAC_ROOTS),
+            &existing(MAC_FILES),
+            &rules,
+        );
     }
     let mut files = existing(MAC_FILES);
     if matches!(
@@ -201,6 +235,34 @@ fn compose_macos_profile(
         .filter(|p| !path_is_within(p, &input.workspace))
         .cloned()
         .collect();
+    // A framework interpreter re-execs a binary beside itself, so its version
+    // directory is granted as a subpath and the privileged names are denied
+    // back out; everything else stays an exec list of the binaries themselves.
+    // A version root is granted as a subpath only when no one but root can
+    // write it; otherwise its executables, and the interpreter its stub
+    // re-execs, keep literal grants below.
+    let FrameworkGrants {
+        roots: framework_roots,
+        interpreters,
+    } = framework_grants(
+        &input.allowed_executables,
+        &input.workspace,
+        &writes,
+        sealed_on_disk,
+    );
+    let mut named: Vec<PathBuf> = input
+        .allowed_executables
+        .iter()
+        .filter(|path| !path_is_within_any(path, &framework_roots))
+        .cloned()
+        .collect();
+    named.extend(interpreters);
+    if named.is_empty() && framework_roots.is_empty() {
+        return Err(RestrictedPytestError::new(
+            PYTEST_INVALID_COMMAND_REASON_CODE,
+            "Contained run has no executable to allow.",
+        ));
+    }
     let mut lines = vec![
         "(version 1)".to_owned(),
         "(deny default)".to_owned(),
@@ -208,7 +270,17 @@ fn compose_macos_profile(
         "(allow process-fork)".to_owned(),
         format!(
             "(allow process-exec {})",
-            filter(&input.allowed_executables, "literal")
+            // An allow with no filter at all allows every exec, so a run with
+            // nothing to execute denies instead.
+            [
+                filter(&named, "literal"),
+                filter(&framework_roots, "subpath")
+            ]
+            .iter()
+            .filter(|part| !part.is_empty())
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(" ")
         ),
         "(allow signal (target self) (target children))".to_owned(),
         "(allow sysctl-read)".to_owned(),
@@ -227,6 +299,22 @@ fn compose_macos_profile(
             filter(&writes, "subpath")
         ),
     ];
+    // Granting a directory rather than a list of binaries would otherwise let
+    // a command reach a privileged name inside it, so the exec grant for a
+    // framework carries the same denial the workspace profile uses.
+    if !framework_roots.is_empty() {
+        let position = lines
+            .iter()
+            .position(|line| line.starts_with("(allow process-exec "))
+            .unwrap_or(lines.len() - 1);
+        lines.insert(
+            position + 1,
+            format!(
+                "(deny process-exec {})",
+                filter(&workspace_profile::privileged_executables(), "literal")
+            ),
+        );
+    }
     if !immutable.is_empty() {
         lines.push(format!(
             "(deny file-write* {})",
@@ -253,7 +341,10 @@ pub(super) fn replay_profile(input: &Value, grants: &Value) -> Value {
 fn bubblewrap_argv(input: &Input) -> Result<Vec<String>, RestrictedPytestError> {
     // A non-read-only profile gets a writable workspace here, which would drop
     // this profile's protected paths. Linux containment is a separate change.
-    if input.profile_version == WORKSPACE_CONTAINED_PROFILE {
+    if input.profile_version == WORKSPACE_CONTAINED_PROFILE
+        || input.profile_version == super::workspace_grant::GRANT_PROFILE
+        || !input.capabilities.is_empty()
+    {
         return Err(RestrictedPytestError::new(
             PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
             "The workspace sandbox profile is not available on Linux.",

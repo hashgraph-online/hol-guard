@@ -32,6 +32,8 @@ mod business_source_tests;
 mod command_authority_tests;
 #[path = "policy_store_command_floor_tests.rs"]
 mod command_floor_tests;
+#[path = "policy_store_command_pack_tests.rs"]
+mod command_pack_tests;
 #[path = "policy_store_fault_tests.rs"]
 mod fault_tests;
 #[path = "policy_store_fixture_tests.rs"]
@@ -102,7 +104,8 @@ pub(super) fn signed_snapshot_with_policy(
         command_extensions: None,
         business_policy: None,
         issued_at_ms: now_ms().unwrap().saturating_sub(1),
-        expires_at_ms: now_ms().unwrap() + 60_000,
+        // Long enough that a loaded runner cannot outlast it mid-test.
+        expires_at_ms: now_ms().unwrap() + 3_600_000,
         integrity: SnapshotIntegrityV3 {
             algorithm: POLICY_SNAPSHOT_INTEGRITY_ALGORITHM.into(),
             key_id: verifier_key_id(key),

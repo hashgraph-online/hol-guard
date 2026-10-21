@@ -149,6 +149,14 @@ fn current_action(query: &ConsumerCurrentActionQueryV1) -> Value {
     } else {
         decide_action(query, query.changed)
     };
+    // A low registry trust score raises an unconfigured artifact's fresh
+    // decision; a saved approval still applies in the runtime decision.
+    let base = match canonical(&query.low_trust_action) {
+        Some(low_trust) if unconfigured && (query.first_seen || query.changed) => {
+            stricter(base, low_trust)
+        }
+        _ => base,
+    };
     let scanner = verdict.guard_action();
     let current = floor(stricter(base, scanner));
     json!({

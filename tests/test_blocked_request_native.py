@@ -56,6 +56,11 @@ def test_native_review_defaults_to_safe_alternative(
     assert "safe, permitted alternative" not in reason
     # The agent hands the queued request's link to the user.
     request_id = store.list_approval_requests(status="pending")[0]["request_id"]
+    # Only the OMP extension waits for the approval and resumes the agent.
+    if harness == "omp":
+        assert response["approval_resume"] == {"request_id": request_id, "poll_path": f"/v1/requests/{request_id}"}
+    else:
+        assert "approval_resume" not in response
     if harness == "codex":
         # Codex gets only signed loopback links, and this daemon has no token to sign with.
         assert "could not create a signed approval link" in reason
@@ -84,11 +89,16 @@ def test_malformed_config_denies_review_without_prompt(tmp_path, monkeypatch):
     worker.close()
 
 
-def test_unbound_native_review_does_not_tell_the_agent_to_wait(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("exact_allowable", [False, True])
+def test_unbound_native_review_does_not_tell_the_agent_to_wait(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, exact_allowable: bool
+) -> None:
     # git push and local scripts get no retry binding, so a one-time approval cannot let the agent's retry run.
     from codex_plugin_scanner.guard.daemon import hook_native_review_approval
 
     monkeypatch.setattr(hook_native_review_approval, "native_review_binding", lambda *_args, **_kwargs: None)
+    exact = ("exact-token", None) if exact_allowable else (None, "no exact action")
+    monkeypatch.setattr(hook_native_review_approval, "native_exact_action", lambda **_kwargs: exact)
     worker, store = _worker(tmp_path, monkeypatch, _edge("omp"), ask=False)
     response = worker.review_http_payload(
         payload={
@@ -106,7 +116,18 @@ def test_unbound_native_review_does_not_tell_the_agent_to_wait(tmp_path: Path, m
     assert_silent_review_recorded(store)
     pending = store.list_approval_requests(status="pending")
     assert pending and pending[0]["artifact_hash"] == pending[0]["request_id"]
+    # A one-time approval cannot release the retry, so nothing resumes the agent.
+    assert "approval_resume" not in response
     reason = response.get("reason") or response["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "will not let you run it" in reason
     assert "Do not retry the same action until it is approved" not in reason
+    if exact_allowable:
+        # Always allow exact action can still let the retry run, so the user gets the row's link.
+        assert 'only "Always allow exact action" will' in reason
+        assert "Open HOL Guard to approve or keep this blocked:" in reason
+        assert f"/requests/{pending[0]['request_id']}" in reason
+    else:
+        # No approval can let it run, so nothing sends the user to approve it.
+        assert "approving it there will not let you run it" in reason
+        assert "Open HOL Guard to approve" not in reason
+        assert pending[0]["request_id"] not in reason
     worker.close()

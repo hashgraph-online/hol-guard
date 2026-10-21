@@ -243,20 +243,29 @@ fn single_quoted_pattern_anchors_do_not_change_containment() {
         .reason_code
     };
     let contained = "native_workspace_containment_required";
-    for (anchored, plain) in [
+    // An `awk` that reads only its piped input names no file, so its proof
+    // allows it before any sandbox route runs.
+    let piped = "native_exact_safe_command";
+    for (anchored, plain, macos) in [
         (
             "awk 'f&&c<=22{print;c++} /app-shell.ts., .$/{f=1}' notes.txt",
             "awk 'f&&c<=22{print;c++} /app-shell.ts/{f=1}' notes.txt",
+            contained,
         ),
-        ("awk '{print $1}' notes.txt", "awk '{print}' notes.txt"),
+        (
+            "awk '{print $1}' notes.txt",
+            "awk '{print}' notes.txt",
+            contained,
+        ),
         (
             "printf 'a\\n' | awk '/a$/{f=1} END{print f}'",
             "printf 'a\\n' | awk '/a/{f=1} END{print f}'",
+            piped,
         ),
     ] {
         let plain_reason = reason(plain);
         if cfg!(target_os = "macos") {
-            assert_eq!(plain_reason, contained, "{plain}");
+            assert_eq!(plain_reason, macos, "{plain}");
         }
         assert_eq!(reason(anchored), plain_reason, "{anchored}");
     }

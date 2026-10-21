@@ -4,6 +4,18 @@
 //! proofs gave on the same tree. The two machine-dependent engines (launch
 //! identity, package intent) are replaced by the deterministic fakes the
 //! recorder used, so only the proofs under test can differ.
+//!
+//! Where the resident deliberately departs from the retired implementation,
+//! the recorded answer is updated with it and the departure is argued in the
+//! change that makes it; re-running the recorder would restore the old answer,
+//! so it is not the way to resolve a difference. The tool-target family departs
+//! in three places: the bytes a write tool puts into the file it names no
+//! longer bind the approval, paging and formatting options no longer bind a
+//! read, and one file a read tool names outside the workspace is a scope an
+//! approval can cover. A directory outside it still is not, neither is any
+//! path a search tool is given to walk, and neither is a write out there: the
+//! bytes are not part of the identity, so naming only the path would let one
+//! allow answer for every later edit of a shell profile or a launch agent.
 
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -16,11 +28,16 @@ use guard_contracts::{NativeExactActionPayloadV1, NativeExactActionRequestV1};
 use serde_json::{json, Value};
 
 use super::context::{Engines, EvidenceFile, LocalExecution};
-use super::{decide, token};
+use super::{decide_with, token, Fallback};
+#[path = "native_exact_action_v2_vectors.rs"]
+mod v2_vectors;
+#[path = "native_exact_action_v4_vectors.rs"]
+mod v4_vectors;
 
 const VECTORS: &[u8] = include_bytes!("../tests/fixtures/native_exact_action_vectors.json.gz");
 
 struct Fake {
+    #[cfg_attr(windows, allow(dead_code))]
     root: String,
     intent: Value,
 }
@@ -209,6 +226,16 @@ fn first_difference(got: &Value, want: &Value) -> String {
     format!(": {} != {}", clip(got), clip(want))
 }
 
+fn ordinary_review_binding(request: &Value, engines: &Fake) -> Option<String> {
+    let mut request = request.clone();
+    request["query"]["facts"]["action_type"] = json!("shell");
+    let request: NativeExactActionRequestV1 = serde_json::from_value(request).unwrap();
+    match decide_with(&request, engines, Fallback::Strict) {
+        Ok(NativeExactActionPayloadV1::ReviewBinding { binding }) => binding,
+        _ => None,
+    }
+}
+
 fn run_case(case: &Value) -> Result<(), String> {
     let scratch = Scratch::new();
     let root = scratch.0.to_str().unwrap().to_owned();
@@ -225,11 +252,25 @@ fn run_case(case: &Value) -> Result<(), String> {
         root,
         intent: concrete["intent"].clone(),
     };
-    let expected = &concrete["expected"];
-    let payload = decide(&request, &engines).map_err(|code| format!("error {code}"))?;
+    let expected = v2_vectors::expected(&concrete);
+    let payload = decide_with(&request, &engines, Fallback::Strict)
+        .map_err(|code| format!("error {code}"))?;
     match payload {
+        NativeExactActionPayloadV1::BashSubject { .. }
+        | NativeExactActionPayloadV1::LaunchEvidence { .. } => {
+            Err("legacy identity vector unexpectedly returned a Bash subject".into())
+        }
         NativeExactActionPayloadV1::ReviewBinding { binding } => {
-            let want = expected["binding"].as_str().map(str::to_owned);
+            let mut want = expected["binding"].as_str().map(str::to_owned);
+            if want.is_none() && concrete["request"]["query"]["facts"]["action_type"] == "package" {
+                // Package reviews now get the retry binding of any other
+                // review (docs/guard/approval-invariant.md); the recorded
+                // Python left them unbound.
+                want = ordinary_review_binding(&concrete["request"], &engines);
+                if want.is_none() {
+                    return Err("an ordinary review has no binding".into());
+                }
+            }
             (binding == want)
                 .then_some(())
                 .ok_or(format!("binding {binding:?} != {want:?}"))
@@ -238,23 +279,34 @@ fn run_case(case: &Value) -> Result<(), String> {
             token: minted,
             once_only_reason,
         } => {
-            let want_reason = expected["once_only_reason"].as_str().map(str::to_owned);
-            if once_only_reason != want_reason
-                || minted.is_some() != expected["token_present"].as_bool().unwrap()
-            {
+            let migrated = v4_vectors::migrated(&concrete, &expected);
+            let want_reason = if migrated {
+                Some("script_execution_binding_unavailable".to_owned())
+            } else {
+                expected["once_only_reason"].as_str().map(str::to_owned)
+            };
+            let want_token = !migrated && expected["token_present"].as_bool().unwrap();
+            if once_only_reason != want_reason || minted.is_some() != want_token {
                 return Err(format!(
                     "reason {once_only_reason:?} != {want_reason:?} (token {})",
                     minted.is_some()
                 ));
             }
-            if minted.is_none() {
+            if minted.is_none() && !migrated {
                 return Ok(());
+            }
+            let deadline = Instant::now() + Duration::from_secs(20);
+            let observed = token::exact_action_components(&request.query, deadline, &engines);
+            if migrated && !expected["token_present"].as_bool().unwrap() {
+                return match observed {
+                    Err(reason) if Some(reason) == expected["once_only_reason"].as_str() => Ok(()),
+                    Err(reason) => Err(format!("prior inventory refusal changed: {reason}")),
+                    Ok(_) => Err("prior incomplete inventory unexpectedly became complete".into()),
+                };
             }
             let mut wanted = expected["components"].clone();
             resolve_digests(&mut wanted);
-            let deadline = Instant::now() + Duration::from_secs(20);
-            let components = token::exact_action_components(&request.query, deadline, &engines)
-                .map_err(|reason| reason.to_owned())?;
+            let components = observed.map_err(|reason| reason.to_owned())?;
             for (name, got) in [
                 ("identity", &components.identity),
                 ("content", &components.content),
@@ -271,9 +323,18 @@ fn run_case(case: &Value) -> Result<(), String> {
     }
 }
 
+/// The recorded trees and requests are POSIX: `:`-separated `PATH`s, `/`-rooted
+/// paths and symlinks. The proofs model POSIX path semantics, so on Windows
+/// no launch is proven (`a_windows_launch_falls_back_to_the_command_hash`).
+#[cfg_attr(
+    not(unix),
+    ignore = "POSIX-recorded vectors; Windows launches are never proven"
+)]
 #[test]
 fn matches_vectors_recorded_from_python() {
     let cases = load();
+    v2_vectors::validate(&cases);
+    v4_vectors::validate(&cases);
     assert!(cases.len() > 600, "fixture shrank to {}", cases.len());
     let failures: Vec<String> = cases
         .iter()
@@ -297,75 +358,47 @@ fn matches_vectors_recorded_from_python() {
     );
 }
 
-fn resident(request: &Value) -> Value {
-    let wrapped = json!({"operation": "native_exact_action", "request": request});
-    let bytes =
-        crate::resident_protocol::evaluate_resident_bytes(wrapped.to_string().as_bytes(), None)
-            .unwrap();
-    serde_json::from_slice(&bytes).unwrap()
-}
-
-fn binding_request(schema: &str) -> Value {
-    json!({
-        "schema": schema,
-        "request_id": "req-binding",
-        "query": {
-            "kind": "review_binding", "harness": "codex", "command": "cat notes", "workspace_bound": true,
-            "facts": {"decision": "ask", "minimum_action": "review", "policy_action": "review", "reason_code": "r"},
-            "receipt": {
-                "schema": "guard-native-hook-decision-receipt.v1", "version": 1, "authority": "rust",
-                "harness": "codex", "event_name": "PreToolUse", "workspace_bound": true,
-                "request_digest": "ab".repeat(32), "decision": "ask", "policy_action": "review", "reason_code": "r"
-            },
-            "policy_binding": {"state": "unbound"}
-        }
-    })
-}
-
+/// The identity proofs bind `/`-rooted spellings, so on Windows a launch is
+/// never proven. The approval still persists under the command hash.
+#[cfg(windows)]
 #[test]
-fn wire_reply_is_bound_to_the_request() {
-    let reply = resident(&binding_request("guard-native-exact-action-request.v1"));
-    assert_eq!(reply["status"], "ok");
-    assert_eq!(reply["schema"], "guard-native-exact-action-result.v1");
-    assert_eq!(reply["request_id"], "req-binding");
-    assert!(reply["request_sha256"]
-        .as_str()
-        .unwrap()
-        .starts_with("sha256:"));
-    let binding = reply["payload"]["binding"].as_str().unwrap();
-    assert_eq!(
-        binding,
-        format!("native-review-v4:{}:ask:review:review:r", "ab".repeat(32))
-    );
-}
-
-#[test]
-fn wire_schema_mismatch_is_an_error_without_payload() {
-    let reply = resident(&binding_request("guard-native-exact-action-request.v0"));
-    assert_eq!(reply["status"], "error");
-    assert_eq!(reply["code"], "native_exact_action_schema_mismatch");
-    assert!(reply["payload"].is_null());
-}
-
-#[test]
-fn wire_exact_action_with_real_engines_answers_a_domain_outcome() {
+fn a_windows_launch_falls_back_to_the_command_hash() {
+    let case = load()
+        .into_iter()
+        .find(|case| case["name"] == "gate_baseline")
+        .unwrap();
+    assert_eq!(case["expected"]["token_present"], true);
     let scratch = Scratch::new();
-    let root = scratch.0.to_str().unwrap();
-    let request = json!({
-        "schema": "guard-native-exact-action-request.v1",
-        "request_id": "req-exact",
-        "query": {
-            "kind": "exact_action", "harness": "codex", "tool_name": "Bash", "command": "echo hi",
-            "tool_input": [["command", "echo hi"]], "payload_cwd": root, "workspace": root, "home_dir": root,
-            "environment": {"PATH": "/usr/bin:/bin"},
-            "facts": {"decision": "ask", "minimum_action": "review", "policy_action": "review", "reason_code": "first_seen", "action_type": "shell"},
-            "policy_binding": {"state": "unbound"},
-            "extension_control_digest": "e".repeat(64), "budget_ms": 20000
-        }
-    });
-    let reply = resident(&request);
-    assert_eq!(reply["status"], "ok");
-    assert_eq!(reply["payload"]["kind"], "exact_action");
-    assert_eq!(reply["payload"]["once_only_reason"], "unproven_launch");
-    assert!(reply["payload"]["token"].is_null());
+    let root = scratch.0.to_str().unwrap().trim_start_matches(r"\\?\");
+    let concrete: Value = serde_json::from_str(
+        &case
+            .to_string()
+            .replace("{ROOT}", &root.replace('\\', "\\\\")),
+    )
+    .unwrap();
+    materialize(&scratch.0, concrete["tree"].as_object().unwrap());
+    let request: NativeExactActionRequestV1 =
+        serde_json::from_value(concrete["request"].clone()).unwrap();
+    let engines = Fake {
+        root: root.to_owned(),
+        intent: concrete["intent"].clone(),
+    };
+    let NativeExactActionPayloadV1::ExactAction {
+        token,
+        once_only_reason,
+    } = decide_with(&request, &engines, Fallback::Strict).unwrap()
+    else {
+        panic!("an exact-action query answers with an exact action");
+    };
+    assert!(token.is_none());
+    assert_eq!(once_only_reason.as_deref(), Some("unproven_launch"));
+    let NativeExactActionPayloadV1::ExactAction {
+        token,
+        once_only_reason,
+    } = super::decide(&request, &engines).unwrap()
+    else {
+        panic!("an exact-action query answers with an exact action");
+    };
+    assert!(token.is_some());
+    assert!(once_only_reason.is_none());
 }

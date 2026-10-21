@@ -14,6 +14,7 @@ export function CustomExtensionReviewModal(props: {
   nextState: LocalCliState;
   commandChanges: ReturnType<typeof commandPermissionChanges>;
   providerUpdates: ProviderActionDraft[];
+  capabilityChange?: { label: string; next: "on" | "off" };
   busy: boolean;
   error: string | null;
   approvalGate: GuardApprovalGatePublicConfig | null;
@@ -23,7 +24,10 @@ export function CustomExtensionReviewModal(props: {
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
   const dialogRef = useModalDialog<HTMLFormElement>(props.onCancel, !props.busy);
-  const title = props.providerUpdates.length > 0 ? "Review app action permissions" : reviewTitle(props.item.name, props.nextState);
+  const change = props.capabilityChange;
+  const title = change
+    ? `${change.next === "on" ? "Turn on" : "Turn off"} ${change.label.toLowerCase()} for ${props.item.name}`
+    : props.providerUpdates.length > 0 ? "Review app action permissions" : reviewTitle(props.item.name, props.nextState);
   const handlePassword = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setPassword(event.target.value);
   }, []);
@@ -57,6 +61,9 @@ export function CustomExtensionReviewModal(props: {
           <p>{props.item.source_label || "This host"} · This configured connection</p>
           <p>{connectionReviewMessage(props.nextState)}</p>
         </div> : null}
+        {change ? <p className="mt-4 text-sm leading-6 text-brand-dark">
+          {change.label}: {change.next === "on" ? "Off → On" : "On → Off"}. This applies to this device only.
+        </p> : null}
         {props.commandChanges.length > 0 ? <section aria-label="Permission changes" className="mt-4 text-sm leading-6 text-brand-dark">
           <p className="font-semibold">{props.commandChanges.length} {props.item.surface === "mcp" ? "tool" : "command"} changes</p>
           <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">

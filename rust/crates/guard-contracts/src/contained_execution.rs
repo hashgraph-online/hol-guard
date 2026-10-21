@@ -8,6 +8,7 @@
 //!   * `try_execute_contained_workspace_write`— `contained_workspace_write_execute`
 //!   * `execute_contained`                    — `contained_execute`
 //!   * `probe_stdio_mcp_server`               — `mcp_stdio_probe`
+//!   * `probe_containment_health`             — `containment_health_probe`
 //!
 //! Every struct uses `deny_unknown_fields` so a stale resident cannot smuggle
 //! new keys past the schema check.
@@ -47,6 +48,9 @@ pub const CONTAINED_EXECUTE_REQUEST_SCHEMA: &str = "guard-contained-execute-requ
 pub const CONTAINED_EXECUTE_RESULT_SCHEMA: &str = "guard-contained-execute-result.v1";
 pub const MCP_STDIO_PROBE_REQUEST_SCHEMA: &str = "guard-mcp-stdio-probe-request.v1";
 pub const MCP_STDIO_PROBE_RESULT_SCHEMA: &str = "guard-mcp-stdio-probe-result.v1";
+pub const CONTAINMENT_HEALTH_PROBE_REQUEST_SCHEMA: &str =
+    "guard-containment-health-probe-request.v1";
+pub const CONTAINMENT_HEALTH_PROBE_RESULT_SCHEMA: &str = "guard-containment-health-probe-result.v1";
 
 // ---------------------------------------------------------------------------
 // Contained execution — per-op request/result pairs.
@@ -348,4 +352,32 @@ mod wire_tests {
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Containment health probe
+//
+// The daemon asks the resident for current containment health instead of
+// running its own backend probe, so backend selection, the enforcement
+// self-probe and the evidence it is bound to stay in one place.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContainmentHealthProbeRequestV1 {
+    pub schema: String,
+    #[serde(default)]
+    pub request_id: Option<String>,
+    /// Daemon runtime fingerprint the evidence is bound to (lowercase SHA-256).
+    pub daemon_fingerprint: String,
+    pub guard_home: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContainmentHealthProbeResultV1 {
+    pub schema: String,
+    /// Canonical `ContainmentHealthEvidence` payload, or `null` when the probe
+    /// could not run at all.
+    pub result: Option<Value>,
 }

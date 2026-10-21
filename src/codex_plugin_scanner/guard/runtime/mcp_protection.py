@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..native_context import context_mcp_identity
+from ..native_context import context_mcp_identity, native_context_failure_reason
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +45,12 @@ def build_mcp_server_identity(
         },
     )
     if identity is None:
-        raise ValueError("native_mcp_server_identity_unavailable")
+        # This aborts an install, so the error is the only thing the person
+        # reading it has. "unavailable" alone cannot tell a missing runtime
+        # from an unprovisionable home or a resident that was merely slow,
+        # which is the difference between a broken build and a busy machine.
+        reason = native_context_failure_reason()
+        raise ValueError("native_mcp_server_identity_unavailable" + (f":{reason}" if reason else ""))
     return McpServerIdentity(
         config_path=identity["config_path"],
         command=identity["command"],

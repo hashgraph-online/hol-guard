@@ -1,4 +1,5 @@
-//! Replay the actual Python owner before deleting its request-path authority.
+//! Replay the recorded Python owner's answers; that owner has been deleted and
+//! `tests/fixtures/critical-floor-python.v1.json` is now a frozen record of it.
 
 use guard_contracts::RequestContextRequestV1;
 use serde_json::{json, Value};

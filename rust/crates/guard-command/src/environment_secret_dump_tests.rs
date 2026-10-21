@@ -1,6 +1,6 @@
 use super::{
     command_reads_environment_secrets, command_reads_environment_secrets_with_caller_cwd,
-    printer_expands_secret,
+    printer_expands_secret, without_node_port_reads,
 };
 use serde_json::Value;
 
@@ -90,5 +90,44 @@ fn printing_a_credential_variable_is_a_secret_read() {
     }
     for text in ["echo \"$PATH\" > p.txt", "echo ${HOME}/x", "printf hello"] {
         assert!(!printer_expands_secret(text), "{text}");
+    }
+}
+
+#[test]
+fn only_dotted_port_variables_are_blanked_from_the_node_environment() {
+    for (text, kept) in [
+        ("listen(process.env.port||3000)", "listen( ||3000)"),
+        (
+            "listen(number(process.env.port ?? 3000))",
+            "listen(number(  ?? 3000))",
+        ),
+        (
+            "listen(process.env.dev_port, process.env.vite_port)",
+            "listen( ,  )",
+        ),
+        ("listen(process.env . port)", "listen( )"),
+    ] {
+        assert_eq!(without_node_port_reads(text), kept, "{text}");
+    }
+    for text in [
+        "r.end(json.stringify(process.env))",
+        "listen(process.env.port);r.end(process.env.github_token)",
+        "process.env['port']",
+        "process.env[name]",
+        "process.env.port_token",
+        "process.env.passport",
+        "process.env.port$x",
+        "process.env.port/u005ftoken",
+        "process.env.port/u0041iner_token",
+        "process.env.port\\u005ftoken",
+        "process.env.porté",
+        "process.env?.port",
+        "{...process.env}",
+        "object.keys(process.env)",
+    ] {
+        assert!(
+            without_node_port_reads(text).contains("process.env"),
+            "{text}"
+        );
     }
 }

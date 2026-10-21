@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
@@ -80,3 +81,12 @@ def test_invalid_or_oversized_binding_is_not_accepted_as_persisted_evidence(tmp_
     with store._connect() as connection, pytest.raises(sqlite3.IntegrityError):
         connection.execute("update native_hook_decision_receipts set command_extensions_json = ?", ("x" * 2049,))
     assert store.get_native_decision_receipt("missing") is None
+
+
+def test_a_receipt_carried_by_any_mapping_still_records(tmp_path: Path) -> None:
+    """A read-only view of a receipt stores the same row a plain dict does."""
+    store = GuardStore(tmp_path)
+    receipt = _receipt(_observations())
+    binding = MappingProxyType(dict(receipt["command_extensions"]))
+    assert store.record_native_decision_receipt(MappingProxyType({**receipt, "command_extensions": binding}))
+    assert store.get_native_decision_receipt(receipt["decision_id"]) == receipt

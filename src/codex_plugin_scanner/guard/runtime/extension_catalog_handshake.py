@@ -34,6 +34,12 @@ def prepare_extension_catalog_handshake(
     """Validate Cloud negotiation and prepare a digest-bound upload without I/O."""
 
     digest = session_payload.get("extensionCatalogDigest")
+    if "extensionCatalogViewDigest" in session_payload and not isinstance(digest, str):
+        return {
+            "managedControlsCapabilities": [],
+            "extension_catalog_sync_status": "unsupported",
+            "extension_catalog_sync_reason": "complete_catalog_exceeds_cloud_v1_limits",
+        }, None
     if not isinstance(digest, str):
         # Posture advertises capabilities without a digest only when the catalog
         # build failed; name the Cloud limit when that was the cause.
@@ -157,6 +163,9 @@ def runtime_session_success_summary(
     }
     for field in (
         "extensionCatalogDigest",
+        "extensionCatalogViewDigest",
+        "extensionCatalogEnforcementDigest",
+        "extensionCatalogGeneratedAt",
         "extensionControlSchemaVersions",
         "extensionAuthorityRevision",
         "managedExtensionAuthorityRevision",

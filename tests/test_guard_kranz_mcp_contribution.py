@@ -9,21 +9,21 @@ import pytest
 
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
-from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import load_generated_command_catalog_bytes
+from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
+from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import _extension
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     catalog_id_for_mcp_id,
     validate_mcp_contribution,
 )
+from scripts.native_directory_inventory import catalog_rows
 
 from . import mcp_extension_driver as extension_driver
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .mcp_extension_driver import apply_local_mcp_extension_decision
 from .test_guard_mcp_server_grants import _AuthorityStore, _layer
-from .test_native_source_program import build as build
-from .test_native_source_program import canonical
-from .test_native_source_program import compiled as compiled
+from .test_native_source_program import canonical_packs as canonical_packs
 from .test_native_source_program import compiler as compiler
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -99,18 +99,9 @@ def test_reviewed_inventory_and_external_binding(kranz_payload: dict) -> None:
     }
 
 
-def test_canonical_native_compilation_contains_mcp_coverage(compiled: dict) -> None:
-    # Use current source compilation even when checked-in projections await regeneration.
-    program = compiled["program"]
-    catalog = {
-        "schema": "guard.command-catalog.v1",
-        "catalog": compiled["catalog"],
-        "catalog_digest": program["catalog_digest"],
-        "program_digest": program["program_digest"],
-        "source_digest": compiled["source_digest"],
-        "implementation_digest": compiled["implementation_digest"],
-    }
-    registry = load_generated_command_catalog_bytes(canonical(catalog), canonical(program))
+def test_canonical_native_compilation_contains_mcp_coverage(canonical_packs) -> None:
+    reader, release = canonical_packs
+    registry = GeneratedCommandCatalog(tuple(_extension(row) for _, _, row in catalog_rows(reader, release)))
     extension = registry.get(CATALOG_ID)
     assert extension is not None
     value = extension.to_dict()

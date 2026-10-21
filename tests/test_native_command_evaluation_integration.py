@@ -49,8 +49,11 @@ def test_real_native_transparent_wrapper_preserves_uncertain_envelope() -> None:
 def test_real_native_review_classification_accepts_explicit_stash_permission(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # A stash write, not `git stash list`: a printing stash form now clears
+    # only through the Git helper probe, and an explicit Allow never settles
+    # that helper floor.
     fixture = real_native_review_fixture(
-        "git stash list",
+        "git stash push -m wip",
         force_rule_ids=("command.git.stash",),
         controls=(("permission", "command.git.permission.stash", "enabled"),),
     )
@@ -90,7 +93,7 @@ def test_native_privileged_wrapper_floor_survives_explicit_command_permission(
     )
 
 
-def test_native_unsupported_heredoc_remains_bound_blocking_unavailability(
+def test_native_unsupported_heredoc_with_a_non_root_removal_stays_under_review(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fixture = real_native_review_fixture("cat <<'EOF'\n$(sh -c 'rm -rf /tmp/example')\nEOF")
@@ -107,7 +110,9 @@ def test_native_unsupported_heredoc_remains_bound_blocking_unavailability(
     assert isinstance(binding, dict)
     assert binding["observation_count"] == 0
     assert binding["uncertainty_count"] == 0
-    assert fixture.payload["minimum_action"] == "block"
+    # The heredoc names `rm -rf` on a non-root path, so the root-removal floor
+    # does not apply; the unmodeled shape still requires review.
+    assert fixture.payload["minimum_action"] == "review"
 
     monkeypatch.setattr(native_command_evaluation, "review_pre_tool_native", lambda *_args, **_kwargs: fixture.payload)
     reviewed = native_command_evaluation.review_command_native(
@@ -118,7 +123,7 @@ def test_native_unsupported_heredoc_remains_bound_blocking_unavailability(
     assert reviewed is not None
     assert reviewed.payload is fixture.payload
     assert reviewed.snapshot is fixture.snapshot
-    assert reviewed.evaluation.minimum_action == "block"
-    assert reviewed.evaluation.decision_plane.action == "block"
+    assert reviewed.evaluation.minimum_action == "review"
+    assert reviewed.evaluation.decision_plane.action == "review"
     assert reviewed.evaluation.matches == ()
     assert reviewed.evaluation.decision_plane.proof_routes == frozenset()

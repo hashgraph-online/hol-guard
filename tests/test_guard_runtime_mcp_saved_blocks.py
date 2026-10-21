@@ -479,6 +479,7 @@ def test_package_preliminary_saved_tool_block_is_terminal_before_approval_surfac
         "evaluate_tool_call",
         lambda **_kwargs: ToolCallDecision(
             action="block",
+            policy_action="block",
             source="policy",
             signals=("command execution",),
             summary="blocked by authenticated saved policy",
@@ -551,6 +552,7 @@ def test_authenticated_saved_package_block_is_terminal_before_generic_approval(
         "evaluate_tool_call",
         lambda **_kwargs: ToolCallDecision(
             action="review",
+            policy_action="review",
             source="risk-policy",
             signals=("command execution",),
             summary="generic tool review",
@@ -869,6 +871,7 @@ def test_package_retry_validates_context_and_retained_authority_before_forward(
     )
     tool_decision = ToolCallDecision(
         action="allow",
+        policy_action="allow",
         source="policy",
         signals=(),
         summary="current tool authority allows",
@@ -1068,6 +1071,7 @@ def test_package_observe_mode_records_each_authority_without_approval_requests(
     )
     tool_decision = ToolCallDecision(
         action=tool_action,
+        policy_action=tool_action,
         source="policy",
         signals=(f"tool {tool_action}",),
         summary=f"tool {tool_action}",
@@ -1186,7 +1190,7 @@ def test_mcp_executable_identity_uses_launch_cwd_and_stays_pinned_after_spawn(
 
     def _capture_tool_call(**kwargs: object) -> ToolCallDecision:
         captured["artifact"] = kwargs["artifact"]
-        return ToolCallDecision(action="allow", source="heuristic", signals=(), summary="safe")
+        return ToolCallDecision(action="allow", policy_action="allow", source="heuristic", signals=(), summary="safe")
 
     monkeypatch.setattr(runtime_mcp_module, "evaluate_tool_call", _capture_tool_call)
     proxy = CodexMcpGuardProxy(
@@ -1282,7 +1286,7 @@ def test_interpreted_mcp_server_binds_script_bytes_and_pins_them_for_the_running
 
     def _capture_tool_call(**kwargs: object) -> ToolCallDecision:
         captured["artifact"] = kwargs["artifact"]
-        return ToolCallDecision(action="allow", source="heuristic", signals=(), summary="safe")
+        return ToolCallDecision(action="allow", policy_action="allow", source="heuristic", signals=(), summary="safe")
 
     monkeypatch.setattr(runtime_mcp_module, "evaluate_tool_call", _capture_tool_call)
     proxy = CodexMcpGuardProxy(
@@ -1384,7 +1388,9 @@ def test_runtime_mcp_binds_only_configured_server_env_values_without_leaking_the
 
         def capture_tool_call(**kwargs: object) -> ToolCallDecision:
             captured["artifact"] = kwargs["artifact"]
-            return ToolCallDecision(action="allow", source="heuristic", signals=(), summary="captured")
+            return ToolCallDecision(
+                action="allow", policy_action="allow", source="heuristic", signals=(), summary="captured"
+            )
 
         monkeypatch.setattr(runtime_mcp_module, "evaluate_tool_call", capture_tool_call)
         proxy = CodexMcpGuardProxy(
@@ -1534,6 +1540,7 @@ def test_first_policy_review_never_auto_forwards_and_all_surfaces_preserve_revie
         "evaluate_tool_call",
         lambda **_kwargs: ToolCallDecision(
             action="review",
+            policy_action="review",
             source="policy",
             signals=("current policy requires review",),
             summary="review required",
@@ -1579,6 +1586,7 @@ def test_terminal_current_tool_action_is_not_downgraded_to_retryable_review(
         "evaluate_tool_call",
         lambda **_kwargs: ToolCallDecision(
             action=terminal_action,  # type: ignore[arg-type]
+            policy_action=terminal_action,  # type: ignore[arg-type]
             source="policy",
             signals=("terminal current policy",),
             summary="terminal action",
@@ -1624,6 +1632,7 @@ def test_runtime_mcp_redacts_secret_argument_fields_from_every_persisted_surface
         "evaluate_tool_call",
         lambda **_kwargs: ToolCallDecision(
             action="review",
+            policy_action="review",
             source="policy",
             signals=("review secret-shaped request",),
             summary="review required",
@@ -1769,12 +1778,14 @@ def test_observe_mode_records_terminal_tool_policy_immediately_before_forward(
         (
             ToolCallDecision(
                 action="review",
+                policy_action="review",
                 source="policy",
                 signals=("initial review",),
                 summary="initial review",
             ),
             ToolCallDecision(
                 action="block",
+                policy_action="block",
                 source="policy",
                 signals=("terminal policy changed before launch",),
                 summary="terminal block",
@@ -1822,12 +1833,14 @@ def test_observe_mode_preserves_fresh_executable_warn_at_final_tool_boundary(
         (
             ToolCallDecision(
                 action="review",
+                policy_action="review",
                 source="policy",
                 signals=("initial review",),
                 summary="initial review",
             ),
             ToolCallDecision(
                 action="warn",
+                policy_action="warn",
                 source="policy",
                 signals=("fresh warning",),
                 summary="fresh warning",

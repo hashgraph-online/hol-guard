@@ -10,10 +10,12 @@ mod destination;
 #[path = "worktree_add_names.rs"]
 mod names;
 
-use destination::{fresh_destination, resolve_chdir};
+pub(in crate::pretool) use destination::fresh_temporary_parent;
+use destination::resolve_chdir;
+pub(in crate::pretool) use destination::{fresh_destination, MissingParents};
 
-pub(super) use names::valid_branch_name;
-use names::{valid_destination_text, valid_local_reference, valid_path_text};
+pub(in crate::pretool) use names::{valid_branch_name, valid_destination_text};
+use names::{valid_local_reference, valid_path_text};
 
 struct WorktreeAdd<'a> {
     leading: Vec<String>,
@@ -57,8 +59,10 @@ pub(super) fn exact_safe_command(
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
         npm_config_inert: context.npm_config_inert,
+        pip_config_inert: context.pip_config_inert,
         shell_home_matches: context.shell_home_matches,
         ripgrep_config_absent: context.ripgrep_config_absent,
+        psql_environment: context.psql_environment,
         cwd: cwd_proof
             .as_ref()
             .map(|proof| proof.cwd.as_str())
@@ -212,7 +216,7 @@ pub(super) fn outside_home_reason(
         Path::new(&base).join(supplied)
     };
     let parent = std::fs::canonicalize(target.parent()?).ok()?;
-    if parent.starts_with(&home) || super::git_routes::temporary_checkout_parent(&parent, context) {
+    if parent.starts_with(&home) || fresh_temporary_parent(&parent, context) {
         return None;
     }
     Some(
@@ -340,6 +344,7 @@ fn planned_checkout<'a>(
             cwd: chdir_cwd.as_deref().or(context.cwd),
             ..context
         },
+        MissingParents::Created,
     )?;
     Some((spec, destination, chdir_cwd))
 }

@@ -100,7 +100,7 @@ class TestCodexCliSmoke:
             script_name=None,
             raw_payload_redacted={},
         )
-        risks = detect_data_flow_exfiltration(action, workspace=None)
+        risks, _artifact = detect_data_flow_exfiltration(action, workspace=None)
         assert len(risks) > 0, (
             "Canary exfil shell command (curl POST uploading ~/.npmrc) must trigger data-flow detection"
         )

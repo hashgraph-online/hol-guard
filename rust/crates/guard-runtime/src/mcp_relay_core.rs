@@ -13,13 +13,11 @@
 
 use std::time::Duration;
 
-use guard_command::mcp_stdio_session::{
-    is_notification, is_request, response_key, ResponseBuffers,
-};
+use guard_command::mcp_stdio_session::{is_request, response_key, ResponseBuffers};
 use serde_json::{json, Map, Value};
 
 use crate::mcp_relay_authority::{
-    sync_failed_response, ClaimTicket, RelayAuthority, ToolCallVerdict,
+    no_decision_response, sync_failed_response, ClaimTicket, RelayAuthority, ToolCallVerdict,
 };
 use crate::mcp_relay_catalog::{cursor_fact, CatalogSnapshot, RelayCatalog};
 use crate::mcp_relay_host::{HostLink, HostRead};
@@ -32,10 +30,13 @@ const MAX_RESPONSE_TIMEOUT_SECONDS: u64 = 30;
 const MAX_NESTING: usize = 32;
 const TIMEOUT_CODE: i64 = -32800;
 const NESTING_CODE: i64 = -32603;
+const RESERVED_ID_CODE: i64 = -32600;
 const CHILD_TIMEOUT: &str = "Guard runtime MCP proxy timed out waiting for the MCP server.";
 const CLIENT_TIMEOUT: &str = "Guard runtime MCP proxy timed out waiting for the client response.";
 const NESTING_REFUSED: &str =
     "Guard runtime MCP proxy refused a reverse request nested too deeply.";
+const RESERVED_ID_REFUSED: &str =
+    "Guard runtime MCP proxy refused a reverse request naming one of its own prompts.";
 const CHILD_EOF: &str = "Guard stdio proxy did not receive a response from the MCP server.";
 const HOST_LOST: &str =
     "Guard runtime MCP proxy lost the client while waiting for a server response.";
@@ -154,6 +155,10 @@ pub(crate) struct Relay<C, H, A> {
     child_responses: ResponseBuffers,
     client_responses: ResponseBuffers,
     timeout: Duration,
+    /// How long one inline approval prompt waits for the client's answer.
+    inline_timeout: Duration,
+    /// `_inline_prompt_counter`, which names the prompts of this session.
+    prompts: u64,
     depth: usize,
     /// A listing was captured since the catalog was last reported.
     report_due: bool,
@@ -163,7 +168,13 @@ pub(crate) struct Relay<C, H, A> {
 }
 
 impl<C: ChildLink, H: HostLink, A: RelayAuthority> Relay<C, H, A> {
-    pub(crate) fn new(child: C, host: H, authority: A, timeout: Duration) -> Self {
+    pub(crate) fn new(
+        child: C,
+        host: H,
+        authority: A,
+        timeout: Duration,
+        inline_timeout: Duration,
+    ) -> Self {
         Self {
             child,
             host,
@@ -172,6 +183,8 @@ impl<C: ChildLink, H: HostLink, A: RelayAuthority> Relay<C, H, A> {
             child_responses: ResponseBuffers::default(),
             client_responses: ResponseBuffers::default(),
             timeout,
+            inline_timeout,
+            prompts: 0,
             depth: 0,
             report_due: false,
             reported: None,
@@ -225,29 +238,58 @@ impl<C: ChildLink, H: HostLink, A: RelayAuthority> Relay<C, H, A> {
             _ => None,
         };
         let Some(params) = call_params else {
+            if method(&message) == Some("initialize") {
+                // `_record_client_capabilities`, which reads the client's
+                // `elicitation` capability before the session carries traffic.
+                self.authority.client_capabilities(message.get("params"));
+            }
             return self.forward_request(&message).map(Some);
         };
-        if self.drain(Duration::ZERO).is_err() {
-            self.catalog.poison();
-            return Ok(Some(sync_failed_response(message.get("id"), &params)));
-        }
-        let verdict = match self
-            .authority
-            .decide(&message, &params, order, &self.catalog)
-        {
-            ToolCallVerdict::Claim(ticket) => self.claim(ticket),
-            verdict => verdict,
-        };
-        match verdict {
-            ToolCallVerdict::Respond(response) => Ok(Some(response)),
-            ToolCallVerdict::Forward(ticket) => match self
-                .forward_guarded(&ticket.message, &ticket.expected)?
+        let mut asked = false;
+        loop {
+            // A resumed call drained before it took the prompt's answer, so
+            // draining again here would hand the answer to a nested call.
+            if !asked && self.drain(Duration::ZERO).is_err() {
+                self.catalog.poison();
+                return Ok(Some(sync_failed_response(message.get("id"), &params)));
+            }
+            let verdict = match self
+                .authority
+                .decide(&message, &params, order, &self.catalog)
             {
-                Guarded::Response(response) => Ok(Some(self.authority.complete(ticket, response))),
-                Guarded::BoundaryChanged => Ok(Some(self.authority.boundary_changed(ticket))),
-            },
-            // A claim answers with a respond or a forward, never a claim.
-            ToolCallVerdict::Claim(ticket) => Ok(Some(ticket.no_decision())),
+                ToolCallVerdict::Claim(ticket) => self.claim(ticket),
+                verdict => verdict,
+            };
+            return match verdict {
+                ToolCallVerdict::Respond(response) => Ok(Some(response)),
+                ToolCallVerdict::Forward(ticket) => match self
+                    .forward_guarded(&ticket.message, &ticket.expected)?
+                {
+                    Guarded::Response(response) => {
+                        Ok(Some(self.authority.complete(ticket, response)))
+                    }
+                    Guarded::BoundaryChanged => Ok(Some(self.authority.boundary_changed(ticket))),
+                },
+                // A claim answers with a respond or a forward, never a claim.
+                ToolCallVerdict::Claim(ticket) => Ok(Some(ticket.no_decision())),
+                // One prompt per call: the answer is a fact of this call, and
+                // an authority that asks for a second one decided nothing.
+                ToolCallVerdict::Elicit(_) if asked => {
+                    Ok(Some(no_decision_response(message.get("id"), &params)))
+                }
+                ToolCallVerdict::Elicit(ask) => {
+                    asked = true;
+                    let answer = self.elicit(ask)?;
+                    // The drain the next decide opens runs before the answer
+                    // is handed over, so no call it services takes this one.
+                    if self.drain(Duration::ZERO).is_err() {
+                        self.catalog.poison();
+                        return Ok(Some(sync_failed_response(message.get("id"), &params)));
+                    }
+                    self.authority.elicited(answer.as_ref());
+                    continue;
+                }
+            };
         }
     }
 
@@ -379,65 +421,15 @@ impl<C: ChildLink, H: HostLink, A: RelayAuthority> Relay<C, H, A> {
         }
         self.host.send(&frame)
     }
-
-    /// `_proxy_child_request`: a reverse request from the child.
-    fn proxy_child_request(&mut self, request: Value) -> Result<(), String> {
-        let id = request.get("id").cloned();
-        if self.depth >= MAX_NESTING {
-            let refusal = json!({
-                "jsonrpc": "2.0",
-                "id": id.unwrap_or(Value::Null),
-                "error": {"code": NESTING_CODE, "message": NESTING_REFUSED},
-            });
-            return self.child.send(&refusal);
-        }
-        self.host.send(&request)?;
-        self.depth += 1;
-        let outcome = self.await_client_response(id.as_ref());
-        self.depth -= 1;
-        outcome
-    }
-
-    fn await_client_response(&mut self, id: Option<&Value>) -> Result<(), String> {
-        loop {
-            if let Some(response) = live_id(id).and_then(|id| self.client_responses.pop(id)) {
-                return self.child.send(&response);
-            }
-            let (message, order) = match self.host.next(Some(self.timeout)) {
-                HostRead::Message(message, order) => (message, order),
-                HostRead::Timeout => {
-                    let timeout = timeout_response(
-                        id,
-                        "nested_client_response",
-                        self.timeout,
-                        CLIENT_TIMEOUT,
-                    );
-                    return self.child.send(&timeout);
-                }
-                HostRead::Eof => return Err(HOST_LOST.to_owned()),
-                HostRead::Invalid(reason) => return Err(reason.to_owned()),
-            };
-            if same_id(message.get("id"), id) && !is_request(&message) {
-                return self.child.send(&message);
-            }
-            if is_notification(&message) {
-                self.child.send(&message)?;
-                continue;
-            }
-            if !is_request(&message) {
-                if live_id(message.get("id")).is_some() {
-                    self.client_responses.buffer(message);
-                }
-                continue;
-            }
-            if let Some(response) = self.handle(message, order.as_deref())? {
-                let sent = self.host.send(&response);
-                self.authority.settle();
-                sent?;
-            }
-        }
-    }
 }
+
+#[path = "mcp_relay_core_prompt.rs"]
+mod prompt;
+
+#[path = "mcp_relay_core_reverse.rs"]
+mod reverse;
+
+pub(crate) use prompt::inline_approval_timeout;
 
 #[cfg(test)]
 #[path = "mcp_relay_core_tests.rs"]

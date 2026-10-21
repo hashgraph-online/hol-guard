@@ -339,6 +339,35 @@
                       "maintainer"
                     ]
                   }
+                },
+                "profile": {
+                  "description": "Optional public presentation. These fields never grant claim authority.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "minProperties": 1,
+                  "properties": {
+                    "description": { "type": "string", "minLength": 12, "maxLength": 280 },
+                    "organization": { "type": "string", "minLength": 2, "maxLength": 80 },
+                    "website": {
+                      "type": "string",
+                      "minLength": 12,
+                      "maxLength": 1024,
+                      "pattern": "^https://",
+                      "format": "uri"
+                    },
+                    "linkedin": {
+                      "type": "string",
+                      "minLength": 26,
+                      "maxLength": 200,
+                      "pattern": "^https://(www\\.)?linkedin\\.com/(in|company)/[A-Za-z0-9][A-Za-z0-9-]{1,99}/?$"
+                    },
+                    "x": {
+                      "type": "string",
+                      "minLength": 14,
+                      "maxLength": 80,
+                      "pattern": "^https://(www\\.)?(x\\.com|twitter\\.com)/[A-Za-z0-9_]{1,15}/?$"
+                    }
+                  }
                 }
               }
             }

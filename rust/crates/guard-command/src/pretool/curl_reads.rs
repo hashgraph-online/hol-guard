@@ -1,4 +1,5 @@
-//! Plain `curl` GET and HEAD requests for public web content.
+//! Plain `curl` GET and HEAD requests for public web content and local dev
+//! servers.
 //!
 //! The request may only fetch named public `http(s)` URLs and print the
 //! response to stdout, where the pipeline's own proofs judge every consumer
@@ -7,7 +8,13 @@
 //! config, carries credentials, routes through a proxy or socket, or writes a
 //! file other than a scratch file keeps the normal review path.
 //!
-//! Loopback, private, link-local and metadata addresses, rebinding names and
+//! A read of a dev server on `127.0.0.1` or `localhost` is proven too, on a
+//! conventional dev-server port ([`super::loopback_ports`]) that neither
+//! Guard's daemon nor a local service answering a plain GET with
+//! credentials, cluster state or a debugger ([`LOCAL_ADMIN_PORTS`]) may
+//! listen on, or on a port the agent chose for a server it started itself,
+//! screened against the whole local-service list. Private, link-local
+//! and metadata addresses, other loopback spellings, rebinding names and
 //! names under reserved test suffixes stay reviewed: those resolve to local
 //! services rather than public content. The response body and headers reach
 //! a file only through `-o` or `-D` naming a scratch file ([`output_targets`]); the redirect
@@ -16,16 +23,36 @@
 //! credential shape, a JWT or a long opaque token stays reviewed, since the
 //! request line itself can carry data to the host.
 
+#[path = "curl_reads_bound.rs"]
+mod bound;
 #[path = "curl_output_targets.rs"]
 pub(in crate::pretool) mod output_targets;
 #[path = "url_secrets.rs"]
 pub(super) mod url_secrets;
+pub use bound::bound_curl_read_destinations;
 
 pub(crate) const NETWORK_READ_REASON: &str = "native_exact_safe_network_read";
 
 /// Names reserved by RFC 6761 or routinely mapped to local development
 /// servers. They never name public content.
 const RESERVED_SUFFIXES: [&str; 4] = [".test", ".invalid", ".example", ".localhost"];
+
+/// Loopback ports of container engines (`2375`, `2376`, `4243`), cluster
+/// stores, APIs and proxies (`2379`, `2380`, `6443`, `8001`, kubelet and
+/// kube-proxy `10248`-`10256`), Nomad (`4646`), secret stores and service
+/// catalogs (`8200`, `8500`), proxy admin APIs (`2019`, `15000`), and the
+/// Chrome and Node inspectors (`9222`, `9229`). A GET to any of them can read
+/// secrets or drive another process.
+///
+/// This list subtracts from the dev-server ports, which is what a loopback
+/// read is allowed on in the first place: a port no framework conventionally
+/// binds is already unreachable here without being named. It is written out
+/// whole, the kubelet block included, so the list keeps saying what it means
+/// if the dev-server ranges ever widen onto one of these.
+const LOCAL_ADMIN_PORTS: [u16; 23] = [
+    2019, 2375, 2376, 2379, 2380, 4243, 4646, 6443, 8001, 8200, 8500, 9222, 9229, 10248, 10249,
+    10250, 10251, 10252, 10253, 10254, 10255, 10256, 15000,
+];
 
 /// Flags that change only presentation, failure handling or transport version.
 const PLAIN_FLAGS: [&str; 17] = [
@@ -87,40 +114,46 @@ pub(super) fn safe_curl_segment(
     if model.dialect != "posix" || segment.pipeline_index != 0 {
         return false;
     }
-    let arguments = &segment.arguments;
+    read_urls(&segment.arguments, context).is_some()
+}
+
+fn read_urls<'a>(arguments: &'a [String], context: super::PathContext<'_>) -> Option<Vec<&'a str>> {
     if arguments.iter().any(|argument| expands(argument)) {
-        return false;
+        return None;
     }
-    let mut urls = 0usize;
+    let mut urls = Vec::new();
     let mut options = true;
     let mut index = 0;
     while index < arguments.len() {
         let argument = arguments[index].as_str();
+        // curl disables default configuration only in this exact position.
+        if index == 0 && matches!(argument, "-q" | "--disable") {
+            index += 1;
+            continue;
+        }
         if options && argument == "--" {
             options = false;
             index += 1;
             continue;
         }
         if !options || !argument.starts_with('-') || argument == "-" {
-            if !public_url(argument) {
-                return false;
+            if !readable_url(argument, context) {
+                return None;
             }
-            urls += 1;
+            urls.push(argument);
             index += 1;
             continue;
         }
-        let Some(consumed) = option_consumed(arguments, index, context) else {
-            return false;
-        };
+        let consumed = option_consumed(arguments, index, context)?;
         if let Some(url) = url_option(arguments, index) {
-            if !public_url(url) {
-                return false;
+            if !readable_url(url, context) {
+                return None;
             }
-            urls += 1;
+            urls.push(url);
         }
         index += consumed;
     }
-    urls > 0
+    (!urls.is_empty()).then_some(urls)
 }
 
 /// A whole `curl` segment, generic checks included, that the native proof
@@ -259,6 +292,48 @@ fn safe_header(value: &str) -> bool {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
         && !CREDENTIAL_TERMS.iter().any(|term| name.contains(term))
+}
+
+fn readable_url(raw: &str, context: super::PathContext<'_>) -> bool {
+    public_url(raw) || loopback_url(raw, context.home_dir)
+}
+
+/// An `http(s)` URL naming `127.0.0.1` or `localhost` itself, on a dev-server
+/// port that no local admin service or Guard daemon listens on.
+pub(in crate::pretool) fn loopback_url(raw: &str, home_dir: Option<&str>) -> bool {
+    if raw.contains(['{', '}', '[', ']', '\\', ' ']) {
+        return false;
+    }
+    let Ok(url) = url::Url::parse(raw) else {
+        return false;
+    };
+    let loopback = match url.host() {
+        Some(url::Host::Ipv4(address)) => address == std::net::Ipv4Addr::LOCALHOST,
+        Some(url::Host::Domain(name)) => name == "localhost",
+        _ => false,
+    };
+    loopback
+        && matches!(url.scheme(), "http" | "https")
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url
+            .port_or_known_default()
+            .is_some_and(|port| reachable_loopback_port(port, home_dir))
+        && !url_secrets::carries_secret(&url)
+}
+
+/// A loopback port this request may reach: a conventional dev-server port, or
+/// one the agent chose for the server it started itself while Guard's daemon
+/// state records another port. A chosen port is screened against the local
+/// services whose plain answer carries credentials, stored data or control of
+/// another process, the same list the workspace sandbox grants against, so
+/// only a port nothing well known claims is reachable by number alone.
+fn reachable_loopback_port(port: u16, home_dir: Option<&str>) -> bool {
+    use super::loopback_ports::{
+        chosen_server_port, dev_server_port, local_service_port, LOCAL_SERVICE_PORTS,
+    };
+    dev_server_port(port, &LOCAL_ADMIN_PORTS, home_dir)
+        || (!local_service_port(port) && chosen_server_port(port, LOCAL_SERVICE_PORTS, home_dir))
 }
 
 fn public_url(raw: &str) -> bool {

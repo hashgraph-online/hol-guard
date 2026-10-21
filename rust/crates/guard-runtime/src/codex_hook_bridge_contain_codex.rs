@@ -94,14 +94,35 @@ pub(super) fn launching_codex_executable() -> Option<PathBuf> {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 const MAX_ANCESTORS: usize = 6;
 
+/// Release archives name the binary for its target, as
+/// `codex-aarch64-apple-darwin`.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-fn is_codex(path: &Path) -> bool {
-    path.file_name().is_some_and(|name| name == "codex")
+const RELEASE_TARGETS: &[&str] = &[
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-musl",
+    "x86_64-unknown-linux-musl",
+];
+
+/// `is_codex_binary_name`: `codex` or an official release binary named for
+/// its target. The npm, bun and Homebrew launchers start this native binary
+/// as their child, so it is always the nearer ancestor of the hook; a `node`
+/// or `bun` process is never taken for Codex.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+pub(super) fn is_codex(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| match name.split_once('-') {
+            None => name == "codex",
+            Some((prefix, target)) => prefix == "codex" && RELEASE_TARGETS.contains(&target),
+        })
 }
 
 /// `codex_applies_updated_input(executable, deadline=deadline)`: `codex
-/// --version` reports a stable release at or above 0.131.0 within the
-/// hook deadline.
+/// --version` reports a release that applies `updatedInput` within the hook
+/// deadline.
 #[cfg(unix)]
 pub(super) fn codex_applies_updated_input(executable: &Path, deadline: Instant) -> bool {
     use std::io::Read;
@@ -166,14 +187,28 @@ pub(super) fn codex_applies_updated_input(_executable: &Path, _deadline: Instant
     false
 }
 
-/// `_VERSION.match(stdout.strip())` with no pre-release and a version at or
-/// above 0.131.0. Any pre-release can predate the rewrite support.
+/// `_VERSION.match(stdout.strip())` with a release at or above 0.131.0, or
+/// a pre-release whose base is above it: a pre-release sorts before its
+/// base, so `0.131.0-alpha.N` can predate the rewrite support.
 #[cfg(unix)]
 pub(super) fn version_supported(stdout: &str) -> bool {
     let Some(version) = py_strip(stdout).strip_prefix("codex-cli ") else {
         return false;
     };
-    let parts: Vec<&str> = version.split('.').collect();
+    let (base, pre_release) = match version.split_once('-') {
+        Some((base, label)) => (base, Some(label)),
+        None => (version, None),
+    };
+    let label_valid = |label: &str| {
+        !label.is_empty()
+            && label
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'.' || byte == b'-')
+    };
+    if pre_release.is_some_and(|label| !label_valid(label)) {
+        return false;
+    }
+    let parts: Vec<&str> = base.split('.').collect();
     let [major, minor, patch] = parts.as_slice() else {
         return false;
     };
@@ -183,6 +218,9 @@ pub(super) fn version_supported(stdout: &str) -> bool {
             .flatten()
     };
     match (number(major), number(minor), number(patch)) {
+        (Some(major), Some(minor), Some(patch)) if pre_release.is_some() => {
+            (major, minor, patch) > MIN_VERSION
+        }
         (Some(major), Some(minor), Some(patch)) => (major, minor, patch) >= MIN_VERSION,
         _ => false,
     }

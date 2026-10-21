@@ -34,6 +34,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_limits import (
 )
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 
 
 def _mutation_payload(*, revision: int = 4) -> dict[str, object]:
@@ -101,6 +102,7 @@ def test_catalog_and_effective_responses_are_bounded_public_dtos(tmp_path: Path)
     assert effective == {
         "schema_version": "guard.daemon.extension-controls.v1",
         "health": "protected",
+        "authority_unread": False,
         "revision": 4,
         "catalog_digest": BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
         "global_lockdown": False,
@@ -265,7 +267,7 @@ def test_authority_recovery_consumes_daemon_bound_approval_before_repair(
         runtime=ExtensionControlRuntime(tampered),
     )
     calls: list[str] = []
-    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: tampered)
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry, **_kwargs: tampered)
     monkeypatch.setattr(
         store,
         "recover_extension_control_authority",
@@ -314,7 +316,7 @@ def test_authority_recovery_never_reports_success_while_still_tampered(
         registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
         runtime=ExtensionControlRuntime(tampered),
     )
-    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: tampered)
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry, **_kwargs: tampered)
     monkeypatch.setattr(store, "recover_extension_control_authority", lambda **_kwargs: tampered)
     monkeypatch.setattr(extension_control_api_module, "require_extension_control", lambda *_args, **_kwargs: object())
     monkeypatch.setattr(extension_control_api_module, "consume_extension_control_grant", lambda *_args, **_kwargs: None)
@@ -341,7 +343,7 @@ def test_authority_recovery_returns_bounded_error_when_store_repair_fails(
         registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
         runtime=ExtensionControlRuntime(tampered),
     )
-    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: tampered)
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry, **_kwargs: tampered)
     monkeypatch.setattr(
         store,
         "recover_extension_control_authority",

@@ -282,6 +282,42 @@ fn token_cases_match_python_parse() {
     }
 }
 
+/// The predicate the three remaining Python callers of the retired decoder
+/// ask. It has to agree with the recorded Python parse on every token case,
+/// including the malformed ones, because the callers used to read exactly that
+/// verdict out of their own decoder.
+#[test]
+fn well_formed_verdict_matches_python_parse_on_every_token_case() {
+    for case in corpus()["token_cases"].as_array().unwrap() {
+        let result = evaluate(request_for(
+            ContextDigestKindV1::ApprovalContextTokenWellFormed {
+                token: case["token"].clone(),
+            },
+        ));
+        let expected = !matches!(case.get("parsed"), Some(Value::Null) | None);
+        assert_eq!(result.status, "ok", "case {}", case["id"]);
+        assert_eq!(
+            result.approval_context_token_well_formed,
+            Some(expected),
+            "case {}",
+            case["id"]
+        );
+    }
+}
+
+/// A `false` verdict is an answer, not a missing one: the result contract has
+/// to carry it rather than drop it as an empty field.
+#[test]
+fn a_false_well_formed_verdict_survives_the_result_contract() {
+    let result = evaluate(request_for(
+        ContextDigestKindV1::ApprovalContextTokenWellFormed {
+            token: Value::String("legacy-artifact-hash".to_owned()),
+        },
+    ));
+    assert_eq!(result.status, "ok");
+    assert_eq!(result.approval_context_token_well_formed, Some(false));
+}
+
 #[test]
 fn validation_cases_match_python_reasons() {
     for case in corpus()["validation_cases"].as_array().unwrap() {
@@ -401,4 +437,72 @@ fn oversized_component_fails() {
     let result = evaluate(request);
     assert_eq!(result.status, "error");
     assert_eq!(result.code, ERR_COMPONENT);
+}
+
+#[test]
+fn guard_run_launch_plans_dedupe_adapter_commands_and_share_one_environment_digest() {
+    let environment: std::collections::BTreeMap<String, String> =
+        [("PATH".to_string(), "/usr/bin".to_string())]
+            .into_iter()
+            .collect();
+    let result = evaluate(request_for(ContextDigestKindV1::GuardRunLaunchPlans {
+        adapter_commands: vec![
+            vec!["hol-guard-nonexistent".to_string(), "--go".to_string()],
+            vec!["hol-guard-nonexistent".to_string(), "--go".to_string()],
+            vec![],
+        ],
+        environment: environment.clone(),
+        launch_cwd: "/".to_string(),
+    }));
+    let payload = result.guard_run_launch.expect("plans kind must answer");
+    let plans = payload["plans"].as_array().expect("plans array");
+    assert_eq!(plans.len(), 1, "duplicate and empty commands drop out");
+    assert_eq!(
+        plans[0]["environment_sha256"].as_str().expect("digest"),
+        guard_command::guard_run_launch::guard_run_launch_environment_hash(&environment)
+    );
+    assert_eq!(plans[0]["launch_cwd"].as_str(), Some("/"));
+    assert!(
+        plans[0]["identity"].is_object(),
+        "identity is content-bound"
+    );
+}
+
+#[test]
+fn guard_run_authorized_prefixes_answers_null_when_the_set_does_not_bind() {
+    let bound = evaluate(request_for(
+        ContextDigestKindV1::GuardRunAuthorizedPrefixes {
+            plans: vec![guard_contracts::GuardRunLaunchPlanV1 {
+                adapter_command: vec!["cli".to_string()],
+                execution_command: vec!["/usr/bin/cli".to_string(), "cli".to_string()],
+                environment_sha256: "s".to_string(),
+                reusable: true,
+            }],
+        },
+    ));
+    assert_eq!(
+        bound.guard_run_launch,
+        Some(json!({"prefixes": [["/usr/bin/cli", "cli"]]}))
+    );
+
+    // The unbound verdict is an explicit JSON null, which Python reads as
+    // "the authorized set does not bind". Decoding it into `Option<Value>`
+    // collapses it to `None`, so assert on the wire bytes the caller sees.
+    let unbound = evaluate_context_digest_request(&request_for(
+        ContextDigestKindV1::GuardRunAuthorizedPrefixes {
+            plans: vec![guard_contracts::GuardRunLaunchPlanV1 {
+                adapter_command: vec!["cli".to_string()],
+                execution_command: vec!["/usr/bin/cli".to_string(), "cli".to_string()],
+                environment_sha256: "s".to_string(),
+                reusable: false,
+            }],
+        },
+    ))
+    .expect("request must encode a result");
+    let unbound: Value = serde_json::from_slice(&unbound).expect("result must decode");
+    assert_eq!(
+        unbound.get("guard_run_launch"),
+        Some(&Value::Null),
+        "Python requires the key to be present before reading the verdict"
+    );
 }

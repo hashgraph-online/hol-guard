@@ -13,7 +13,12 @@ use guard_contracts::{NativeExactActionQueryV1, NativePolicyBindingV1, NativeRev
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 
-const POLICY_BINDING_SCHEMA: &str = "guard.native-review-policy-binding.v1";
+// v2 drops `policy_digest`: it is `H(config_digest, rule_digest)` over the
+// whole compiled snapshot, so it moves on every republish, including one that
+// only recorded observed state. The retry's own anchor digest covers the
+// configured policy, `rule_digest` and `runtime_identity` instead. The receipt
+// is still required to carry a well-formed `policy_digest`.
+const POLICY_BINDING_SCHEMA: &str = "guard.native-review-policy-binding.v2";
 const EXACT_ACTION_BUDGET_MS: u64 = 4_000;
 const TOOL_NAME_FIELDS: [&str; 3] = ["tool_name", "toolName", "tool"];
 const TOOL_INPUT_FIELDS: [&str; 2] = ["tool_input", "toolInput"];
@@ -54,6 +59,7 @@ pub(super) fn exact_action(
         tool_name,
         command: pre_tool_command(input.payload)?,
         tool_input: tool_input_pairs(input.payload)?,
+        raw_tool_input: raw_tool_input(input.payload)?,
         payload_cwd: payload_cwd(input.payload)?,
         workspace: Some(input.workspace.to_owned()),
         home_dir: Some(input.home_dir.to_owned()),
@@ -96,7 +102,7 @@ fn policy_binding(
         return Err(HookDirectDefer::SavedDecision);
     }
     let text = |key: &str| receipt.get(key).filter(|value| value.is_string()).cloned();
-    let (Some(policy_digest), Some(rule_digest), Some(runtime_identity)) = (
+    let (Some(_policy_digest), Some(rule_digest), Some(runtime_identity)) = (
         text("policy_digest"),
         text("rule_digest"),
         text("runtime_identity"),
@@ -115,7 +121,6 @@ fn policy_binding(
     Ok(NativePolicyBindingV1::Bound {
         value: json!({
             "schema": POLICY_BINDING_SCHEMA,
-            "policy_digest": policy_digest,
             "rule_digest": rule_digest,
             "runtime_identity": runtime_identity,
             "command_extensions": command_extensions,
@@ -213,6 +218,23 @@ fn tool_input_pairs(
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect(),
     ))
+}
+
+/// `_raw_tool_input`: the first tool input the payload sent that is not an
+/// object, when it sent no object, deferring on the same numbers as
+/// [`tool_input_pairs`].
+fn raw_tool_input(payload: &Map<String, Value>) -> Result<Option<Value>, HookDirectDefer> {
+    if pre_tool_input(payload).is_some() || payload.get("arguments").is_some_and(Value::is_object) {
+        return Ok(None);
+    }
+    let raw = TOOL_INPUT_FIELDS
+        .iter()
+        .chain(["arguments"].iter())
+        .find_map(|key| payload.get(*key).filter(|value| !value.is_null()));
+    match raw {
+        Some(value) if !plain_numbers(value) => Err(HookDirectDefer::SavedDecision),
+        raw => Ok(raw.cloned()),
+    }
 }
 
 /// Whether every number in `value` is an integer in its canonical spelling.

@@ -1,4 +1,4 @@
-"""Windows contains only installed Python, and only for Claude Code's Git Bash sink."""
+"""Windows contains installed Python and Node scripts, and only for harnesses with a sink."""
 
 import hashlib
 import json
@@ -46,12 +46,21 @@ def _receipt(profile: str = "python-eval-readonly-v1") -> dict[str, object]:
     }
 
 
-def test_windows_backend_decodes_only_for_python_on_windows(monkeypatch, tmp_path):
+def test_windows_backend_decodes_only_for_contained_profiles_on_windows(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "platform", "win32")
     plan = transport.decode_native_plan(_plan(tmp_path), ("python-eval-readonly-v1",))
     assert plan.backend == "windows-appcontainer"
+    node = transport.decode_native_plan(_plan(tmp_path, profile="node-eval-readonly-v1"), ("node-eval-readonly-v1",))
+    assert node.backend == "windows-appcontainer"
+    # The read-only pytest profile has a Windows runner of its own.
+    tests = transport.decode_native_plan(_plan(tmp_path, profile="pytest-readonly-v2"), ("pytest-readonly-v2",))
+    assert tests.backend == "windows-appcontainer"
+    # The workspace sandbox does not: it has no Windows backend, so a plan
+    # naming it is refused however it reaches this decode.
     with pytest.raises(RestrictedPytestError):
-        transport.decode_native_plan(_plan(tmp_path, profile="node-eval-readonly-v1"), ("node-eval-readonly-v1",))
+        transport.decode_native_plan(
+            _plan(tmp_path, profile="workspace-contained-v1"), ("workspace-contained-v1",)
+        )
     monkeypatch.setattr(sys, "platform", "darwin")
     with pytest.raises(RestrictedPytestError):
         transport.decode_native_plan(_plan(tmp_path), ("python-eval-readonly-v1",))
@@ -88,6 +97,15 @@ def test_windows_inline_eval_runs_through_the_native_runner(monkeypatch, tmp_pat
     assert kwargs["timeout_seconds"] == 30
 
 
+def test_windows_node_script_names_the_node_profile(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "platform", "win32")
+    plan = transport.decode_native_plan(_plan(tmp_path, profile="node-eval-readonly-v1"), ("node-eval-readonly-v1",))
+    calls = []
+    monkeypatch.setattr(restricted_inline_eval, "_run_backend_process", lambda argv, **_kwargs: calls.append(argv) or 0)
+    restricted_inline_eval.run_restricted_inline_eval(plan, timeout_seconds=30, authorize_capability=lambda _argv: None)
+    assert calls[0][7:11] == ["30", "--profile", "node-eval-readonly-v1", "--"]
+
+
 def test_windows_backend_never_reaches_posix_sandboxes(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "platform", "win32")
     plan = transport.decode_native_plan(_plan(tmp_path), ("python-eval-readonly-v1",))
@@ -97,15 +115,19 @@ def test_windows_backend_never_reaches_posix_sandboxes(monkeypatch, tmp_path):
         _backend_argv(plan, private_root=tmp_path)
 
 
-def test_windows_contains_python_eval_only(monkeypatch):
+def test_windows_contains_the_profiles_it_has_a_runner_for(monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
     assert platform_contains(_receipt())
-    assert not platform_contains(_receipt("pytest-readonly-v2"))
+    assert platform_contains({"required_execution_profile": "node-eval-readonly-v1"})
+    # The read-only pytest profile has a Windows planner and runner, so a
+    # receipt naming it is rewritten into the sink rather than left as a deny.
+    assert platform_contains(_receipt("pytest-readonly-v2"))
+    # The workspace sandbox has no Windows backend.
     assert not platform_contains(_receipt("workspace-contained-v1"))
 
 
-@pytest.mark.parametrize(("harness", "routed"), [("claude-code", True), ("codex", False), ("zcode", False)])
-def test_windows_routes_only_the_git_bash_harness(monkeypatch, tmp_path, harness, routed):
+@pytest.mark.parametrize(("harness", "routed"), [("claude-code", True), ("codex", True), ("zcode", False)])
+def test_windows_routes_only_harnesses_with_a_sink_command(monkeypatch, tmp_path, harness, routed):
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(windows_paths, "trusted_windows_local_temp", lambda: tmp_path)
     payload = {
@@ -122,6 +144,10 @@ def test_windows_routes_only_the_git_bash_harness(monkeypatch, tmp_path, harness
     }
     result = contained_zcode_response(_receipt(), input_text=json.dumps(payload), config=config, cli_args=[])
     assert (result is not None) is routed
+    if harness == "codex":
+        command = result["hookSpecificOutput"]["updatedInput"]["command"]
+        assert command.startswith("& '")
+        assert "execute-contained-test" in command
 
 
 def test_windows_sink_finds_the_request_when_temp_differs(monkeypatch, tmp_path):
