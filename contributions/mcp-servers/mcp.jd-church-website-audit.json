@@ -3,7 +3,7 @@
   "id": "mcp.jd-church-website-audit",
   "version": "1.0.0",
   "name": "Church Website Audit by Journey Digital",
-  "description": "tnvolman/jd-church-website-audit server/audit-mcp.js has one tool, audit_church_website. It only POSTs {url, source:\"plugin\", include_cta?} to https://journeydigital.ai/api/audit. It does not fetch or upload page HTML, read local files, or need credentials. Off until you turn it on.",
+  "description": "Local stdio server from tnvolman/jd-church-website-audit. Clients start it as node server/audit-mcp.js. Its one tool, audit_church_website, only POSTs {url, source:\"plugin\", include_cta?} to https://journeydigital.ai/api/audit. It does not fetch or upload page HTML, read local files, or need credentials. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -19,11 +19,8 @@
   "homepage": "https://journeydigital.ai/audit",
   "license": "MIT",
   "launch": {
-    "kind": "remote-http",
-    "url": "https://journeydigital.ai/api/audit",
-    "serverNames": [
-      "church-website-audit"
-    ]
+    "kind": "direct-command",
+    "command": "audit-mcp.js"
   },
   "riskClasses": [
     "external-url-submission"
@@ -46,8 +43,8 @@
     "https://journeydigital.ai/terms"
   ],
   "saferAlternatives": [
-    "audit_church_website only POSTs {url, source:\"plugin\", include_cta?} to https://journeydigital.ai/api/audit.",
-    "It does not fetch or upload page HTML, read local files, or need credentials.",
+    "Start the local stdio server with node server/audit-mcp.js. This entry matches the script basename audit-mcp.js; node is a reserved interpreter.",
+    "audit_church_website only POSTs {url, source:\"plugin\", include_cta?}. It does not fetch or upload page HTML, read local files, or need credentials.",
     "Use the browser checker at https://journeydigital.ai/audit if you do not want the local server/audit-mcp.js process."
   ]
 }
