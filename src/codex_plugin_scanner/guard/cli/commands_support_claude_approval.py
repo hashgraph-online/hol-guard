@@ -132,18 +132,6 @@ def _persist_claude_guard_question_decision(
     return True
 
 
-def _is_claude_permission_prompt_notification(args: argparse.Namespace, payload: dict[str, object]) -> bool:
-    return (
-        _canonical_harness_name(args.harness) == "claude-code"
-        and _hook_event_name(payload) == "Notification"
-        and _optional_string(payload.get("notification_type")) == "permission_prompt"
-    )
-
-
-def _is_claude_permission_request(args: argparse.Namespace, payload: dict[str, object]) -> bool:
-    return _canonical_harness_name(args.harness) == "claude-code" and _hook_event_name(payload) == "PermissionRequest"
-
-
 def _claude_permission_notice_prefers_ask_user_question(notice: dict[str, object]) -> bool:
     # A render the resident cannot answer falls back to the Guard approval
     # question, which denies Claude's own dialog; the deferring branch is the
@@ -243,8 +231,6 @@ __all__ = [
     "_claude_permission_request_additional_context",
     "_claude_permission_request_system_message",
     "_claude_permission_request_terminal_notice",
-    "_is_claude_permission_prompt_notification",
-    "_is_claude_permission_request",
     "_persist_claude_guard_question_decision",
     "_resolve_claude_permission_request_policy_action",
 ]

@@ -11,10 +11,12 @@ from .commands_support import *
 from ._commands_shared import *
 
 from dataclasses import dataclass, field, replace
+from typing import Any
 
 from ..action_lattice import normalize_guard_action
 from ..incident import build_incident_context
 from ..models import GuardReceipt
+from ..native_hook_artifact_finalize import native_artifact_finalize
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus
 from ..runtime.signals import RiskSignalV2
 from .commands_support_command_activity import (
@@ -59,75 +61,96 @@ class NativeArtifactHookState:
     approval_prompted: bool | None = None
 
 
-def set_native_artifact_hook_final_action(
+def plan_native_artifact_hook_final_action(
     state: NativeArtifactHookState,
     policy_action: str,
     *,
     approval_request_id: str | None = None,
     approval_source: str | None = None,
+    guard_home: Path | None = None,
     observed_policy_action: str | None = None,
-) -> None:
-    """Make one post-review action authoritative across every hook surface."""
+    queued_request_id: str | None = None,
+) -> Mapping[str, Any]:
+    """Ask the resident what a post-review action settles to, and change nothing.
 
-    previous_action = normalize_guard_action(state.policy_action, unknown_action="block")
-    normalized_action = normalize_guard_action(policy_action, unknown_action="block")
-    state.policy_action = normalized_action
-    state.response_payload["policy_action"] = normalized_action
-    state.response_payload["resolved_policy_action"] = normalized_action
-    normalized_observed_action = (
-        normalize_guard_action(observed_policy_action, unknown_action="block")
-        if observed_policy_action is not None
+    The answer is fetched before anything is persisted: a resident that cannot
+    give one raises, and the hook answers with its outage response instead of
+    recording a verdict the harness never received.
+    """
+
+    raw_supply_chain = state.response_payload.get("supply_chain_evaluation")
+    package_action = (
+        raw_supply_chain.get("policy_action", raw_supply_chain.get("decision"))
+        if isinstance(raw_supply_chain, dict)
         else None
     )
-    if normalized_observed_action is not None:
-        state.response_payload["observed_policy_action"] = normalized_observed_action
+    cloud_reason_code = state.decision_v2_payload.get("package_review_cloud_reason_code")
+    return native_artifact_finalize(
+        {
+            "previous_action": state.policy_action,
+            "policy_action": policy_action,
+            "observed_policy_action": observed_policy_action,
+            "approval_source": approval_source,
+            "approval_request_id": approval_request_id,
+            "queued_request_id": queued_request_id,
+            "initial_policy_action": state.initial_policy_action,
+            "receipt_approval_source": state.receipt.approval_source,
+            "receipt_approval_request_id": state.receipt.approval_request_id,
+            "receipt_user_override": state.receipt.user_override,
+            "package_review_cloud_reason_code": (
+                cloud_reason_code if isinstance(cloud_reason_code, str) else None
+            ),
+            "supply_chain_present": isinstance(raw_supply_chain, dict),
+            "supply_chain_action": package_action if isinstance(package_action, str) else None,
+        },
+        guard_home=guard_home if guard_home is not None else state.guard_home,
+    )
+
+
+def apply_native_artifact_hook_final_action(state: NativeArtifactHookState, plan: Mapping[str, Any]) -> None:
+    """Write the resident's settled answer onto every hook surface.
+
+    Rendering only: the action, the decision record, the evidence and the
+    receipt fields are the plan's.
+    """
+
+    action = plan["action"]
+    observed = plan["observed_action"]
+    response = state.response_payload
+    state.policy_action = action
+    response["policy_action"] = action
+    response["resolved_policy_action"] = action
+    if observed is not None:
+        response["observed_policy_action"] = observed
+    if plan["drop_terminal_action"]:
         # Observe mode records the non-executed policy only in explicitly
         # diagnostic fields; no unqualified terminal action may contradict
         # the final action that was actually executed.
-        state.response_payload.pop("terminal_action", None)
+        response.pop("terminal_action", None)
     if state.action_envelope is not None:
-        state.action_envelope = state.action_envelope.with_pre_execution_result(normalized_action)
+        state.action_envelope = state.action_envelope.with_pre_execution_result(action)
 
     decision_v2_payload = build_decision_v2(
-        normalized_action,
-        reason=(
-            "browser-approval"
-            if approval_source == "browser"
-            else normalized_action
-        ),
+        action,
+        reason=plan["decision_reason"],
         signals=state.decision_signals,
     ).to_dict()
-    package_review_cloud_reason_code = state.decision_v2_payload.get("package_review_cloud_reason_code")
-    if package_review_cloud_reason_code in {
-        "cloud_auth_error",
-        "cloud_http_error",
-        "cloud_timeout",
-        "cloud_validation_error",
-    }:
-        decision_v2_payload["package_review_cloud_reason_code"] = package_review_cloud_reason_code
+    if plan["cloud_reason_code"] is not None:
+        decision_v2_payload["package_review_cloud_reason_code"] = plan["cloud_reason_code"]
     state.decision_v2_payload = decision_v2_payload
-    state.response_payload["decision_v2_json"] = decision_v2_payload
+    response["decision_v2_json"] = decision_v2_payload
 
-    if previous_action != normalized_action:
+    if plan["refresh_copy"]:
         final_risk_summary = str(decision_v2_payload["dashboard_primary_detail"])
         state.risk_summary = final_risk_summary
-        state.response_payload["risk_summary"] = final_risk_summary
-        raw_supply_chain = state.response_payload.get("supply_chain_evaluation")
+        response["risk_summary"] = final_risk_summary
+        raw_supply_chain = response.get("supply_chain_evaluation")
         if isinstance(raw_supply_chain, dict):
             observed_supply_chain = dict(raw_supply_chain)
             raw_user_copy = raw_supply_chain.get("user_copy")
             user_copy = dict(raw_user_copy) if isinstance(raw_user_copy, dict) else {}
-            if normalized_observed_action is not None:
-                raw_package_action = observed_supply_chain.get(
-                    "policy_action",
-                    observed_supply_chain.get("decision"),
-                )
-                observed_package_action = (
-                    normalize_guard_action(raw_package_action, unknown_action="block")
-                    if isinstance(raw_package_action, str)
-                    else normalized_observed_action
-                )
-                raw_supply_chain["observed_policy_action"] = observed_package_action
+            if plan["observed_supply_chain_action"] is not None:
+                raw_supply_chain["observed_policy_action"] = plan["observed_supply_chain_action"]
                 raw_supply_chain["observed_risk_summary"] = observed_supply_chain.get("risk_summary")
                 raw_supply_chain["observed_user_copy"] = observed_supply_chain.get("user_copy")
             user_copy.update(
@@ -142,7 +165,7 @@ def set_native_artifact_hook_final_action(
             raw_supply_chain.update(
                 {
                     "decision": decision_v2_payload["action"],
-                    "policy_action": normalized_action,
+                    "policy_action": action,
                     "risk_summary": final_risk_summary,
                     "user_copy": user_copy,
                 }
@@ -157,60 +180,66 @@ def set_native_artifact_hook_final_action(
         source_scope=state.runtime_artifact.source_scope,
         config_path=state.runtime_artifact.config_path,
         changed_fields=state.changed_capabilities,
-        policy_action=normalized_action,
+        policy_action=action,
         launch_target=None,
         risk_summary=state.risk_summary,
         guard_home=state.guard_home,
     )
     for key in ("trigger_summary", "why_now", "risk_headline"):
-        state.response_payload[key] = incident[key]
+        response[key] = incident[key]
 
-    policy_composition = state.response_payload.get("policy_composition")
+    patch = plan["evidence_patch"]
+    policy_composition = response.get("policy_composition")
     if isinstance(policy_composition, dict):
-        policy_composition["authoritative_action"] = normalized_action
-        if normalized_observed_action is not None:
-            policy_composition["observed_policy_action"] = normalized_observed_action
+        policy_composition.update(patch["fields"])
     for evidence in state.scanner_evidence_payload:
-        if evidence.get("source") == "policy_composition":
-            evidence["authoritative_action"] = normalized_action
-            if normalized_observed_action is not None:
-                evidence["observed_policy_action"] = normalized_observed_action
+        if evidence.get("source") == patch["source"]:
+            evidence.update(patch["fields"])
 
-    receipt_evidence = tuple(
-        {
-            **evidence,
-            "authoritative_action": normalized_action,
-            **(
-                {"observed_policy_action": normalized_observed_action}
-                if normalized_observed_action is not None
-                else {}
-            ),
-        }
-        if evidence.get("source") == "policy_composition"
-        else evidence
-        for evidence in state.receipt.scanner_evidence
-    )
-    if approval_source == "browser":
-        receipt_evidence = (
-            *receipt_evidence,
-            {
-                "source": "browser_approval_resolution",
-                "initial_action": state.initial_policy_action,
-                "authoritative_action": normalized_action,
-                "approval_request_id": approval_request_id,
-            },
-        )
+    receipt_plan = plan["receipt"]
     state.receipt = replace(
         state.receipt,
-        policy_decision=normalized_action,
-        approval_source=approval_source or state.receipt.approval_source,
-        approval_request_id=approval_request_id or state.receipt.approval_request_id,
-        user_override=(
-            "browser-approval"
-            if approval_source == "browser"
-            else state.receipt.user_override
+        policy_decision=receipt_plan["policy_decision"],
+        approval_source=receipt_plan["approval_source"],
+        approval_request_id=receipt_plan["approval_request_id"],
+        user_override=receipt_plan["user_override"],
+        scanner_evidence=(
+            *(
+                {**evidence, **patch["fields"]} if evidence.get("source") == patch["source"] else evidence
+                for evidence in state.receipt.scanner_evidence
+            ),
+            *(dict(entry) for entry in receipt_plan["appended_evidence"]),
         ),
-        scanner_evidence=receipt_evidence,
+    )
+
+
+def set_native_artifact_hook_final_action(
+    state: NativeArtifactHookState,
+    policy_action: str,
+    *,
+    approval_request_id: str | None = None,
+    approval_source: str | None = None,
+    guard_home: Path | None = None,
+    observed_policy_action: str | None = None,
+    queued_request_id: str | None = None,
+) -> None:
+    """Make one post-review action authoritative across every hook surface.
+
+    For a settle with nothing persisted between the question and its answer;
+    a path that records something first plans before it and applies after.
+    """
+
+    apply_native_artifact_hook_final_action(
+        state,
+        plan_native_artifact_hook_final_action(
+            state,
+            policy_action,
+            approval_request_id=approval_request_id,
+            approval_source=approval_source,
+            guard_home=guard_home,
+            observed_policy_action=observed_policy_action,
+            queued_request_id=queued_request_id,
+        ),
     )
 
 
@@ -272,6 +301,8 @@ def _record_runtime_command_activity(state: NativeArtifactHookState, store: Guar
 
 __all__ = [
     "NativeArtifactHookState",
+    "apply_native_artifact_hook_final_action",
+    "plan_native_artifact_hook_final_action",
     "record_native_artifact_hook_receipt",
     "set_native_artifact_hook_final_action",
 ]

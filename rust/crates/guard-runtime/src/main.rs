@@ -439,12 +439,15 @@ mod hook_cli_claude_text;
 #[cfg(test)]
 mod hook_decision_apply_patch_gate_tests;
 mod hook_decision_artifact_directive;
+mod hook_decision_artifact_finalize;
+mod hook_decision_artifact_reuse_step;
 mod hook_decision_artifact_review_route;
 #[cfg(all(test, unix))]
 mod hook_decision_benign_tool_action_tests;
 mod hook_decision_compose;
 mod hook_decision_directive;
 mod hook_decision_finalize;
+mod hook_decision_hook_route;
 mod hook_decision_native_facts;
 #[cfg(all(test, unix))]
 mod hook_decision_native_facts_tests;

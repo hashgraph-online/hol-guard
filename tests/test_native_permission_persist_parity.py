@@ -24,9 +24,12 @@ import pytest
 
 import codex_plugin_scanner.guard.cli.commands  # noqa: F401  (wires the shared command namespace)
 from codex_plugin_scanner.guard import native_hook_decision as decision
+from codex_plugin_scanner.guard import native_hook_route as route_module
 from codex_plugin_scanner.guard import native_resident_decision as shared
 from codex_plugin_scanner.guard.approval_gate_types import ApprovalGateError
 from codex_plugin_scanner.guard.cli import commands_hook_native_pipeline as pipeline
+from codex_plugin_scanner.guard.cli import commands_hook_native_route as route_run
+from codex_plugin_scanner.guard.cli import commands_hook_native_route_handlers as handlers
 from codex_plugin_scanner.guard.cli import commands_support_permission_store as permission_store
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -513,10 +516,15 @@ def test_an_outage_while_saving_an_ask_user_question_answer_emits_the_unavailabl
     state = (payload, None, False, None, None, None, None, None)
     monkeypatch.setattr(pipeline, "_normalize_hook_payload", lambda value, **_kwargs: value)
     monkeypatch.setattr(pipeline, "prepare_native_hook_state", lambda *_args, **_kwargs: state)
-    monkeypatch.setattr(pipeline, "_load_single_claude_pending_permission", lambda *_a, **_k: ("key", {}))
-    monkeypatch.setattr(pipeline, "_claude_guard_question_verdict", lambda *_a, **_k: SimpleNamespace(is_question=True))
-    monkeypatch.setattr(pipeline, "_persist_claude_guard_question_decision", unavailable)
-    monkeypatch.setattr(pipeline, "_emit_native_unavailable", emit)
+    monkeypatch.setattr(
+        pipeline,
+        "native_hook_route",
+        lambda _inputs, **_kwargs: route_module.NativeHookRoute(("claude_guard_question",), "PostToolUse"),
+    )
+    monkeypatch.setattr(handlers, "_load_single_claude_pending_permission", lambda *_a, **_k: ("key", {}))
+    monkeypatch.setattr(handlers, "_claude_guard_question_verdict", lambda *_a, **_k: SimpleNamespace(is_question=True))
+    monkeypatch.setattr(handlers, "_persist_claude_guard_question_decision", unavailable)
+    monkeypatch.setattr(route_run, "_emit_native_unavailable", emit)
     context = SimpleNamespace(guard_home=HOME, home_dir=HOME)
 
     rc = pipeline.run_native_hook_pipeline(

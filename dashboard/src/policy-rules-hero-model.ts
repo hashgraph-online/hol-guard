@@ -10,7 +10,6 @@ export interface RulesHeroModel {
   headline: string;
   subheadline: string;
   facts: string[];
-  liveLabel: string;
 }
 
 const RISKY_FAMILIES = new Set(["tool-action", "package-request", "mcp", "prompt-env-read"]);
@@ -96,9 +95,8 @@ export function buildRulesHeroModel(input: {
       badge: "Nothing remembered yet",
       headline: "Guard asks before it repeats anything",
       subheadline:
-        "No decision is remembered on this device yet. The first time an app asks to do something new, Guard checks with you — approve it once and choose how broadly to remember it, and it lands here.",
+        "Approve a request in Inbox and choose how broadly to remember it — the decision lands here.",
       facts,
-      liveLabel: "Asking every time",
     };
   }
   if (attention.broadAllows.length > 0) {
@@ -108,17 +106,16 @@ export function buildRulesHeroModel(input: {
       badge: "Worth a second look",
       headline: n === 1 ? "1 broad allow deserves a second look" : `${n} broad allows deserve a second look`,
       subheadline:
-        "These rules let an action through everywhere it matches — every project, or every time an app runs it. If one is wider than you meant, narrow or remove it below and Guard will ask again.",
+        "These let an action through everywhere it matches. If one is wider than you meant, remove it and Guard asks again.",
       facts,
-      liveLabel: `${counts.total} rules in force`,
     };
   }
   const provenance =
     counts.cloud === 0
-      ? "Every rule below is a choice you made once, stated in plain language with where it came from and how to undo it."
+      ? "Each one says where it came from and how to undo it."
       : counts.local === 0
-        ? "Every rule below synced from Guard Cloud, stated in plain language. They are read-only here — change them in Guard Cloud or their governing Extension."
-        : "Rules below mix choices you made on this device with rules synced from Guard Cloud. Each one says where it came from and how it can be changed.";
+        ? "Synced from Guard Cloud and read-only here — change them in Guard Cloud or their governing Extension."
+        : "Each one says where it came from and how it can be changed.";
   return {
     tone: "clear",
     badge: "Memory is tidy",
@@ -126,9 +123,8 @@ export function buildRulesHeroModel(input: {
       counts.total === 1
         ? "1 decision Guard will repeat for you"
         : `${counts.total} decisions Guard will repeat for you`,
-    subheadline: `${provenance} Nothing here widens itself — Guard only repeats what was approved.`,
+    subheadline: provenance,
     facts,
-    liveLabel: `${counts.total} rules in force`,
   };
 }
 

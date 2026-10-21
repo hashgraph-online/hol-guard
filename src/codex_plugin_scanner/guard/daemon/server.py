@@ -27,7 +27,11 @@ from urllib.parse import parse_qs, parse_qsl, urlparse
 
 from ...version import __version__
 from ..adapters import get_adapter
-from ..aibom_cli import _AIBOM_AUTO_SYNC_INTERVAL_SECONDS, sync_aibom_snapshots_if_due
+from ..aibom_cli import (
+    _AIBOM_AUTO_SYNC_INTERVAL_SECONDS,
+    remember_user_inventory_if_due,
+    sync_aibom_snapshots_if_due,
+)
 from ..approval_gate import (
     ApprovalGateError,
     require_high_risk,
@@ -4268,6 +4272,19 @@ class GuardDaemonServer:
             try:
                 home_dir, workspace_dir, bound_workspace_id = self._aibom_inventory_context_dirs()
                 if workspace_dir is None:
+                    # Without a workspace the cloud snapshot is left alone; the
+                    # user-wide scan still feeds fleet posture inventory.
+                    # A failed home scan is reported here so the status still
+                    # says no workspace is bound rather than a sync error.
+                    try:
+                        user_inventory = remember_user_inventory_if_due(
+                            self._server.store,
+                            generated_at=refreshed_at,
+                            min_interval_seconds=max(int(interval_seconds), 1),
+                            home_dir=home_dir if home_dir is not None else self._aibom_home_dir,
+                        )
+                    except Exception as error:
+                        user_inventory = {"collected": False, "error": str(error)}
                     self._server.store.set_sync_payload(
                         "aibom_inventory_daemon",
                         {
@@ -4275,6 +4292,7 @@ class GuardDaemonServer:
                             "reason": "missing_workspace_context",
                             "skipped": True,
                             "refreshed_at": refreshed_at,
+                            "user_inventory": user_inventory,
                         },
                         refreshed_at,
                     )

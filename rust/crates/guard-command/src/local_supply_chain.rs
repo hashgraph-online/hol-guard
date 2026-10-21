@@ -643,6 +643,9 @@ pub struct GuardConfig {
     /// `harness_risk_actions` (config.py :419).
     pub harness_risk_actions:
         Option<std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>>,
+    /// `harness_postures` (config.py :421), canonically keyed as
+    /// `coerce_loaded_harness_postures` leaves them.
+    pub harness_postures: Option<std::collections::BTreeMap<String, String>>,
     /// `managed_policy_status` (config.py :426).
     pub managed_policy_status: String,
     /// `managed_policy_hash` (config.py :427).
@@ -1662,6 +1665,24 @@ pub fn resolve_risk_action(
     if !VALID_RISK_ACTION_KEYS.contains(&risk_class) {
         return None;
     }
+    let resolved = resolve_configured_risk_action(config, risk_class, harness);
+    if harness_posture_override(config, harness) == Some("extra_careful") {
+        // A per-harness Extra careful override only ever strengthens.
+        return stricter_risk_action(
+            resolved,
+            posture_risk_actions("extra_careful").and_then(|rows| rows.get(risk_class).cloned()),
+        );
+    }
+    resolved
+}
+
+/// The explicit-then-default half of `resolve_risk_action`, before the
+/// per-harness Extra careful floor.
+fn resolve_configured_risk_action(
+    config: &GuardConfig,
+    risk_class: &str,
+    harness: Option<&str>,
+) -> Option<String> {
     if let Some(h) = harness {
         if let Some(harness_map) = config.harness_risk_actions.as_ref() {
             if let Some(inner) = harness_map.get(h) {
@@ -1677,6 +1698,38 @@ pub fn resolve_risk_action(
         }
     }
     posture_or_level_defaults(config).get(risk_class).cloned()
+}
+
+/// `harness_posture.harness_posture_override` (:120-126) against the mirror.
+/// `runtime_harness_key` resolves a registered id or alias and otherwise falls
+/// back to the normalized name, so an unregistered harness simply matches no
+/// override.
+fn harness_posture_override<'a>(config: &'a GuardConfig, harness: Option<&str>) -> Option<&'a str> {
+    let raw = harness?;
+    let postures = config.harness_postures.as_ref()?;
+    let normalized = raw.trim().to_lowercase().replace('_', "-");
+    if normalized.is_empty() {
+        return None;
+    }
+    let key =
+        crate::harness_identity::canonical_harness_id(&normalized).unwrap_or(normalized.as_str());
+    postures.get(key).map(String::as_str)
+}
+
+/// `harness_posture.stricter_risk_action` (:209-214).
+fn stricter_risk_action(base: Option<String>, floor: Option<String>) -> Option<String> {
+    match (base, floor) {
+        (None, floor) => floor,
+        (base, None) => base,
+        (Some(base), Some(floor)) => Some(
+            crate::action_lattice::most_restrictive_guard_action(
+                &[Value::String(base), Value::String(floor)],
+                crate::effect_decision::GuardAction::Block,
+            )
+            .as_str()
+            .to_owned(),
+        ),
+    }
 }
 
 /// `_posture_or_level_defaults` (config.py :1053-1058).

@@ -16,6 +16,7 @@ hashes the same way whichever source saw it.
 from __future__ import annotations
 
 import os
+import threading
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -122,6 +123,13 @@ def _item_rows(snapshot: Any, home_dir: Path | None, workspace_dir: Path | None)
         }
 
 
+# The daemon refresh loop, request handlers and the CLI can collect at the same
+# time. The thread lock orders collectors in one process and the store's
+# advisory file lock orders processes, so one read-modify-write of the stored
+# rows never drops another.
+_ROWS_LOCK = threading.Lock()
+
+
 def remember_aibom_items(
     store: GuardStore,
     snapshots: Iterable[Any],
@@ -140,6 +148,18 @@ def remember_aibom_items(
 
     home = _resolved(home_dir)
     workspace = _resolved(workspace_dir)
+    with _ROWS_LOCK, store.hold_aibom_items_lock():
+        return _replace_rows(store, snapshots, now=now, home=home, workspace=workspace)
+
+
+def _replace_rows(
+    store: GuardStore,
+    snapshots: Iterable[Any],
+    *,
+    now: str,
+    home: Path | None,
+    workspace: Path | None,
+) -> int:
     scanned = str(workspace) if workspace is not None else None
     previous = _stored_rows(store)
     first_seen = {_row_key(row): row.get("first_seen_at") for row in previous}

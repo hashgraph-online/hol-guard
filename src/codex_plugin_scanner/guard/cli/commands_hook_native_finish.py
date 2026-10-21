@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 
 from ..native_hook_artifact_compose import native_hook_compose
+from ..native_hook_artifact_finalize import native_artifact_browser_outcome
 from ..native_hook_decision import native_artifact_directive
 from .commands_support import *
 
@@ -178,56 +179,51 @@ def finalize_native_artifact_hook(
         response_payload = state.response_payload
         runtime_artifact = state.runtime_artifact
 
-    if codex_browser_decision == "allow":
+    # The resident says whether the browser's outcome settles the hook; an
+    # outcome it cannot judge leaves no verdict, so the hook answers with its
+    # outage response before anything is recorded.
+    outcome = (
+        native_artifact_browser_outcome(
+            {"decision": codex_browser_decision, "event": event_name},
+            guard_home=store.guard_home,
+        )
+        if codex_browser_decision is not None
+        else None
+    )
+    if outcome is not None and outcome["settle"]:
         adopt_fresh_browser_state()
-        approval_request_id = response_payload.get("browser_resolution_request_id")
+        resolution_request_id = response_payload.get("browser_resolution_request_id")
+        approval_requests = response_payload.get("approval_requests")
+        first_request = approval_requests[0] if isinstance(approval_requests, list) and approval_requests else None
+        queued_request_id = first_request.get("request_id") if isinstance(first_request, dict) else None
         set_native_artifact_hook_final_action(
             state,
-            "allow",
-            approval_request_id=(
-                approval_request_id if isinstance(approval_request_id, str) else None
-            ),
-            approval_source="browser",
+            str(outcome["action"]),
+            approval_request_id=resolution_request_id if isinstance(resolution_request_id, str) else None,
+            approval_source=outcome["approval_source"],
+            guard_home=store.guard_home,
+            queued_request_id=queued_request_id if isinstance(queued_request_id, str) else None,
         )
         action_envelope = state.action_envelope
         policy_action = state.policy_action
         response_payload = state.response_payload
-        if event_name != "PreToolUse":
-            _emit_native_hook_response(
-                harness=args.harness,
-                policy_action="allow",
-                event_name=event_name,
-                reason="",
-                output_stream=output_stream,
+        if outcome["finish_without_render"]:
+            if outcome["emit_native_allow"]:
+                _emit_native_hook_response(
+                    harness=args.harness,
+                    policy_action=policy_action,
+                    event_name=event_name,
+                    reason="",
+                    output_stream=output_stream,
+                )
+            record_native_artifact_hook_receipt(state, store)
+            _record_harness_usage_for_hook(
+                store=store,
+                action_envelope=action_envelope,
+                payload=payload,
+                policy_action=policy_action,
             )
-        record_native_artifact_hook_receipt(state, store)
-        _record_harness_usage_for_hook(
-            store=store,
-            action_envelope=action_envelope,
-            payload=payload,
-            policy_action="allow",
-        )
-        return 0
-    if codex_browser_decision in {"block", "sandbox-required"}:
-        adopt_fresh_browser_state()
-        approval_request_id = response_payload.get("browser_resolution_request_id")
-        if not isinstance(approval_request_id, str):
-            approval_requests = response_payload.get("approval_requests")
-            if isinstance(approval_requests, list) and approval_requests:
-                first_request = approval_requests[0]
-                if isinstance(first_request, dict) and isinstance(first_request.get("request_id"), str):
-                    approval_request_id = first_request["request_id"]
-        set_native_artifact_hook_final_action(
-            state,
-            codex_browser_decision,
-            approval_request_id=(
-                approval_request_id if isinstance(approval_request_id, str) else None
-            ),
-            approval_source="browser",
-        )
-        action_envelope = state.action_envelope
-        policy_action = state.policy_action
-        response_payload = state.response_payload
+            return 0
     approval_context = live_hook_approval_context(response_payload, harness=args.harness, guard_home=store.guard_home)
     canonical_harness = _canonical_harness_name(args.harness)
     is_claude = canonical_harness == "claude-code"

@@ -30,9 +30,10 @@ name: Merge freeze
 #
 # The variable only changes results computed after it changes. Running this
 # workflow re-evaluates the open pull requests whose CI already finished: it
-# posts a failing `hol-guard / required` check run while frozen, and on unfreeze
-# re-runs the real aggregate, whose new result replaces that check run. A pull
-# request with no CI result yet stays blocked until CI reports. Add
+# posts a failing `hol-guard / required` check run while frozen. On unfreeze it
+# marks that check run neutral, or re-runs the real aggregate when the two share
+# a check suite; CI's own result still has to pass. A pull request with no CI
+# result yet stays blocked until CI reports. Add
 # `-f dry_run=true` to see what would change without writing anything.
 
 on:

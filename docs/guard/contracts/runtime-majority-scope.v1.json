@@ -545,15 +545,8 @@
         "reason": "Retained conservatively in runtime scope: generated_command_catalog and native_command_control_binding reach authenticated pack metadata, activation projection and recovery through lazy imports. Count the complete shared delivery modules, including preparation and transport helpers, rather than exclude code reachable through those authority boundaries. Pack admission and hook evaluation remain native."
       },
       {
-        "path": [
-          "src/codex_plugin_scanner/guard/runtime/data_flow.py",
-          "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py"
-        ],
-        "reason": "Reviewed and retained in runtime scope: cli/commands_support_runtime_artifacts reaches these at module load when it builds runtime artifacts; the resident now recognises non-executing GitHub Actions reads. github_command_capabilities returns unknown when the native GitHub classifier is unavailable and never re-derives a capability in Python. The sensitive-request classifiers that used to reach them eagerly now run in the resident, so they are reached through that lazily loaded artifact module and stay counted."
-      },
-      {
-        "path": "src/codex_plugin_scanner/guard/runtime/node_semver.py",
-        "reason": "Reviewed and retained in runtime scope: the routine local runner verdict that used to import node_semver_spec_matches now runs in the resident package intent parser, so the artifact module no longer reaches this. scripts/record_direct_tool_vectors binds node_semver_spec_matches into the services it replays direct tool vectors through, which is a recording harness rather than an enforcement path; the module stays counted until that harness reads the native verdict."
+        "path": "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py",
+        "reason": "Reviewed and retained in runtime scope: cli/commands_support_runtime_artifacts reaches github_command_capabilities at module load when it builds runtime artifacts; the resident now recognises non-executing GitHub Actions reads. It returns unknown when the native GitHub classifier is unavailable and never re-derives a capability in Python. The sensitive-request classifiers that used to reach it eagerly now run in the resident, so it is reached through that lazily loaded artifact module and stays counted."
       },
       {
         "path": "src/codex_plugin_scanner/guard/retry_lineage.py",
@@ -695,7 +688,6 @@
           "src/codex_plugin_scanner/guard/runtime/contained_test_hook.py",
           "src/codex_plugin_scanner/guard/runtime/contained_wrapper.py",
           "src/codex_plugin_scanner/guard/runtime/embedded_script_evidence.py",
-          "src/codex_plugin_scanner/guard/runtime/executable_flag_contract.py",
           "src/codex_plugin_scanner/guard/runtime/extension_contribution.py",
           "src/codex_plugin_scanner/guard/runtime/extension_trust.py",
           "src/codex_plugin_scanner/guard/runtime/js_semver.py",
@@ -711,7 +703,7 @@
           "src/codex_plugin_scanner/guard/runtime/skill_protection.py",
           "src/codex_plugin_scanner/guard/runtime/source_paths.py"
         ],
-        "reason": "Reviewed: runtime support modules used by supply-chain evaluation, contained execution, local-CLI/MCP grant decisions and secret-file-request services: js_semver, npm_policy_range, lockfile/manifest evaluation, package_json_scripts, source_paths/skill_paths, contained_test_hook/wrapper/run_directory/command_prefix/authority, oci isolation, extension and mcp_server contribution, embedded_script_evidence, executable_flag_contract, mcp_connection_identity, and skill_protection (skill-content findings for the MCP skill firewall). Each is imported by an in-scope decision, parser or containment module on the hook/run path."
+        "reason": "Reviewed: runtime support modules used by supply-chain evaluation, contained execution, local-CLI/MCP grant decisions and secret-file-request services: js_semver, npm_policy_range, lockfile/manifest evaluation, package_json_scripts, source_paths/skill_paths, contained_test_hook/wrapper/run_directory/command_prefix/authority, oci isolation, extension and mcp_server contribution, embedded_script_evidence, mcp_connection_identity, and skill_protection (skill-content findings for the MCP skill firewall). Each is imported by an in-scope decision, parser or containment module on the hook/run path."
       },
       {
         "path": [

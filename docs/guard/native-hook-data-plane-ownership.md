@@ -183,6 +183,13 @@ Current material gaps include:
   resident-memory replay state, and final consume fence. Python may present
   the opaque challenge and forward the external artifact, but it never signs,
   authorizes, or persists approval state.
+- Rust owns the reuse of a saved approval on the artifact hook: the resident
+  (`artifact_reuse_step`) answers a plan of effects (claim, revalidate, settled)
+  and Python only runs them. A claim that wins is always followed by its
+  revalidation with no resident call between the two, and a resident that
+  fails or answers a malformed plan fails closed to the host outage. The one
+  Python decision left is the package fallback floor, which never ends weaker
+  than the recomputed action.
 
 ## No-environment production contract
 

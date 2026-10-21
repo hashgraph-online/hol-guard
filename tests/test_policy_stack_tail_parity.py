@@ -30,8 +30,11 @@ import pytest
 
 import codex_plugin_scanner.guard.cli.commands  # noqa: F401  (wires the shared command namespace)
 from codex_plugin_scanner.guard import native_hook_artifact_facts as facts_bridge
+from codex_plugin_scanner.guard import native_hook_route as route_module
 from codex_plugin_scanner.guard.cli import commands_hook_native_pipeline as pipeline
 from codex_plugin_scanner.guard.cli import commands_hook_native_policy_tail as tail
+from codex_plugin_scanner.guard.cli import commands_hook_native_route as route_run
+from codex_plugin_scanner.guard.cli import commands_hook_native_route_handlers as handlers
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifact_policy import artifact_fact_skip_native_floor
 from codex_plugin_scanner.guard.native_hook_artifact_compose import (
     HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE,
@@ -314,26 +317,29 @@ def test_a_resident_without_the_tail_feature_is_refused(monkeypatch: pytest.Monk
 def test_a_policy_tail_outage_is_the_host_outage_response(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     emitted: list[dict[str, object]] = []
     monkeypatch.setattr(pipeline, "runtime_hook_event_name", lambda _payload: "PreToolUse")
-    monkeypatch.setattr(pipeline, "_hook_event_name", lambda _payload: "PreToolUse")
     monkeypatch.setattr(pipeline, "_normalize_hook_payload", lambda payload, harness: payload)
     monkeypatch.setattr(
         pipeline,
         "prepare_native_hook_state",
         lambda *_a, payload, workspace, **_k: (payload, None, False, workspace, None, None, None, None),
     )
-    monkeypatch.setattr(pipeline, "emit_native_containment_route", lambda *_a: None)
-    monkeypatch.setattr(pipeline, "run_native_copilot_pretool", lambda *_a, **_k: None)
-    monkeypatch.setattr(pipeline, "run_native_copilot_permission_request", lambda *_a, **_k: None)
-    monkeypatch.setattr(pipeline, "_runtime_action_data_flow_signals", lambda *_a, **_k: ((), None))
     monkeypatch.setattr(
         pipeline,
+        "native_hook_route",
+        lambda _inputs, **_k: route_module.NativeHookRoute(
+            ("native_edge", "containment", "runtime_artifact", "artifact_flow", "generic_flow"), "PreToolUse"
+        ),
+    )
+    monkeypatch.setattr(handlers, "emit_native_containment_route", lambda *_a: None)
+    monkeypatch.setattr(handlers, "_runtime_action_data_flow_signals", lambda *_a, **_k: ((), None))
+    monkeypatch.setattr(handlers, "_runtime_data_flow_naming", lambda **_k: None)
+    monkeypatch.setattr(
+        handlers,
         "ExtensionControlRuntimeSnapshot",
         SimpleNamespace(from_authority_view=lambda _view: None),
     )
-    monkeypatch.setattr(pipeline, "use_extension_control_snapshot", lambda _snapshot: contextlib.nullcontext())
-    monkeypatch.setattr(pipeline, "_hook_runtime_artifact", lambda **_k: object())
-    monkeypatch.setattr(pipeline, "run_native_claude_permission_request", lambda *_a, **_k: None)
-    monkeypatch.setattr(pipeline, "run_native_claude_permission_prompt_notification", lambda *_a, **_k: None)
+    monkeypatch.setattr(handlers, "use_extension_control_snapshot", lambda _snapshot: contextlib.nullcontext())
+    monkeypatch.setattr(handlers, "_hook_runtime_artifact", lambda **_k: object())
 
     def no_composition(*_args: object, **_kwargs: object) -> int:
         raise NativeHookComposeError(INVALID)
@@ -343,7 +349,7 @@ def test_a_policy_tail_outage_is_the_host_outage_response(monkeypatch: pytest.Mo
         return 0
 
     monkeypatch.setattr(pipeline, "_run_native_artifact_hook_flow", no_composition)
-    monkeypatch.setattr(pipeline, "_emit_native_unavailable", unavailable)
+    monkeypatch.setattr(route_run, "_emit_native_unavailable", unavailable)
 
     class _Worker:
         def review_native_edge_decision(self, **_kwargs: object) -> dict[str, object]:

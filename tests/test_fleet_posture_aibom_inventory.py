@@ -259,3 +259,37 @@ def test_policy_matching_and_approval_checks_use_one_machine_name(
 def test_a_generic_label_stays_when_the_host_has_no_usable_name(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(naming.platform, "node", lambda: "localhost")
     assert naming.effective_device_label("Local machine") == "Local machine"
+
+
+def test_a_daemon_without_workspace_context_still_records_user_wide_inventory(
+    store: GuardStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import aibom_cli
+    from codex_plugin_scanner.guard.aibom_commands import remember_user_inventory_if_due
+
+    contexts: list[HarnessContext] = []
+
+    def _collect(context: HarnessContext, **_kwargs: object) -> tuple[GuardAgentInventorySnapshot, ...]:
+        contexts.append(context)
+        return (
+            _snapshot(
+                "codex", "2026-10-20T11:00:00Z", _item("codex:global:chrome-devtools", "mcp_server", "chrome-devtools")
+            ),
+        )
+
+    monkeypatch.setattr(aibom_cli, "collect_aibom_snapshots", _collect)
+    monkeypatch.setattr(aibom_cli, "_resolve_trust_attestation_context", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(store, "list_inventory", lambda harness=None: [])
+    home = tmp_path / "home"
+    first = remember_user_inventory_if_due(
+        store, generated_at="2026-10-20T11:00:00Z", min_interval_seconds=600, home_dir=home
+    )
+    again = remember_user_inventory_if_due(
+        store, generated_at="2026-10-20T11:05:00Z", min_interval_seconds=600, home_dir=home
+    )
+
+    assert first == {"collected": True, "collected_at": "2026-10-20T11:00:00Z", "snapshots": 1, "items": 1}
+    assert again["reason"] == "recently_collected"
+    assert len(contexts) == 1 and contexts[0].workspace_dir is None
+    assert store.get_sync_payload("aibom_sync_summary") is None
+    assert {row["artifact_name"] for row in fleet_inventory_rows(store)} == {"chrome-devtools"}

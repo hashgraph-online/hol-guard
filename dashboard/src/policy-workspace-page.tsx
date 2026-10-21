@@ -112,11 +112,7 @@ export function PolicyWorkspacePage(props: {
     <div className="space-y-6">
       {activeView === "rules" ? (
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <p className="text-sm text-slate-600">
-            <span className="font-semibold text-brand-dark">{ruleCounts.total} remembered {ruleCounts.total === 1 ? "rule" : "rules"}</span>
-            {" · "}{ruleCounts.allow} allow · {ruleCounts.block} block
-            {" · Configure tools and capability posture in Extensions."}
-          </p>
+          <p className="text-sm text-slate-500">Configure tools and capability posture in Extensions.</p>
           <PolicyPageToolbar
             snapshot={props.snapshot}
             onReloadPolicy={handleReloadPolicy}

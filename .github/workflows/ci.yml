@@ -1340,19 +1340,22 @@ jobs:
           PY
       # Merge freeze: while the repository variable MERGE_FREEZE is true, this
       # aggregate (a required check in the main-status-checks ruleset) fails for
-      # every pull request except MERGE_FREEZE_ALLOW entries, so neither a
-      # direct merge nor an armed auto-merge can land. It runs after the
+      # every pull request except MERGE_FREEZE_ALLOW entries, and for a dispatched
+      # run outside the default branch, so neither a direct merge nor an armed
+      # auto-merge can land. It runs after the
       # evaluation step, which must stay first, and even when that step failed,
       # so a frozen PR always shows why. merge-freeze.yml re-evaluates PRs whose
       # CI already finished when the variable changes.
       #
       # The policy comes from the PR's base revision, the way the change planner
       # does, so a PR cannot edit the script that decides whether it may merge.
+      # Any other run reads it from the default branch, so a dispatched run on a
+      # PR branch is held by the same policy.
       - name: Check out the merge freeze policy from the base revision
         if: ${{ !cancelled() }}
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch || github.sha }}
           path: .merge-freeze-policy
           persist-credentials: false
           sparse-checkout: scripts/ci/merge_freeze.py
