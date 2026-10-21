@@ -44,8 +44,9 @@ from .commands_hook_native_review_queue import queue_native_approval
 from .commands_hook_native_silent_review import apply_unprompted_native_review
 from .commands_hook_native_state import (
     NativeArtifactHookState,
+    apply_native_artifact_hook_final_action,
+    plan_native_artifact_hook_final_action,
     record_native_artifact_hook_receipt,
-    set_native_artifact_hook_final_action,
 )
 from .commands_parser_helpers import *
 from .commands_support_observe_queue import queue_observe_mode_request
@@ -117,6 +118,13 @@ def _record_observed_review(
     # the sources do not change between them, so asking twice would
     # only spend a second round trip on the same question.
     executable_action = _observe_mode_executable_action(state)
+    # The settle is planned before anything is recorded: a resident that
+    # cannot give it leaves no inbox record of a verdict the hook never made.
+    final_plan = plan_native_artifact_hook_final_action(
+        state,
+        executable_action,
+        observed_policy_action=observed_policy_action,
+    )
     queue_observe_mode_request(
         action_envelope=state.action_envelope,
         artifact=state.runtime_artifact,
@@ -129,11 +137,7 @@ def _record_observed_review(
         scanner_evidence=state.scanner_evidence_payload,
         store=store,
     )
-    set_native_artifact_hook_final_action(
-        state,
-        executable_action,
-        observed_policy_action=observed_policy_action,
-    )
+    apply_native_artifact_hook_final_action(state, final_plan)
     state.browser_approval_daemon_client = None
 
 

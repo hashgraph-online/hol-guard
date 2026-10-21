@@ -1,4 +1,4 @@
-import { useCallback, type MouseEvent } from "react";
+import { useCallback } from "react";
 import {
   HiMiniCloudArrowUp,
   HiMiniCommandLine,
@@ -8,18 +8,14 @@ import {
   HiMiniShieldCheck,
   HiMiniNoSymbol,
   HiMiniCheckCircle,
-  HiMiniArrowTopRightOnSquare,
 } from "react-icons/hi2";
 import { Tag } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime, scopeLabel, policyActionLabel } from "./approval-center-utils";
-import { guardAwareHref } from "./guard-api";
 import type { GuardPolicyDecision } from "./guard-types";
 import { EvidenceTableCell, EvidenceTableRow } from "./evidence/evidence-table";
 import {
   isCloudManagedPolicy,
-  resolvePolicyApprovalRecordLabel,
   resolvePolicyDisplay,
-  resolvePolicyEvidenceHref,
   resolvePolicyMatcherFamily,
   resolvePolicyRowFolder,
   resolvePolicyRowTitle,
@@ -68,40 +64,6 @@ function resolveFamilyIcon(family: string | null) {
   }
   return HiMiniShieldCheck;
 }
-
-function PolicyEvidenceLink({
-  policy,
-  onNavigate,
-}: {
-  policy: GuardPolicyDecision;
-  onNavigate?: (pathname: string) => void;
-}) {
-  const href = resolvePolicyEvidenceHref(policy);
-  const label = resolvePolicyApprovalRecordLabel(policy);
-  const handleClick = useCallback(
-    (event: MouseEvent<HTMLAnchorElement>) => {
-      if (!onNavigate) {
-        return;
-      }
-      event.preventDefault();
-      onNavigate(href);
-    },
-    [href, onNavigate],
-  );
-
-  return (
-    <a
-      href={guardAwareHref(href)}
-      onClick={handleClick}
-      className="inline-flex max-w-full items-center gap-1 font-mono text-xs font-medium text-brand-blue hover:underline"
-      title={`Open ${label} in Evidence`}
-    >
-      <span className="truncate">{label}</span>
-      <HiMiniArrowTopRightOnSquare className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-    </a>
-  );
-}
-
 
 type PolicyRuleRowProps = {
   policy: GuardPolicyDecision;
@@ -200,27 +162,11 @@ export function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, c
         <Tag tone={cloudManaged ? "slate" : "blue"}>{resolvePolicyRowSourceLabel(policy)}</Tag>
       </EvidenceTableCell>
 
-      <EvidenceTableCell className="hidden w-[96px] whitespace-nowrap lg:table-cell">
+      <EvidenceTableCell className="hidden w-[110px] whitespace-nowrap lg:table-cell">
         <span className="font-medium text-brand-blue">{harnessDisplayName(policy.harness)}</span>
         <span className="mt-0.5 block text-xs font-normal text-slate-500">{scopeTag}</span>
-      </EvidenceTableCell>
-
-      <EvidenceTableCell className="hidden w-[104px] whitespace-nowrap text-xs text-slate-500 lg:table-cell">
-        {policy.updated_at ? formatRelativeTime(policy.updated_at) : "—"}
-      </EvidenceTableCell>
-
-      <EvidenceTableCell className="hidden min-w-[132px] lg:table-cell">
-        {!cloudManaged ? <PolicyEvidenceLink policy={policy} onNavigate={onNavigate} /> : null}
-        {cloudManaged && cloudControlsUrl ? (
-          <a
-            href={cloudControlsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs font-medium text-brand-blue hover:underline"
-          >
-            <HiMiniCloudArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
-            View on cloud
-          </a>
+        {policy.updated_at ? (
+          <span className="mt-0.5 block text-xs font-normal text-slate-400">{formatRelativeTime(policy.updated_at)}</span>
         ) : null}
       </EvidenceTableCell>
 
@@ -228,6 +174,17 @@ export function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, c
         <div className="flex items-center justify-end gap-2">
           {cloudManaged ? (
             <span className="whitespace-nowrap text-xs font-medium text-slate-500">Read-only</span>
+          ) : null}
+          {cloudManaged && cloudControlsUrl ? (
+            <a
+              href={cloudControlsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-medium text-brand-blue hover:underline"
+            >
+              <HiMiniCloudArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+              View on cloud
+            </a>
           ) : null}
           {onInspect ? (
             <button

@@ -31,7 +31,7 @@ assert.ok(chrome.includes("Connect Guard Cloud to request an exception."), "disa
 assert.ok(chrome.includes("resolvePolicyViewHint"), "tabs carry a plain-language hint");
 
 const tab = read("policy-remembered-rules-tab.tsx");
-assert.ok(tab.includes("PolicyRulesHero"), "remembered tab leads with the dark rules hero");
+assert.ok(tab.includes("PolicyRulesHero"), "remembered tab leads with the light rules header");
 assert.ok(tab.includes("PolicyRulesSpotlight"), "spotlight surfaces widest-reaching rules");
 assert.ok(tab.includes("PolicyRulesListSwitch"), "action filter uses the Extensions list switch");
 assert.ok(tab.includes("guard-posture-bar"), "allow/block posture bar visualizes the rule mix");
@@ -56,9 +56,17 @@ const rail = read("policy-remembered-rules-right-rail.tsx");
 assert.ok(rail.includes("<details"), "right-rail help collapses instead of pushing rules down");
 
 const hero = read("policy-rules-hero.tsx");
-assert.ok(hero.includes("guard-hero"), "hero reuses the Home hero surface");
-assert.ok(hero.includes("HeroParticleLogo"), "hero carries the particle brand mark");
-assert.ok(!hero.includes("Lorem"), "hero uses real model copy only");
+assert.ok(!hero.includes("guard-hero"), "header does not copy the Home dark hero");
+assert.ok(!hero.includes("HeroParticleLogo"), "header carries no particle stage");
+assert.ok(hero.includes("guard-state-pill"), "header uses the native state pill");
+assert.ok(!hero.includes("Lorem"), "header uses real model copy only");
+
+const styledSelect = read("styled-select.tsx");
+assert.ok(styledSelect.includes("appearance-none"), "selects suppress raw OS chrome");
+assert.ok(styledSelect.includes("HiMiniChevronDown"), "selects carry the shared chevron");
+const filterBar = read("evidence/evidence-filter-bar.tsx");
+assert.ok(filterBar.includes("StyledSelect"), "evidence filters use the styled select");
+assert.ok(!filterBar.includes("<select"), "evidence filters have no bare native selects");
 
 const inspector = read("policy-rule-inspector.tsx");
 assert.ok(inspector.includes('role="dialog"'), "inspector is a modal dialog");

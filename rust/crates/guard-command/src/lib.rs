@@ -791,6 +791,8 @@ pub mod redacted_command_tokens;
 pub mod supply_chain_package_eval;
 pub mod target_identities;
 pub mod workspace_inventory;
+#[cfg(test)]
+mod workspace_path_guard_tests;
 
 // RTM-014/017/020/023 pending modules — compile signal only until legs complete.
 pub mod aibom_reporting;

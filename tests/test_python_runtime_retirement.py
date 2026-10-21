@@ -137,6 +137,42 @@ def test_retirement_requires_native_replacement(retired_repository: tuple[Path, 
         check(retired_repository)
 
 
+def _dead_code_record(contract: dict[str, object], **overrides: object) -> None:
+    record = contract["retired_modules"][0]
+    record["native_replacements"] = []
+    record["retirement"] = "dead_code"
+    record["removal_reason"] = "Nothing imported it; the tests were the only consumers."
+    record.update(overrides)
+
+
+def test_dead_code_retirement_needs_no_native_replacement(
+    retired_repository: tuple[Path, dict[str, object]],
+) -> None:
+    """Python that reached nobody still has to be recorded, or its path keeps no protection."""
+    _, contract = retired_repository
+    _dead_code_record(contract)
+    evidence = check(retired_repository)
+    assert len(evidence) == 1
+    assert evidence[0]["source_present"] is False
+
+
+def test_dead_code_retirement_requires_a_reason(retired_repository: tuple[Path, dict[str, object]]) -> None:
+    _, contract = retired_repository
+    _dead_code_record(contract, removal_reason="   ")
+    with pytest.raises(RuntimeError, match="removal reason"):
+        check(retired_repository)
+
+
+def test_empty_native_replacements_need_the_dead_code_declaration(
+    retired_repository: tuple[Path, dict[str, object]],
+) -> None:
+    _, contract = retired_repository
+    _dead_code_record(contract)
+    del contract["retired_modules"][0]["retirement"]
+    with pytest.raises(RuntimeError, match="native replacement paths are required"):
+        check(retired_repository)
+
+
 def test_retirement_allows_documentation_and_negative_fixtures(
     retired_repository: tuple[Path, dict[str, object]],
 ) -> None:

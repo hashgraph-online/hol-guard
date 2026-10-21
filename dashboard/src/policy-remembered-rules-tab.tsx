@@ -21,6 +21,7 @@ import { groupPoliciesByFamily, resolveFamilyFilterLabel } from "./policy-worksp
 import { PolicyRememberedCloudRules } from "./policy-remembered-cloud-rules";
 import { PolicyRememberedLocalRules } from "./policy-remembered-local-rules";
 import { PolicyRememberedRulesRightRail } from "./policy-remembered-rules-right-rail";
+import { StyledSelect } from "./styled-select";
 import { PolicyRulesHero } from "./policy-rules-hero";
 import { PolicyRulesListSwitch } from "./policy-rules-list-switch";
 import { PolicyRulesSpotlight } from "./policy-rules-spotlight";
@@ -218,20 +219,6 @@ export function PolicyRememberedRulesTab({
     [allRemembered, attention, cloudConnected, modeCopy.label, snapshot.pending_count, snapshot.queue_summary],
   );
   const spotlightPolicies = useMemo(() => buildRulesSpotlight(allRemembered), [allRemembered]);
-  const heroPreview = useMemo(
-    () =>
-      spotlightPolicies.slice(0, 3).map((policy) => {
-        const display = resolvePolicyDisplay(policy);
-        return {
-          id: policySelectionKey(policy),
-          policy,
-          action: policy.action,
-          title: `${policy.action === "allow" ? "Allows" : "Blocks"} · ${resolvePolicyRowTitle(policy, display)}`,
-          meta: harnessDisplayName(policy.harness),
-        };
-      }),
-    [spotlightPolicies],
-  );
   const inspectedPolicy = useMemo(
     () => allRemembered.find((policy) => policySelectionKey(policy) === inspectedKey) ?? null,
     [allRemembered, inspectedKey],
@@ -239,13 +226,6 @@ export function PolicyRememberedRulesTab({
   const handleInspect = useCallback((policy: GuardPolicyDecision) => {
     setInspectedKey(policySelectionKey(policy));
   }, []);
-  const handleOpenPreviewItem = useCallback(
-    (id: string) => {
-      const item = heroPreview.find((entry) => entry.id === id);
-      if (item) handleInspect(item.policy);
-    },
-    [handleInspect, heroPreview],
-  );
   const handleCloseInspector = useCallback(() => setInspectedKey(null), []);
   const scrollToRules = useCallback(() => {
     document.getElementById("remembered-rules-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -262,15 +242,11 @@ export function PolicyRememberedRulesTab({
     <div className="space-y-5">
       <PolicyRulesHero
         model={heroModel}
-        preview={heroPreview.map(({ id, title, meta, action }) => ({ id, title, meta, action }))}
-        previewLabel="Widest-reaching remembered rules"
-        onOpenPreviewItem={handleOpenPreviewItem}
         cta={
           <button
             type="button"
-            data-primary="true"
             onClick={scrollToRules}
-            className="inline-flex min-h-11 items-center rounded-xl px-4 text-sm font-semibold transition-colors focus-visible:outline-none"
+            className="inline-flex min-h-10 items-center rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40"
           >
             Review remembered rules
           </button>
@@ -280,7 +256,7 @@ export function PolicyRememberedRulesTab({
             <button
               type="button"
               onClick={onOpenInbox}
-              className="inline-flex min-h-11 items-center rounded-xl border px-4 text-sm font-semibold transition-colors focus-visible:outline-none"
+              className="inline-flex min-h-10 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-dark transition-colors hover:border-brand-blue/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40"
             >
               Open Inbox
             </button>
@@ -354,6 +330,26 @@ export function PolicyRememberedRulesTab({
               counts={{ all: counts.total, allow: counts.allow, block: counts.block }}
               onChange={setActionFilter}
             />
+            <StyledSelect
+              value={sort ? `${sort.key}:${sort.direction}` : "updated:desc"}
+              onChange={(event) => {
+                const [key, direction] = event.target.value.split(":");
+                setSort({ key: key as "updated" | "rule" | "action" | "app", direction: direction as "asc" | "desc" });
+              }}
+              aria-label="Sort rules"
+              className="min-h-9 text-xs font-medium"
+            >
+              {/* Column headers can set sorts this list does not offer; show
+                  that honestly instead of pretending "Newest first". */}
+              {sort && !["updated:desc", "updated:asc", "rule:asc", "action:asc", "app:asc"].includes(`${sort.key}:${sort.direction}`) ? (
+                <option value={`${sort.key}:${sort.direction}`}>Custom (column sort)</option>
+              ) : null}
+              <option value="updated:desc">Newest first</option>
+              <option value="updated:asc">Oldest first</option>
+              <option value="rule:asc">Rule A–Z</option>
+              <option value="action:asc">Action A–Z</option>
+              <option value="app:asc">App A–Z</option>
+            </StyledSelect>
             {hasActiveFilters ? (
               <button type="button" onClick={handleClearFilters} className="min-h-9 px-2 text-sm font-medium text-brand-blue hover:underline">
                 Clear search and filters
@@ -363,18 +359,18 @@ export function PolicyRememberedRulesTab({
 
           {showFilters ? (
             <div className="flex flex-wrap gap-2">
-              <select value={appFilter} onChange={(event) => setAppFilter(event.target.value)} aria-label="Filter by app" className="min-h-10 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark">
+              <StyledSelect value={appFilter} onChange={(event) => setAppFilter(event.target.value)} aria-label="Filter by app" className="min-h-10">
                 <option value="">All assets</option>
                 {appOptions.map((app) => (
                   <option key={app} value={app}>{harnessDisplayName(app)}</option>
                 ))}
-              </select>
-              <select value={familyFilter} onChange={(event) => setFamilyFilter(event.target.value)} aria-label="Filter by action type" className="min-h-10 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark">
+              </StyledSelect>
+              <StyledSelect value={familyFilter} onChange={(event) => setFamilyFilter(event.target.value)} aria-label="Filter by action type" className="min-h-10">
                 <option value="">All action types</option>
                 {[...familyCounts.entries()].map(([family, count]) => (
                   <option key={family} value={family}>{resolveFamilyFilterLabel(family)} ({count})</option>
                 ))}
-              </select>
+              </StyledSelect>
             </div>
           ) : null}
 

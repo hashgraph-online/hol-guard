@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.axpilot",
+  "version": "1.0.0",
+  "name": "AXPilot",
+  "description": "Lets an agent see and operate macOS apps through the Accessibility API: snapshots, element search, OCR and screenshots, then clicks, typing, shortcuts, menus, apps and windows. Every tool that acts is reviewed; read-only tools inherit. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.vansh3503",
+    "displayName": "Vansh3503",
+    "url": "https://github.com/vansh3503/Mac-Mcp"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#B45309" },
+  "homepage": "https://github.com/vansh3503/Mac-Mcp",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "direct-command",
+    "command": "axpilot"
+  },
+  "riskClasses": [
+    "external-desktop-control",
+    "external-command-execution",
+    "external-script-execution"
+  ],
+  "tools": [
+    { "name": "snapshot", "state": "inherit" },
+    { "name": "screenshot", "state": "inherit" },
+    { "name": "find", "state": "inherit" },
+    { "name": "explore", "state": "inherit" },
+    { "name": "read", "state": "inherit" },
+    { "name": "inspect", "state": "inherit" },
+    { "name": "ocr", "state": "inherit" },
+    { "name": "list_apps", "state": "inherit" },
+    { "name": "list_windows", "state": "inherit" },
+    { "name": "list_displays", "state": "inherit" },
+    { "name": "wait_for", "state": "inherit" },
+    { "name": "status", "state": "inherit" },
+    { "name": "click", "state": "review" },
+    { "name": "type_text", "state": "review" },
+    { "name": "press_keys", "state": "review" },
+    { "name": "scroll", "state": "review" },
+    { "name": "drag", "state": "review" },
+    { "name": "move_mouse", "state": "review" },
+    { "name": "set_value", "state": "review" },
+    { "name": "select_option", "state": "review" },
+    { "name": "perform_action", "state": "review" },
+    { "name": "select_menu", "state": "review" },
+    { "name": "fill_form", "state": "review" },
+    { "name": "handle_dialog", "state": "review" },
+    { "name": "app", "state": "review" },
+    { "name": "window", "state": "review" },
+    { "name": "open", "state": "review" },
+    { "name": "clipboard", "state": "review" },
+    { "name": "notify", "state": "review" },
+    { "name": "spotlight_search", "state": "inherit" },
+    { "name": "system_info", "state": "inherit" },
+    { "name": "system_control", "state": "review" },
+    { "name": "processes", "state": "review" },
+    { "name": "shell", "state": "review" },
+    { "name": "applescript", "state": "review" },
+    { "name": "shortcuts", "state": "review" },
+    { "name": "defaults", "state": "review" },
+    { "name": "browser_tabs", "state": "review" },
+    { "name": "browser_read", "state": "inherit" },
+    { "name": "browser_eval_js", "state": "review" },
+    { "name": "computer", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/vansh3503/Mac-Mcp",
+    "https://github.com/vansh3503/Mac-Mcp/blob/main/docs/tools.md",
+    "https://github.com/vansh3503/Mac-Mcp/blob/main/docs/install.md",
+    "https://github.com/vansh3503/Mac-Mcp/blob/main/docs/security.md"
+  ],
+  "saferAlternatives": [
+    "Keep every acting tool on review: they click, type, launch or quit apps, change system settings, run shell commands or AppleScript, and run JavaScript in browser tabs. Read-only tools, including browser_read, inherit.",
+    "Use AXPilot's default standard profile, which leaves shell, AppleScript, Shortcuts, defaults and the browser tools disabled until you enable them in its config.",
+    "Keep AXPilot's confirmations on (safety.confirm = \"destructive\", the default): force-quit, process kill, dialog buttons that destroy or discard, preference changes and every shell, AppleScript, shortcut or browser JavaScript run ask first.",
+    "AXPilot never reads secure fields and keeps password managers and the Privacy & Security settings off limits; add other sensitive apps to safety.deny_apps.",
+    "AXPilot is pre-alpha and not on PyPI yet: install it from a reviewed source checkout as in its install guide, then run axpilot connect <client>, which points that client at the axpilot executable by path."
+  ]
+}
