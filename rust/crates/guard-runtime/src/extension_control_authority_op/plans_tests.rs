@@ -310,7 +310,9 @@ fn history_lists_prior_committed_snapshots_newest_first() {
         limit: Some(limit),
         ..home.request("history", &catalog('a'))
     };
-    let history = run(&request(20))["history"].clone();
+    let result = run(&request(20));
+    let history = result["history"].clone();
+    assert_eq!(history.as_array().map(Vec::len), Some(2), "{result}");
     assert_eq!(history[0]["revision"], json!(2));
     assert_eq!(history[0]["layers"], json!([]));
     assert_eq!(history[1]["revision"], json!(1));
