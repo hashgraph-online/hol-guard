@@ -1051,7 +1051,8 @@ jobs:
         run: |
           set -euo pipefail
           venv="$RUNNER_TEMP/guard-venv"
-          uv venv --python "$CI_PYTHON_VERSION" "$venv"
+          # Any 3.12 patch release; this uv predates CI_PYTHON_VERSION.
+          uv venv --python 3.12 "$venv"
           uv pip install --python "$venv/bin/python" "$RUNNER_TEMP"/dashboard-integration-wheel/hol_guard-*.whl
           PYTHONPATH= "$venv/bin/python" -c 'import pathlib, codex_plugin_scanner as p; native = pathlib.Path(p.__file__).parent / "_native"; assert (native / "runtime-manifest.json").is_file(), native'
           echo "DASHBOARD_E2E_PYTHON=$venv/bin/python" >> "$GITHUB_ENV"
