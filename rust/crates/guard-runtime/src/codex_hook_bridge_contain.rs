@@ -33,6 +33,13 @@ const REQUEST_SCHEMA: &str = "guard-contained-test-request.v1";
 const MAX_REQUEST_BYTES: usize = 1_048_576;
 const PRE_TOOL_EVENTS: [&str; 2] = ["PreToolUse", "pre_tool_use"];
 const SHELL_TOOLS: [&str; 4] = ["Bash", "bash", "run_terminal_command", "run_command"];
+const WINDOWS_PROFILES: [&str; 5] = [
+    "python-eval-readonly-v1",
+    "node-eval-readonly-v1",
+    "node-build-output-v1",
+    "node-tool-readonly-v1",
+    "pytest-readonly-v2",
+];
 
 /// What `route_codex_containment` made of a sandbox requirement.
 #[derive(Debug, PartialEq)]
@@ -124,12 +131,6 @@ fn contain(
     {
         return Contained::Unchanged;
     }
-    // This port cannot yet reproduce the PowerShell-quoted Windows sink
-    // command or its process lookup, so the denial stands. The Codex update
-    // hint would mislead, because the Codex version is not the obstacle.
-    if cfg!(windows) {
-        return Contained::Unchanged;
-    }
     if !launching_codex_applies(deadline) {
         return Contained::Hint;
     }
@@ -148,7 +149,9 @@ fn contain(
 }
 
 /// `platform_contains(response)`: macOS runs every contained profile, Linux
-/// the workspace sandbox, Windows installed Python in an AppContainer.
+/// the workspace sandbox, Windows installed Python and Node scripts, a
+/// project's own pytest, Vite builds and local lint, typecheck and format
+/// checks in an AppContainer.
 fn platform_contains(profile: Option<&str>) -> bool {
     if cfg!(target_os = "macos") {
         return true;
@@ -156,7 +159,7 @@ fn platform_contains(profile: Option<&str>) -> bool {
     if cfg!(target_os = "linux") {
         return profile == Some("workspace-contained-v1");
     }
-    cfg!(windows) && profile == Some("python-eval-readonly-v1")
+    cfg!(windows) && profile.is_some_and(|profile| WINDOWS_PROFILES.contains(&profile))
 }
 
 /// `str(state.parent)` when the state path is an absolute
@@ -265,9 +268,7 @@ fn string(text: &str) -> PyVal {
 fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) -> Option<PyVal> {
     let profile = text(response, "reason_code")
         .and_then(guard_command::hook_responses::contained_execution_profile)?;
-    // The sink command is POSIX-quoted; Windows runs it only for Claude Code.
-    if cfg!(windows)
-        || response.get("observe_mode") == Some(&PyVal::Bool(true))
+    if response.get("observe_mode") == Some(&PyVal::Bool(true))
         || text(response, "required_execution_profile") != Some(profile)
     {
         return None;
@@ -318,7 +319,7 @@ fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) 
         return None;
     };
     let digest = hex::encode(Sha256::digest(serialized.as_bytes()));
-    let mut command = prefix.to_vec();
+    let mut command = command_prefix(prefix);
     command.extend(
         [
             "guard",
@@ -338,16 +339,44 @@ fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) 
         ]
         .map(str::to_owned),
     );
-    Some(routed_response(original, &command))
+    let Some(joined) = shell_join(&command) else {
+        discard(&request);
+        return None;
+    };
+    Some(routed_response(original, &joined))
 }
 
-/// The allow that runs `command` in place of the original call.
-fn routed_response(original: &PyVal, command: &[String]) -> PyVal {
+/// The sink's argv prefix as the shell will start it.
+#[cfg(not(windows))]
+fn command_prefix(prefix: &[String]) -> Vec<String> {
+    prefix.to_vec()
+}
+
+#[cfg(windows)]
+fn command_prefix(prefix: &[String]) -> Vec<String> {
+    windows::sink_prefix(prefix)
+}
+
+/// The sink command line: POSIX-quoted, and on Windows quoted for the
+/// PowerShell Codex runs shell commands in.
+#[cfg(not(windows))]
+fn shell_join(command: &[String]) -> Option<String> {
+    Some(crate::mcp_proxy_shlex::join(command))
+}
+
+#[cfg(windows)]
+fn shell_join(command: &[String]) -> Option<String> {
+    windows::powershell_join(command)
+}
+
+/// The allow that runs the `joined` command line in place of the original
+/// call.
+fn routed_response(original: &PyVal, joined: &str) -> PyVal {
     let mut updated = match original {
         PyVal::Dict(entries) => entries.clone(),
         _ => Vec::new(),
     };
-    let joined = string(&crate::mcp_proxy_shlex::join(command));
+    let joined = string(joined);
     match updated.iter_mut().find(|(name, _)| name == "command") {
         Some(slot) => slot.1 = joined,
         None => updated.push(("command".to_owned(), joined)),
@@ -414,7 +443,12 @@ fn resolved_workspace(value: &str) -> Option<String> {
     resolved.to_str().map(str::to_owned)
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn resolved_workspace(value: &str) -> Option<String> {
+    windows::resolved_workspace(value)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn resolved_workspace(_value: &str) -> Option<String> {
     None
 }
@@ -424,7 +458,12 @@ fn write_snapshot(serialized: &[u8]) -> Option<PathBuf> {
     crate::hook_direct::contained::request::write_snapshot(&std::env::temp_dir(), serialized)
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn write_snapshot(serialized: &[u8]) -> Option<PathBuf> {
+    windows::write_snapshot(serialized)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn write_snapshot(_serialized: &[u8]) -> Option<PathBuf> {
     None
 }
@@ -441,3 +480,6 @@ mod codex;
 #[cfg(all(test, unix))]
 #[path = "codex_hook_bridge_contain_tests.rs"]
 mod tests;
+#[cfg(windows)]
+#[path = "codex_hook_bridge_contain_windows.rs"]
+mod windows;

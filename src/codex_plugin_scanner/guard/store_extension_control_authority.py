@@ -12,9 +12,6 @@ import secrets
 import sqlite3
 from typing import cast
 
-from .managed_controls_policy_bundle import (
-    managed_controls_layers_from_activation_state as managed_controls_layers_from_activation_state,
-)
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import (
     AuthorityAnchor,

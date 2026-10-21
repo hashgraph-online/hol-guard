@@ -803,28 +803,28 @@
    "body": "13e1ea33df13"
   },
   {
+   "verdict": "other-platform",
+   "note": "Windows resolves the workspace in its own arm (`codex_hook_bridge_contain_windows.rs`); this stub is reached only on a platform Guard does not ship for, where `None` keeps the command reviewed because there is no sink.",
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_contain.rs",
    "item": "fn resolved_workspace(_value: &str) -> Option<String>",
-   "verdict": "windows-unsupported",
-   "note": "No contained workspace is resolved off Unix, so the Codex bridge does not route a command into a sink.",
-   "cfg": "not(unix)",
+   "cfg": "not(any(unix, windows))",
    "body": "0c258e1c7d46"
   },
   {
+   "verdict": "other-platform",
+   "note": "Windows writes the snapshot under the profile's `AppData\\Local\\Temp` in its own arm; elsewhere `None` writes nothing, so the call keeps its review.",
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_contain.rs",
    "item": "fn write_snapshot(_serialized: &[u8]) -> Option<PathBuf>",
-   "verdict": "windows-unsupported",
-   "note": "No snapshot is written off Unix; paired with `resolved_workspace` above.",
-   "cfg": "not(unix)",
+   "cfg": "not(any(unix, windows))",
    "body": "36ec584876e3"
   },
   {
+   "verdict": "other-platform",
+   "note": "Windows sets `SYSTEMROOT`, `PATH` and `USERPROFILE` for the version probe in its own arm above; elsewhere `false` skips the probe, so updated input is never assumed to be applied.",
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_contain_codex.rs",
-   "item": "pub(super) fn codex_applies_updated_input(_executable: &Path, _deadline: Instant) -> bool",
-   "verdict": "windows-unsupported",
-   "note": "The Codex version probe does not run off Unix, so updated input is never assumed to be applied. Fails closed.",
-   "cfg": "not(unix)",
-   "body": "b832d51abbbb"
+   "item": "fn probe_environment(_command: &mut std::process::Command) -> bool",
+   "cfg": "not(any(unix, windows))",
+   "body": "60598db7948f"
   },
   {
    "file": "rust/crates/guard-runtime/src/codex_thread_continue_op.rs",

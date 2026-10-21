@@ -95,20 +95,13 @@ fn weighed(cwd: &Path, home: &Path, harness: &str, command: &str) -> (String, St
 fn a_reporting_tool_run_is_contained_instead_of_reviewed() {
     let (project, home) = project(None);
     for command in REPORTING {
-        for harness in ["omp", "claude-code"] {
+        for harness in ["omp", "claude-code", "codex"] {
             assert_eq!(
                 weighed(&project, &home, harness, command),
                 ("sandbox-required".to_string(), NODE_TOOL.to_string()),
                 "{harness}: {command}"
             );
         }
-        // Codex's Windows sink is a PowerShell command written for the Python
-        // profile alone, so its tool runs keep the single review prompt.
-        assert_eq!(
-            weighed(&project, &home, "codex", command).1,
-            review(command),
-            "codex: {command}"
-        );
     }
     let _ = std::fs::remove_dir_all(project.parent().unwrap());
 }

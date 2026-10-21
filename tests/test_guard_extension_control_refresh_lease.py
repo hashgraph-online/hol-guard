@@ -38,13 +38,15 @@ def test_refresh_shares_unchanged_authority_and_excludes_readers_only_for_mutati
             SimpleNamespace(
                 store=store,
                 extension_control_runtime=ExtensionControlRuntime(initial),
-                extension_control_api=SimpleNamespace(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest),
+                extension_control_api=SimpleNamespace(
+                    catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+                ),
                 _installed_authority_pending=False,
                 _extension_control_on_core_registry=False,
             ),
         ),
     )
-    read_locked = store._read_extension_control_authority_locked
+    read_locked = store._read_authority_locked
     entered = threading.Event()
     release = threading.Event()
     attempts = 0
@@ -52,21 +54,29 @@ def test_refresh_shares_unchanged_authority_and_excludes_readers_only_for_mutati
     def paused_read(
         catalog_digest: str,
         *,
-        migration_registry: CommandSafetyExtensionRegistry | None = None,
-        allow_migration: bool = True,
-    ) -> ExtensionControlAuthorityView:
+        migration_registry: CommandSafetyExtensionRegistry | None,
+        allow_migration: bool,
+        roll_back_abandoned: bool = True,
+        compose: bool = False,
+    ) -> tuple[ExtensionControlAuthorityView, dict[str, object] | None]:
         nonlocal attempts
         attempts += 1
         if mutation_required:
             # This is the existing guard used before catalog migration and
             # authority recovery writes. A shared attempt must unwind first.
             require_command_control_mutation_lease(store.guard_home)
-        view = read_locked(catalog_digest, migration_registry=migration_registry, allow_migration=allow_migration)
+        read = read_locked(
+            catalog_digest,
+            migration_registry=migration_registry,
+            allow_migration=allow_migration,
+            roll_back_abandoned=roll_back_abandoned,
+            compose=compose,
+        )
         entered.set()
         assert release.wait(timeout=5)
-        return view
+        return read
 
-    monkeypatch.setattr(store, "_read_extension_control_authority_locked", paused_read)
+    monkeypatch.setattr(store, "_read_authority_locked", paused_read)
     with ThreadPoolExecutor(max_workers=1) as executor:
         refresh = executor.submit(_GuardDaemonHttpServer.refresh_extension_control_runtime, server)
         try:

@@ -3515,6 +3515,51 @@ export async function scheduleGuardUpdate(
   };
 }
 
+export type GuardDesktopHandoffResult = {
+  handoff_requested: boolean;
+  latest_version: string | null;
+};
+
+/**
+ * Asks the daemon to record an update request for the HOL Guard app. The
+ * dashboard inside the Desktop window cannot call the app updater itself;
+ * Desktop watches for the request and opens its own visible update flow,
+ * which re-verifies the release before installing anything.
+ */
+export async function requestGuardDesktopHandoff(): Promise<GuardDesktopHandoffResult> {
+  if (isGuardDemoMode()) {
+    return { handoff_requested: false, latest_version: null };
+  }
+  // Bounded: an unanswered request must release the banner into its
+  // failure state instead of disabling its actions forever.
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 10_000);
+  let response: Response;
+  try {
+    response = await fetchWithGuardAuth("/v1/update", {
+      method: "POST",
+      redirect: "error",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ handoff_to_desktop: true }),
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    const message =
+      stringValue(payload.message) ??
+      stringValue(payload.error) ??
+      `Guard update failed with ${response.status}`;
+    throw new Error(message);
+  }
+  return {
+    handoff_requested: payload.handoff_requested === true,
+    latest_version: stringValue(payload.latest_version),
+  };
+}
+
 export type GuardUpdateChannelProof = {
   approval_password?: string;
   approval_totp_code?: string;

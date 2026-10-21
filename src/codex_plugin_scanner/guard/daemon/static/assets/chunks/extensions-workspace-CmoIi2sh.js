@@ -1,5 +1,5 @@
-import { r as reactExports, bt as fetchExtensionCatalog, bu as ExtensionControlApiError, bv as normalizeExtensionCatalogSummary, bw as normalizeExtensionPermission, bx as ExtensionControlProtocolError, by as normalizeExtensionCatalogItem, bz as guardApiCacheScope, bA as fetchExtensionCatalogV2Api, bB as localPermissionDraftState, bC as setLocalPermissionDraftState, bD as extensionPolicyAuthorityUnchanged, bE as newExtensionPolicyDraftIdentity, bF as extensionPolicyDraftIsDirty, bG as setLocalPermissionDraftStates, bH as buildExtensionPolicyDraftMutation, bI as fetchEffectiveExtensionControls, bJ as previewExtensionMutation, bK as isCurrentExtensionPolicyDraft, bL as applyExtensionMutation, bM as fetchExtensionControlHistory, j as jsxRuntimeExports, bN as managedPermissionState, Z as HiMiniSparkles, s as HiMiniCheckCircle, g as HiMiniNoSymbol, v as HiMiniLockClosed, a4 as HiMiniExclamationTriangle, bO as controlProvenance, bP as treatmentLabel, aR as isApprovalProofSubmitDisabled, _ as HiMiniXMark, aQ as ApprovalProofFieldInputs, bQ as useResolvedApprovalGate, bR as groupPermissionsByFamily, d as HiMiniArrowPath, R as HiMiniShieldCheck, bS as HiMiniInformationCircle, aS as buildApprovalProofCredentials, bT as approvalProofRecentlySatisfied, p as HiMiniMagnifyingGlass, bU as bulkCommandState, H as HiMiniChevronRight, bV as fetchLocalCliApi, bW as ExtensionBrandMark, c as HiMiniChevronDown, bX as fetchMcpProviderActions, bY as previewLocalCliMutation, bZ as applyLocalCliMutation, b_ as LocalCliApiError, b$ as LOCAL_CLI_CAPABILITIES, c0 as readJson, c1 as enrollablePackageScriptCommands, c2 as seenSuggestionMeta, c3 as HiMiniPlus, c4 as looksLikeProjectRelocatePaste, c5 as packageScriptFilterNeedle, e as HiMiniCheck, c6 as suggestedPackageScriptExtensions, c7 as filterExtensionSuggestions, c8 as suggestedHarnessExtensions, c9 as suggestedSeenExtensions, ca as keepsPackageScriptCatalog, cb as recognizeLocalCli, cc as preferredPackageScriptExtension, cd as looksLikePackageScriptPaste, ce as enrollmentCommandStates, cf as isBulkApproveGateReady, cg as HiMiniArrowLeft, ch as fetchLocalCliList, ci as normalizeLocalCliList, cj as refreshMcpInventory, ck as startGuardCloudConnect, cl as extensionEffectiveState, cm as permissionEffectiveState, cn as HiMiniArrowTopRightOnSquare, a0 as HiMiniCloud, co as fetchExtensionControlApi, cp as permissionForRule, cq as refreshEffectiveExtensionControls, aD as HiMiniClipboardDocumentCheck, aE as HiMiniClipboard, aG as ApprovalProofModal, cr as fetchExtensionDiscoveryApi, t as HiMiniArrowRight, cs as HiMiniClock, B as createCommandActivityClient, C as fetchCommandActivityApi, ct as startCancelableDiscoveryJob, cu as waitForMcpDiscoveryJob, cv as isLocalCliId, bc as guardAwareHref, cw as localCliHref, cx as filterCodexHostApps, cy as connectorWorkspaceItems, cz as customExtensionNeedsReview, aM as HiMiniAdjustmentsHorizontal, cA as extensionDisplayName, cB as catalogRowSecondLine, cC as extensionStateLabel, cD as HiMiniGlobeAlt, cE as HiMiniFunnel, ba as WorkspacePageHeader, cF as refreshCodexHostInventory, cG as loadCurrentDashboardBuild, cH as canonicalExtensionId, cI as extensionDetailHref, cJ as DEFAULT_EXTENSION_DETAIL_URL_STATE, cK as acknowledgeDegradedExtensionControlAuthority, cL as recoverExtensionControlAuthority, cM as readExtensionDetailUrlState, cN as parseProtectionRoute, cO as addCustomExtensionHref } from "../guard-dashboard.js";
-import { u as useConfirmDialog } from "./confirm-dialog-DKs42E8c.js";
+import { r as reactExports, bt as fetchExtensionCatalog, bu as ExtensionControlApiError, bv as normalizeExtensionCatalogSummary, bw as normalizeExtensionPermission, bx as ExtensionControlProtocolError, by as normalizeExtensionCatalogItem, bz as guardApiCacheScope, bA as fetchExtensionCatalogV2Api, bB as localPermissionDraftState, bC as setLocalPermissionDraftState, bD as extensionPolicyAuthorityUnchanged, bE as newExtensionPolicyDraftIdentity, bF as extensionPolicyDraftIsDirty, bG as setLocalPermissionDraftStates, bH as buildExtensionPolicyDraftMutation, bI as fetchEffectiveExtensionControls, bJ as previewExtensionMutation, bK as isCurrentExtensionPolicyDraft, bL as applyExtensionMutation, bM as fetchExtensionControlHistory, j as jsxRuntimeExports, bN as managedPermissionState, Z as HiMiniSparkles, s as HiMiniCheckCircle, g as HiMiniNoSymbol, v as HiMiniLockClosed, a4 as HiMiniExclamationTriangle, bO as controlProvenance, bP as treatmentLabel, aR as isApprovalProofSubmitDisabled, _ as HiMiniXMark, aQ as ApprovalProofFieldInputs, bQ as useResolvedApprovalGate, bR as groupPermissionsByFamily, d as HiMiniArrowPath, R as HiMiniShieldCheck, bS as HiMiniInformationCircle, aS as buildApprovalProofCredentials, bT as approvalProofRecentlySatisfied, p as HiMiniMagnifyingGlass, bU as bulkCommandState, H as HiMiniChevronRight, bV as fetchLocalCliApi, bW as ExtensionBrandMark, c as HiMiniChevronDown, bX as fetchMcpProviderActions, bY as previewLocalCliMutation, bZ as applyLocalCliMutation, b_ as LocalCliApiError, b$ as LOCAL_CLI_CAPABILITIES, c0 as readJson, c1 as enrollablePackageScriptCommands, c2 as seenSuggestionMeta, c3 as HiMiniPlus, c4 as looksLikeProjectRelocatePaste, c5 as packageScriptFilterNeedle, e as HiMiniCheck, c6 as suggestedPackageScriptExtensions, c7 as filterExtensionSuggestions, c8 as suggestedHarnessExtensions, c9 as suggestedSeenExtensions, ca as keepsPackageScriptCatalog, cb as recognizeLocalCli, cc as preferredPackageScriptExtension, cd as looksLikePackageScriptPaste, ce as enrollmentCommandStates, cf as isBulkApproveGateReady, cg as HiMiniArrowLeft, ch as fetchLocalCliList, ci as normalizeLocalCliList, cj as refreshMcpInventory, ck as startGuardCloudConnect, cl as extensionEffectiveState, cm as permissionEffectiveState, cn as HiMiniArrowTopRightOnSquare, a0 as HiMiniCloud, co as fetchExtensionControlApi, cp as permissionForRule, cq as refreshEffectiveExtensionControls, aD as HiMiniClipboardDocumentCheck, aE as HiMiniClipboard, aG as ApprovalProofModal, cr as fetchExtensionDiscoveryApi, t as HiMiniArrowRight, cs as HiMiniClock, B as createCommandActivityClient, C as fetchCommandActivityApi, ct as startCancelableDiscoveryJob, cu as waitForMcpDiscoveryJob, cv as isLocalCliId, bc as guardAwareHref, cw as localCliHref, cx as filterCodexHostApps, cy as connectorWorkspaceItems, cz as customExtensionNeedsReview, aM as HiMiniAdjustmentsHorizontal, cA as extensionDisplayName, cB as catalogRowSecondLine, cC as extensionStateLabel, cD as HiMiniGlobeAlt, cE as HiMiniFunnel, cF as discoveryFailureMessage, ba as WorkspacePageHeader, cG as refreshCodexHostInventory, cH as CODEX_HOST_FALLBACK, cI as CONFIGURED_CONNECTIONS_FALLBACK, cJ as loadCurrentDashboardBuild, cK as canonicalExtensionId, cL as extensionDetailHref, cM as DEFAULT_EXTENSION_DETAIL_URL_STATE, cN as acknowledgeDegradedExtensionControlAuthority, cO as recoverExtensionControlAuthority, cP as readExtensionDetailUrlState, cQ as parseProtectionRoute, cR as addCustomExtensionHref } from "../guard-dashboard.js";
+import { u as useConfirmDialog } from "./confirm-dialog-DoiBaaXB.js";
 const PROFILE_SETUP_COMMANDS = { wrangler: "npx wrangler" };
 const PROFILE_COMMAND_PARAM = "command";
 function profileSetupCommand(item) {
@@ -2077,6 +2077,13 @@ function customExtensionStateLabel(item) {
   }
   return item.surface === "mcp" ? "Detected · Permissions not configured. Inspect this connection." : item.example_label;
 }
+function customExtensionRowBehavior(item) {
+  const continuity = continuityCopy(item);
+  return continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(item);
+}
+function customExtensionRowSource(item) {
+  return item.surface === "mcp" && item.source_label ? item.source_label : void 0;
+}
 function continuityCopy(item) {
   const status = item.continuity?.status;
   if (status === "applied") {
@@ -2646,6 +2653,7 @@ function ProtectionModuleRow(props) {
         props.external ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: "External" }) : null,
         props.managed ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: props.managedLabel ?? "Synced from Guard Cloud" }) : null,
         props.custom ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: "Custom" }) : null,
+        props.source ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "max-w-[16rem] truncate text-[11px] font-semibold text-brand-dark/55", title: props.source, "data-testid": "extension-row-source", children: props.source }) : null,
         props.badge ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/30 bg-brand-blue/5 px-2 py-0.5 text-[11px] font-semibold text-brand-dark", "data-testid": "custom-extension-badge", children: props.badge }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate text-sm text-brand-dark/70", children: props.behavior }),
@@ -4592,6 +4600,8 @@ function discoveryIssueMessage(issue) {
       return "Some connectors have more tools than Guard can catalog safely. Existing choices were kept.";
     case "configured_host_scan_failed":
       return "Guard could not read configured host connections. Check the host app and retry.";
+    case "configured_host_persist_failed":
+      return "Guard read your host connections but could not save them. Existing choices were kept; retry discovery, and restart Guard if it keeps failing.";
     case "observed_provider_scan_failed":
       return "Guard could not merge observed provider tools. Existing choices were kept; retry discovery.";
     case "package_catalog_refresh_failed":
@@ -7675,7 +7685,6 @@ function CustomExtensionRow(props) {
     else onOpen(item.cli_id);
   }, [item, onOpen, onSetUp]);
   const action = customExtensionActionLabel(item);
-  const continuity = continuityCopy(props.item);
   const catalog = mcpCatalogCopy(props.item);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     ProtectionModuleRow,
@@ -7683,7 +7692,8 @@ function CustomExtensionRow(props) {
       extensionId: props.item.cli_id,
       name: customExtensionDisplayName(props.item),
       description: customExtensionRowDescription(props.item, catalog?.title ?? null),
-      behavior: continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(props.item),
+      behavior: customExtensionRowBehavior(props.item),
+      source: customExtensionRowSource(props.item),
       brand: props.item.brand,
       badge: customExtensionBadge(props.item) ?? void 0,
       actionLabel: action ?? void 0,
@@ -8942,8 +8952,8 @@ function ExtensionsOverview(props) {
     const reload = async () => {
       if (!controller.signal.aborted) await reloadConnections.current();
     };
-    const configured = refreshMcpInventory("inventory:configured", controller.signal, true, discoveryAttempt > 0).then(reload).catch(() => {
-      if (!controller.signal.aborted) setDiscoveryError("Could not check host configuration. Known connections remain available.");
+    const configured = refreshMcpInventory("inventory:configured", controller.signal, true, discoveryAttempt > 0).then(reload).catch((error) => {
+      if (!controller.signal.aborted) setDiscoveryError(discoveryFailureMessage(error, CONFIGURED_CONNECTIONS_FALLBACK));
     });
     let hostRunning = false;
     const refreshHost = async (force) => {
@@ -8952,8 +8962,8 @@ function ExtensionsOverview(props) {
       try {
         await refreshCodexHostInventory(controller.signal, force);
         if (!controller.signal.aborted) setHostDiscoveryError(null);
-      } catch {
-        if (!controller.signal.aborted) setHostDiscoveryError("Could not read Codex app inventory. Known connections remain available.");
+      } catch (error) {
+        if (!controller.signal.aborted) setHostDiscoveryError(discoveryFailureMessage(error, CODEX_HOST_FALLBACK));
       } finally {
         await reload();
         hostRunning = false;

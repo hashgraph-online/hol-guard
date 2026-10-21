@@ -182,7 +182,7 @@ class ExtensionControlAuthorityCommitMixin:
             current = self._read_extension_control_authority_locked(
                 catalog_digest,
                 migration_registry=migration_registry,
-                _healed=True,
+                roll_back_abandoned=False,
                 allow_migration=pack_activation is None,
             )
             key = self._authority_key(required=True)

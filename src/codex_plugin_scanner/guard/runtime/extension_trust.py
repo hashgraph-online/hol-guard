@@ -1,21 +1,13 @@
-"""Trust-class lookup and inert-external observation filtering."""
+"""Curated trust-class map and binding loading; activity is resolved natively."""
 
 from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Iterable
 from functools import lru_cache
 from importlib import resources
 from pathlib import Path
 from typing import Final, Literal, cast
-
-from .extension_control_contract import (
-    ControlLayerKind,
-    ControlState,
-    ControlTargetKind,
-    ExtensionControlLayer,
-)
 
 TrustClass = Literal["first-party", "trusted-library", "external"]
 Activation = Literal["default-on", "opt-in"]
@@ -144,29 +136,3 @@ def trust_class_for(extension_id: str) -> TrustClass:
 
 def mapped_ids() -> frozenset[str]:
     return frozenset(_trust_map())
-
-
-def extension_is_active(
-    extension_id: str,
-    layers: Iterable[ExtensionControlLayer] | None,
-    *,
-    required: bool = False,
-) -> bool:
-    if required or trust_class_for(extension_id) != "external":
-        return True
-    layer_values = tuple(layers or ())
-    from .extension_control_resolver import compose_control_layers
-
-    composed = compose_control_layers(layer_values)
-    if composed.state_for(ControlTargetKind.EXTENSION, extension_id) is ControlState.DISABLED:
-        return False
-    return any(
-        layer.kind is ControlLayerKind.LOCAL_ADMIN
-        and any(
-            control.target.kind is ControlTargetKind.EXTENSION
-            and control.target.target_id == extension_id
-            and control.state is ControlState.ENABLED
-            for control in layer.controls
-        )
-        for layer in layer_values
-    )

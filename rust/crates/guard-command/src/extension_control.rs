@@ -1,9 +1,11 @@
 //! Fail-closed composition and resolution of command-extension controls.
 //!
-//! Byte-parity port of `extension_control_contract.py` (control types +
-//! `ResolverFailureCode`), `command_dns_control_migration.py` (legacy
-//! aggregate-DNS expansion), and `extension_control_resolver.py`
-//! (`compose_control_layers` + `resolve_extension_controls`).
+//! The owner of composition (`compose_control_layers`) and resolution
+//! (`resolve_extension_controls`); the Python resolver is retired and asks
+//! this module through the resident `extension_control` operation. The control
+//! types and `ResolverFailureCode` mirror `extension_control_contract.py`, and
+//! the legacy aggregate-DNS expansion mirrors `command_dns_control_migration.py`,
+//! which remain Python value types and a store import respectively.
 //!
 //! Catalog access is abstracted behind [`ControlRegistry`]; the resident
 //! implements it over the native command program/catalog so this module stays
@@ -20,7 +22,7 @@ use super::effect_decision::{DecisionBasis, DecisionFactor, DecisionFactorSource
 /// `CONTROL_SCHEMA_VERSION` (extension_control_contract.py:12).
 pub const CONTROL_SCHEMA_VERSION: &str = "1.0.0";
 
-// Limits (extension_control_limits.py + extension_control_resolver.py:36-40).
+// Limits (extension_control_limits.py and the resolver's input bounds).
 /// `MAX_CONTROL_LAYERS` = len(ControlLayerKind) = 2.
 pub const MAX_CONTROL_LAYERS: usize = 2;
 /// `_MAX_CONTROLS_PER_LAYER` (resolver).
@@ -405,7 +407,7 @@ pub fn expand_legacy_dns_layers(layers: &[ExtensionControlLayer]) -> Vec<Extensi
 }
 
 // ---------------------------------------------------------------------------
-// Composition + resolution (extension_control_resolver.py)
+// Composition + resolution
 // ---------------------------------------------------------------------------
 
 /// `compose_control_layers` (:43-66): disable-dominant, deterministic output.
@@ -970,6 +972,64 @@ mod tests {
             None,
         );
         assert!(!res.blocked);
+    }
+
+    #[test]
+    fn resolve_preserves_observations_through_lockdown_and_trusted_recovery() {
+        let mut layer = layer(ControlLayerKind::LocalAdmin, vec![]);
+        layer.global_lockdown = true;
+        let reg = registry();
+        let observed = vec![
+            "classification:package-manager".to_owned(),
+            "classification:remote-mutation".to_owned(),
+        ];
+        let resolve = |surface| {
+            resolve_extension_controls(
+                std::slice::from_ref(&layer),
+                Some(&reg),
+                &[],
+                &[],
+                surface,
+                &observed,
+                None,
+            )
+        };
+        let command = resolve(ControlSurface::CommandEvaluation);
+        assert!(command.blocked);
+        assert_eq!(command.observations, observed);
+        assert_eq!(command.factors[0].reason_code, "control.global-lockdown");
+        let recovery = resolve(ControlSurface::TrustedLocalRecovery);
+        assert!(!recovery.blocked);
+        assert!(recovery.factors.is_empty());
+        assert_eq!(recovery.observations, observed);
+    }
+
+    #[test]
+    fn resolve_observation_limit_fails_closed_at_boundary() {
+        let reg = registry();
+        let resolve = |count: usize| {
+            let observed = vec!["observed".to_owned(); count];
+            resolve_extension_controls(
+                &[],
+                Some(&reg),
+                &["command.dns.aws".to_owned()],
+                &[],
+                ControlSurface::CommandEvaluation,
+                &observed,
+                None,
+            )
+        };
+        let accepted = resolve(MAX_OBSERVATIONS);
+        assert!(!accepted.blocked);
+        assert_eq!(accepted.observations.len(), MAX_OBSERVATIONS);
+        let rejected = resolve(MAX_OBSERVATIONS + 1);
+        assert!(rejected.blocked);
+        assert!(rejected
+            .failures
+            .iter()
+            .any(|failure| failure.code == ResolverFailureCode::InputLimitExceeded));
+        // The rejected input is cut to the limit, never echoed whole.
+        assert_eq!(rejected.observations.len(), MAX_OBSERVATIONS);
     }
 
     #[test]

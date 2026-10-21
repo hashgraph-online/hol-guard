@@ -412,6 +412,8 @@
     "src/codex_plugin_scanner/guard/native_mcp_relay_server_report.py",
     "src/codex_plugin_scanner/guard/native_daemon_lifecycle.py",
     "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
+    "src/codex_plugin_scanner/guard/native_extension_control_authority.py",
+    "src/codex_plugin_scanner/guard/native_extension_control_authority_memo.py",
     "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
     "src/codex_plugin_scanner/guard/native_mcp_tool_evidence.py",
     "src/codex_plugin_scanner/guard/native_mcp_tool_call_identity.py",
@@ -524,7 +526,8 @@
     "src/codex_plugin_scanner/guard/daemon/discovery.py",
     "src/codex_plugin_scanner/guard/daemon/manager.py",
     "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
-    "src/codex_plugin_scanner/guard/native_catalog_read.py"
+    "src/codex_plugin_scanner/guard/native_catalog_read.py",
+    "src/codex_plugin_scanner/guard/native_extension_control.py"
    ],
    "current": "Python performs binary identity checks and minimal client launch. Rust owns authentication, framing, process and peer attestation, bounded retirement, liveness, reconnect, restart, and generation state. Both superseded Python resident implementations are physically deleted.",
    "target": "binary identity and minimal Rust client launch only"

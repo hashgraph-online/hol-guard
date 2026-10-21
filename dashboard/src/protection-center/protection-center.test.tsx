@@ -334,6 +334,22 @@ assert.match(customMixed, /Needs review · 1/);
 assert.match(customMixed, /Reviewed · 1/);
 assert.doesNotMatch(customMixed, /custom-extensions-empty/);
 
+// One MCP server configured in two apps is two rows. Each names its app
+// beside the server name, and the status line stays whole.
+const customPerApp = renderToStaticMarkup(createElement(CustomExtensionsSection, {
+  items: [
+    { ...baseCustomExtension, cli_id: "local-cli.mcp-claude", name: "truenas-pilot", source_label: "Claude Code" },
+    { ...baseCustomExtension, cli_id: "local-cli.mcp-omp", name: "truenas-pilot", source_label: "Oh My Pi" },
+  ],
+  onOpen: () => undefined, onAdd: () => undefined,
+}));
+assert.match(customPerApp, /data-testid="extension-row-source"[^>]*>Claude Code</);
+assert.match(customPerApp, /data-testid="extension-row-source"[^>]*>Oh My Pi</);
+assert.equal(
+  customPerApp.match(/>Detected · Permissions not configured\. Inspect this connection\.</g)?.length,
+  2,
+);
+
 // When the section search is visible it must render in its own row below the
 // header: the Add action closes the header row and a bounded search label
 // opens the row that follows it — never inside the header's flex container,

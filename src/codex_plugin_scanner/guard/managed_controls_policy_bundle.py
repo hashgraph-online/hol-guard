@@ -6,7 +6,6 @@ import hashlib
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
 
 from .managed_controls_policy_fields import (
     _UNBOUND,
@@ -17,14 +16,11 @@ from .managed_controls_policy_fields import (
 )
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import (
-    ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
     authenticated_record,
-    layers_from_json,
     layers_to_json,
-    verify_authenticated_record,
 )
-from .runtime.extension_control_contract import ControlLayerKind, ExtensionControlLayer
+from .runtime.extension_control_contract import ExtensionControlLayer
 
 MANAGED_CONTROLS_ACTIVE_STATE_KEY = "managed_controls_active"
 MANAGED_CONTROLS_LAST_GOOD_STATE_KEY = "managed_controls_last_good"
@@ -53,36 +49,6 @@ def build_managed_controls_revision_state(
         "revision": revision,
         "authentication": {"record": encoded, "digest": digest, "mac": mac},
     }
-
-
-def managed_controls_revision_from_state(
-    value: object,
-    *,
-    authority_key: bytes,
-) -> int:
-    """Verify and return the durable managed-controls publication epoch."""
-
-    if not is_mapping(value):
-        raise ExtensionControlAuthorityError("invalid managed controls revision state")
-    revision = value.get("revision")
-    authentication = value.get("authentication")
-    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1 or not is_mapping(authentication):
-        raise ExtensionControlAuthorityError("invalid managed controls revision state")
-    record = authentication.get("record")
-    digest = authentication.get("digest")
-    mac = authentication.get("mac")
-    if not all(isinstance(item, str) for item in (record, digest, mac)):
-        raise ExtensionControlAuthorityError("invalid managed controls revision authentication")
-    authenticated = verify_authenticated_record(
-        cast(str, record),
-        expected_digest=cast(str, digest),
-        expected_mac=cast(str, mac),
-        key=authority_key,
-        purpose=MANAGED_CONTROLS_REVISION_PURPOSE,
-    )
-    if authenticated.get("revision") != revision:
-        raise ExtensionControlAuthorityError("managed controls revision payload mismatch")
-    return revision
 
 
 def _projection_digest(value: dict[str, object]) -> str:
@@ -332,55 +298,3 @@ def build_managed_controls_activation_state(
         "mac": mac,
     }
     return activation
-
-
-def managed_controls_layers_from_activation_state(
-    value: object,
-    *,
-    catalog_digest: str,
-    authority_key: bytes,
-) -> tuple[tuple[ExtensionControlLayer, ...], int]:
-    """Load only a complete, internally consistent managed activation snapshot."""
-
-    if not is_mapping(value) or value.get("schemaVersion") != MANAGED_CONTROLS_ACTIVATION_SCHEMA:
-        raise ExtensionControlAuthorityError("invalid managed controls activation state")
-    if value.get("complete") is not True or value.get("catalogDigest") != catalog_digest:
-        raise ExtensionControlAuthorityError("incomplete managed controls activation state")
-    authentication = value.get("authentication")
-    if not is_mapping(authentication):
-        raise ExtensionControlAuthorityError("missing managed controls activation authentication")
-    record = authentication.get("record")
-    digest = authentication.get("digest")
-    mac = authentication.get("mac")
-    if not all(isinstance(item, str) for item in (record, digest, mac)):
-        raise ExtensionControlAuthorityError("invalid managed controls activation authentication")
-    authenticated = verify_authenticated_record(
-        cast(str, record),
-        expected_digest=cast(str, digest),
-        expected_mac=cast(str, mac),
-        key=authority_key,
-        purpose=MANAGED_CONTROLS_ACTIVATION_PURPOSE,
-    )
-    unsigned = dict(value)
-    unsigned.pop("authentication", None)
-    if authenticated.get("activation") != unsigned:
-        raise ExtensionControlAuthorityError("managed controls activation payload mismatch")
-    revision = value.get("extensionAuthorityRevision")
-    encoded_layers = value.get("signedCloudLayersJson")
-    acknowledgement = value.get("acknowledgement")
-    if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
-        raise ExtensionControlAuthorityError("invalid managed controls activation revision")
-    if not isinstance(encoded_layers, str) or not is_mapping(acknowledgement):
-        raise ExtensionControlAuthorityError("invalid managed controls activation projection")
-    if (
-        acknowledgement.get("bundleHash") != value.get("bundleHash")
-        or acknowledgement.get("bundleVersion") != value.get("bundleVersion")
-        or acknowledgement.get("extensionAuthorityRevision") != revision
-        or acknowledgement.get("catalogDigest") != catalog_digest
-        or acknowledgement.get("effectiveProjectionDigest") != _projection_digest(unsigned)
-    ):
-        raise ExtensionControlAuthorityError("managed controls acknowledgement mismatch")
-    layers = layers_from_json(encoded_layers)
-    if len(layers) > 1 or any(layer.kind is not ControlLayerKind.SIGNED_CLOUD for layer in layers):
-        raise ExtensionControlAuthorityError("invalid managed signed Cloud layer")
-    return cast(tuple[ExtensionControlLayer, ...], layers), revision
