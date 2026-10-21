@@ -1066,6 +1066,17 @@ jobs:
       # Uses the runner's preinstalled Google Chrome, so no browser download.
       - name: Dashboard integration suite
         run: cd dashboard && bun run test:e2e:integration
+      # Each failure's page snapshot shows what the browser actually rendered.
+      # Sidebar links carry the session in the URL fragment, so strip fragments.
+      - name: Print failed page snapshots
+        if: failure()
+        run: |
+          find dashboard/e2e/proofs/integration-output -name error-context.md -print0 2>/dev/null |
+            while IFS= read -r -d '' file; do
+              echo "::group::$file"
+              sed -E 's/#[^ "'\'')]*//g' "$file"
+              echo "::endgroup::"
+            done
 
   cisco-full:
     needs: [plan, native-command-evaluators]
