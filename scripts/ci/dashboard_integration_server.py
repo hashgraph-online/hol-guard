@@ -94,7 +94,24 @@ def _prepare_authority(store: GuardStore, guard_home: Path, password: str) -> No
         raise RuntimeError(f"integration authority is not protected: {view.health.value} ({describe_authority(store)})")
 
 
-def _wait_for_catalog(origin: str, auth_token: str) -> None:
+def _error_code(error: urllib.error.HTTPError) -> str:
+    try:
+        body = json.loads(error.read(4096) or b"{}")
+    except (OSError, ValueError):
+        return "unreadable"
+    return str(body.get("error", "unknown")) if isinstance(body, dict) else "unknown"
+
+
+def _daemon_log_tail(guard_home: Path, lines: int = 40) -> str:
+    # The daemon writes background catalog-preparation faults to its own log,
+    # not stdout. CI has no other way to see them once the run root is gone.
+    logs = sorted(guard_home.glob("**/daemon.log"))
+    if not logs:
+        return "(no daemon.log)"
+    return "\n".join(logs[0].read_text(encoding="utf-8", errors="replace").splitlines()[-lines:])
+
+
+def _wait_for_catalog(origin: str, auth_token: str, guard_home: Path) -> None:
     # A fresh home prepares its extension catalog in the background and answers
     # 503 until that finishes. Hand the browser a warm daemon so specs never
     # race first-run preparation.
@@ -110,7 +127,10 @@ def _wait_for_catalog(origin: str, auth_token: str) -> None:
                     return
         except urllib.error.HTTPError as error:
             if error.code != 503 or time.monotonic() > deadline:
-                raise RuntimeError(f"extension catalog never became ready: HTTP {error.code}") from error
+                print(_daemon_log_tail(guard_home), file=sys.stderr)
+                raise RuntimeError(
+                    f"extension catalog never became ready: HTTP {error.code} {_error_code(error)}"
+                ) from error
         time.sleep(0.25)
 
 
@@ -151,7 +171,7 @@ def main() -> None:
     try:
         auth_token = daemon._server.auth_token  # pyright: ignore[reportPrivateUsage]
         origin = f"http://127.0.0.1:{port}"
-        _wait_for_catalog(origin, auth_token)
+        _wait_for_catalog(origin, auth_token, guard_home)
         state = {
             "origin": origin,
             "session": build_local_dashboard_session_token(auth_token=auth_token, surface="dashboard"),
