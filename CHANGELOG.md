@@ -95,6 +95,45 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.52.0](https://github.com/hashgraph-online/hol-guard/compare/v3.51.0...v3.52.0) (2026-10-21)
+
+
+### Features
+
+* **containment:** let the resident answer containment health ([#5417](https://github.com/hashgraph-online/hol-guard/issues/5417)) ([7e78ed3](https://github.com/hashgraph-online/hol-guard/commit/7e78ed38587e9c6f9372ac819375924b9405f7b1))
+* **containment:** run the installed containment proof in the native runtime ([#5441](https://github.com/hashgraph-online/hol-guard/issues/5441)) ([68c3c8b](https://github.com/hashgraph-online/hol-guard/commit/68c3c8b20e86b5c4c6bcf9be9576b4ec1f0da038))
+* **dashboard:** give Rules & exceptions the Home hero, a widest-rules spotlight, and a rule inspector ([#5458](https://github.com/hashgraph-online/hol-guard/issues/5458)) ([e309ad0](https://github.com/hashgraph-online/hol-guard/commit/e309ad05c1bad4069f8ab4aa0a056c73bad5052f))
+* **dashboard:** put remembered rules first on Rules & exceptions with at-a-glance counts, action filters, and bulk removal ([#5453](https://github.com/hashgraph-online/hol-guard/issues/5453)) ([b99e7da](https://github.com/hashgraph-online/hol-guard/commit/b99e7da06b5e317791de23abce91c687bfc48f2e))
+* **extensions:** accept a public profile on extension credit ([#5454](https://github.com/hashgraph-online/hol-guard/issues/5454)) ([298c1a7](https://github.com/hashgraph-online/hol-guard/commit/298c1a7421527625e2602394d571b21fdbca857f))
+* **windows:** run a project's pytest inside read-only containment ([#5422](https://github.com/hashgraph-online/hol-guard/issues/5422)) ([e31d1c9](https://github.com/hashgraph-online/hol-guard/commit/e31d1c99d992373a6a9a2e67c921d0f7a10a377b))
+
+
+### Bug Fixes
+
+* **contained:** accept a venv link into the macOS developer directory ([#5425](https://github.com/hashgraph-online/hol-guard/issues/5425)) ([7396af8](https://github.com/hashgraph-online/hol-guard/commit/7396af87f8c1e1decb1f8f953674968a626895f9))
+* **containment:** keep the contained workspace write's own deadline ([#5446](https://github.com/hashgraph-online/hol-guard/issues/5446)) ([4c96a78](https://github.com/hashgraph-online/hol-guard/commit/4c96a78f2cdf3e337d1f84c51e4bad3da8bd91ca))
+* **deps:** take certifi 2026.10.19 for the compromised emSign roots ([#5480](https://github.com/hashgraph-online/hol-guard/issues/5480)) ([4cf5146](https://github.com/hashgraph-online/hol-guard/commit/4cf514673613ba184f89ea00838aa8bf0a2fdf63))
+* **extensions:** keep the Extensions page loading after a catalog activation lands ([#5438](https://github.com/hashgraph-online/hol-guard/issues/5438)) ([ad1fd09](https://github.com/hashgraph-online/hol-guard/commit/ad1fd093da998e2a2deac5603d9d3574b1da3e2b))
+* **extensions:** save a protection policy without reaching the network ([#5442](https://github.com/hashgraph-online/hol-guard/issues/5442)) ([be47b9a](https://github.com/hashgraph-online/hol-guard/commit/be47b9a7d530e2c1d1d5537ca7319adffe8c3d51))
+* **fleet:** report AIBOM-detected items and name machines by host name ([#5440](https://github.com/hashgraph-online/hol-guard/issues/5440)) ([3c3d1ad](https://github.com/hashgraph-online/hol-guard/commit/3c3d1ad2669e85ef28fae6e47adcce455dd27138))
+* **gauntlet:** re-run a case the model never exercised instead of a whole attempt ([#5411](https://github.com/hashgraph-online/hol-guard/issues/5411)) ([016ced7](https://github.com/hashgraph-online/hol-guard/commit/016ced789de138d8cd9f3f4151b6beb541d54bc3))
+* **gauntlet:** tell a session started beside a checkout where it really is ([#5421](https://github.com/hashgraph-online/hol-guard/issues/5421)) ([1126b18](https://github.com/hashgraph-online/hol-guard/commit/1126b180572efb273390a1d389f5ed88a9017a03))
+* **guard:** record a failing catalog preparation and report it as terminal ([#5437](https://github.com/hashgraph-online/hol-guard/issues/5437)) ([42c3be7](https://github.com/hashgraph-online/hol-guard/commit/42c3be7a1f01e302114df2b626380f929c8165a4))
+* **guard:** surface container extension hints and category icons in inbox ([#5439](https://github.com/hashgraph-online/hol-guard/issues/5439)) ([b4399c9](https://github.com/hashgraph-online/hol-guard/commit/b4399c963a25b87b5c948844afbd28ececa98d02))
+* **pretool:** allow worktree creation through missing parent directories ([#5456](https://github.com/hashgraph-online/hol-guard/issues/5456)) ([fa10941](https://github.com/hashgraph-online/hol-guard/commit/fa1094177cf3011a19e6315eab84f43dbe2a6c6a))
+* **pretool:** let a read-only git route to a directory without a repository ([#5408](https://github.com/hashgraph-online/hol-guard/issues/5408)) ([91d99a8](https://github.com/hashgraph-online/hol-guard/commit/91d99a87c760df46960b52ca5371af0260efd9c5))
+* **pretool:** list a temporary scratch directory the way its owner sees it ([#5432](https://github.com/hashgraph-online/hol-guard/issues/5432)) ([3fd63bb](https://github.com/hashgraph-online/hol-guard/commit/3fd63bbbac21edbe1c32a9173b2e2ba1cd90d774))
+* **pretool:** prove an rg listing by the names it can print ([#5429](https://github.com/hashgraph-online/hol-guard/issues/5429)) ([abcaadc](https://github.com/hashgraph-online/hol-guard/commit/abcaadc3aa7c7ec90d9b037f344fbe491a9b4048))
+* **pretool:** read a missing path in a registered worktree quietly ([#5424](https://github.com/hashgraph-online/hol-guard/issues/5424)) ([6afb490](https://github.com/hashgraph-online/hol-guard/commit/6afb490ef253d2c43ea7d8508c75f215bba72b85))
+* **pretool:** stop a missing worktree read from climbing out with .. ([#5457](https://github.com/hashgraph-online/hol-guard/issues/5457)) ([d2a1b30](https://github.com/hashgraph-online/hol-guard/commit/d2a1b305cf44387fa42d2be5fa706363866c780a))
+* **runtime:** keep a cancelled Bash launch's reply deliverable on Windows ([#5428](https://github.com/hashgraph-online/hol-guard/issues/5428)) ([4f28277](https://github.com/hashgraph-online/hol-guard/commit/4f28277c89cc39d5f0a93b59a01eda8cd2c512d8))
+* **runtime:** keep a journaled receipt when the store is briefly locked ([#5415](https://github.com/hashgraph-online/hol-guard/issues/5415)) ([dd4fa37](https://github.com/hashgraph-online/hol-guard/commit/dd4fa3780d4590477ac3b96ea54caa72ee212746))
+
+
+### Performance Improvements
+
+* **ci:** extend nextest archive caching to command and core partitions ([#5423](https://github.com/hashgraph-online/hol-guard/issues/5423)) ([d78503b](https://github.com/hashgraph-online/hol-guard/commit/d78503b6c55e633f1636e8ce45f799a427b6d4cf))
+
 ## [3.51.0](https://github.com/hashgraph-online/hol-guard/compare/v3.50.0...v3.51.0) (2026-10-20)
 
 
