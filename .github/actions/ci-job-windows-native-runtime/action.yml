@@ -34,7 +34,7 @@ runs:
         # build.rs reads contributions/ and contracts/extensions/trust, and
         # guard-policy-snapshot include_str!s spec/. A test asserts this key
         # stays complete.
-        key: windows-hol-guard-runtime-v2-${{ runner.arch }}-${{ steps.runtime-platform.outputs.image }}-${{ steps.runtime-platform.outputs.compiler-env }}-lto-${{ env.CARGO_PROFILE_RELEASE_LTO }}-cgu-${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}-${{ hashFiles('rust/**', 'contributions/**', 'contracts/**', 'spec/**', 'src/codex_plugin_scanner/guard/contracts/**', '.cargo/**', '.github/actions/setup-rust/action.yml', '.github/actions/ci-job-windows-native-runtime/action.yml', 'scripts/ci/native_cache_environment.py', 'scripts/refresh_extension_artifacts.py') }}
+        key: windows-hol-guard-runtime-v2-${{ runner.arch }}-${{ steps.runtime-platform.outputs.image }}-${{ steps.runtime-platform.outputs.compiler-env }}-lto-${{ env.CARGO_PROFILE_RELEASE_LTO }}-cgu-${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}-${{ hashFiles('rust/**', 'contributions/**', 'contracts/**', 'spec/**', 'src/codex_plugin_scanner/guard/contracts/**', 'src/codex_plugin_scanner/guard/schemas/**', '.cargo/**', '.github/actions/setup-rust/action.yml', '.github/actions/ci-job-windows-native-runtime/action.yml', 'scripts/ci/native_cache_environment.py', 'scripts/refresh_extension_artifacts.py') }}
     - uses: ./.github/actions/setup-rust
       if: steps.runtime-cache.outputs.cache-hit != 'true'
     - name: Install content-addressed compiler cache

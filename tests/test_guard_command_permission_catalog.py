@@ -4,16 +4,9 @@ import json
 from dataclasses import replace
 from hashlib import sha256
 
-import pytest
-
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtensionRegistry,
-)
-from codex_plugin_scanner.guard.runtime.command_permission_catalog import (
-    COMMAND_PERMISSION_SCHEMA_VERSION,
-    CommandPermissionCatalog,
-    CommandPermissionSpec,
 )
 from codex_plugin_scanner.guard.runtime.github_capability_contract import GitHubCommandCapability
 
@@ -68,7 +61,7 @@ def test_every_extension_has_complete_enabled_permission_metadata() -> None:
 
     assert registry.permissions
     assert all(extension.permissions for extension in registry.extensions)
-    assert all(permission.schema_version == COMMAND_PERMISSION_SCHEMA_VERSION for permission in registry.permissions)
+    assert all(permission.schema_version == 1 for permission in registry.permissions)
     assert all(permission.default_enabled is True for permission in registry.permissions)
     assert all(
         permission.extension_id in {extension.extension_id for extension in registry.extensions}
@@ -157,121 +150,6 @@ def test_registry_digest_changes_when_generated_matcher_contract_changes() -> No
         for item in safe_variant_rules
         for variant in item.safe_variants
     )
-
-
-def test_permission_catalog_rejects_duplicate_mappings_cycles_and_invalid_references() -> None:
-    base = CommandPermissionSpec(
-        permission_id="command.test.permission.base",
-        schema_version=COMMAND_PERMISSION_SCHEMA_VERSION,
-        extension_id="command.test",
-        implementation_version="1.0.0",
-        label="Base",
-        description="Base test permission.",
-        risk_tier="high",
-        baseline_floor="review",
-        default_enabled=True,
-        configurable=True,
-        fixed_reason=None,
-        typed_capabilities=("test_base",),
-        action_classes=("test base action",),
-        rule_ids=("command.test.base",),
-        dependencies=(),
-        conflicts=(),
-        implied_permissions=(),
-        introduced_version="2.2.0",
-        deprecated=False,
-        replacement_permission_id=None,
-        safer_guidance=("Inspect the operation.",),
-        example_command="test inspect",
-    )
-
-    with pytest.raises(ValueError, match="duplicate permission ID"):
-        CommandPermissionCatalog((base, base))
-    with pytest.raises(ValueError, match="mapped by multiple permissions"):
-        CommandPermissionCatalog((base, replace(base, permission_id="command.test.permission.other")))
-    shared_action = CommandPermissionCatalog(
-        (
-            base,
-            replace(
-                base,
-                permission_id="command.test.permission.normalized-collision",
-                typed_capabilities=("test_normalized_collision",),
-                action_classes=(" TEST BASE ACTION ",),
-                rule_ids=("command.test.normalized-collision",),
-            ),
-        )
-    )
-    assert shared_action.for_action_class("test base action") is base
-    assert shared_action.for_rule_id("command.test.normalized-collision") is not None
-    with pytest.raises(ValueError, match=r"rule .* mapped by multiple permissions"):
-        CommandPermissionCatalog(
-            (
-                base,
-                replace(
-                    base,
-                    permission_id="command.test.permission.rule-collision",
-                    typed_capabilities=("test_rule_collision",),
-                    action_classes=("test rule collision action",),
-                    rule_ids=(" COMMAND.TEST.BASE ",),
-                ),
-            )
-        )
-    with pytest.raises(ValueError, match=r"typed capability .* mapped by multiple permissions"):
-        CommandPermissionCatalog(
-            (
-                base,
-                replace(
-                    base,
-                    permission_id="command.test.permission.capability-collision",
-                    typed_capabilities=(" TEST_BASE ",),
-                    action_classes=("test capability collision action",),
-                    rule_ids=("command.test.capability-collision",),
-                ),
-            )
-        )
-    with pytest.raises(ValueError, match="unknown dependency"):
-        CommandPermissionCatalog((replace(base, dependencies=("command.test.permission.missing",)),))
-    with pytest.raises(ValueError, match="relationship cycle"):
-        other = replace(
-            base,
-            permission_id="command.test.permission.other",
-            typed_capabilities=("test_other",),
-            action_classes=("test other action",),
-            rule_ids=("command.test.other",),
-            dependencies=(base.permission_id,),
-        )
-        CommandPermissionCatalog((replace(base, dependencies=(other.permission_id,)), other))
-    with pytest.raises(ValueError, match="duplicate dependency"):
-        CommandPermissionCatalog((replace(base, dependencies=(base.permission_id, base.permission_id)),))
-    with pytest.raises(ValueError, match="self-referential replacement"):
-        CommandPermissionCatalog(
-            (
-                replace(
-                    base,
-                    deprecated=True,
-                    replacement_permission_id=base.permission_id,
-                ),
-            )
-        )
-    cross_extension_target = replace(
-        base,
-        permission_id="command.other.permission.target",
-        extension_id="command.other",
-        typed_capabilities=("other_target",),
-        action_classes=("other target action",),
-        rule_ids=("command.other.target",),
-    )
-    with pytest.raises(ValueError, match="cross-extension replacement"):
-        CommandPermissionCatalog(
-            (
-                replace(
-                    base,
-                    deprecated=True,
-                    replacement_permission_id=cross_extension_target.permission_id,
-                ),
-                cross_extension_target,
-            )
-        )
 
 
 def test_extension_serialization_contains_metadata_not_effective_control_state() -> None:

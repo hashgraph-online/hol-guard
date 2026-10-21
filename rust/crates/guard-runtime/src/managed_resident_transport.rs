@@ -102,7 +102,8 @@ fn managed_accept_loop(
     owner_alive: Arc<AtomicBool>,
     policy_store: std::sync::Arc<crate::policy_store::PolicySnapshotStore>,
 ) -> Result<(), String> {
-    let admission = crate::resident_transport::start_resident_workers(token, Some(policy_store));
+    let admission =
+        crate::resident_transport::start_resident_workers(token, Some(Arc::clone(&policy_store)));
     let mut last_activity = Instant::now();
     let mut failures = 0;
     let result = (|| {
@@ -136,6 +137,8 @@ fn managed_accept_loop(
         }
         Ok(())
     })();
+    #[cfg(target_os = "macos")]
+    policy_store.bash_launches().shutdown();
     crate::resident_transport::drain_resident_workers(admission);
     result
 }
@@ -169,8 +172,10 @@ pub(super) fn serve_loopback_managed(
         address.to_string(),
         &token,
     )?;
-    let admission =
-        crate::resident_transport::start_resident_workers(Arc::new(token), Some(policy_store));
+    let admission = crate::resident_transport::start_resident_workers(
+        Arc::new(token),
+        Some(Arc::clone(&policy_store)),
+    );
     let mut last_activity = Instant::now();
     let mut failures = 0;
     let result = loop {
@@ -213,6 +218,8 @@ pub(super) fn serve_loopback_managed(
             Err(_) => break Err("native_resident_loopback_accept_failed".to_owned()),
         }
     };
+    #[cfg(target_os = "macos")]
+    policy_store.bash_launches().shutdown();
     crate::resident_transport::drain_resident_workers(admission);
     resident_state_retirement::retire_state(
         scope,

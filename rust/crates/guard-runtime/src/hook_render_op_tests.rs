@@ -307,3 +307,43 @@ fn cursor_observer_event_kind_requires_a_payload_object() {
     assert_eq!(result.status, "error");
     assert_eq!(result.code, "native_hook_render_invalid");
 }
+
+#[test]
+fn hermes_bridge_names_the_document_and_the_exit_status() {
+    let mut req = request("hermes_bridge");
+    req.harness = "hermes".to_owned();
+    req.cli = Some(json!({"response": {"policy_action": "review", "reason": "recursive delete"}}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "ok");
+    let payload = result.payload.expect("payload");
+    assert_eq!(payload["outcome"], "document");
+    assert_eq!(
+        payload["response"]["document"],
+        json!({"decision": "block", "reason": "recursive delete"})
+    );
+    assert_eq!(payload["response"]["exit_code"], json!(2));
+}
+
+#[test]
+fn hermes_bridge_uses_the_recorded_text_when_a_block_has_no_reason() {
+    let mut req = request("hermes_bridge");
+    req.harness = "hermes".to_owned();
+    req.cli = Some(json!({"response": {"decision": "block"}}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    let payload = result.payload.expect("payload");
+    assert_eq!(
+        payload["response"]["document"],
+        json!({"decision": "block", "reason": "HOL Guard blocked this action"})
+    );
+    assert_eq!(payload["response"]["exit_code"], json!(2));
+}
+
+#[test]
+fn hermes_bridge_rejects_a_request_with_no_response() {
+    let mut req = request("hermes_bridge");
+    req.harness = "hermes".to_owned();
+    req.cli = Some(json!({}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "error");
+    assert_eq!(result.code, "native_hook_render_invalid");
+}

@@ -52,6 +52,8 @@ def test_an_absolute_script_in_a_sibling_repository_anchors_its_root(tmp_path: P
         f"python3 {script} --top 40",
         f"python3 -m py_compile {script}",
         f"bun {script} --root={sibling / 'dashboard'}",
+        # A heap size ahead of the script leaves the script as the program.
+        f"node --max-old-space-size=4096 {script} --config jest.config.js",
     ):
         assert anchored_sibling_root(command, workspace=workspace, cwd=workspace, home=home) == sibling.resolve()
     for command in (
@@ -69,6 +71,13 @@ def test_an_absolute_script_in_a_sibling_repository_anchors_its_root(tmp_path: P
         f"jq . {script}",
         f"rg -n report {sibling}",
         f"python3 -c 1 {script}",
+        # Only a bounded numeric heap size is peeled; any other option keeps
+        # the script an operand of a program that runs from the session.
+        f"node --max-old-space-size=0 {script}",
+        f"node --max-old-space-size=4096k {script}",
+        f"node --max-old-space-size={'9' * 5000} {script}",
+        f"node --require=./hook.js {script}",
+        f"node --max-old-space-size=4096 --require=./hook.js {script}",
     ):
         assert anchored_sibling_root(command, workspace=workspace, cwd=workspace, home=home) is None, command
     assert anchored_sibling_root(f"python3 {script}", workspace=workspace, cwd=workspace, home=None) is None

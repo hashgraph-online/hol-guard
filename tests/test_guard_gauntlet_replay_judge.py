@@ -98,6 +98,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
     marked = {c.base_id for c in expand() if c.expect == "block" and c.contained_ok}
     assert marked == {
         "neg-cargo-check-locked-host-toolchain",
+        # A filter whose grammar the read recognizer rejects: the operands stay inside the
+        # workspace, so the contained run reaches nothing, and the case pins the rejection
+        # rather than an approval prompt an in-worktree write would never raise.
+        "neg-cut-without-selection",
         "neg-env-bare-set-then-list",
         "neg-env-git-dir-then-list",
         "neg-env-ld-preload-then-list",
@@ -105,6 +109,34 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # A `find` that is not limited to regular files hands a link to `grep`, which opens its
         # target; the contained run reaches nothing outside the workspace.
         "neg-find-exec-grep-l-edge-clone-without-type-f",
+        # The sandbox has no network for the push to reach the remote over, and no home access
+        # for the widened search, so a contained run sends nothing and prints no key.
+        "neg-git-push-to-tmp-chain",
+        # A listing below a hidden home directory: a contained run has no home access, so it
+        # names nothing the home keeps there.
+        "neg-ls-home-dot-glob",
+        "neg-ls-home-missing-hidden-store",
+        "neg-ls-home-missing-key-in-hidden-directory",
+        # A file listing of a home service lane or credential store: a contained run has no
+        # home access, so it prints no name the home keeps there.
+        "neg-rg-content-search-service-lane",
+        "neg-rg-files-hidden-service-lane",
+        "neg-rg-files-home-credential-store",
+        "neg-rg-files-no-ignore-service-lane",
+        "neg-rg-path-before-files-flag-credential-store",
+        "neg-rg-replace-widens-home-search",
+        # A sibling checkout's workflows and test runner: a contained run reads only the
+        # workspace, so `-exec cat`, a preloaded module or a dotfile probe reaches no secret.
+        "neg-sibling-find-github-exec-cat",
+        "neg-sibling-ls-missing-env-below-github",
+        "neg-sibling-node-heap-require-other-checkout",
+        # The same rejection for a filter that names an output file. `neg-sort-output-file`
+        # and `neg-uniq-output-operand` carry the strict direction with an escaping path;
+        # these keep the in-worktree shape on record, where the write cannot leave the
+        # workspace and the contained run is the designed outcome.
+        "neg-sort-output-file-in-worktree",
+        "neg-tr-file-operand",
+        "neg-uniq-output-operand-in-worktree",
     }
 
 

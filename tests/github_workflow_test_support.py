@@ -9,12 +9,13 @@ without a resident.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.native_github_workflow import GitHubWorkflowDescriptor
+from codex_plugin_scanner.guard.native_github_workflow import GitHubWorkflowDescriptor, GitHubWorkflowLineage
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.github_workflow_approval_record import (
     GITHUB_WORKFLOW_APPROVAL_RECORD_SCHEMA,
@@ -41,6 +42,17 @@ def digest(label: str) -> str:
 
 def framed_digest(purpose: str, payload: object) -> str:
     return hashlib.sha256(canonical_framed_payload(purpose, payload)).hexdigest()
+
+
+def capability_id(request_id: str) -> str:
+    """The id a workflow capability for ``request_id`` is stored under.
+
+    Spelled out here rather than imported from the runtime, so a drift in the
+    resident's derivation fails a test instead of silently renaming every
+    capability the store already holds.
+    """
+
+    return f"gwc-{framed_digest('github-workflow-capability', request_id)}"
 
 
 def binding(
@@ -96,7 +108,33 @@ def with_binding(source: GitHubWorkflowDescriptor, **changes: object) -> GitHubW
 
 @pytest.fixture
 def native_lineage_verified(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Stand in for the resident's persisted-command re-derivation (covered by Rust vectors)."""
+    """Stand in for the resident's lineage verdict so the store plumbing can be driven.
+
+    The resident decides whether the three rows are one lineage; every way that
+    decision can go against the request is covered by
+    `guard-command`'s `github_workflow_lineage_tests`. This stub says yes and
+    reads back the identities the rows already carry -- it compares nothing, so
+    it cannot drift into a second Python oracle for the verdict.
+    """
     import codex_plugin_scanner.guard.runtime.github_workflow_runtime as runtime_module
 
-    monkeypatch.setattr(runtime_module, "github_workflow_persisted_command_matches", lambda *_a, **_k: True)
+    def verified(
+        approval_request: Mapping[str, object],
+        operation: Mapping[str, object],
+        session: Mapping[str, object],
+        **_kwargs: object,
+    ) -> GitHubWorkflowLineage | None:
+        record = runtime_module.approval_record_from_approval_request(approval_request)
+        if record is None:
+            return None
+        request_id = str(approval_request["request_id"])
+        return GitHubWorkflowLineage(
+            request_id=request_id,
+            operation_id=str(operation["operation_id"]),
+            session_id=str(session["session_id"]),
+            record=record,
+            capability_id=f"gwc-{framed_digest('github-workflow-capability', request_id)}",
+            nonce=framed_digest("github-workflow-nonce", request_id),
+        )
+
+    monkeypatch.setattr(runtime_module, "github_workflow_validated_lineage", verified)

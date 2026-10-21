@@ -99,7 +99,7 @@ def test_controls_help_is_available_from_every_installed_alias(
 
     assert exit_info.value.code == 0
     assert (
-        "{status,patterns,set,list,show,preview,apply,global-preview,global-apply,enroll,recover-authority,acknowledge-degraded}"
+        "{status,prefetch,export-offline,import-offline,cleanup-cache,patterns,set,list,show,preview,apply,global-preview,global-apply,enroll,recover-authority,acknowledge-degraded}"
     ) in capsys.readouterr().out
 
 

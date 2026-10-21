@@ -131,8 +131,12 @@ def native_review_fence(
             # Refusing this hook would turn an ordinary command issued during a
             # publication into an approval row, and would add no protection:
             # the review still runs, and still denies. It needs budget to run,
-            # so a hook that is already out of time is still refused here.
-            if deadline is None or time.monotonic() >= deadline:
+            # so a hook that is already out of time is still refused here. A
+            # hook that carries no deadline is not out of time: it took no
+            # lease wait, and what makes an unleased review safe is the
+            # caller's comparison of committed control state across it, not
+            # the clock.
+            if deadline is not None and time.monotonic() >= deadline:
                 raise TimeoutError("native_review_fence_deadline") from None
             yield None
             return

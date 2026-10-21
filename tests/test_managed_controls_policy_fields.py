@@ -467,13 +467,55 @@ def test_native_outage_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     assert _code(_document()) == "native_unavailable"
 
 
-def test_documents_without_extension_fields_skip_the_native_parser(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_documents_without_extension_fields_still_require_native_authority(monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import managed_controls_policy_fields as fields
 
     monkeypatch.setattr(fields, "native_context_digest", lambda *_args, **_kwargs: None)
-    parsed = _parse({"spec": {"rules": [{"id": "plain", "action": "block"}]}})
-    assert not parsed.has_extension_semantics
+    assert _code({"spec": {"rules": [{"id": "plain", "action": "block"}]}}) == "native_unavailable"
     assert _code({"spec": {"rules": "x"}}) == "native_unavailable"
+
+
+@pytest.mark.parametrize("extension_fields", [False, True])
+@pytest.mark.parametrize("caller", ["daemon", "runner"])
+def test_catalog_unavailable_only_refuses_extension_policies(monkeypatch, tmp_path, extension_fields, caller):
+    from codex_plugin_scanner.guard.runtime import managed_controls_sync
+
+    document = _document() if extension_fields else {"spec": {"rules": [{"id": "plain", "action": "block"}]}}
+    bundle = {"contractVersion": "guard-policy-bundle.v2", "payload": document}
+    requested = []
+
+    def unavailable(*_args):
+        requested.append(True)
+        raise ManagedControlsPolicyError("policy_local_view_invalid", "Catalog unavailable.")
+
+    if caller == "daemon":
+        monkeypatch.setattr(daemon_policy_delivery, "current_catalog_registry", unavailable)
+        monkeypatch.setattr(
+            daemon_policy_delivery, "_managed_controls_negotiated_capabilities", lambda *_: _CAPABILITIES
+        )
+        candidate, _, delivery, error = daemon_policy_delivery.daemon_managed_controls_candidate(
+            store=cast(Any, SimpleNamespace(guard_home=tmp_path)),
+            payload={},
+            policy_bundle=bundle,
+            device_id="device",
+        )
+    else:
+        monkeypatch.setattr(managed_controls_sync, "_registry_for_home", unavailable)
+        accepted, candidate, delivery, error, applicable = managed_controls_sync.validated_managed_controls_candidate(
+            bundle,
+            negotiated_capabilities=_CAPABILITIES,
+            delivery_field_provided=False,
+            delivery_payload=None,
+            workspace_id=None,
+            device_id="device",
+            runtime_summary=None,
+            guard_home=tmp_path,
+        )
+        assert applicable
+        assert (accepted is None) == extension_fields
+    assert candidate is None and delivery is None
+    assert error == ("policy_local_view_invalid" if extension_fields else None)
+    assert bool(requested) == extension_fields
 
 
 def test_native_request_carries_only_the_fields_the_parser_reads(monkeypatch: pytest.MonkeyPatch) -> None:

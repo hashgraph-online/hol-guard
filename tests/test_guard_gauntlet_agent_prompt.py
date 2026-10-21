@@ -16,6 +16,8 @@ from ci.gauntlet.agent_prompt import (
 )
 from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.fixtures import create_fixture, scratch_checkout, stage_directory
+from ci.gauntlet.session_folder import CASES as SESSION_FOLDER_CASES
+from ci.gauntlet.session_folder import session_cwd
 
 
 @pytest.mark.parametrize("scenario", load_catalog(), ids=lambda scenario: scenario.id)
@@ -95,3 +97,44 @@ def test_watch_context_omits_typed_paths_so_bash_uses_its_default_cwd(tmp_path):
     assert "needs no cwd argument" in text and collector in text
     other = next(item for item in load_catalog() if item.oracle != "watch-command")
     assert str(fixture.workspace) in fixture_authorization(fixture, collector, other)
+
+
+def _first_contact_fixture(tmp_path, scenario_id: str):
+    """A realistic first-contact fixture, built the way the live runner builds one."""
+    return create_fixture(tmp_path / "disposable", realistic=True, scenario_id=scenario_id)
+
+
+def test_a_session_started_beside_the_checkout_is_told_so_rather_than_given_a_project(tmp_path):
+    """Naming the generated workspace as the project contradicts the work these cases ask for.
+
+    Both runs of the shell case at the 3.50.0 head died on that contradiction, one
+    refusing every listed command and one looking for project instructions instead,
+    so neither reached Guard at all.
+    """
+    scenario = next(item for item in load_catalog() if item.id in SESSION_FOLDER_CASES)
+    fixture = _first_contact_fixture(tmp_path, scenario.id)
+    session = session_cwd(fixture.home, fixture.workspace, scenario.id)
+    assert session != fixture.workspace
+    text = fixture_authorization(fixture, "http://127.0.0.1:12345/", scenario, session)
+    assert str(session) in text and str(fixture.workspace) not in text
+    assert "designates no project of its own" in text
+
+
+def test_a_session_inside_its_own_checkout_still_names_the_project(tmp_path):
+    """Every other first-contact case does start in the project, and is told exactly that."""
+    scenario = next(
+        item for item in load_catalog() if item.oracle == "native-tools" and item.id not in SESSION_FOLDER_CASES
+    )
+    fixture = _first_contact_fixture(tmp_path, scenario.id)
+    session = session_cwd(fixture.home, fixture.workspace, scenario.id)
+    assert session == fixture.workspace
+    text = fixture_authorization(fixture, "http://127.0.0.1:12345/", scenario, session)
+    assert str(fixture.workspace) in text and "Every tool already starts in the project" in text
+
+
+def test_a_lane_that_cannot_choose_a_working_directory_keeps_the_project_wording(tmp_path):
+    """Harness lanes run the session-folder cases from the project, so there the project is real."""
+    scenario = next(item for item in load_catalog() if item.id in SESSION_FOLDER_CASES)
+    fixture = _first_contact_fixture(tmp_path, scenario.id)
+    text = fixture_authorization(fixture, "http://127.0.0.1:12345/", scenario)
+    assert str(fixture.workspace) in text and "Every tool already starts in the project" in text

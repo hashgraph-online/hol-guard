@@ -12,9 +12,10 @@
 //!   execution-context floor.
 //! * `cd <dir>; ls src`: nothing is chained to the `cd`, so every later
 //!   segment runs in `<dir>` when the `cd` succeeded and in the original
-//!   directory when it failed. Each is proven against both. A Git read is
-//!   admitted only without helper context; the Git execution-context floor
-//!   inspects its configuration in both directories.
+//!   directory when it failed. Each is proven against both, and a Git read
+//!   that starts a configured helper has its configuration inspected in
+//!   both directories by the Git execution-context floor and the
+//!   helper-configuration probe.
 //! * `touch <f> && echo ok || echo fail; rm -f <f>`: a write probe that
 //!   creates one new file and removes it again. The file must not exist
 //!   before the command runs, so the trailing `rm` can only remove what the
@@ -193,12 +194,8 @@ fn cd_then_read_sequence(
         ..context
     };
     // The Git floor splits both forms and inspects each Git read in every
-    // directory it can run in. A read that needs the helper probe stays
-    // reviewed, because that probe runs in one directory only.
-    let git = model.segments[1..]
-        .iter()
-        .any(|segment| segment.executable.as_deref().map(executable_basename) == Some("git"));
-    let allow_git_helper_context = allow_git_helper_context && !leading_semicolon && !git;
+    // directory it can run in, and the helper-configuration probe makes the
+    // same split, so a Git read that needs helper context keeps it here.
     let mut after_fork = false;
     model.segments[1..]
         .iter()

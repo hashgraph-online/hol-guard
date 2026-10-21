@@ -1,8 +1,11 @@
 #![forbid(unsafe_code)]
 #![recursion_limit = "512"]
 
+mod active_pack_security;
+#[path = "adapters/adapter_inventory.rs"]
 mod adapter_inventory;
 #[cfg(all(test, unix))]
+#[path = "adapters/adapter_vectors_tests.rs"]
 mod adapter_vectors_tests;
 mod aibom_artifact;
 mod aibom_discovery;
@@ -15,6 +18,7 @@ mod aibom_skill_rules;
 mod aibom_skills;
 #[cfg(all(test, unix))]
 mod aibom_vectors_tests;
+#[path = "adapters/detection/antigravity_detect.rs"]
 mod antigravity_detect;
 mod approval;
 mod approval_bulk_eligibility_op;
@@ -25,8 +29,10 @@ mod approval_gate_op;
 mod approval_gate_settings;
 mod approval_gate_state;
 mod approval_gate_verify;
+mod approval_persist_select_op;
 mod approval_proof_op;
 mod approval_queue_identity_op;
+mod approval_resolution_eligibility_op;
 mod approval_resolution_plan_op;
 mod approval_reuse;
 mod approval_reuse_diagnostic_op;
@@ -36,11 +42,13 @@ mod approval_reuse_diagnostic_vectors_tests;
 mod approval_scope_contract;
 mod approval_scope_material;
 mod approval_scope_op;
+mod approval_scope_select_op;
 mod archive_acquisition_op;
 mod archive_inspect;
 mod archive_inspect_containment;
 mod archive_verdict_seam;
 mod artifact_risk_op;
+mod bash_post_delivery;
 #[cfg(unix)]
 mod binding_capture_capture;
 #[cfg(unix)]
@@ -89,6 +97,7 @@ mod claim_reuse_then_tests;
 #[cfg(test)]
 mod claim_reuse_vectors_tests;
 mod claude_code_config;
+#[path = "adapters/detection/claude_code_detect.rs"]
 mod claude_code_detect;
 #[cfg(all(test, unix))]
 mod claude_code_vectors_tests;
@@ -121,6 +130,7 @@ mod cloud_request_text;
 mod cloud_request_vectors_tests;
 mod cloud_sync_privacy;
 mod codex_app_server_socket;
+#[path = "adapters/detection/codex_detect.rs"]
 mod codex_detect;
 mod codex_hook_artifacts;
 mod codex_hook_bridge;
@@ -191,11 +201,15 @@ mod continuation_grants;
 mod continuation_lineage;
 mod continuation_metadata;
 mod continuation_store;
+#[cfg(test)]
+mod contributed_mcp_catalog_test_support;
 mod contributed_mcp_decision_op;
+#[path = "adapters/detection/copilot_detect.rs"]
 mod copilot_detect;
 #[cfg(all(test, unix))]
 mod copilot_vectors_tests;
 mod critical_floor_op;
+#[path = "adapters/detection/cursor_detect.rs"]
 mod cursor_detect;
 mod cursor_hook_bridge;
 mod cursor_hook_bridge_response;
@@ -233,6 +247,7 @@ mod decision_authority_op;
 mod decision_authority_vectors_tests;
 mod developer_inspection_authority_op;
 mod developer_inspection_host;
+#[path = "adapters/detection/devin_detect.rs"]
 mod devin_detect;
 mod direct_tool_context_op;
 #[cfg(test)]
@@ -243,6 +258,7 @@ mod discovery_placement_op;
 mod edge;
 mod edge_git_push;
 mod encrypted_secret_store;
+#[path = "adapters/detection/gemini_detect.rs"]
 mod gemini_detect;
 mod git_execution_safety_binary;
 mod git_execution_safety_checks;
@@ -256,6 +272,7 @@ mod git_execution_safety_tests;
 mod github_cli_classify_op;
 mod github_workflow_context_io;
 mod github_workflow_prepare_op;
+#[path = "adapters/detection/grok_detect.rs"]
 mod grok_detect;
 mod guard_config_coerce;
 mod guard_config_harness;
@@ -393,6 +410,7 @@ mod guard_store_wfcap_wire;
 mod guard_store_workflow_capability_vectors_tests;
 mod guard_store_write_cache;
 mod hardening;
+#[path = "adapters/detection/hermes_detect.rs"]
 mod hermes_detect;
 mod hermes_inspect;
 mod hermes_printable;
@@ -403,23 +421,41 @@ mod hermes_vectors_tests;
 mod hermes_yaml;
 mod hermes_yaml_construct;
 mod hermes_yaml_resolve;
+#[path = "adapters/hook_adapter_op.rs"]
 mod hook_adapter_op;
 mod hook_approval_context;
 mod hook_artifact_compose_op;
+mod hook_artifact_compose_package_firewall;
+mod hook_artifact_compose_package_firewall_entitlement;
+mod hook_artifact_compose_policy_lookup;
+mod hook_artifact_compose_policy_tail;
+mod hook_artifact_compose_prompt;
 mod hook_artifact_compose_reuse;
+mod hook_artifact_facts_op;
 mod hook_authority_state_op;
 mod hook_bridge_daemon_start;
 mod hook_bridge_fallback;
 mod hook_cli_claude_text;
+#[cfg(test)]
+mod hook_decision_apply_patch_gate_tests;
+mod hook_decision_artifact_directive;
+mod hook_decision_artifact_finalize;
+mod hook_decision_artifact_reuse_step;
+mod hook_decision_artifact_review_route;
 #[cfg(all(test, unix))]
 mod hook_decision_benign_tool_action_tests;
+mod hook_decision_claude_permission_verdict;
 mod hook_decision_compose;
+mod hook_decision_containment_route;
 mod hook_decision_directive;
 mod hook_decision_finalize;
+mod hook_decision_hook_route;
 mod hook_decision_native_facts;
 #[cfg(all(test, unix))]
 mod hook_decision_native_facts_tests;
+mod hook_decision_native_permission_persist;
 mod hook_decision_op;
+mod hook_decision_pretool_floor;
 mod hook_decision_settle;
 mod hook_direct;
 mod hook_direct_counters;
@@ -427,6 +463,8 @@ mod hook_direct_evidence;
 mod hook_env_stamp;
 #[cfg(all(test, unix))]
 mod mcp_config_discovery_tests;
+mod pack_lifecycle;
+mod pack_preparation;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
 #[allow(dead_code)]
@@ -448,6 +486,7 @@ mod hook_path_rules;
 mod hook_policy_config;
 mod hook_process_spawn;
 mod hook_render_op;
+#[path = "adapters/detection/kimi_detect.rs"]
 mod kimi_detect;
 mod local_cli_grant_op;
 mod local_cli_hook_contained;
@@ -482,6 +521,7 @@ mod mcp_proxy_decision_op;
 mod mcp_proxy_decision_tests;
 #[cfg(test)]
 mod mcp_proxy_decision_vectors_tests;
+mod mcp_proxy_inline_approval;
 mod mcp_proxy_package;
 mod mcp_proxy_postclaim;
 mod mcp_proxy_projection;
@@ -525,12 +565,18 @@ mod mcp_tool_policy_lookup;
 mod mcp_tool_policy_proxy;
 mod mcp_tool_policy_revalidate;
 mod memory_pattern;
+#[cfg(target_os = "macos")]
+mod native_bash_client;
+mod native_bash_reply_validation;
+mod native_bash_review_descriptor;
+mod native_bash_review_scope;
 mod native_decision_receipt;
 mod native_exact_action_op;
 mod native_hook_receipt;
 mod native_review_link;
 mod native_runtime_admission;
 mod native_runtime_resilience;
+mod network_protection;
 mod oauth_refresh;
 mod oauth_secret_authority;
 mod oci_bundle_evidence;
@@ -541,11 +587,14 @@ mod oci_bundle_vectors_tests;
 mod oci_path;
 mod omp_yield_input_scan;
 mod oneshot;
+#[path = "adapters/detection/openclaw_detect.rs"]
 mod openclaw_detect;
 #[cfg(all(test, unix))]
+#[path = "adapters/detection/openclaw_detect_tests.rs"]
 mod openclaw_detect_tests;
 mod openclaw_mcp;
 mod openclaw_skills;
+#[path = "adapters/detection/opencode_detect.rs"]
 mod opencode_detect;
 mod package_approval_hash_op;
 mod package_audit_projection_op;
@@ -558,6 +607,7 @@ mod package_posture_op;
 mod package_protect_finalize_op;
 mod package_protect_projection_op;
 mod persistence_action_class;
+#[path = "adapters/detection/pi_detect.rs"]
 mod pi_detect;
 mod pi_glob;
 mod pi_hook_bridge;
@@ -640,6 +690,7 @@ mod runner_authority_signature;
 mod runner_sync_policy;
 mod runner_sync_signals;
 mod runner_sync_url;
+mod runtime_artifact_identity_op;
 mod runtime_cli;
 mod runtime_detector_run_op;
 mod secrets_cli;
@@ -677,15 +728,21 @@ mod supply_chain_eval_caller;
 mod supply_chain_eval_rounds;
 mod supply_chain_eval_seams;
 mod supply_chain_eval_transport;
+mod tool_action_identity_op;
 mod totp;
+mod verified_npm_op;
+mod verified_read_decision_op;
 #[cfg(windows)]
 mod windows_node_build;
+#[cfg(windows)]
+mod windows_pytest;
 #[cfg(windows)]
 mod windows_readonly;
 mod workspace_inventory_files;
 mod workspace_inventory_op;
 mod workspace_scan_targets;
 mod zcode_artifacts;
+#[path = "adapters/detection/zcode_detect.rs"]
 mod zcode_detect;
 #[cfg(all(test, unix))]
 mod zcode_vectors_tests;

@@ -95,6 +95,9 @@ class StoreSecretPolicyIntegrityMixin:
         self.guard_home = guard_home
         self.guard_home.mkdir(parents=True, exist_ok=True)
         _set_private_mode_compat(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)
+        from .extension_builder.native_executable_root import use_guard_home
+
+        use_guard_home(self.guard_home)
         self.__oauth_secret_store = _OAUTH_SECRET_STORE_UNSET
         self.__policy_integrity_secret_store = _POLICY_INTEGRITY_SECRET_STORE_UNSET
         self._cached_oauth_secret_payload: tuple[str, str, str] | None = None

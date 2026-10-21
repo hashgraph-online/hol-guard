@@ -7,6 +7,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
+      "local_eligibility_required": false,
       "local_grants_allowed": true,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -27,7 +28,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -37,20 +37,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "prompt_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "UserPromptSubmit",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": false,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -74,7 +78,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -84,6 +87,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -98,6 +102,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
+      "local_eligibility_required": false,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -118,7 +123,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -128,20 +132,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": "block",
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PostToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -165,7 +173,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -175,6 +182,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -189,6 +197,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [
@@ -218,7 +227,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -228,20 +236,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": "nonsense",
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -265,7 +277,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -275,6 +286,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -289,6 +301,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -309,7 +322,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -319,20 +331,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": "ask",
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -356,7 +372,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -366,6 +381,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -380,6 +396,7 @@
       "auto_stop_events": [],
       "current_config_action": "block",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -400,7 +417,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -410,20 +426,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -447,7 +467,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "block",
         "explicit_permission_allow": false,
@@ -457,6 +476,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -471,6 +491,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
+      "local_eligibility_required": false,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [
@@ -500,7 +521,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -510,20 +530,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PermissionRequest",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -547,7 +571,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -557,6 +580,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -571,6 +595,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -591,7 +616,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -601,20 +625,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": "warn",
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -638,7 +666,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -648,6 +675,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -662,6 +690,7 @@
       "auto_stop_events": [],
       "current_config_action": "review",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": true,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -682,7 +711,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -692,20 +720,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -729,7 +761,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "???",
         "explicit_permission_allow": false,
@@ -739,6 +770,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -753,6 +785,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
+      "local_eligibility_required": false,
       "local_grants_allowed": true,
       "native_floor": "block",
       "normalizer_evidence": [],
@@ -773,7 +806,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "allow",
         "explicit_permission_allow": false,
@@ -783,20 +815,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": false,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": {
@@ -827,7 +863,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -837,6 +872,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -851,6 +887,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -871,7 +908,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -881,20 +917,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": null,
       "current_action_override_present": true,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -918,7 +958,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -928,6 +967,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -942,6 +982,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -962,7 +1003,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -972,20 +1012,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": true,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "package_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": true,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -1011,7 +1055,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1021,6 +1064,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": true,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -1035,6 +1079,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": true,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -1055,7 +1100,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1065,20 +1109,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": true,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "package_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": true,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -1104,7 +1152,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1114,6 +1161,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": true,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -1128,6 +1176,7 @@
       "auto_stop_events": [],
       "current_config_action": "review",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": true,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -1148,7 +1197,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1158,20 +1206,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": true,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "package_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": true,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -1197,7 +1249,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "review",
         "explicit_permission_allow": false,
@@ -1207,6 +1258,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": true,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -1221,6 +1273,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": "block",
+      "local_eligibility_required": true,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -1243,7 +1296,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1253,12 +1305,14 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": true,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "package_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [
@@ -1266,9 +1320,11 @@
       ],
       "data_flow_strong": false,
       "data_flow_summary": "df summary",
+      "event_name": "PreToolUse",
       "has_compound_findings": true,
       "has_data_flow": true,
       "has_package": true,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -1298,7 +1354,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1308,6 +1363,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": true,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -1322,6 +1378,7 @@
       "auto_stop_events": [],
       "current_config_action": "block",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": true,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -1343,7 +1400,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1353,20 +1409,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": true,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "package_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": true,
       "has_data_flow": false,
       "has_package": true,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -1392,7 +1452,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "block",
         "explicit_permission_allow": false,
@@ -1402,6 +1461,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": true,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -1416,6 +1476,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": "block",
+      "local_eligibility_required": true,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -1437,7 +1498,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1447,12 +1507,14 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [
@@ -1461,9 +1523,11 @@
       ],
       "data_flow_strong": false,
       "data_flow_summary": "df summary",
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": true,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -1491,7 +1555,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1501,6 +1564,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -1515,6 +1579,7 @@
       "auto_stop_events": [],
       "current_config_action": "review",
       "data_flow_action": "review",
+      "local_eligibility_required": true,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -1536,7 +1601,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1546,12 +1610,14 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [
@@ -1559,9 +1625,11 @@
       ],
       "data_flow_strong": false,
       "data_flow_summary": "df summary",
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": true,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -1589,7 +1657,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "review",
         "explicit_permission_allow": false,
@@ -1599,6 +1666,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -1613,6 +1681,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -1635,7 +1704,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1645,20 +1713,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": true,
       "kind": "policy_stack",
       "native_edge": null,
@@ -1682,7 +1754,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1692,6 +1763,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": "block",
@@ -1709,6 +1781,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -1730,7 +1803,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1740,20 +1812,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": true,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": true,
       "kind": "policy_stack",
       "native_edge": null,
@@ -1777,7 +1853,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1787,6 +1862,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": "block",
@@ -1803,6 +1879,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -1824,7 +1901,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1834,20 +1910,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": "block",
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": true,
       "kind": "policy_stack",
       "native_edge": null,
@@ -1871,7 +1951,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1881,6 +1960,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": "block",
@@ -1897,6 +1977,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -1918,7 +1999,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1928,20 +2008,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": true,
       "kind": "policy_stack",
       "native_edge": null,
@@ -1965,7 +2049,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -1975,6 +2058,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": "warn",
@@ -3875,6 +3959,7 @@
       "auto_stop_events": [],
       "current_config_action": "warn",
       "data_flow_action": "block",
+      "local_eligibility_required": true,
       "local_grants_allowed": false,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -3896,7 +3981,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -3906,12 +3990,14 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [
@@ -3920,9 +4006,11 @@
       ],
       "data_flow_strong": true,
       "data_flow_summary": "df summary",
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": true,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -3950,7 +4038,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -3960,6 +4047,7 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": null,
@@ -3979,6 +4067,7 @@
       ],
       "current_config_action": "block",
       "data_flow_action": null,
+      "local_eligibility_required": true,
       "local_grants_allowed": true,
       "native_floor": null,
       "normalizer_evidence": [],
@@ -3999,7 +4088,6 @@
       "approval_context": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": false,
         "confidence_text": "",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -4009,20 +4097,24 @@
         "risk_classes": [],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "artifact_risk_signals": [
         "a1"
       ],
       "artifact_risk_summary": "art summary",
+      "artifact_type": "tool_action_request",
       "cli_action": null,
       "current_action_override_present": false,
       "data_flow_reasons": [],
       "data_flow_strong": false,
       "data_flow_summary": null,
+      "event_name": "PreToolUse",
       "has_compound_findings": false,
       "has_data_flow": false,
       "has_package": false,
+      "has_raw_command": true,
       "has_scanner": false,
       "kind": "policy_stack",
       "native_edge": null,
@@ -4046,7 +4138,6 @@
       "runtime": {
         "action_class": null,
         "command_action_floor": null,
-        "confidence_strong": true,
         "confidence_text": "strong",
         "configured_override": "warn",
         "explicit_permission_allow": false,
@@ -4058,10 +4149,2409 @@
         ],
         "shell_local_script_review": false,
         "skill_is_known_bad": false,
+        "skip_native_floor": false,
         "writes_launch_agent": false
       },
       "scanner_action": null,
       "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "reason": "HOL Guard stopped this Codex prompt before Codex could open a credential-looking local file. Codex does not expose native approval prompts for Read-tool file reads, so Guard blocks this request at prompt time."
+    },
+    "name": "prompt_request_reason_codex_secret_read",
+    "query": {
+      "harness": "codex",
+      "kind": "prompt_request_reason",
+      "policy_action": "block",
+      "prompt_classes": [
+        "secret_read"
+      ],
+      "prompt_summary": "Asks to read a credential-looking local file in the workspace"
+    }
+  },
+  {
+    "expected": {
+      "reason": null
+    },
+    "name": "remembered_rule_reason_not_degraded",
+    "query": {
+      "artifact_summary": "git push origin main",
+      "integrity_message": null,
+      "kind": "remembered_rule_reason",
+      "remembered_rules": "enabled"
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": null,
+      "approval_reuse_source": null,
+      "claim_disposition": null,
+      "evidence_appends": [],
+      "policy_action": "warn",
+      "reuse_applied": false,
+      "reuse_evidence": null,
+      "revalidate_required": false,
+      "saved_allow_applied": false,
+      "settled_evidence_appends": []
+    },
+    "name": "package_reuse_settle_no_saved_reason",
+    "query": {
+      "approval_reuse_source": null,
+      "claim_saved_approval": false,
+      "current_action": "warn",
+      "evaluation_policy_action": "allow",
+      "kind": "package_reuse_settle",
+      "reasons": [],
+      "stored_artifact_hash": null,
+      "stored_policy_action": null
+    }
+  },
+  {
+    "expected": {
+      "reason": "HOL Guard blocked this prompt because it asks to bypass or disable Guard."
+    },
+    "name": "prompt_request_reason_bypass_intent",
+    "query": {
+      "harness": "claude-code",
+      "kind": "prompt_request_reason",
+      "policy_action": "block",
+      "prompt_classes": [
+        "guard_bypass_intent"
+      ],
+      "prompt_summary": null
+    }
+  },
+  {
+    "expected": {
+      "reason": "HOL Guard kept git push origin main in review because a remembered local rule was ignored while local trust is degraded. Local approval store integrity could not be verified. One-time approvals still work, but broader remembered rules stay limited until local trust is protected."
+    },
+    "name": "remembered_rule_reason_degraded_with_integrity_detail",
+    "query": {
+      "artifact_summary": "git push origin main",
+      "integrity_message": "Local approval store integrity could not be verified",
+      "kind": "remembered_rule_reason",
+      "remembered_rules": "disabled_degraded"
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": null,
+      "approval_reuse_source": "saved_package_policy",
+      "claim_disposition": "consumed",
+      "evidence_appends": [],
+      "policy_action": "allow",
+      "reuse_applied": true,
+      "reuse_evidence": null,
+      "revalidate_required": true,
+      "saved_allow_applied": true,
+      "settled_evidence_appends": []
+    },
+    "name": "package_reuse_settle_claimed_saved_allow_revalidates",
+    "query": {
+      "approval_reuse_source": null,
+      "claim_saved_approval": true,
+      "current_action": "block",
+      "evaluation_policy_action": "allow",
+      "kind": "package_reuse_settle",
+      "reasons": [
+        {
+          "approval_claim_disposition": "consumed",
+          "code": "saved_package_approval"
+        }
+      ],
+      "stored_artifact_hash": null,
+      "stored_policy_action": null
+    }
+  },
+  {
+    "expected": {
+      "action": "allow",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "allow",
+      "reason": "no detector signals; base policy action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_no_signals_allow",
+    "query": {
+      "base_action": "allow",
+      "kind": "signal_composition",
+      "signals": []
+    }
+  },
+  {
+    "expected": {
+      "action": "block",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "block",
+      "reason": "no detector signals; base policy action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_no_signals_block",
+    "query": {
+      "base_action": "block",
+      "kind": "signal_composition",
+      "signals": []
+    }
+  },
+  {
+    "expected": {
+      "action": "block",
+      "downgraded": false,
+      "normalization_reason_code": "guard_action_unknown",
+      "original_action": "future-action",
+      "reason": "no detector signals; base policy action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_no_signals_unknown_base",
+    "query": {
+      "base_action": "future-action",
+      "kind": "signal_composition",
+      "signals": []
+    }
+  },
+  {
+    "expected": {
+      "action": "review",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "ask",
+      "reason": "no detector signals; base policy action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_no_signals_ask_alias",
+    "query": {
+      "base_action": "ask",
+      "kind": "signal_composition",
+      "signals": []
+    }
+  },
+  {
+    "expected": {
+      "action": "block",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "allow",
+      "reason": "bypass signal 'det-bypass' forces block",
+      "upgraded": true
+    },
+    "name": "signal_composition_bypass_upgrades_allow_to_block",
+    "query": {
+      "base_action": "allow",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "bypass",
+          "confidence": "strong",
+          "detector": "det-bypass",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "critical",
+          "signal_id": "bypass:guard-uninstall",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "allow",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "allow",
+      "reason": "risk signal 'det-bypass' (low/weak); base action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_bypass_weak_does_not_upgrade",
+    "query": {
+      "base_action": "allow",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "bypass",
+          "confidence": "weak",
+          "detector": "det-bypass",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "low",
+          "signal_id": "bypass:guard-uninstall",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "review",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "allow",
+      "reason": "persistence signal 'det-persist' requires review",
+      "upgraded": true
+    },
+    "name": "signal_composition_persistence_upgrades_allow_to_review",
+    "query": {
+      "base_action": "allow",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "persistence",
+          "confidence": "strong",
+          "detector": "det-persist",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "high",
+          "signal_id": "persist:cron",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "block",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "allow",
+      "reason": "critical signal 'det-flow' forces block",
+      "upgraded": true
+    },
+    "name": "signal_composition_critical_upgrades_allow_to_block",
+    "query": {
+      "base_action": "allow",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "network",
+          "confidence": "likely",
+          "detector": "det-flow",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "critical",
+          "signal_id": "risk:critical",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "block",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "block",
+      "reason": "risk signal 'det-flow' (critical/likely); base action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_critical_at_block_base_is_not_an_upgrade",
+    "query": {
+      "base_action": "block",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "network",
+          "confidence": "likely",
+          "detector": "det-flow",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "critical",
+          "signal_id": "risk:critical",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "review",
+      "downgraded": true,
+      "normalization_reason_code": null,
+      "original_action": "block",
+      "reason": "strong false-positive signals with only low-severity risk; downgraded block \u2192 review",
+      "upgraded": false
+    },
+    "name": "signal_composition_strong_fp_downgrades_block_to_review",
+    "query": {
+      "base_action": "block",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "false_positive",
+          "confidence": "strong",
+          "detector": "det-fp",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "info",
+          "signal_id": "fp:source-search:grep",
+          "technical_detail": null,
+          "title": "t"
+        },
+        {
+          "advisory_id": null,
+          "category": "filesystem",
+          "confidence": "likely",
+          "detector": "det-fs",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "low",
+          "signal_id": "risk:fs",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "review",
+      "downgraded": true,
+      "normalization_reason_code": null,
+      "original_action": "block",
+      "reason": "strong false-positive signals with only low-severity risk; downgraded block \u2192 review",
+      "upgraded": false
+    },
+    "name": "signal_composition_strong_fp_downgrades_block_to_review_alone",
+    "query": {
+      "base_action": "block",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "false_positive",
+          "confidence": "strong",
+          "detector": "det-fp",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "info",
+          "signal_id": "fp:source-search:grep",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "warn",
+      "downgraded": true,
+      "normalization_reason_code": null,
+      "original_action": "review",
+      "reason": "strong read-only false-positive with no risk signals; downgraded review \u2192 warn",
+      "upgraded": false
+    },
+    "name": "signal_composition_readonly_fp_downgrades_review_to_warn",
+    "query": {
+      "base_action": "review",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "false_positive",
+          "confidence": "strong",
+          "detector": "det-fp",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "info",
+          "signal_id": "fp:read-only-http-fetch:x",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "warn",
+      "downgraded": true,
+      "normalization_reason_code": null,
+      "original_action": "review",
+      "reason": "strong read-only false-positive with no risk signals; downgraded review \u2192 warn",
+      "upgraded": false
+    },
+    "name": "signal_composition_source_search_fp_downgrades_review_to_warn",
+    "query": {
+      "base_action": "review",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "false_positive",
+          "confidence": "strong",
+          "detector": "det-fp",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "info",
+          "signal_id": "fp:source-search:grep",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "review",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "review",
+      "reason": "advisory false-positive signals only; base action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_other_fp_does_not_downgrade_review",
+    "query": {
+      "base_action": "review",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "false_positive",
+          "confidence": "strong",
+          "detector": "det-fp",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "info",
+          "signal_id": "fp:other:x",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "review",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "review",
+      "reason": "risk signal 'det-fs' (low/likely); base action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_fp_with_risk_does_not_downgrade_review",
+    "query": {
+      "base_action": "review",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "false_positive",
+          "confidence": "strong",
+          "detector": "det-fp",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "info",
+          "signal_id": "fp:source-search:grep",
+          "technical_detail": null,
+          "title": "t"
+        },
+        {
+          "advisory_id": null,
+          "category": "filesystem",
+          "confidence": "likely",
+          "detector": "det-fs",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "low",
+          "signal_id": "risk:fs",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "block",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "block",
+      "reason": "advisory false-positive signals only; base action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_weak_fp_does_not_downgrade",
+    "query": {
+      "base_action": "block",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "false_positive",
+          "confidence": "weak",
+          "detector": "det-fp",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "info",
+          "signal_id": "fp:source-search:grep",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "block",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "allow",
+      "reason": "bypass signal 'det-bypass' forces block",
+      "upgraded": true
+    },
+    "name": "signal_composition_bypass_beats_fp_downgrade",
+    "query": {
+      "base_action": "allow",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "bypass",
+          "confidence": "strong",
+          "detector": "det-bypass",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "critical",
+          "signal_id": "bypass:guard-uninstall",
+          "technical_detail": null,
+          "title": "t"
+        },
+        {
+          "advisory_id": null,
+          "category": "false_positive",
+          "confidence": "strong",
+          "detector": "det-fp",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "info",
+          "signal_id": "fp:source-search:grep",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "block",
+      "downgraded": false,
+      "normalization_reason_code": "guard_action_unknown",
+      "original_action": "bogus",
+      "reason": "advisory false-positive signals only; base action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_fp_does_not_downgrade_unrecognized_base",
+    "query": {
+      "base_action": "bogus",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "false_positive",
+          "confidence": "strong",
+          "detector": "det-fp",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "info",
+          "signal_id": "fp:source-search:grep",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "block",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "block",
+      "reason": "risk signal 'det-bypass' (low/weak); base action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_fp_does_not_downgrade_protected_category",
+    "query": {
+      "base_action": "block",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "false_positive",
+          "confidence": "strong",
+          "detector": "det-fp",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "info",
+          "signal_id": "fp:source-search:grep",
+          "technical_detail": null,
+          "title": "t"
+        },
+        {
+          "advisory_id": null,
+          "category": "bypass",
+          "confidence": "weak",
+          "detector": "det-bypass",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "low",
+          "signal_id": "bypass:guard-uninstall",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "block",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "block",
+      "reason": "risk signal 'det-fs' (high/weak); base action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_fp_does_not_downgrade_high_risk",
+    "query": {
+      "base_action": "block",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "false_positive",
+          "confidence": "strong",
+          "detector": "det-fp",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "info",
+          "signal_id": "fp:source-search:grep",
+          "technical_detail": null,
+          "title": "t"
+        },
+        {
+          "advisory_id": null,
+          "category": "filesystem",
+          "confidence": "weak",
+          "detector": "det-fs",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "high",
+          "signal_id": "risk:fs-high",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "warn",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "warn",
+      "reason": "risk signal 'det-fs' (high/weak); base action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_plain_risk_reports_top_signal",
+    "query": {
+      "base_action": "warn",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "network",
+          "confidence": "likely",
+          "detector": "det-net",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "medium",
+          "signal_id": "risk:net",
+          "technical_detail": null,
+          "title": "t"
+        },
+        {
+          "advisory_id": null,
+          "category": "filesystem",
+          "confidence": "weak",
+          "detector": "det-fs",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "high",
+          "signal_id": "risk:fs-high",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "warn",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "warn",
+      "reason": "risk signal 'det-net' (medium/likely); base action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_plain_risk_single",
+    "query": {
+      "base_action": "warn",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "network",
+          "confidence": "likely",
+          "detector": "det-net",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "medium",
+          "signal_id": "risk:net",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "warn",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "warn",
+      "reason": "advisory false-positive signals only; base action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_fp_advisory_only_reason",
+    "query": {
+      "base_action": "warn",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "false_positive",
+          "confidence": "strong",
+          "detector": "det-fp",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "info",
+          "signal_id": "fp:other:x",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "block",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "block",
+      "reason": "risk signal 'det-persist' (high/strong); base action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_persistence_at_block_base_keeps_block",
+    "query": {
+      "base_action": "block",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "persistence",
+          "confidence": "strong",
+          "detector": "det-persist",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "high",
+          "signal_id": "persist:cron",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action": "warn",
+      "downgraded": false,
+      "normalization_reason_code": null,
+      "original_action": "warn",
+      "reason": "risk signal 'det-first' (medium/likely); base action applies",
+      "upgraded": false
+    },
+    "name": "signal_composition_tied_severity_names_the_first_detector",
+    "query": {
+      "base_action": "warn",
+      "kind": "signal_composition",
+      "signals": [
+        {
+          "advisory_id": null,
+          "category": "network",
+          "confidence": "likely",
+          "detector": "det-first",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "medium",
+          "signal_id": "risk:first",
+          "technical_detail": null,
+          "title": "t"
+        },
+        {
+          "advisory_id": null,
+          "category": "network",
+          "confidence": "likely",
+          "detector": "det-second",
+          "evidence_ref": null,
+          "false_positive_hint": null,
+          "plain_reason": "p",
+          "redaction_level": "summary",
+          "severity": "medium",
+          "signal_id": "risk:second",
+          "technical_detail": null,
+          "title": "t"
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "allowed": true,
+      "reason": "paid_oauth_entitlement_active",
+      "tier": "pro",
+      "upgrade_cta": null
+    },
+    "name": "package_firewall_entitlement_a_paid_oauth_claim_is_allowed",
+    "query": {
+      "bundle_payload": null,
+      "connect_state": null,
+      "has_cloud_sync_profile": true,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": {
+        "configured": true,
+        "state": "healthy"
+      },
+      "oauth_payload": {
+        "supply_chain_entitlement_expires_at": "2027-01-01T00:00:00+00:00",
+        "supply_chain_firewall": true,
+        "supply_chain_plan_id": "pro"
+      }
+    }
+  },
+  {
+    "expected": {
+      "allowed": false,
+      "reason": "guard_cloud_reconnect_required",
+      "tier": "pro",
+      "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access."
+    },
+    "name": "package_firewall_entitlement_an_expired_oauth_claim_asks_for_a_reconnect",
+    "query": {
+      "bundle_payload": null,
+      "connect_state": null,
+      "has_cloud_sync_profile": true,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": {
+        "configured": true,
+        "state": "healthy"
+      },
+      "oauth_payload": {
+        "supply_chain_entitlement_expires_at": "2020-01-01T00:00:00+00:00",
+        "supply_chain_firewall": true,
+        "supply_chain_plan_id": "pro"
+      }
+    }
+  },
+  {
+    "expected": {
+      "allowed": false,
+      "reason": "guard_cloud_reconnect_required",
+      "tier": "pro",
+      "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access."
+    },
+    "name": "package_firewall_entitlement_an_oauth_claim_without_an_expiry_asks_for_a_reconnect",
+    "query": {
+      "bundle_payload": null,
+      "connect_state": null,
+      "has_cloud_sync_profile": true,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": {
+        "configured": true,
+        "state": "healthy"
+      },
+      "oauth_payload": {
+        "supply_chain_firewall": true,
+        "supply_chain_plan_id": "pro"
+      }
+    }
+  },
+  {
+    "expected": {
+      "allowed": false,
+      "reason": "paid_guard_cloud_required",
+      "tier": "free",
+      "upgrade_cta": "Upgrade to HOL Guard Cloud to run package firewall actions."
+    },
+    "name": "package_firewall_entitlement_a_free_plan_needs_an_upgrade",
+    "query": {
+      "bundle_payload": null,
+      "connect_state": null,
+      "has_cloud_sync_profile": true,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": {
+        "configured": true,
+        "state": "healthy"
+      },
+      "oauth_payload": {
+        "supply_chain_firewall": false,
+        "supply_chain_plan_id": "free"
+      }
+    }
+  },
+  {
+    "expected": {
+      "allowed": true,
+      "reason": "paid_entitlement_active",
+      "tier": "team",
+      "upgrade_cta": null
+    },
+    "name": "package_firewall_entitlement_a_paid_bundle_is_allowed",
+    "query": {
+      "bundle_payload": {
+        "tier": "team"
+      },
+      "connect_state": null,
+      "has_cloud_sync_profile": true,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": {
+        "configured": true,
+        "state": "healthy"
+      },
+      "oauth_payload": null
+    }
+  },
+  {
+    "expected": {
+      "allowed": false,
+      "reason": "paid_guard_cloud_required",
+      "tier": "free",
+      "upgrade_cta": "Upgrade to HOL Guard Cloud to run package firewall actions."
+    },
+    "name": "package_firewall_entitlement_an_unpaid_bundle_needs_an_upgrade",
+    "query": {
+      "bundle_payload": {
+        "tier": "free"
+      },
+      "connect_state": null,
+      "has_cloud_sync_profile": true,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": {
+        "configured": true,
+        "state": "healthy"
+      },
+      "oauth_payload": null
+    }
+  },
+  {
+    "expected": {
+      "allowed": false,
+      "reason": "guard_cloud_connect_required",
+      "tier": "unknown",
+      "upgrade_cta": "Connect HOL Guard Cloud to check package firewall access and run package firewall actions."
+    },
+    "name": "package_firewall_entitlement_nothing_stored_needs_a_connect",
+    "query": {
+      "bundle_payload": null,
+      "connect_state": null,
+      "has_cloud_sync_profile": false,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": null,
+      "oauth_payload": null
+    }
+  },
+  {
+    "expected": {
+      "allowed": false,
+      "reason": "guard_cloud_connect_required",
+      "tier": "pro",
+      "upgrade_cta": "Connect HOL Guard Cloud to check package firewall access and run package firewall actions."
+    },
+    "name": "package_firewall_entitlement_a_degraded_credential_does_not_read_a_paid_claim",
+    "query": {
+      "bundle_payload": null,
+      "connect_state": null,
+      "has_cloud_sync_profile": false,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": {
+        "configured": true,
+        "state": "degraded"
+      },
+      "oauth_payload": {
+        "supply_chain_entitlement_expires_at": "2027-01-01T00:00:00+00:00",
+        "supply_chain_firewall": true,
+        "supply_chain_plan_id": "pro"
+      }
+    }
+  },
+  {
+    "expected": {
+      "allowed": false,
+      "reason": "guard_cloud_reconnect_required",
+      "tier": "pro",
+      "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access."
+    },
+    "name": "package_firewall_entitlement_a_retry_required_connect_state_asks_for_a_reconnect",
+    "query": {
+      "bundle_payload": null,
+      "connect_state": {
+        "milestone": "first_sync_failed",
+        "status": "retry_required"
+      },
+      "has_cloud_sync_profile": true,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": {
+        "configured": true,
+        "state": "healthy"
+      },
+      "oauth_payload": {
+        "supply_chain_entitlement_expires_at": "2027-01-01T00:00:00+00:00",
+        "supply_chain_firewall": true,
+        "supply_chain_plan_id": "pro"
+      }
+    }
+  },
+  {
+    "expected": {
+      "allowed": false,
+      "reason": "guard_cloud_reconnect_required",
+      "tier": "pro",
+      "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access."
+    },
+    "name": "package_firewall_entitlement_a_sync_not_available_milestone_asks_for_a_reconnect",
+    "query": {
+      "bundle_payload": null,
+      "connect_state": {
+        "milestone": "sync_not_available",
+        "status": "connected"
+      },
+      "has_cloud_sync_profile": true,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": {
+        "configured": true,
+        "state": "healthy"
+      },
+      "oauth_payload": {
+        "supply_chain_entitlement_expires_at": "2027-01-01T00:00:00+00:00",
+        "supply_chain_firewall": true,
+        "supply_chain_plan_id": "pro"
+      }
+    }
+  },
+  {
+    "expected": {
+      "allowed": false,
+      "reason": "guard_cloud_reconnect_required",
+      "tier": "unknown",
+      "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access."
+    },
+    "name": "package_firewall_entitlement_a_connected_state_without_oauth_asks_for_a_reconnect",
+    "query": {
+      "bundle_payload": null,
+      "connect_state": {
+        "milestone": "first_sync_succeeded",
+        "status": "connected"
+      },
+      "has_cloud_sync_profile": true,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": null,
+      "oauth_payload": null
+    }
+  },
+  {
+    "expected": {
+      "allowed": true,
+      "reason": "paid_oauth_entitlement_active",
+      "tier": "pro",
+      "upgrade_cta": null
+    },
+    "name": "package_firewall_entitlement_a_healthy_connected_state_leaves_the_claim_alone",
+    "query": {
+      "bundle_payload": null,
+      "connect_state": {
+        "milestone": "first_sync_succeeded",
+        "status": "connected"
+      },
+      "has_cloud_sync_profile": true,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": {
+        "configured": true,
+        "state": "healthy"
+      },
+      "oauth_payload": {
+        "supply_chain_entitlement_expires_at": "2027-01-01T00:00:00+00:00",
+        "supply_chain_firewall": true,
+        "supply_chain_plan_id": "pro"
+      }
+    }
+  },
+  {
+    "expected": {
+      "allowed": true,
+      "reason": "paid_entitlement_active",
+      "tier": "team",
+      "upgrade_cta": null
+    },
+    "name": "package_firewall_entitlement_a_paid_bundle_stands_without_a_credential",
+    "query": {
+      "bundle_payload": {
+        "tier": "team"
+      },
+      "connect_state": null,
+      "has_cloud_sync_profile": false,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": null,
+      "oauth_payload": null
+    }
+  },
+  {
+    "expected": {
+      "allowed": false,
+      "reason": "guard_cloud_connect_required",
+      "tier": "unknown",
+      "upgrade_cta": "Connect HOL Guard Cloud to check package firewall access and run package firewall actions."
+    },
+    "name": "package_firewall_entitlement_a_configured_but_unhealthy_credential_needs_a_connect",
+    "query": {
+      "bundle_payload": null,
+      "connect_state": null,
+      "has_cloud_sync_profile": false,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": {
+        "configured": true,
+        "state": "expired"
+      },
+      "oauth_payload": null
+    }
+  },
+  {
+    "expected": {
+      "allowed": false,
+      "reason": "guard_cloud_reconnect_required",
+      "tier": "free",
+      "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access."
+    },
+    "name": "package_firewall_entitlement_a_paid_oauth_record_contradicting_an_unpaid_bundle_asks_for_a_reconnect",
+    "query": {
+      "bundle_payload": {
+        "tier": "free"
+      },
+      "connect_state": null,
+      "has_cloud_sync_profile": true,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": null,
+      "oauth_payload": {
+        "supply_chain_plan_id": "pro"
+      }
+    }
+  },
+  {
+    "expected": {
+      "allowed": false,
+      "reason": "paid_guard_cloud_required",
+      "tier": "free",
+      "upgrade_cta": "Upgrade to HOL Guard Cloud to run package firewall actions."
+    },
+    "name": "package_firewall_entitlement_a_cloud_profile_alone_keeps_the_unpaid_bundle",
+    "query": {
+      "bundle_payload": {
+        "tier": "free"
+      },
+      "connect_state": null,
+      "has_cloud_sync_profile": true,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": null,
+      "oauth_payload": null
+    }
+  },
+  {
+    "expected": {
+      "allowed": false,
+      "reason": "guard_cloud_reconnect_required",
+      "tier": "enterprise",
+      "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access."
+    },
+    "name": "package_firewall_entitlement_a_stale_paid_plan_without_a_firewall_claim_asks_for_a_reconnect",
+    "query": {
+      "bundle_payload": null,
+      "connect_state": null,
+      "has_cloud_sync_profile": true,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": {
+        "configured": true,
+        "state": "healthy"
+      },
+      "oauth_payload": {
+        "supply_chain_plan_id": "enterprise"
+      }
+    }
+  },
+  {
+    "expected": {
+      "allowed": true,
+      "reason": "paid_entitlement_active",
+      "tier": "pro",
+      "upgrade_cta": null
+    },
+    "name": "package_firewall_entitlement_a_tier_is_read_case_insensitively",
+    "query": {
+      "bundle_payload": {
+        "tier": "PRO"
+      },
+      "connect_state": null,
+      "has_cloud_sync_profile": true,
+      "kind": "package_firewall_entitlement",
+      "now": "2026-10-20T12:00:00+00:00",
+      "oauth_health": {
+        "configured": true,
+        "state": "healthy"
+      },
+      "oauth_payload": null
+    }
+  },
+  {
+    "expected": {
+      "authority_revision": 7,
+      "decision": {
+        "_approval_authority_revision": 7,
+        "action": "allow",
+        "approval_id": null,
+        "artifact_id": "direct"
+      },
+      "ignored_local_integrity": null,
+      "trust_status": {
+        "status": "verified"
+      }
+    },
+    "name": "policy_lookup_select_direct_only",
+    "query": {
+      "kind": "policy_lookup_select",
+      "lookups": [
+        {
+          "authority_revision": 7,
+          "decision": {
+            "action": "allow",
+            "approval_id": null,
+            "artifact_id": "direct"
+          },
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "authority_revision": 7,
+      "decision": {
+        "_approval_authority_revision": 7,
+        "action": "block",
+        "approval_id": null,
+        "artifact_id": "memory"
+      },
+      "ignored_local_integrity": null,
+      "trust_status": {
+        "status": "verified"
+      }
+    },
+    "name": "policy_lookup_select_later_block_wins",
+    "query": {
+      "kind": "policy_lookup_select",
+      "lookups": [
+        {
+          "authority_revision": 7,
+          "decision": {
+            "action": "allow",
+            "approval_id": null,
+            "artifact_id": "direct"
+          },
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        },
+        {
+          "authority_revision": 7,
+          "decision": {
+            "action": "block",
+            "approval_id": null,
+            "artifact_id": "memory"
+          },
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "authority_revision": 7,
+      "decision": {
+        "_approval_authority_revision": 7,
+        "action": "warn",
+        "approval_id": null,
+        "artifact_id": "direct"
+      },
+      "ignored_local_integrity": null,
+      "trust_status": {
+        "status": "verified"
+      }
+    },
+    "name": "policy_lookup_select_keeps_the_first_of_equal_severity",
+    "query": {
+      "kind": "policy_lookup_select",
+      "lookups": [
+        {
+          "authority_revision": 7,
+          "decision": {
+            "action": "warn",
+            "approval_id": null,
+            "artifact_id": "direct"
+          },
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        },
+        {
+          "authority_revision": 7,
+          "decision": {
+            "action": "warn",
+            "approval_id": null,
+            "artifact_id": "exact"
+          },
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "authority_revision": 7,
+      "decision": {
+        "_approval_authority_revision": 7,
+        "action": "block",
+        "approval_id": null,
+        "artifact_id": "memory"
+      },
+      "ignored_local_integrity": null,
+      "trust_status": {
+        "status": "verified"
+      }
+    },
+    "name": "policy_lookup_select_never_weakens_the_first",
+    "query": {
+      "kind": "policy_lookup_select",
+      "lookups": [
+        {
+          "authority_revision": 7,
+          "decision": {
+            "action": "block",
+            "approval_id": null,
+            "artifact_id": "memory"
+          },
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        },
+        {
+          "authority_revision": 7,
+          "decision": {
+            "action": "allow",
+            "approval_id": null,
+            "artifact_id": "direct"
+          },
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "authority_revision": 7,
+      "decision": {
+        "_approval_authority_revision": 7,
+        "action": 3,
+        "approval_id": null,
+        "artifact_id": "memory"
+      },
+      "ignored_local_integrity": null,
+      "trust_status": {
+        "status": "verified"
+      }
+    },
+    "name": "policy_lookup_select_unreadable_action_is_read_as_a_block",
+    "query": {
+      "kind": "policy_lookup_select",
+      "lookups": [
+        {
+          "authority_revision": 7,
+          "decision": {
+            "action": "allow",
+            "approval_id": null,
+            "artifact_id": "direct"
+          },
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        },
+        {
+          "authority_revision": 7,
+          "decision": {
+            "action": 3,
+            "approval_id": null,
+            "artifact_id": "memory"
+          },
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "authority_revision": 7,
+      "decision": {
+        "_approval_authority_revision": 7,
+        "action": "allow",
+        "approval_id": null,
+        "artifact_id": "direct"
+      },
+      "ignored_local_integrity": null,
+      "trust_status": {
+        "status": "verified"
+      }
+    },
+    "name": "policy_lookup_select_skips_the_undecided",
+    "query": {
+      "kind": "policy_lookup_select",
+      "lookups": [
+        {
+          "authority_revision": 7,
+          "decision": null,
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        },
+        {
+          "authority_revision": 7,
+          "decision": null,
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        },
+        {
+          "authority_revision": 7,
+          "decision": {
+            "action": "allow",
+            "approval_id": null,
+            "artifact_id": "direct"
+          },
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "authority_revision": 7,
+      "decision": {
+        "_approval_authority_revision": 7,
+        "action": "block",
+        "approval_id": null,
+        "artifact_id": "memory"
+      },
+      "ignored_local_integrity": {
+        "reason": "integrity drifted"
+      },
+      "trust_status": {
+        "status": "verified"
+      }
+    },
+    "name": "policy_lookup_select_holds_the_first_ignored_integrity",
+    "query": {
+      "kind": "policy_lookup_select",
+      "lookups": [
+        {
+          "authority_revision": 7,
+          "decision": null,
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        },
+        {
+          "authority_revision": 7,
+          "decision": {
+            "action": "allow",
+            "approval_id": null,
+            "artifact_id": "exact"
+          },
+          "ignored_local_integrity": {
+            "reason": "integrity drifted"
+          },
+          "trust_status": {
+            "status": "verified"
+          }
+        },
+        {
+          "authority_revision": 7,
+          "decision": {
+            "action": "block",
+            "approval_id": null,
+            "artifact_id": "memory"
+          },
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "authority_revision": -1,
+      "decision": {
+        "_approval_authority_revision": -1,
+        "action": "allow",
+        "approval_id": null,
+        "artifact_id": "direct"
+      },
+      "ignored_local_integrity": null,
+      "trust_status": {
+        "status": "verified"
+      }
+    },
+    "name": "policy_lookup_select_disagreed_revisions_carry_none",
+    "query": {
+      "kind": "policy_lookup_select",
+      "lookups": [
+        {
+          "authority_revision": 7,
+          "decision": {
+            "action": "allow",
+            "approval_id": null,
+            "artifact_id": "direct"
+          },
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        },
+        {
+          "authority_revision": 8,
+          "decision": {
+            "action": "allow",
+            "approval_id": null,
+            "artifact_id": "exact"
+          },
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "authority_revision": 7,
+      "decision": null,
+      "ignored_local_integrity": null,
+      "trust_status": {
+        "status": "verified"
+      }
+    },
+    "name": "policy_lookup_select_undecided_lookups_select_the_first",
+    "query": {
+      "kind": "policy_lookup_select",
+      "lookups": [
+        {
+          "authority_revision": 7,
+          "decision": null,
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        },
+        {
+          "authority_revision": 7,
+          "decision": null,
+          "ignored_local_integrity": null,
+          "trust_status": {
+            "status": "verified"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "available",
+        "install": "available",
+        "remove": "disabled",
+        "repair": "available",
+        "sync": "available",
+        "test": "available"
+      },
+      "available_actions": [
+        "status",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "paid_guard_cloud_required",
+        "message": "HOL Guard Cloud paid access is required to run package firewall actions.",
+        "status": 402
+      },
+      "operation_allowed": true
+    },
+    "name": "package_firewall_access_allowed_runs_every_action",
+    "query": {
+      "entitlement": {
+        "allowed": true,
+        "reason": "entitled"
+      },
+      "has_installed_managers": false,
+      "kind": "package_firewall_access",
+      "operation": "install"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "available",
+        "install": "available",
+        "remove": "available",
+        "repair": "available",
+        "sync": "available",
+        "test": "available"
+      },
+      "available_actions": [
+        "status",
+        "repair",
+        "remove",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "paid_guard_cloud_required",
+        "message": "HOL Guard Cloud paid access is required to run package firewall actions.",
+        "status": 402
+      },
+      "operation_allowed": null
+    },
+    "name": "package_firewall_access_allowed_with_shims_offers_local_recovery",
+    "query": {
+      "entitlement": {
+        "allowed": true,
+        "reason": "entitled"
+      },
+      "has_installed_managers": true,
+      "kind": "package_firewall_access",
+      "operation": null
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "connect_required",
+        "install": "connect_required",
+        "remove": "disabled",
+        "repair": "connect_required",
+        "sync": "connect_required",
+        "test": "connect_required"
+      },
+      "available_actions": [
+        "status",
+        "connect",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "guard_cloud_connect_required",
+        "message": "Connect HOL Guard Cloud on this machine before running package firewall actions.",
+        "status": 403
+      },
+      "operation_allowed": false
+    },
+    "name": "package_firewall_access_connect_required_blocks_the_cloud_actions",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "guard_cloud_connect_required"
+      },
+      "has_installed_managers": false,
+      "kind": "package_firewall_access",
+      "operation": "install"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "connect_required",
+        "install": "connect_required",
+        "remove": "available",
+        "repair": "available",
+        "sync": "connect_required",
+        "test": "connect_required"
+      },
+      "available_actions": [
+        "status",
+        "connect",
+        "repair",
+        "remove",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "guard_cloud_connect_required",
+        "message": "Connect HOL Guard Cloud on this machine before running package firewall actions.",
+        "status": 403
+      },
+      "operation_allowed": true
+    },
+    "name": "package_firewall_access_connect_required_still_repairs_installed_shims",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "guard_cloud_connect_required"
+      },
+      "has_installed_managers": true,
+      "kind": "package_firewall_access",
+      "operation": "repair"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "reconnect_required",
+        "install": "reconnect_required",
+        "remove": "available",
+        "repair": "available",
+        "sync": "reconnect_required",
+        "test": "reconnect_required"
+      },
+      "available_actions": [
+        "status",
+        "connect",
+        "repair",
+        "remove",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "guard_cloud_reconnect_required",
+        "message": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+        "status": 403
+      },
+      "operation_allowed": false
+    },
+    "name": "package_firewall_access_reconnect_required_refuses_a_cloud_operation",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "guard_cloud_reconnect_required"
+      },
+      "has_installed_managers": true,
+      "kind": "package_firewall_access",
+      "operation": "sync"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "available",
+        "install": "available",
+        "remove": "disabled",
+        "repair": "available",
+        "sync": "available",
+        "test": "available"
+      },
+      "available_actions": [
+        "status",
+        "connect",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "guard_cloud_reconnect_required",
+        "message": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+        "status": 403
+      },
+      "operation_allowed": false
+    },
+    "name": "package_firewall_access_reconnect_required_refuses_even_a_proven_entitlement",
+    "query": {
+      "entitlement": {
+        "allowed": true,
+        "reason": "guard_cloud_reconnect_required"
+      },
+      "has_installed_managers": false,
+      "kind": "package_firewall_access",
+      "operation": "sync"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "paid_required",
+        "install": "paid_required",
+        "remove": "disabled",
+        "repair": "paid_required",
+        "sync": "paid_required",
+        "test": "paid_required"
+      },
+      "available_actions": [
+        "status",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "paid_guard_cloud_required",
+        "message": "HOL Guard Cloud paid access is required to run package firewall actions.",
+        "status": 402
+      },
+      "operation_allowed": false
+    },
+    "name": "package_firewall_access_an_unknown_reason_reads_as_the_paid_requirement",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "guard_cloud_entitlement_unreadable"
+      },
+      "has_installed_managers": false,
+      "kind": "package_firewall_access",
+      "operation": "audit"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "paid_required",
+        "install": "paid_required",
+        "remove": "disabled",
+        "repair": "paid_required",
+        "sync": "paid_required",
+        "test": "paid_required"
+      },
+      "available_actions": [
+        "status",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "paid_guard_cloud_required",
+        "message": "HOL Guard Cloud paid access is required to run package firewall actions.",
+        "status": 402
+      },
+      "operation_allowed": false
+    },
+    "name": "package_firewall_access_a_missing_reason_reads_as_the_paid_requirement",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": null
+      },
+      "has_installed_managers": false,
+      "kind": "package_firewall_access",
+      "operation": "test"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "paid_required",
+        "install": "paid_required",
+        "remove": "disabled",
+        "repair": "paid_required",
+        "sync": "paid_required",
+        "test": "paid_required"
+      },
+      "available_actions": [
+        "status",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "paid_guard_cloud_required",
+        "message": "HOL Guard Cloud paid access is required to run package firewall actions.",
+        "status": 402
+      },
+      "operation_allowed": false
+    },
+    "name": "package_firewall_access_remove_needs_installed_shims_not_an_entitlement",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "paid_guard_cloud_required"
+      },
+      "has_installed_managers": false,
+      "kind": "package_firewall_access",
+      "operation": "remove"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "paid_required",
+        "install": "paid_required",
+        "remove": "available",
+        "repair": "available",
+        "sync": "paid_required",
+        "test": "paid_required"
+      },
+      "available_actions": [
+        "status",
+        "repair",
+        "remove",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "paid_guard_cloud_required",
+        "message": "HOL Guard Cloud paid access is required to run package firewall actions.",
+        "status": 402
+      },
+      "operation_allowed": true
+    },
+    "name": "package_firewall_access_remove_runs_off_installed_shims_alone",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "paid_guard_cloud_required"
+      },
+      "has_installed_managers": true,
+      "kind": "package_firewall_access",
+      "operation": "remove"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "connect_required",
+        "install": "connect_required",
+        "remove": "disabled",
+        "repair": "connect_required",
+        "sync": "connect_required",
+        "test": "connect_required"
+      },
+      "available_actions": [
+        "status",
+        "connect",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "guard_cloud_connect_required",
+        "message": "Connect HOL Guard Cloud on this machine before running package firewall actions.",
+        "status": 403
+      },
+      "operation_allowed": true
+    },
+    "name": "package_firewall_access_status_is_answered_without_an_entitlement",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "guard_cloud_connect_required"
+      },
+      "has_installed_managers": false,
+      "kind": "package_firewall_access",
+      "operation": "STATUS"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "paid_required",
+        "install": "paid_required",
+        "remove": "disabled",
+        "repair": "paid_required",
+        "sync": "paid_required",
+        "test": "paid_required"
+      },
+      "available_actions": [
+        "status",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "paid_guard_cloud_required",
+        "message": "HOL Guard Cloud paid access is required to run package firewall actions.",
+        "status": 402
+      },
+      "operation_allowed": true
+    },
+    "name": "package_firewall_access_open_shell_is_answered_without_an_entitlement",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "paid_guard_cloud_required"
+      },
+      "has_installed_managers": false,
+      "kind": "package_firewall_access",
+      "operation": " open-shell "
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "connect_required",
+        "install": "connect_required",
+        "remove": "disabled",
+        "repair": "connect_required",
+        "sync": "connect_required",
+        "test": "connect_required"
+      },
+      "available_actions": [
+        "status",
+        "connect",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "guard_cloud_connect_required",
+        "message": "Connect HOL Guard Cloud on this machine before running package firewall actions.",
+        "status": 403
+      },
+      "operation_allowed": null
+    },
+    "name": "package_firewall_access_a_reason_is_read_case_insensitively",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "  Guard_Cloud_Connect_Required "
+      },
+      "has_installed_managers": false,
+      "kind": "package_firewall_access",
+      "operation": null
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "reconnect_required",
+        "install": "reconnect_required",
+        "remove": "available",
+        "repair": "available",
+        "sync": "reconnect_required",
+        "test": "reconnect_required"
+      },
+      "available_actions": [
+        "status",
+        "connect",
+        "repair",
+        "remove",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "guard_cloud_reconnect_required",
+        "message": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+        "status": 403
+      },
+      "operation_allowed": true
+    },
+    "name": "package_firewall_access_a_lapsed_entitlement_still_repairs",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": "pro"
+      },
+      "has_installed_managers": true,
+      "kind": "package_firewall_access",
+      "operation": "repair"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "reconnect_required",
+        "install": "reconnect_required",
+        "remove": "available",
+        "repair": "available",
+        "sync": "reconnect_required",
+        "test": "reconnect_required"
+      },
+      "available_actions": [
+        "status",
+        "connect",
+        "repair",
+        "remove",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "guard_cloud_reconnect_required",
+        "message": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+        "status": 403
+      },
+      "operation_allowed": true
+    },
+    "name": "package_firewall_access_a_lapsed_entitlement_still_removes",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": "pro"
+      },
+      "has_installed_managers": true,
+      "kind": "package_firewall_access",
+      "operation": "remove"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "reconnect_required",
+        "install": "reconnect_required",
+        "remove": "disabled",
+        "repair": "reconnect_required",
+        "sync": "reconnect_required",
+        "test": "reconnect_required"
+      },
+      "available_actions": [
+        "status",
+        "connect",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "guard_cloud_reconnect_required",
+        "message": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+        "status": 403
+      },
+      "operation_allowed": false
+    },
+    "name": "package_firewall_access_a_lapsed_entitlement_repairs_nothing_unshimmed",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": "pro"
+      },
+      "has_installed_managers": false,
+      "kind": "package_firewall_access",
+      "operation": "repair"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "reconnect_required",
+        "install": "reconnect_required",
+        "remove": "available",
+        "repair": "available",
+        "sync": "reconnect_required",
+        "test": "reconnect_required"
+      },
+      "available_actions": [
+        "status",
+        "connect",
+        "repair",
+        "remove",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "guard_cloud_reconnect_required",
+        "message": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+        "status": 403
+      },
+      "operation_allowed": false
+    },
+    "name": "package_firewall_access_a_lapsed_entitlement_installs_nothing",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": "pro"
+      },
+      "has_installed_managers": true,
+      "kind": "package_firewall_access",
+      "operation": "install"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "reconnect_required",
+        "install": "reconnect_required",
+        "remove": "available",
+        "repair": "available",
+        "sync": "reconnect_required",
+        "test": "reconnect_required"
+      },
+      "available_actions": [
+        "status",
+        "connect",
+        "repair",
+        "remove",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "guard_cloud_reconnect_required",
+        "message": "Reconnect HOL Guard Cloud to refresh package firewall access.",
+        "status": 403
+      },
+      "operation_allowed": false
+    },
+    "name": "package_firewall_access_a_lapsed_entitlement_tests_nothing",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "guard_cloud_reconnect_required",
+        "tier": "pro"
+      },
+      "has_installed_managers": true,
+      "kind": "package_firewall_access",
+      "operation": "test"
+    }
+  },
+  {
+    "expected": {
+      "action_states": {
+        "audit": "paid_required",
+        "install": "paid_required",
+        "remove": "disabled",
+        "repair": "paid_required",
+        "sync": "paid_required",
+        "test": "paid_required"
+      },
+      "available_actions": [
+        "status",
+        "education",
+        "cli_fallback"
+      ],
+      "block": {
+        "code": "guard_runtime_unavailable",
+        "message": "The HOL Guard runtime could not report package firewall access on this machine.",
+        "status": 503
+      },
+      "operation_allowed": false
+    },
+    "name": "package_firewall_access_an_unanswerable_runtime_is_not_an_unpaid_account",
+    "query": {
+      "entitlement": {
+        "allowed": false,
+        "reason": "guard_runtime_unavailable"
+      },
+      "has_installed_managers": false,
+      "kind": "package_firewall_access",
+      "operation": "audit"
     }
   }
 ]

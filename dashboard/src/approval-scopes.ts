@@ -116,6 +116,9 @@ function declaredScopesForAction(
   item: GuardApprovalRequest,
   action: ApprovalResolutionAction,
 ): DecisionScope[] | null {
+  if (action === "allow" && item.once_only_reason === "script_execution_binding_unavailable") {
+    return [];
+  }
   if (action === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") &&
       item.exact_action_persistence_eligible !== true) {
     return [];
@@ -228,6 +231,24 @@ const ONCE_ONLY_REASON_COPY: Record<string, string> = {
     "Always allow is unavailable: this tool call has no stable command or file to remember. You can allow it once.",
   mutable_launcher:
     "Always allow is unavailable: this program can run other code or config, so Guard cannot prove what it will do next time. You can allow it once.",
+  node_package_manifest_unproven:
+    "Guard could not verify an installed package's resolution settings. Repair or reinstall the package before remembering this command.",
+  node_package_entrypoint_unproven:
+    "Guard could not bind the installed package entry point to the code it loads. This command cannot be remembered.",
+  node_package_exports_unproven:
+    "Guard cannot yet verify this package's export conditions or path patterns. This command cannot be remembered.",
+  node_package_native_addon_unproven:
+    "Guard has not bound the compiled dependency this package would load. This command cannot be remembered.",
+  node_runtime_package_mutation_unproven:
+    "Guard has not verified that later package loads are protected from this program's file writes. This command cannot be remembered.",
+  runner_code_closure_unproven:
+    "Guard could not bind all code loaded by this package runner and its command. This command cannot be remembered.",
+  python_runtime_module_unproven:
+    "Guard could not bind the installed Python implementation this program imports. This command cannot be remembered.",
+  python_runtime_bootstrap_unproven:
+    "Guard could not bind this Python runtime's startup code and native libraries. This command cannot be remembered.",
+  script_execution_binding_unavailable:
+    "This app cannot run a verified snapshot of this script through this approval. Keep it blocked until a supported execution route is available.",
   compound_command:
     "Always allow is unavailable: this command chains steps that Guard cannot verify one by one. You can allow it once.",
   guard_control: "Changes to Guard itself are always reviewed. You can allow this one time.",

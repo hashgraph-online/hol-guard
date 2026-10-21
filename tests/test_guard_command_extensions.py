@@ -365,10 +365,13 @@ def test_inspection_handles_unregistered_legacy_action_without_crashing(
 
     payload = inspect_command("echo value", cwd=tmp_path, home_dir=tmp_path)
 
-    assert payload["status"] == "review"
-    assert payload["classification"]["action_class"] == "future sensitive command"
+    # A caller label is display metadata. Without effective native rule evidence for
+    # this command it cannot add a review floor: sparse active catalogs omit inactive
+    # extension owners, so an unowned label does not authenticate itself.
+    assert payload["status"] == "no_match"
+    assert payload["classification"]["action_class"] is None
     assert payload["rules"] == []
-    assert payload["minimum_action"] == "review"
+    assert payload["minimum_action"] == "allow"
 
 
 def test_required_core_extensions_are_explicit_and_cannot_be_mistaken_for_optional() -> None:
@@ -740,9 +743,7 @@ def test_github_pr_create_body_file_requires_native_file_proof_before_proposal_p
     health: AuthorityHealth,
     state: ControlState,
 ) -> None:
-    from codex_plugin_scanner.guard.runtime.secret_file_request_services.github_pr_body_safety import (
-        _gh_pr_create_uses_safe_static_body_file,
-    )
+    from codex_plugin_scanner.guard.native_shell_request_authority import shell_request_authority
 
     home_dir = tmp_path / "home"
     workspace = home_dir / "CascadeProjects" / "hashgraph-online"
@@ -758,7 +759,10 @@ def test_github_pr_create_body_file_requires_native_file_proof_before_proposal_p
         "--body-file ~/CascadeProjects/hol-guard-protection-posture/PR_BODY_PROTECTION.md"
     )
     # The native body-file proof models POSIX paths only, so Windows fails closed.
-    safe_body = _gh_pr_create_uses_safe_static_body_file(command, cwd=workspace, home_dir=home_dir)
+    safe_body = shell_request_authority(
+        "_gh_pr_create_uses_safe_static_body_file",
+        {"command_text": command, "cwd": workspace, "home_dir": home_dir},
+    )
     assert safe_body is (sys.platform != "win32")
     snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         ExtensionControlAuthorityView(

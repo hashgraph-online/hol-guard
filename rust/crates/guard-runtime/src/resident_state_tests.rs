@@ -373,6 +373,57 @@ fn publishing_ignores_unrelated_scope_entries() {
 }
 
 #[test]
+fn pruning_keeps_published_state_when_rediscovery_misses_it() {
+    let scope = test_scope("state-prune-missed-publication");
+    let digest = runtime_digest().unwrap();
+    let token = [7u8; crate::AUTH_TOKEN_BYTES];
+    for generation in [1, 2] {
+        publish_state(
+            &scope,
+            generation,
+            std::process::id(),
+            &digest,
+            "loopback",
+            "127.0.0.1:1".to_owned(),
+            &token,
+        )
+        .unwrap();
+    }
+    // Discovery skips unreadable files and uninspectable process identities.
+    // Inject that empty observation into pruning after a successful write.
+    let private_root = private_root_for_scope(&scope).unwrap();
+    prune_superseded_states(&scope, 2, &Default::default(), &private_root).unwrap();
+
+    let states = discover_states(&scope, &digest).unwrap();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].generation, 2);
+    assert_eq!(states[0].token_hex, hex_bytes(&token));
+    fs::remove_dir_all(scope).unwrap();
+}
+
+#[test]
+fn publication_rejects_invalid_state_before_preserving_its_generation() {
+    let scope = test_scope("state-prune-invalid-publication");
+    let digest = runtime_digest().unwrap();
+    for (generation, token) in [(0, vec![7; crate::AUTH_TOKEN_BYTES]), (1, vec![7; 1])] {
+        assert!(publish_state(
+            &scope,
+            generation,
+            std::process::id(),
+            &digest,
+            "loopback",
+            "127.0.0.1:1".to_owned(),
+            &token,
+        )
+        .is_err());
+    }
+    assert!(resident_state_discovery::state_paths(&scope)
+        .unwrap()
+        .is_empty());
+    fs::remove_dir_all(scope).unwrap();
+}
+
+#[test]
 fn startup_lock_drop_preserves_stable_private_lockfile() {
     let scope = test_scope("startup-lock-stable");
     let path = scope.join("startup.lock");

@@ -72,8 +72,6 @@ _PRE_TOOL_ACTION_OPERATIONS = {
     "harness": {"start", "stop", "set", "read"},
     "unknown": {"unknown"},
 }
-_UNCERTAIN_EXTENSION_FLOORS = frozenset({"review", "require-reapproval", "block"})
-_DESTRUCTIVE_SHELL_RULE = "command.shell-mutations.destructive-shell"
 _PRE_TOOL_RESULT_KEYS = {
     "schema",
     "version",
@@ -138,18 +136,6 @@ def _valid_pre_tool_result_fields(result: dict[str, Any]) -> bool:
     )
 
 
-def _contained_removal(result: dict[str, Any], extensions: dict[str, object]) -> bool:
-    """Whether every uncertain match is a removal or in-place edit Rust sent to the sandbox."""
-    observations = cast(list[dict[str, object]], extensions["observations"])
-    uncertain = [item for item in observations if item["uncertainty_reasons"]]
-    return (
-        result.get("minimum_action") == "sandbox-required"
-        and result.get("reason_code") == "native_workspace_containment_required"
-        and len(uncertain) == cast(dict[str, object], extensions["binding"])["uncertainty_count"]
-        and all(item["rule_id"] == _DESTRUCTIVE_SHELL_RULE for item in uncertain)
-    )
-
-
 def _valid_pre_tool_action(action: dict[str, Any], *, harness: str, event: str) -> bool:
     action_type = action.get("action_type")
     operation = action.get("operation")
@@ -191,14 +177,9 @@ def _decode_pre_tool_result(result: object, *, harness: str, event: str = "PreTo
         extensions = validate_native_command_observations(result["command_extensions"])
         if extensions is None:
             return False
-        binding = cast(dict[str, object], extensions["binding"])
+        # The floor for an uncertain match is Rust's to choose; a structurally
+        # valid receipt is trusted rather than second-guessed here.
         if extensions["evaluation_error"] is not None and result.get("minimum_action") != "block":
-            return False
-        if (
-            binding["uncertainty_count"]
-            and result.get("minimum_action") not in _UNCERTAIN_EXTENSION_FLOORS
-            and not _contained_removal(result, extensions)
-        ):
             return False
     if not _valid_pre_tool_result_fields(result):
         return False
@@ -231,7 +212,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         "result",
         "receipt",
     }
-    allowed = required | {"request_id", "harness_response"}
+    allowed = required | {"request_id", "harness_response", "containment_route"}
     if not isinstance(payload, dict) or not required <= set(payload) or set(payload) - allowed:
         return None
     event_name = payload.get("event_name")
@@ -257,6 +238,12 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
     if event_name == "UserPromptSubmit" and payload_kind != "inline":
         return None
     if event_name == "PreToolUse" and payload_kind == "encrypted_payload_ref":
+        return None
+    if "containment_route" in payload and (
+        not isinstance(payload["containment_route"], str)
+        or payload["containment_route"] not in {"none", "sink", "grant"}
+        or (event_name != "PreToolUse" and payload["containment_route"] != "none")
+    ):
         return None
     receipt = payload.get("receipt")
     if not receipt_matches_edge(payload, receipt):

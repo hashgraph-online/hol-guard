@@ -50,9 +50,20 @@ def compute_extension_allow_hint(
     it passes, the already verified full permission set is returned as-is.
     """
 
-    if snapshot.authority_failure is not None or evaluation.decision_plane.action != "review":
+    if snapshot.authority_failure is not None or evaluation.decision_plane.action not in (
+        "review",
+        "require-reapproval",
+    ):
         return None
-    if isinstance(native_evidence, dict) and native_evidence.get("minimum_action") == "block":
+    if isinstance(native_evidence, dict) and (
+        native_evidence.get("minimum_action") == "block"
+        # A fixed PreTool floor (sensitive access, Guard self-protection,
+        # ...) reviews whatever the extensions say, so no extension Allow
+        # can settle it and no hint may promise otherwise. Real native
+        # results always carry the reason; its absence is not the
+        # extension review either.
+        or native_evidence.get("reason_code") != "native_command_review_required"
+    ):
         return None
     already_enabled = set(evaluation.control_resolution.explicitly_enabled_permission_ids)
     owners: dict[str, tuple[str, str]] = {}

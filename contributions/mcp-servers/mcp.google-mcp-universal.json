@@ -1,0 +1,353 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.google-mcp-universal",
+  "version": "1.0.0",
+  "name": "Google MCP Universal",
+  "description": "Manages Google Ads, Merchant Center and PageSpeed from an agent: GAQL queries, reports, audits and dashboards only read; tools that change campaigns, ads, keywords, bids, budgets, assets, conversion uploads or Merchant Center feeds are reviewed. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.ai-godfather",
+    "displayName": "God_FatherAI",
+    "url": "https://github.com/ai-godfather/google-mcp-universal"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#1A56DB"
+  },
+  "homepage": "https://github.com/ai-godfather/google-mcp-universal",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "google-mcp-universal"
+  },
+  "riskClasses": [
+    "remote-state-mutation",
+    "external-ad-spend",
+    "external-merchant-config-write",
+    "external-public-listing",
+    "external-filesystem-write"
+  ],
+  "tools": [
+    {
+      "name": "batch_analyze_assets",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_api_quota",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_audit_campaign",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_campaign_config_dashboard",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_category_keywords",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_changelog_read",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_check_eligibility",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_check_obligatory",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_dashboard",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_device_analysis",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_fix_domains_progress",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_get_instructions",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_global_dashboard",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_guardrails_report",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_health_check",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_images_progress",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_keyword_research",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_keyword_spend_analysis",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_keyword_spend_analysis_status",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_list_market_intel_jobs",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_loc_device_time_analysis",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_location_analysis",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_logs",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_mine_keywords_progress",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_missing",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_np_roadmap_dashboard",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_product_dashboard",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_rsa_price_audit",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_setup_progress",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_shopping_coverage_audit",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_status",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_time_analysis",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_validate_guardrails",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_verify_campaign_settings",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_warmup_market_intel_status",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_warmup_status",
+      "state": "inherit"
+    },
+    {
+      "name": "batch_winning_patterns",
+      "state": "inherit"
+    },
+    {
+      "name": "ecom_feed_compare",
+      "state": "inherit"
+    },
+    {
+      "name": "ecom_labelizer_verify",
+      "state": "inherit"
+    },
+    {
+      "name": "ecom_pmax_strategy",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_account_performance_summary",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_conversion_diagnostics",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_execute_gaql",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_get_account_summary",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_get_campaign_details",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_get_performance_report",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_get_shopping_performance",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_list_ad_groups",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_list_ad_schedules",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_list_ads",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_list_assets",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_list_campaign_criteria",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_list_campaigns",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_list_conversion_actions",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_list_keywords",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_list_recommendations",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_list_search_terms",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_pmax_negative_keywords",
+      "state": "inherit"
+    },
+    {
+      "name": "google_ads_setup_status",
+      "state": "inherit"
+    },
+    {
+      "name": "merchant_center_get_account",
+      "state": "inherit"
+    },
+    {
+      "name": "merchant_center_get_account_status",
+      "state": "inherit"
+    },
+    {
+      "name": "merchant_center_get_datafeed",
+      "state": "inherit"
+    },
+    {
+      "name": "merchant_center_get_datafeed_status",
+      "state": "inherit"
+    },
+    {
+      "name": "merchant_center_get_product",
+      "state": "inherit"
+    },
+    {
+      "name": "merchant_center_get_product_status",
+      "state": "inherit"
+    },
+    {
+      "name": "merchant_center_list_account_statuses",
+      "state": "inherit"
+    },
+    {
+      "name": "merchant_center_list_accounts",
+      "state": "inherit"
+    },
+    {
+      "name": "merchant_center_list_datafeed_statuses",
+      "state": "inherit"
+    },
+    {
+      "name": "merchant_center_list_datafeeds",
+      "state": "inherit"
+    },
+    {
+      "name": "merchant_center_list_product_statuses",
+      "state": "inherit"
+    },
+    {
+      "name": "merchant_center_list_products",
+      "state": "inherit"
+    },
+    {
+      "name": "merchant_center_report_search",
+      "state": "inherit"
+    },
+    {
+      "name": "pagespeed_analyze_theme",
+      "state": "inherit"
+    },
+    {
+      "name": "pagespeed_scan_all_stores",
+      "state": "inherit"
+    },
+    {
+      "name": "pagespeed_scan_store",
+      "state": "inherit"
+    },
+    {
+      "name": "pagespeed_scan_url",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/ai-godfather/google-mcp-universal",
+    "https://github.com/ai-godfather/google-mcp-universal/blob/main/INSTALL.md"
+  ],
+  "saferAlternatives": [
+    "Keep every tool that is not a list, get, report or dashboard on review: they change live campaigns, ads, bids, budgets, assets and Merchant Center feeds, and bid or budget changes spend real money.",
+    "Read the account with google_ads_execute_gaql, the google_ads_list_* and google_ads_get_* tools, reports and dashboards; they never change it.",
+    "google_ads_create_reviewed_search_campaign creates Search campaigns PAUSED and validate-only by default; review its plan before turning validate_only off.",
+    "Sign the OAuth refresh token in with a Google user that has Standard, not Admin, access and keep .env (developer and refresh tokens) at chmod 600.",
+    "Try changes on a Google Ads test account first: a developer token with Test access works only with test accounts."
+  ]
+}

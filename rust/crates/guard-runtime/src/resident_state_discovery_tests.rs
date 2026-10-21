@@ -129,9 +129,11 @@ fn a_verified_live_fallback_survives_the_retained_state_cap() {
     for index in 0..16 {
         let stale_digest = format!("{index:016x}{}", "0".repeat(48));
         let scope = state_scope(&base, &stale_digest).unwrap();
+        // Publication refuses an unreadable state, so take a valid template
+        // above the written range and leave only the stale generations.
         let mut state = publish_state(
             &scope,
-            0,
+            65,
             std::process::id(),
             &stale_digest,
             "loopback",
@@ -139,6 +141,7 @@ fn a_verified_live_fallback_survives_the_retained_state_cap() {
             &token,
         )
         .unwrap();
+        fs::remove_file(scope.join(format!("generation-{:020}.json", 65))).unwrap();
         state.process_start_marker = "stale-process-marker".to_owned();
         let private_root = private_root_for_scope(&scope).unwrap();
         for generation in 1..=64 {

@@ -4644,6 +4644,78 @@
   },
   {
    "kind": "sync_url",
+   "name": "network_protection_bundle 'https://hol.org/registry/api/v1' 'w1'",
+   "args": {
+    "route": "network_protection_bundle",
+    "url": "https://hol.org/registry/api/v1",
+    "workspace_id": "w1"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/guard/network/bundle?workspaceId=w1"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "network_protection_bundle 'https://hol.org/registry/api/v1#frag' 'w1'",
+   "args": {
+    "route": "network_protection_bundle",
+    "url": "https://hol.org/registry/api/v1#frag",
+    "workspace_id": "w1"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/guard/network/bundle?workspaceId=w1"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "network_protection_bundle 'https://hol.org/registry/api/v1/guard/receipts/sync' 'w1'",
+   "args": {
+    "route": "network_protection_bundle",
+    "url": "https://hol.org/registry/api/v1/guard/receipts/sync",
+    "workspace_id": "w1"
+   },
+   "expected": {
+    "url": "https://hol.org/registry/api/v1/guard/network/bundle?workspaceId=w1"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "network_protection_bundle 'https://hol.org/api/v1/guard/events' 'w1'",
+   "args": {
+    "route": "network_protection_bundle",
+    "url": "https://hol.org/api/v1/guard/events",
+    "workspace_id": "w1"
+   },
+   "expected": {
+    "url": "https://hol.org/api/v1/guard/events/network/bundle?workspaceId=w1"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "network_protection_bundle 'https://hol.org/custom/base' 'w1'",
+   "args": {
+    "route": "network_protection_bundle",
+    "url": "https://hol.org/custom/base",
+    "workspace_id": "w1"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/base/network/bundle?workspaceId=w1"
+   }
+  },
+  {
+   "kind": "sync_url",
+   "name": "network_protection_bundle 'https://hol.org/custom/receipts' 'w1'",
+   "args": {
+    "route": "network_protection_bundle",
+    "url": "https://hol.org/custom/receipts",
+    "workspace_id": "w1"
+   },
+   "expected": {
+    "url": "https://hol.org/custom/receipts/network/bundle?workspaceId=w1"
+   }
+  },
+  {
+   "kind": "sync_url",
    "name": "partition 'https://hol.org/sync\\tx\\n/path' npm 0",
    "args": {
     "route": "supply_chain_partition",

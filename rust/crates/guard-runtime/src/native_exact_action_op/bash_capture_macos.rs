@@ -1,7 +1,8 @@
 //! Capture bytes through held filesystem handles; require system-root images.
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsString;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -18,75 +19,44 @@ use guard_contracts::{
 use sha2::{Digest, Sha256};
 
 #[cfg(test)]
+#[path = "bash_capture_cache_tests.rs"]
+mod cache_tests;
+#[cfg(test)]
+#[path = "bash_grant_tests.rs"]
+mod grant_tests;
+#[cfg(test)]
+#[path = "bash_launch_tests.rs"]
+mod launch_tests;
+#[cfg(test)]
+#[path = "bash_network_tests.rs"]
+mod network_tests;
+#[cfg(test)]
+#[path = "bash_package_binding_tests.rs"]
+mod package_binding_tests;
+#[cfg(test)]
+#[path = "bash_policy_tests.rs"]
+mod policy_tests;
+#[cfg(test)]
 #[path = "bash_capture_tests.rs"]
 mod tests;
 
-const SELECTED: &[&str] = &[
-    "LANG",
-    "LC_ALL",
-    "LC_CTYPE",
-    "LC_COLLATE",
-    "LC_MESSAGES",
-    "LC_NUMERIC",
-    "LC_TIME",
-    "LC_MONETARY",
-    "TMPDIR",
-];
+#[path = "bash_capture_cache.rs"]
+mod analysis_cache;
+#[path = "bash_capture_native.rs"]
+mod native_image;
+#[path = "bash_capture_outputs.rs"]
+mod output_capture;
+#[path = "bash_package_bindings.rs"]
+mod package_bindings;
+#[path = "bash_capture_paths.rs"]
+mod paths;
+#[path = "bash_capture_environment.rs"]
+mod startup_environment;
+#[cfg(test)]
+use super::capture_for_launch;
+use paths::{canonical, text};
+use startup_environment::capture as environment;
 type Result<T> = std::result::Result<T, &'static str>;
-
-fn canonical(value: &str) -> Result<PathBuf> {
-    if guard_command::bash_approval::is_descriptor_reference(value) {
-        return Err("bash_process_descriptor_unproven");
-    }
-    if value.len() > 4096 || !Path::new(value).is_absolute() {
-        return Err("bash_context_path_invalid");
-    }
-    std::fs::canonicalize(value).map_err(|_| "bash_context_path_unavailable")
-}
-
-fn text(path: &Path) -> Result<String> {
-    path.to_str().map(str::to_owned).ok_or("bash_path_encoding")
-}
-
-fn environment(request: &NativeBashCaptureV1) -> Result<BTreeMap<String, String>> {
-    let stamp = &request.execution_environment;
-    if !stamp.has_valid_shape() || stamp.home.as_deref() != Some(request.home_dir.as_str()) {
-        return Err("bash_host_environment_unavailable");
-    }
-    for name in &stamp.environment_names {
-        if matches!(
-            name.as_str(),
-            "BASH_ENV" | "ENV" | "SHELLOPTS" | "BASHOPTS" | "POSIXLY_CORRECT" | "GLOBIGNORE"
-        ) || name.starts_with("LD_")
-            || name.starts_with("DYLD_")
-            || name.starts_with("BASH_FUNC_")
-            || name.starts_with("__BASH_FUNC")
-        {
-            return Err("bash_startup_environment_unproven");
-        }
-        if SELECTED.contains(&name.as_str()) && !request.environment.contains_key(name) {
-            return Err("bash_host_environment_value_withheld");
-        }
-    }
-    if request.environment.iter().any(|(name, value)| {
-        !SELECTED.contains(&name.as_str())
-            || value.len() > 32 * 1024
-            || value.contains('\0')
-            || !stamp.environment_names.contains(name)
-    }) {
-        return Err("bash_host_environment_invalid");
-    }
-    let mut environment = request.environment.clone();
-    environment.insert("HOME".into(), request.home_dir.clone());
-    environment.insert("PATH".into(), stamp.path.clone());
-    if environment
-        .values()
-        .any(|value| value.trim_start().starts_with("()"))
-    {
-        return Err("bash_startup_environment_unproven");
-    }
-    Ok(environment)
-}
 
 struct Resolver<'a> {
     cwd: &'a Path,
@@ -95,8 +65,10 @@ struct Resolver<'a> {
     names: &'a [String],
     deadline: Instant,
     captured: RefCell<BTreeMap<(String, PathBuf), graph::Executable>>,
+    brokered_commands: RefCell<Vec<PinnedCommand>>,
     source_snapshots: RefCell<BTreeMap<(String, PathBuf), graph::Code>>,
     source_contents: RefCell<BTreeMap<PathBuf, Arc<str>>>,
+    network_destinations: RefCell<BTreeSet<std::net::SocketAddrV4>>,
 }
 
 impl Resolver<'_> {
@@ -156,16 +128,7 @@ impl Resolver<'_> {
     }
 
     fn reject_function(&self, command: &str) -> Result<()> {
-        let encoded = format!("BASH_FUNC_{command}%%");
-        let apple = format!("__BASH_FUNC<{command}>()");
-        if self
-            .names
-            .iter()
-            .any(|name| name == command || name == &encoded || name == &apple)
-        {
-            return Err("bash_command_environment_value_withheld");
-        }
-        Ok(())
+        startup_environment::reject_function(self.names, command)
     }
 
     fn code(&self, requested: &str, resolved: &Path) -> Result<graph::Code> {
@@ -208,20 +171,6 @@ impl Resolver<'_> {
             resolved_path: text(resolved)?,
             source,
         })
-    }
-
-    fn image(&self, path: &Path) -> Result<PinnedCommand> {
-        self.check()?;
-        let pinned = PinnedCommand::new(path, &[], self.cwd, &[])
-            .map_err(|_| "bash_system_image_unavailable")?;
-        if !pinned
-            .has_readonly_system_image()
-            .map_err(|_| "bash_system_image_unavailable")?
-        {
-            return Err("bash_system_image_not_immutable");
-        }
-        self.check()?;
-        Ok(pinned)
     }
 }
 
@@ -271,7 +220,15 @@ impl graph::Resolver for Resolver<'_> {
         let (spelling, path) = self.resolve_spelling(&argv[0])?;
         let key = (spelling.clone(), path.clone());
         let native = match path.to_str() {
+            Some("/usr/bin/curl") => {
+                let peers = super::super::bash_network::destinations(
+                    argv, self.names, self.cwd, self.home,
+                )?;
+                self.network_destinations.borrow_mut().extend(peers);
+                true
+            }
             Some("/usr/bin/sort") => argv.len() == 1,
+            Some("/usr/bin/base64") => argv.len() == 1,
             Some("/usr/bin/head") => {
                 argv.len() == 3
                     && argv[1] == "-n"
@@ -281,21 +238,38 @@ impl graph::Resolver for Resolver<'_> {
             }
             _ => false,
         };
-        if matches!(path.to_str(), Some("/usr/bin/sort" | "/usr/bin/head")) && !native {
+        if matches!(
+            path.to_str(),
+            Some("/usr/bin/sort" | "/usr/bin/base64" | "/usr/bin/head")
+        ) && !native
+        {
             return Err("bash_native_arguments_unproven");
         }
         if let Some(captured) = self.captured.borrow().get(&key) {
+            if matches!(
+                captured,
+                graph::Executable::Native {
+                    delivery: graph::NativeDelivery::HardenedBroker,
+                    ..
+                }
+            ) {
+                // The final, output-bound graph pass must use the identity of
+                // the exact private image it will launch. Reusing the observed
+                // pass's digest would misbind a replacement between passes.
+                let (current, command) = native_image::capture_hardened(self, &path, argv)?;
+                self.brokered_commands.borrow_mut().push(command);
+                return Ok(current);
+            }
             return Ok(captured.clone());
         }
         if self.captured.borrow().len() >= 64 {
             return Err("bash_graph_bounds");
         }
         let captured = if native {
-            let pinned = self.image(&path)?;
-            graph::Executable::Native {
-                resolved_path: text(&path)?,
-                content_sha256: pinned.executable_digest,
-            }
+            native_image::capture(self, &path)?
+        } else if let Ok((captured, command)) = native_image::capture_hardened(self, &path, argv) {
+            self.brokered_commands.borrow_mut().push(command);
+            captured
         } else {
             if spelling.starts_with('-') || spelling.starts_with('+') {
                 return Err("bash_helper_interpreter_unproven");
@@ -311,9 +285,32 @@ impl graph::Resolver for Resolver<'_> {
     }
 }
 
+pub(crate) struct CapturedReport {
+    pub(crate) directory: Arc<Directory>,
+    pub(crate) leaf: OsString,
+    pub(crate) append: bool,
+}
+
+/// Constructed only from native observations, never from a serialized subject.
+pub(crate) struct CapturedBash {
+    pub(crate) subject: NativeBashSubjectV1,
+    pub(crate) graph: graph::Graph,
+    pub(crate) interpreter: PinnedCommand,
+    pub(crate) environment: BTreeMap<String, String>,
+    pub(crate) report: Option<CapturedReport>,
+    pub(crate) policy: Option<super::super::bash_policy::Assessment>,
+    pub(crate) network_destinations: BTreeSet<std::net::SocketAddrV4>,
+    pub(crate) brokered_commands: Vec<PinnedCommand>,
+}
+
 pub(super) fn inspect(request: &NativeBashCaptureV1) -> Result<NativeBashSubjectV1> {
+    capture(request, false).map(|captured| captured.subject)
+}
+
+pub(super) fn capture(request: &NativeBashCaptureV1, bind_outputs: bool) -> Result<CapturedBash> {
     // Resource deadline, not the separately measured installed-latency gate.
-    let deadline = Instant::now() + Duration::from_millis(request.budget_ms.min(1000));
+    let deadline = Instant::now()
+        + Duration::from_millis(request.budget_ms.min(super::ANALYSIS_BUDGET_CAP_MS));
     if request.file_creation_mask.is_some_and(|mask| mask > 0o777) {
         return Err("bash_host_creation_mask_invalid");
     }
@@ -337,8 +334,10 @@ pub(super) fn inspect(request: &NativeBashCaptureV1) -> Result<NativeBashSubject
         names: &request.execution_environment.environment_names,
         deadline,
         captured: RefCell::new(BTreeMap::new()),
+        brokered_commands: RefCell::new(Vec::new()),
         source_snapshots: RefCell::new(BTreeMap::new()),
         source_contents: RefCell::new(BTreeMap::new()),
+        network_destinations: RefCell::new(BTreeSet::new()),
     };
     let model = parse_shell_command(
         &request.command,
@@ -371,59 +370,73 @@ pub(super) fn inspect(request: &NativeBashCaptureV1) -> Result<NativeBashSubject
     if interpreter != Path::new("/bin/bash") {
         return Err("bash_interpreter_unproven");
     }
-    let image = resolver.image(&interpreter)?;
     let argv = &segment.arguments;
     if argv.is_empty() || argv[0].starts_with('-') || argv[0].starts_with('+') {
         return Err("bash_invocation_options_unproven");
     }
-    let entry = canonical(&text(&cwd.join(&argv[0]))?)?;
-    let graph = graph::build(
-        resolver.code(&argv[0], &entry)?,
-        argv,
-        &environment,
-        &resolver,
-        deadline,
-    )
-    .map_err(|uncertainty| uncertainty.reason)?;
+    let image = resolver.image(&interpreter)?;
+    let cache_key = bind_outputs.then(|| analysis_cache::key(request)).flatten();
+    let cached_graph = cache_key
+        .as_ref()
+        .and_then(|key| analysis_cache::reuse(key, &resolver, argv));
+    let cache_hit = cached_graph.is_some();
+    let graph = if let Some(graph) = cached_graph {
+        graph
+    } else {
+        let entry = canonical(&text(&cwd.join(&argv[0]))?)?;
+        let entry = resolver.code(&argv[0], &entry)?;
+        let observed = graph::build(entry.clone(), argv, &environment, &resolver, deadline)
+            .map_err(|uncertainty| uncertainty.reason)?;
+        if bind_outputs {
+            resolver.brokered_commands.borrow_mut().clear();
+            let first_output = if observed.brokered_images.is_empty() {
+                7
+            } else {
+                8
+            };
+            let fds = observed
+                .writes
+                .iter()
+                .map(|effect| effect.redirect.path.clone())
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .enumerate()
+                .map(|(index, path)| (path, first_output + index as u32))
+                .collect();
+            if observed.brokered_images.is_empty() {
+                graph::build_with_acknowledged_outputs(
+                    entry,
+                    argv,
+                    &environment,
+                    &resolver,
+                    deadline,
+                    &fds,
+                )
+            } else {
+                graph::build_with_acknowledged_broker_outputs(
+                    entry,
+                    argv,
+                    &environment,
+                    &resolver,
+                    deadline,
+                    &fds,
+                )
+            }
+            .map_err(|uncertainty| uncertainty.reason)?
+        } else {
+            observed
+        }
+    };
     // Bash 3 exports functions under the command name; Bash 4+ encodes it.
     // A withheld function body must not be mistaken for a PATH executable or builtin.
     for call in &graph.invocations {
         resolver.check()?;
         resolver.reject_function(&call.operation.argv[0])?;
     }
-    let mut outputs = BTreeMap::new();
-    for effect in &graph.writes {
-        resolver.check()?;
-        let leaf = effect.redirect.path.rsplit('/').next().unwrap_or("");
-        if matches!(leaf, "" | "." | "..") {
-            return Err("bash_output_path_invalid");
-        }
-        if guard_command::bash_approval::is_descriptor_reference(&effect.redirect.path) {
-            return Err("bash_process_descriptor_unproven");
-        }
-        if outputs.contains_key(&effect.redirect.path) {
-            continue;
-        }
-        let path = cwd.join(&effect.redirect.path);
-        let parent = std::fs::canonicalize(path.parent().ok_or("bash_output_path_invalid")?)
-            .map_err(|_| "bash_output_parent_unavailable")?;
-        if guard_command::bash_approval::is_descriptor_reference(&text(&parent)?) {
-            return Err("bash_process_descriptor_unproven");
-        }
-        let resolved = parent.join(path.file_name().ok_or("bash_output_path_invalid")?);
-        if guard_command::bash_approval::is_descriptor_reference(&text(&resolved)?) {
-            return Err("bash_process_descriptor_unproven");
-        }
-        let directory = Directory::open(&parent).map_err(|_| "bash_output_parent_unavailable")?;
-        guard_contained_process::bound_output::validate_target(
-            &directory,
-            resolved.file_name().ok_or("bash_output_path_invalid")?,
-        )
-        .map_err(|_| "bash_output_target_unavailable")?;
-        outputs.insert(effect.redirect.path.clone(), text(&resolved)?);
-    }
+    let (outputs, report) =
+        output_capture::capture(&graph, &resolver, &cwd, &guard_home, bind_outputs)?;
     resolver.check()?;
-    subject::from_graph(
+    let mut subject = subject::from_graph(
         &graph,
         subject::Observations {
             context: NativeBashContextV1 {
@@ -443,10 +456,41 @@ pub(super) fn inspect(request: &NativeBashCaptureV1) -> Result<NativeBashSubject
                 kind: NativeScriptInputKindV1::Interpreter,
                 requested_path: text(&interpreter)?,
                 resolved_path: text(&interpreter)?,
-                content_sha256: image.executable_digest,
+                content_sha256: image.executable_digest.clone(),
             },
             environment: &environment,
             resolved_outputs: &outputs,
         },
-    )
+    )?;
+    subject.package_bindings =
+        package_bindings::observe(&subject, graph.frozen_source_bytes(), deadline);
+    subject.validate()?;
+    resolver.check()?;
+    let network_destinations = resolver.network_destinations.into_inner();
+    let brokered_commands = resolver.brokered_commands.into_inner();
+    if brokered_commands.len()
+        != graph
+            .invocations
+            .iter()
+            .filter(|invocation| invocation.broker_id.is_some())
+            .count()
+    {
+        return Err("bash_broker_capture_mismatch");
+    }
+    let captured = CapturedBash {
+        subject,
+        graph,
+        interpreter: image,
+        environment,
+        report,
+        policy: None,
+        network_destinations,
+        brokered_commands,
+    };
+    if !cache_hit {
+        if let Some(key) = cache_key {
+            analysis_cache::insert(key, &captured.graph);
+        }
+    }
+    Ok(captured)
 }

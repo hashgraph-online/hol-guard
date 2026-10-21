@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, TextIO
 
 from ..runtime.connector_setup_items import connector_setup_href, connector_setup_summary
+from ..runtime.fleet_posture_aibom import fleet_inventory_rows
 from ..runtime.fleet_posture_inventory import reportable_inventory_rows
 
 if TYPE_CHECKING:
@@ -59,7 +60,7 @@ def inventory_list_payload(
 
     _, kind, reported_kinds = _LIST_COMMANDS[command]
     items: list[dict[str, object]] = []
-    for selected in reportable_inventory_rows(store.list_inventory()):
+    for selected in reportable_inventory_rows(fleet_inventory_rows(store)):
         if selected.kind not in reported_kinds:
             continue
         row = selected.row

@@ -170,7 +170,8 @@ pub(super) fn project(
     .ok()?;
     // An earlier segment could cd or create a symlink before the shell opens
     // a target, so a chain may only write absolute temp files beside peers.
-    let temporary_chain = temporary_writes && super::super::chain_temporary::peers_only(&model);
+    let temporary_chain =
+        temporary_writes && super::super::chain_temporary::temporary_peers(&model);
     let chain = writes_file && model.segments.len() != 1 && !temporary_chain;
     let leading_write = chain && bounded_writes && !late_write && leading_chain::admits(&model);
     // Plain peers cannot change directory, rename a file or create a link,

@@ -321,6 +321,49 @@ pub(crate) fn exact_existing_drive_target(target: &str) -> bool {
     std::fs::canonicalize(target).is_ok_and(|canonical| exact_drive_spelling(target, &canonical))
 }
 
+/// `exact_drive_spelling` for a drive-absolute target whose deepest names
+/// need not be there yet.
+///
+/// Exact spelling exists to keep a differently cased name, an 8.3 short name
+/// and a junction from standing in for the directory the route proved. None
+/// of those is a name that is not there: a path Windows cannot resolve has no
+/// canonical spelling to differ from, and it names nothing until whoever owns
+/// the directory above it creates it. So the part that exists is held to its
+/// canonical spelling, and the names below it only have to be ordinary ones.
+#[cfg(windows)]
+pub(crate) fn exact_drive_target_with_absent_tail(target: &str) -> bool {
+    let spelled = drive_separators(target);
+    let mut probe = std::path::Path::new(&spelled);
+    let mut absent = 0usize;
+    loop {
+        if let Ok(canonical) = std::fs::canonicalize(probe) {
+            return probe
+                .to_str()
+                .is_some_and(|text| exact_drive_spelling(text, &canonical));
+        }
+        // A name Windows cannot resolve is still read as a name, so only a
+        // plain one may stand below the part that was proved.
+        let Some(name) = probe.components().next_back() else {
+            return false;
+        };
+        if !matches!(name, std::path::Component::Normal(_)) {
+            return false;
+        }
+        absent += 1;
+        if absent > MAX_ABSENT_NAMES {
+            return false;
+        }
+        let Some(parent) = probe.parent() else {
+            return false;
+        };
+        probe = parent;
+    }
+}
+
+/// A `-C` to a directory names the one above it, not a tree to create.
+#[cfg(windows)]
+const MAX_ABSENT_NAMES: usize = 32;
+
 impl<'a> super::PathContext<'a> {
     /// `cdpath_unset` is set only from a harness-stamped environment that
     /// declares no CDPATH, so a bare relative `cd` operand cannot be
@@ -511,6 +554,56 @@ mod tests {
             drive_separators(r"c:\\users\\..\\PROGRA~1"),
             r"c:\users\..\PROGRA~1"
         );
+    }
+
+    /// A `git -C` into a directory that is not there can only print
+    /// `fatal:`, so the route is admitted, but the drive-absolute proof used
+    /// to demand a canonical spelling the path cannot have while it does not
+    /// exist. Every such route was reviewed on Windows and allowed on unix.
+    /// The part that does exist is still held to its canonical spelling.
+    #[cfg(windows)]
+    #[test]
+    fn an_absent_tail_keeps_the_proof_on_the_part_that_exists() {
+        use super::exact_drive_target_with_absent_tail as absent_tail;
+
+        let root = std::env::temp_dir().join(format!(
+            "guard-absent-tail-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(root.join("Code")).unwrap();
+        let canonical = std::fs::canonicalize(&root).unwrap();
+        let spelled = canonical
+            .to_str()
+            .unwrap()
+            .strip_prefix(r"\\?\")
+            .unwrap()
+            .to_owned();
+
+        assert!(absent_tail(&format!(r"{spelled}\Code")));
+        // The directory that is not there, which is the whole point.
+        assert!(absent_tail(&format!(r"{spelled}\Code\not-cloned-yet")));
+        assert!(absent_tail(&format!("{spelled}/Code/not-cloned-yet")));
+        assert!(absent_tail(&format!(r"{spelled}\Code\not-cloned-yet\web")));
+        // A name that is not there is still a name: nothing but a plain one
+        // may stand below the part that was proved.
+        assert!(!absent_tail(&format!(r"{spelled}\Code\..\Code")));
+        assert!(!absent_tail(&format!(r"{spelled}\Code\absent\..")));
+        // The part that does exist keeps its exact spelling.
+        assert!(!absent_tail(&format!(
+            r"{}\CODE\not-cloned-yet",
+            spelled.to_uppercase()
+        )));
+        // A `-C` names one directory, not a tree to create.
+        let deep = "\\absent".repeat(super::MAX_ABSENT_NAMES + 1);
+        assert!(!absent_tail(&format!("{spelled}{deep}")));
+        // A relative target never reaches this proof; it answers for nothing.
+        assert!(!absent_tail("Code/not-cloned-yet"));
+
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]

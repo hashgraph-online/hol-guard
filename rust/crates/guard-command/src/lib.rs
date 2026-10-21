@@ -1,20 +1,29 @@
 #![forbid(unsafe_code)]
 pub mod action_lattice;
 pub mod approval_reuse;
+pub mod artifact_hash;
+#[cfg(test)]
+mod artifact_hash_tests;
+mod artifact_hash_url;
+#[cfg(test)]
+mod artifact_hash_url_tests;
 pub mod artifact_risk;
 pub mod bash_approval;
 pub mod benign_request_api;
 pub mod browser_mcp_intent;
+mod bundle_metadata;
 pub mod business_gmail_plain;
 pub mod business_gmail_wire;
 pub mod business_gws_command;
 pub mod business_input;
 pub mod canonical_command;
+pub mod catalog_prepare;
 pub mod catalog_read_model;
 #[cfg(test)]
 mod catalog_read_model_tests;
 mod catalog_read_projection;
 mod catalog_read_query;
+pub mod cloud_catalog;
 pub mod cloud_scrub;
 mod cloud_scrub_shell;
 mod cloud_scrub_source_search;
@@ -56,6 +65,8 @@ mod codex_output_shlex;
 mod codex_output_source_paths;
 mod codex_output_splitters;
 mod codex_output_wrappers;
+mod codex_prompt_attachment;
+pub mod codex_prompt_credential_file;
 pub mod command_compatibility;
 mod command_contained_routine_candidates;
 mod command_critical_floors;
@@ -111,8 +122,12 @@ mod github_command_capabilities_tests;
 pub mod github_workflow_approval_record;
 pub mod github_workflow_authorization;
 pub mod github_workflow_descriptor;
+pub mod github_workflow_lineage;
+#[cfg(test)]
+mod github_workflow_lineage_tests;
 pub mod github_workflow_operations;
 mod harness_config_names;
+pub mod harness_identity;
 mod home_path_text;
 pub mod homebrew_intent;
 mod inline_shell_quoting;
@@ -144,6 +159,7 @@ pub mod native_command_extension_evidence;
 #[cfg(test)]
 mod native_command_extension_evidence_tests;
 pub mod native_command_program;
+pub mod network_url;
 pub mod npm_source_spec;
 pub mod ordered_json;
 #[cfg(unix)]
@@ -165,6 +181,7 @@ mod powershell_floors;
 mod powershell_parser;
 mod powershell_reads;
 pub mod protect_request;
+pub mod pytest_argv;
 mod read_only_fanout;
 pub mod reviewed_invocation_bindings;
 pub mod rich_command_model_api;
@@ -173,6 +190,9 @@ use parser_segments::*;
 pub mod developer_inspection_authority;
 pub mod environment_secret_dump;
 pub mod pretool;
+pub mod runtime_artifact_identity;
+#[cfg(test)]
+mod runtime_artifact_identity_tests;
 mod runtime_read_paths;
 pub mod secret_path_probe;
 pub mod sensitive_request;
@@ -266,6 +286,7 @@ mod sfrs_node_templates;
 #[cfg(all(test, unix))]
 mod sfrs_node_vectors;
 mod sfrs_node_workflows;
+mod sfrs_path_word_lookups;
 mod sfrs_patterns;
 mod sfrs_perl_read_only;
 #[cfg(all(test, unix))]
@@ -288,6 +309,8 @@ mod sfrs_quote_parsing;
 mod sfrs_quote_tokens;
 #[cfg(all(test, unix))]
 mod sfrs_quote_vectors;
+#[cfg(test)]
+mod sfrs_read_only_filter_tests;
 mod sfrs_read_only_filters;
 pub mod sfrs_replay;
 mod sfrs_replay_context;
@@ -327,6 +350,8 @@ pub mod shell_helpers;
 mod shell_model_limits;
 mod shell_read_literal_wrapper;
 pub mod shell_request_authority;
+#[cfg(test)]
+mod shell_secret_read_containment_tests;
 mod shell_secret_read_flow;
 #[cfg(test)]
 mod shell_secret_read_script_operand_tests;
@@ -334,6 +359,9 @@ mod shell_secret_read_support;
 pub mod shell_secret_reads;
 mod shell_structure;
 pub mod source_cli;
+pub mod tool_action_identity;
+#[cfg(test)]
+mod tool_action_identity_tests;
 pub mod typescript_launch_evidence;
 mod unmodeled_shell_artifact;
 
@@ -755,12 +783,16 @@ pub mod guard_run_launch;
 pub mod install_time_event;
 pub mod local_supply_chain;
 #[cfg(test)]
+mod local_supply_chain_risk_action_tests;
+#[cfg(test)]
 mod local_supply_chain_saved_claim_tests;
 #[cfg(test)]
 mod local_supply_chain_stale_policy_tests;
 #[cfg(test)]
 mod local_supply_chain_timestamp_tests;
 pub mod package_approval;
+#[cfg(test)]
+mod package_intent_exact_decode_tests;
 pub mod package_policy_override;
 pub mod package_protect_projection;
 mod package_shim_invocation;
@@ -771,6 +803,8 @@ pub mod redacted_command_tokens;
 pub mod supply_chain_package_eval;
 pub mod target_identities;
 pub mod workspace_inventory;
+#[cfg(test)]
+mod workspace_path_guard_tests;
 
 // RTM-014/017/020/023 pending modules — compile signal only until legs complete.
 pub mod aibom_reporting;
@@ -784,6 +818,7 @@ pub mod contained_execution;
 #[cfg(unix)]
 pub mod contained_runner;
 pub mod credential_patterns;
+pub mod data_flow_request_artifact;
 pub mod data_flow_rules;
 pub mod decisions;
 pub mod detectors;
@@ -797,29 +832,48 @@ pub mod egress_proxy_credentials;
 mod egress_spool;
 pub mod false_positive_rules;
 pub mod guard_sync_transport;
+#[path = "adapters/hook/hook_adapter_cline_tables.rs"]
 mod hook_adapter_cline_tables;
+#[path = "adapters/hook/hook_adapter_envelope.rs"]
 pub mod hook_adapter_envelope;
+#[path = "adapters/hook/hook_adapter_envelope_tables.rs"]
 mod hook_adapter_envelope_tables;
+#[path = "adapters/hook/hook_adapter_envelope_text.rs"]
 mod hook_adapter_envelope_text;
 #[cfg(test)]
+#[path = "adapters/hook/hook_adapter_omp_tests.rs"]
 mod hook_adapter_omp_tests;
+#[path = "adapters/hook/hook_adapter_paths.rs"]
 pub mod hook_adapter_paths;
+#[path = "adapters/hook/hook_adapter_prepare.rs"]
 pub mod hook_adapter_prepare;
+#[path = "adapters/hook/hook_adapter_prepare_cline.rs"]
 pub mod hook_adapter_prepare_cline;
+#[path = "adapters/hook/hook_adapter_prepare_cursor.rs"]
 mod hook_adapter_prepare_cursor;
+#[path = "adapters/hook/hook_adapter_pyjson.rs"]
 mod hook_adapter_pyjson;
+#[path = "adapters/hook/hook_adapter_pytext.rs"]
 mod hook_adapter_pytext;
+#[path = "adapters/hook/hook_adapter_redact.rs"]
 mod hook_adapter_redact;
+#[path = "adapters/hook/hook_adapter_secret_path.rs"]
 mod hook_adapter_secret_path;
+#[path = "adapters/hook/hook_adapter_value.rs"]
 pub mod hook_adapter_value;
 #[cfg(all(test, unix))]
+#[path = "adapters/hook/hook_adapter_vector_tests.rs"]
 mod hook_adapter_vector_tests;
 mod hook_evidence_deferred_post;
 pub mod hook_evidence_writer;
 #[cfg(test)]
 mod hook_evidence_writer_tests;
 pub mod hook_responses;
+pub mod inventory_agent_types;
 pub mod inventory_contract;
+#[cfg(test)]
+mod inventory_contract_tests;
+pub mod inventory_fingerprints;
 pub mod js_semver;
 pub mod linux_artifact_supply_chain;
 #[cfg(any(unix, windows))]
@@ -859,3 +913,7 @@ pub mod supply_chain_bundle;
 pub mod supply_chain_package_identity;
 pub mod supply_chain_risk;
 pub mod supply_chain_support;
+pub mod verified_npm;
+pub mod verified_read_decision;
+#[cfg(test)]
+mod verified_read_decision_tests;

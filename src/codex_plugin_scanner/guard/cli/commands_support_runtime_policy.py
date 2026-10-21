@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import importlib
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from ..runtime.data_flow_sink import data_flow_sink_type
@@ -15,15 +15,13 @@ from ..runtime.package_request_evaluation import strip_review_evidence_tail as _
 
 if TYPE_CHECKING:
     from ._commands_shared import _HOOK_DAEMON_UNREACHABLE_REASON_MARKER, _now
-    from .commands_support_prompts import _prompt_request_classes
 
 
 from ..blocked_request_mode import is_unlinked_connector_setup_reason
 from ..models import GuardAction
-from ..native_data_flow import detect_data_flow_exfiltration
+from ..native_data_flow import DataFlowArtifactNaming, detect_data_flow_exfiltration
 from ..native_hook_approval_context import native_hook_approval_context_token, runtime_hook_approval_context_inputs
 from ..runtime.approval_context import approval_context_tokens_validation_reason
-from ..runtime.command_extensions import risk_classes_for_command_action
 from ..runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
 from ..store import runtime_tool_action_exact_match_context
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
@@ -266,6 +264,7 @@ def _runtime_saved_policy_probe(
     artifact: GuardArtifact,
     artifact_hash: str,
     workspace: str | None,
+    risk_scoped: bool,
     memory: bool,
 ) -> dict[str, object]:
     """Describe one saved-decision probe for the resident runtime lookup."""
@@ -277,7 +276,7 @@ def _runtime_saved_policy_probe(
         "workspace": workspace,
         "publisher": artifact.publisher,
         "exact_match_context": _runtime_artifact_exact_match_context(artifact),
-        "risk_scoped": bool(_runtime_artifact_risk_classes(artifact)),
+        "risk_scoped": risk_scoped,
     }
     if memory:
         probe["memory"] = {
@@ -301,6 +300,7 @@ def _runtime_saved_policy_decision(
     alias_artifact: GuardArtifact | None,
     alias_artifact_hash: str | None,
     alias_workspace: str | None,
+    risk_classes: Sequence[str],
     reuse: Mapping[str, object] | None = None,
 ) -> tuple[Mapping[str, object], Mapping[str, object] | None, Mapping[str, object] | None]:
     """Return the saved-decision lookup, the decision this artifact may use and,
@@ -308,7 +308,9 @@ def _runtime_saved_policy_decision(
 
     The resident composes the current-hash and legacy-hash lookups (a legacy
     decision wins only when strictly more severe, so a new exact allow never
-    hides a retained pre-v1 block) and falls back to the Claude alias. Nothing
+    hides a retained pre-v1 block) and falls back to the Claude alias.
+    ``risk_classes`` are the resident's facts for ``artifact``; the Claude
+    alias differs from it only in identity, so they describe both. Nothing
     is consumed: the runtime claims an accepted approval only after recomputing
     all current policy and scanner inputs.
     """
@@ -321,6 +323,7 @@ def _runtime_saved_policy_decision(
         artifact=artifact,
         artifact_hash=artifact_hash,
         workspace=workspace,
+        risk_scoped=bool(risk_classes),
         memory=True,
     )
     legacy = {**current, "artifact_hash": legacy_artifact_hash, "workspace": legacy_workspace}
@@ -331,6 +334,7 @@ def _runtime_saved_policy_decision(
             artifact=alias_artifact,
             artifact_hash=alias_artifact_hash,
             workspace=alias_workspace,
+            risk_scoped=bool(risk_classes),
             memory=False,
         )
     return store.resolve_runtime_saved_decision(current, legacy, alias, reuse)
@@ -364,6 +368,7 @@ def _runtime_hook_approval_context_token(
     data_flow_action: GuardAction | None,
     scanner_action: GuardAction | None,
     current_action: GuardAction,
+    risk_classes: Sequence[str],
     data_flow_signals: Sequence[object],
     scanner_evidence: Sequence[object],
     workflow_approval_record: GitHubWorkflowApprovalRecord | None = None,
@@ -371,6 +376,7 @@ def _runtime_hook_approval_context_token(
     """Bind a saved hook approval to the exact reviewed runtime context.
 
     The resident composes the context dimensions and returns the token.
+    ``risk_classes`` are the resident's facts for ``artifact``.
     """
 
     inputs = runtime_hook_approval_context_inputs(
@@ -391,7 +397,7 @@ def _runtime_hook_approval_context_token(
             "untrusted_payload_action": untrusted_payload_action,
         },
         current_action=current_action,
-        risk_classes=_runtime_artifact_risk_classes(artifact),
+        risk_classes=list(risk_classes),
         data_flow_signals=data_flow_signals,
         scanner_evidence=scanner_evidence,
         workflow_approval_record=workflow_approval_record,
@@ -437,9 +443,20 @@ def _runtime_hook_effective_policy_config(config: GuardConfig) -> dict[str, obje
 
 def _remembered_rule_rejection_reason(
     *,
+    composer: Callable[..., dict[str, object]],
+    guard_home: Path | None,
     response_payload: dict[str, object],
     artifact: GuardArtifact,
 ) -> str | None:
+    """Why the resident refused a remembered local rule, or ``None``.
+
+    Which rule states earn a reason, and the reason itself, are the resident's;
+    this only names the request and hands over the facts it reads them from. A
+    rejection is rare enough that asking about every reported state costs less
+    than a second copy of the rule that decides which states are worth asking
+    about.
+    """
+
     rejection = response_payload.get("remembered_rule_rejection")
     if not isinstance(rejection, Mapping):
         return None
@@ -447,20 +464,17 @@ def _remembered_rule_rejection_reason(
     remembered_rules = (
         str(trust_status.get("remembered_rules") or "unknown") if isinstance(trust_status, Mapping) else "unknown"
     )
-    if remembered_rules != "disabled_degraded":
-        return None
-    integrity_message = _optional_string(rejection.get("integrity_message"))
-    artifact_summary = _runtime_request_summary(artifact) or artifact.name
-    if isinstance(integrity_message, str) and integrity_message.strip():
-        message = integrity_message.strip()
-        detail = f" {message if message.endswith('.') else message + '.'}"
-    else:
-        detail = ""
-    return (
-        f"HOL Guard kept {artifact_summary} in review because a remembered local rule was ignored while local trust "
-        f"is degraded.{detail} One-time approvals still work, but broader remembered rules stay limited until local "
-        f"trust is protected."
+    answer = composer(
+        "remembered_rule_reason",
+        {
+            "remembered_rules": remembered_rules,
+            "integrity_message": _optional_string(rejection.get("integrity_message")),
+            "artifact_summary": _runtime_request_summary(artifact) or artifact.name,
+        },
+        guard_home=guard_home,
     )
+    reason = answer["reason"]
+    return reason if isinstance(reason, str) else None
 
 
 def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None:
@@ -481,61 +495,24 @@ def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None
     )
 
 
-def _artifact_risk_confidence(artifact: GuardArtifact) -> object:
-    confidence = artifact.metadata.get("risk_confidence")
-    if confidence is None:
-        confidence = artifact.metadata.get("confidence")
-    if isinstance(confidence, str) and confidence.strip():
-        return confidence
-    signals = artifact.metadata.get("risk_signals")
-    if not isinstance(signals, Sequence) or isinstance(signals, (str, bytes)):
-        return confidence
-    for signal in signals:
-        if not isinstance(signal, Mapping):
-            continue
-        signal_confidence = signal.get("confidence")
-        if isinstance(signal_confidence, str) and signal_confidence.strip():
-            return signal_confidence
-    return confidence
-
-
-def _artifact_skill_is_known_bad(artifact: GuardArtifact) -> bool:
-    if artifact.metadata.get("known_bad_skill") is True:
-        return True
-    if artifact.metadata.get("skill_is_known_bad") is True:
-        return True
-    intel = artifact.metadata.get("threat_intel")
-    return isinstance(intel, Mapping) and intel.get("known_bad") is True
-
-
-def _artifact_writes_launch_agent(artifact: GuardArtifact) -> bool:
-    """Whether a producer already asserted the artifact installs a boot item.
-
-    Reading the mechanism out of ``action_class`` is the resident's, which is
-    why that label travels beside this flag rather than being folded into it
-    here: a second copy of the mechanism table could withhold a stop the
-    protected posture asked for.
-    """
-
-    return artifact.metadata.get("persistence_writes_launch_agent") is True
-
-
-def _artifact_action_class(artifact: GuardArtifact) -> str | None:
-    """The artifact's ``action_class`` label, or ``None`` when it has none."""
-
-    action_class = artifact.metadata.get("action_class")
-    return action_class if isinstance(action_class, str) else None
-
-
 def _runtime_action_data_flow_signals(
     action_envelope: GuardActionEnvelope | None,
     *,
     workspace: Path | None,
     guard_home: Path | None = None,
-) -> tuple[RiskSignalV2, ...]:
+    naming: DataFlowArtifactNaming | None = None,
+) -> tuple[tuple[RiskSignalV2, ...], GuardArtifact | None]:
+    """The action's data-flow signals and the artifact they earn.
+
+    Both come from the one resident call that raised the signals, so the id the
+    review is saved under is derived once, by the side that found the flow.
+    """
+
     if action_envelope is None:
-        return ()
-    return detect_data_flow_exfiltration(action_envelope, workspace=workspace, guard_home=guard_home)
+        return (), None
+    return detect_data_flow_exfiltration(
+        action_envelope, workspace=workspace, guard_home=guard_home, naming=naming
+    )
 
 def _runtime_data_flow_summary(signals: tuple[RiskSignalV2, ...]) -> str:
     sink_type = _runtime_data_flow_sink_type(signals)
@@ -544,39 +521,6 @@ def _runtime_data_flow_summary(signals: tuple[RiskSignalV2, ...]) -> str:
     return f"This command sends local secret to {sink_type}."
 
 _runtime_data_flow_sink_type = data_flow_sink_type
-
-def _runtime_artifact_risk_classes(artifact: GuardArtifact) -> list[str]:
-    risk_classes: list[str] = []
-    composite_risk_classes = artifact.metadata.get("risk_classes")
-    if isinstance(composite_risk_classes, list):
-        risk_classes.extend(
-            value.strip() for value in composite_risk_classes if isinstance(value, str) and value.strip()
-        )
-    if artifact.artifact_type == "file_read_request":
-        risk_classes.append("local_secret_read")
-        return list(dict.fromkeys(risk_classes))
-    if artifact.artifact_type == "package_request":
-        risk_classes.append("package_script")
-        return list(dict.fromkeys(risk_classes))
-    if artifact.artifact_type == "prompt_request":
-        prompt_classes = _prompt_request_classes(artifact)
-        if "secret_read" in prompt_classes:
-            risk_classes.append("local_secret_read")
-        if "exfil_intent" in prompt_classes:
-            risk_classes.append("credential_exfiltration")
-        if "destructive_intent" in prompt_classes:
-            risk_classes.append("destructive_shell")
-        if "subprocess_intent" in prompt_classes:
-            risk_classes.append("destructive_shell")
-        if "prompt_injection_intent" in prompt_classes:
-            risk_classes.append("destructive_shell")
-        return list(dict.fromkeys(risk_classes))
-    if artifact.artifact_type != "tool_action_request":
-        return list(dict.fromkeys(risk_classes))
-    action_class = artifact.metadata.get("action_class")
-    if isinstance(action_class, str):
-        risk_classes.extend(risk_classes_for_command_action(action_class))
-    return list(dict.fromkeys(risk_classes))
 
 def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:
     return {
@@ -725,7 +669,7 @@ __all__ = [
     "_guard_settings_payload", "_is_cloud_inbox_url", "_localize_decision_v2_review_copy",
     "_localize_pending_approval_copy", "_native_approval_center_context", "_native_hook_reason",
     "_native_hook_reason_for_harness", "_runtime_action_data_flow_signals",
-    "_runtime_artifact_command_action_floor", "_runtime_artifact_policy_action", "_runtime_artifact_risk_classes",
+    "_runtime_artifact_command_action_floor", "_runtime_artifact_policy_action",
     "_runtime_data_flow_sink_type", "_runtime_data_flow_summary", "_runtime_detector_perf_payload",
     "_runtime_detector_registry_payload", "_strip_cloud_inbox_urls",
     "_strip_legacy_approval_center_sentence", "_strip_review_evidence_tail", "_terminal_action_message",

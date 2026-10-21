@@ -33,6 +33,7 @@ pub(crate) fn get_approval_request(
     connection: &Connection,
     guard_home: &str,
     args: &Args<'_>,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> StoreResult<Value> {
     let Some(row) = query_one(
         connection,
@@ -44,7 +45,11 @@ pub(crate) fn get_approval_request(
     };
     let projection = project(&row, guard_home)?;
     let mut built = if args.flag("derive_scope")? {
-        payloads(vec![(&row, projection)], args.opt_str("cwd")?)?
+        payloads(
+            vec![(&row, projection)],
+            args.opt_str("cwd")?,
+            owner.map(|owner| (connection, owner)),
+        )?
     } else {
         let (mut payload, contract_error) = draft(&row, &projection)?;
         if let Some(error) = contract_error {
@@ -71,6 +76,7 @@ pub(crate) fn list_approval_requests(
     connection: &Connection,
     guard_home: &str,
     args: &Args<'_>,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> StoreResult<Value> {
     let limit = args.raw("limit").map(|_| args.int("limit")).transpose()?;
     let taken = args.raw("taken").map_or(Ok(0), |_| args.int("taken"))?;
@@ -98,7 +104,12 @@ pub(crate) fn list_approval_requests(
     // projecting rows the next chunk reads again.
     for row in &rows {
         let projection = project(row, guard_home)?;
-        let item = payloads(vec![(row, projection)], cwd)?.remove(0);
+        let item = payloads(
+            vec![(row, projection)],
+            cwd,
+            owner.map(|owner| (connection, owner)),
+        )?
+        .remove(0);
         bytes += serde_json::to_vec(&item).map_or(0, |encoded| encoded.len());
         if !returned.is_empty() && bytes > PAGE_BYTES {
             break;
@@ -124,6 +135,7 @@ pub(crate) fn continuation(row: &Row) -> Value {
 pub(crate) fn payloads(
     rows: Vec<(&Row, Value)>,
     cwd: Option<&str>,
+    owner: Option<(&Connection, &crate::policy_store::PolicySnapshotStore)>,
 ) -> StoreResult<Vec<Map<String, Value>>> {
     let drafts = rows
         .iter()
@@ -131,7 +143,7 @@ pub(crate) fn payloads(
         .collect::<StoreResult<Vec<_>>>()?;
     let contracts = drafts
         .iter()
-        .map(|(payload, _)| scope_contract(payload, cwd))
+        .map(|(payload, _)| scope_contract(payload, cwd, owner))
         .collect::<StoreResult<Vec<_>>>()?;
     let mut payloads = Vec::with_capacity(drafts.len());
     for ((mut payload, contract_error), contract) in drafts.into_iter().zip(contracts) {

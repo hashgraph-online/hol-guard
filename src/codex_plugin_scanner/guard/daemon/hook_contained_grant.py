@@ -7,6 +7,14 @@ sandbox widened by the grant (``workspace-contained-grant-v1``). The sink asks
 the store for the grant again itself, so nothing here is trusted beyond the
 routing. A blocked or undecided CLI, or a call the sink cannot take, keeps the
 review.
+
+The sandbox requirement itself is the resident's: it answers the grant step
+with the review fields the command is routed to, and this module copies them.
+A resident that cannot be reached sends no route, so the review stands.
+
+Whether a result is eligible at all is the resident's ``containment_route``
+answer (``grant``); callers ask it first. Whether the sink takes the rendered
+receipt is its ``containment_sink`` answer.
 """
 
 from __future__ import annotations
@@ -16,9 +24,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..native_hook_containment_route import native_containment_sink
 from .hook_fail_closed import render_pre_tool
 from .hook_native_exact_action import launch_cwd, launch_path
-from .hook_native_saved_approval import _native_review_is_overridable
 from .hook_request_parsing import pre_tool_command
 
 if TYPE_CHECKING:
@@ -26,12 +34,6 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 OUTSIDE_ROOTS_REASON = "native_workspace_containment_executable_outside_roots"
-WORKSPACE_REASON = "native_workspace_containment_required"
-GRANT_REASON = (
-    "HOL Guard runs this command in a protected workspace sandbox, widened only by the "
-    "local CLI access you approved on this device."
-)
-_RECEIPT_ONLY_FIELD = "guard_containment_receipt_only"
 
 
 def granted_containment_result(
@@ -44,16 +46,10 @@ def granted_containment_result(
 ) -> dict[str, object] | None:
     """The sandbox requirement an allowed grant turns an outside-roots review into.
 
-    Only a review the saved-approval path could also override qualifies: a Guard
-    control or package action never routes into the sandbox, whatever the grant.
+    ``result`` is one the resident routed to the grant: an outside-roots review
+    the saved-approval path could also override. A Guard control or package
+    action never gets here, whatever the grant.
     """
-    if (
-        result.get("minimum_action") != "review"
-        or result.get("policy_action") != "review"
-        or result.get("reason_code") != OUTSIDE_ROOTS_REASON
-        or not _native_review_is_overridable(result)
-    ):
-        return None
     command = pre_tool_command(payload)
     cwd = launch_cwd(payload, workspace)
     if command is None or cwd is None:
@@ -75,14 +71,10 @@ def granted_containment_result(
         return None
     if decision is None or decision[0] != ALLOW_CONTAINED_WITH_GRANT or decision[1] is None:
         return None
-    return {
-        **result,
-        "decision": "deny",
-        "minimum_action": "sandbox-required",
-        "policy_action": "sandbox-required",
-        "reason_code": WORKSPACE_REASON,
-        "reason": GRANT_REASON,
-    }
+    route = decision[2]
+    if route is None:
+        return None
+    return {**result, **route}
 
 
 def granted_containment_response(
@@ -100,6 +92,7 @@ def granted_containment_response(
 
     A receipt-only call is the sink re-authorizing, so it gets the sandbox
     receipt itself; any other call is answered only when the sink takes it.
+    No resident answer raises ``NativeHookDecisionError``.
     """
     granted = granted_containment_result(store, result, payload=payload, workspace=workspace, home_dir=home_dir)
     if granted is None:
@@ -107,10 +100,21 @@ def granted_containment_response(
     from ..adapters.zcode_contained_tests import route_zcode_containment
 
     receipt = render_pre_tool(harness, granted, guard_home=guard_home, deadline=deadline)
-    if payload.get(_RECEIPT_ONLY_FIELD) is True:
+    sink = native_containment_sink(
+        receipt, harness=harness, bridge=False, payload=payload, guard_home=guard_home, deadline=deadline
+    )
+    if sink.kept_because == "receipt_only":
         return receipt
+    if sink.profile is None:
+        return None
     routed = route_zcode_containment(
-        receipt, harness=harness, payload=payload, guard_home=guard_home, home_dir=home_dir, workspace=workspace
+        receipt,
+        harness=harness,
+        payload=payload,
+        guard_home=guard_home,
+        home_dir=home_dir,
+        workspace=workspace,
+        sink=sink,
     )
     return None if routed is receipt else routed
 

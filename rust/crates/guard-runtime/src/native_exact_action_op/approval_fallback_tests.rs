@@ -36,7 +36,7 @@ fn outcome(
     request: &NativeExactActionRequestV1,
     fallback: Fallback,
 ) -> (Option<String>, Option<String>) {
-    match decide_with(request, &ResidentEngines, fallback).unwrap() {
+    match decide_with(request, &ResidentEngines { guard_home: None }, fallback).unwrap() {
         NativeExactActionPayloadV1::ExactAction {
             token,
             once_only_reason,
@@ -51,6 +51,65 @@ fn token(root: &str, edit: impl FnOnce(&mut Value)) -> Option<String> {
 
 fn root() -> String {
     std::env::temp_dir().to_string_lossy().into_owned()
+}
+
+const SCRIPTS: [&str; 5] = [
+    "python3 report.py",
+    "python3 -c 'print(1)'",
+    "node report.mjs",
+    "node -e 'console.log(1)'",
+    "npx fixture-runner",
+];
+
+fn script_request(harness: &str, command: &str) -> NativeExactActionRequestV1 {
+    exact_request(&root(), |query| {
+        query["harness"] = json!(harness);
+        query["command"] = json!(command);
+        query["tool_input"] = json!([["command", command]]);
+    })
+}
+
+/// A script review keeps Allow once and Always allow on every harness and
+/// platform (`docs/guard/approval-invariant.md`), including the native
+/// execution-owner route. Withholding the token is not what holds a script to
+/// the bytes the user saw: the owner matches a saved decision against the
+/// captured artifact hash at its launch barrier, so edited bytes ask again.
+/// The command hash still binds the approval to this command in this directory.
+#[test]
+fn a_script_review_without_an_owner_route_keeps_both_choices() {
+    for harness in ["codex", "claude-code", "omp", "pi"] {
+        for command in SCRIPTS {
+            let (token, reason) = outcome(&script_request(harness, command), Fallback::CommandHash);
+            assert!(
+                token.is_some(),
+                "{harness} {command} offers Allow once and Always allow"
+            );
+            assert_eq!(reason, None, "{harness} {command}");
+        }
+    }
+    let first = outcome(&script_request("codex", SCRIPTS[0]), Fallback::CommandHash).0;
+    let second = outcome(&script_request("codex", SCRIPTS[2]), Fallback::CommandHash).0;
+    assert_ne!(
+        first, second,
+        "the hash binds the command it was approved for"
+    );
+}
+
+/// A script launch never gets the proven exact-action token: its approval is
+/// saved under the command hash, so it covers this command only and never
+/// claims the bytes behind it. `Fallback::Strict` is the caller that wants the
+/// refusal itself, and it still sees it.
+#[test]
+fn a_script_launch_never_claims_a_proven_execution_binding() {
+    for harness in ["codex", "omp", "pi"] {
+        for command in SCRIPTS {
+            assert_eq!(
+                outcome(&script_request(harness, command), Fallback::Strict),
+                (None, Some("script_execution_binding_unavailable".into())),
+                "{harness} {command}"
+            );
+        }
+    }
 }
 
 #[test]
@@ -198,7 +257,7 @@ fn binding_request(command: &str, action_type: &str) -> NativeExactActionRequest
 }
 
 fn binding(request: &NativeExactActionRequestV1, fallback: Fallback) -> Option<String> {
-    match decide_with(request, &ResidentEngines, fallback).unwrap() {
+    match decide_with(request, &ResidentEngines { guard_home: None }, fallback).unwrap() {
         NativeExactActionPayloadV1::ReviewBinding { binding } => binding,
         _ => panic!("a review-binding query answers with a binding"),
     }
@@ -219,7 +278,7 @@ fn allow_once_reaches_the_retry_of_any_review() {
             "{command}"
         );
         let NativeExactActionPayloadV1::ReviewBinding { binding } =
-            decide(&request, &ResidentEngines).unwrap()
+            decide(&request, &ResidentEngines { guard_home: None }).unwrap()
         else {
             panic!("a review-binding query answers with a binding");
         };

@@ -79,4 +79,8 @@ runs:
           throw "CI-built Windows native runtime was not downloaded"
         }
         $env:HOL_GUARD_NATIVE = "force"
+        # This frozen build carries no packaged compiler, and daemon startup
+        # asks one whether a release bundle is installed. The multicall runtime
+        # is the compiler release packaging seals, so name it the same way.
+        $env:HOL_GUARD_NATIVE_SOURCE_COMPILER = $env:HOL_GUARD_NATIVE_BINARY
         uv run --no-sync pytest "tests/test_frozen_windows_daemon_bootstrap.py::test_packaged_windows_core_bootstrap_retry_and_repair[${{ inputs.native-diagnostics }}]" --tb=short -rP

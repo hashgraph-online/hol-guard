@@ -193,9 +193,11 @@ def test_private_marker_handles_short_writes_and_rejects_links(tmp_path: Path, m
 def test_mutation_requirement_accepts_exclusive_lease_and_rejects_shared_lease(tmp_path: Path) -> None:
     with hold_command_control_authority_lock(tmp_path):
         require_command_control_mutation_lease(tmp_path)
-    with hold_command_control_authority_lock(tmp_path, shared=True):
-        with pytest.raises(NativeCommandControlMutationRequiredError):
-            require_command_control_mutation_lease(tmp_path)
+    with (
+        hold_command_control_authority_lock(tmp_path, shared=True),
+        pytest.raises(NativeCommandControlMutationRequiredError),
+    ):
+        require_command_control_mutation_lease(tmp_path)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX retained-inode identity replacement fault")
@@ -389,10 +391,11 @@ def test_lease_timeout_reports_unavailability_rather_than_a_verdict(tmp_path: Pa
 
 def _startup_view_with_store(store: object) -> object:
     from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHTTPServer
+    from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
     server = object.__new__(_GuardDaemonHTTPServer)
     server.store = store  # type: ignore[attr-defined]
-    return _GuardDaemonHTTPServer._startup_extension_control_view(server)
+    return _GuardDaemonHTTPServer._startup_extension_control_view(server, BUILT_IN_COMMAND_EXTENSION_REGISTRY)
 
 
 def test_daemon_startup_falls_back_to_a_shared_read_when_the_lease_is_busy() -> None:
@@ -600,8 +603,8 @@ def test_refresh_serves_the_held_snapshot_when_the_lease_is_busy(monkeypatch: py
     assert served == [held]
 
 
-def test_github_workflow_hook_floors_a_busy_authority_lease(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A busy lease floors the workflow hook rather than raising out of it."""
+def test_github_workflow_hook_answers_a_busy_authority_lease_with_the_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A busy lease is a host outage, raised before any approval use is claimed."""
 
     from codex_plugin_scanner.guard.cli import commands_hook_github_workflow as hook_module
     from codex_plugin_scanner.guard.models import GuardArtifact
@@ -612,28 +615,33 @@ def test_github_workflow_hook_floors_a_busy_authority_lease(monkeypatch: pytest.
     descriptor = _Descriptor()
     monkeypatch.setattr(hook_module, "_runtime_github_workflow_descriptor", lambda *a, **k: descriptor)
     monkeypatch.setattr(hook_module, "github_workflow_capability_required", lambda store, request_id: False)
+    monkeypatch.setattr(hook_module, "resolved_github_workflow_capability_preflight", lambda *_args: True)
+    monkeypatch.setattr(
+        hook_module,
+        "claim_resolved_github_workflow_authorization",
+        lambda *_args: pytest.fail("a busy lease must not claim an approval use"),
+    )
 
     class _Store:
         def read_extension_control_authority_for_registry(self, registry: object, *, read_only: bool = False) -> None:
             raise NativeCommandControlAuthorityUnavailableError(shared=read_only)
 
-    state = hook_module.prepare_github_workflow_hook_state(
-        GuardArtifact(
-            artifact_id="artifact-1",
-            name="build",
-            harness="github",
-            artifact_type="workflow",
-            source_scope="project",
-            config_path=".github/workflows/build.yml",
-            command="gh workflow run build.yml",
-        ),
-        workspace=None,
-        guard_home=Path("/nonexistent-guard-home"),
-        config=object(),
-        store=_Store(),
-        approval_request_id="request-1",
-    )
+    with pytest.raises(hook_module.GitHubWorkflowEvaluationUnavailableError) as error:
+        hook_module.prepare_github_workflow_hook_state(
+            GuardArtifact(
+                artifact_id="artifact-1",
+                name="build",
+                harness="github",
+                artifact_type="workflow",
+                source_scope="project",
+                config_path=".github/workflows/build.yml",
+                command="gh workflow run build.yml",
+            ),
+            workspace=None,
+            guard_home=Path("/nonexistent-guard-home"),
+            config=object(),
+            store=_Store(),
+            approval_request_id="request-1",
+        )
 
-    assert state.artifact.metadata["command_action_floor"] == "require-reapproval"
-    assert state.artifact.metadata["command_evaluation_status"] == "native_unavailable"
-    assert state.authorization_claimed is False
+    assert error.value.code == "native_github_workflow_authority_unavailable"

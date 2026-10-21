@@ -51,6 +51,22 @@ _PROBES_FOR_ABSENCE = frozenset(
         "observed-ls-lockfile-probe-mixed",
         "queue-grep-head-wc-absent-tmp-trace",
         "session-grep-roots-one-missing-tmp-sibling",
+        # A scratch directory under the temporary root, probed for an
+        # optional dependency tree and a stale temp directory. The listing
+        # prints only an error, which is the whole shape.
+        "gauntlet-ls-stage-missing-modules",
+        "gauntlet-ls-stage-missing-hidden-tmp",
+        "gauntlet-ls-stage-missing-hidden-leaf",
+        "observed-ls-06",
+        # A sibling checkout that keeps no workflows, probed for them.
+        "sibling-ls-missing-github-workflows",
+        "sibling-find-missing-github-workflows",
+        "gauntlet-sibling-ls-missing-github-workflows",
+        "gauntlet-sibling-find-missing-github-workflows",
+        # A `-C` route to a directory that was never cloned: the whole point
+        # of the case is that Git prints the path it could not enter.
+        "observed-git-18",
+        "gauntlet-git-C-missing-checkout-log",
     }
 )
 
@@ -98,8 +114,31 @@ def _segment_targets(segment: str) -> set[str]:
         if "init" in operands:
             targets.update(_first_path(operands[operands.index("init") + 1 :]))
         if "worktree" in operands and "add" in operands:
-            targets.update(_first_path(_operands(words[words.index("add") + 1 :])))
+            targets.update(_first_path(_worktree_add_operands(words[words.index("add") + 1 :])))
     return targets
+
+
+# ``git worktree add`` flags whose value is the next word. A branch name holds
+# a slash as often as a path does, so a flag's value has to be dropped before
+# the destination can be picked out of the operands.
+_WORKTREE_ADD_FLAGS_TAKING_A_VALUE = frozenset({"-b", "-B", "--reason"})
+
+
+def _worktree_add_operands(words: list[str]) -> list[str]:
+    """The operands of ``git worktree add``, without flags or their values."""
+    operands: list[str] = []
+    skip_value = False
+    for word in words:
+        if skip_value:
+            skip_value = False
+            continue
+        if word in _WORKTREE_ADD_FLAGS_TAKING_A_VALUE:
+            skip_value = True
+            continue
+        if word.startswith("-"):
+            continue
+        operands.append(word)
+    return operands
 
 
 def _first_path(operands: list[str]) -> list[str]:

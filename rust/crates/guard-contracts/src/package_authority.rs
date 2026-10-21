@@ -20,6 +20,9 @@ pub const PACKAGE_AUTHORITY_FEATURE: &str = "package-authority-v1";
 /// Capability advertised when the package-evaluation composition op exists.
 pub const PACKAGE_EVALUATION_COMPOSE_FEATURE: &str = "package-evaluation-compose-v1";
 pub const PACKAGE_APPROVAL_HASH_FEATURE: &str = "package-approval-hash-v1";
+/// Capability advertised when the resident proves which npm an agent will
+/// run, so a script-free registry install can continue without review.
+pub const VERIFIED_NPM_FEATURE: &str = "verified-npm-v1";
 /// Capability advertised when the stored package policy resolution op exists.
 pub const PACKAGE_POLICY_RESOLVE_FEATURE: &str = "package-policy-resolve-v1";
 /// Capability advertised when `supply_chain_eval` is the sole package-verdict
@@ -76,6 +79,45 @@ pub struct PackageIntentParseResultV1 {
     /// Exact targets for ephemeral enforcement, never public intent metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_private_metadata: Option<Value>,
+}
+
+// ---------------------------------------------------------------------------
+// PackageRequestArtifact — `build_package_request_artifact` port entry.
+// ---------------------------------------------------------------------------
+
+/// The review a parsed package intent earns. The host sends the intent it
+/// already holds and the naming the review is filed under; the runtime decides
+/// the artifact id a saved package approval is keyed by.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PackageRequestArtifactRequestV1 {
+    pub schema: String,
+    #[serde(default)]
+    pub request_id: String,
+    /// `intent.to_execution_dict()` — the exact targets and argv the
+    /// fingerprint is taken over, not the redacted public spelling.
+    pub intent: Value,
+    pub harness: String,
+    pub config_path: String,
+    pub source_scope: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PackageRequestArtifactResultV1 {
+    pub schema: String,
+    pub request_id: String,
+    /// SHA-256 of the raw request bytes, binding the result to its request.
+    pub request_sha256: String,
+    /// `ok` or `error`.
+    pub status: String,
+    /// `ok`, `invalid_package_intent`, or `schema_mismatch`.
+    pub code: String,
+    /// The whole artifact, unredacted, on success — `GuardArtifact::to_wire`.
+    /// It carries `runtime_private_metadata`, the exact targets ephemeral
+    /// enforcement needs, which the public `to_dict` serialization drops.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload: Option<Value>,
 }
 
 // ---------------------------------------------------------------------------
@@ -327,6 +369,37 @@ pub struct PackageEvaluationComposeRequestV1 {
     /// `saved_block` only: the saved-policy clear command shown to the user.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clear_command: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// VerifiedNpm — resident op proving which `npm` the agent's `PATH` runs.
+// ---------------------------------------------------------------------------
+
+/// Prove the npm an install will actually execute.
+///
+/// The caller sends the hook's stamped execution environment verbatim and the
+/// workspace the command runs in; the runtime resolves `npm` and `node`,
+/// reads the npm manifest and the npm config files above the project, and
+/// answers with a version only when nothing could have moved the fetch. The
+/// caller never re-derives any part of that answer.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct VerifiedNpmRequestV1 {
+    pub schema: String,
+    pub request_id: String,
+    pub guard_home: String,
+    /// Absolute workspace directory the install runs in.
+    pub workspace: String,
+    /// The hook's stamped execution environment, forwarded unchanged. Any
+    /// shape is accepted so a malformed stamp fails closed in the runtime
+    /// rather than being filtered by the caller. Serialized even when absent:
+    /// the request digest covers the fields exactly as the caller sent them.
+    #[serde(default)]
+    pub environment: Option<Value>,
+    /// Programs the command pipes its output through, which must also resolve
+    /// outside the workspace.
+    #[serde(default)]
+    pub filter_programs: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------

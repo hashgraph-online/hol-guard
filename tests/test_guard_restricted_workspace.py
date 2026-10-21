@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_hook_containment_route as containment_route
 from codex_plugin_scanner.guard import native_restricted_pytest as native
-from codex_plugin_scanner.guard.adapters import zcode_contained_tests
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_workspace as workspace_sink
 from codex_plugin_scanner.guard.runtime.restricted_pytest import RestrictedPytestError
@@ -305,8 +305,15 @@ def test_a_prefix_outside_the_authorized_command_is_rejected(monkeypatch: pytest
             )
 
 
-def test_adapters_map_the_workspace_reason_to_its_profile() -> None:
-    assert zcode_contained_tests._PROFILES["native_workspace_containment_required"] == "workspace-contained-v1"
+def test_adapters_map_the_workspace_reason_to_its_profile(
+    native_approval_reuse_runtime: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Linux runs only this profile, so the resident naming it there pins the mapping.
+    monkeypatch.setattr(containment_route, "host_platform", lambda: "linux")
+    sink = containment_route.native_containment_sink(
+        receipt(), harness="claude-code", bridge=False, payload=payload(), guard_home=native_approval_reuse_runtime
+    )
+    assert sink == ("workspace-contained-v1", None)
 
 
 def test_linux_runs_in_an_overlay_and_applies_only_after_exit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

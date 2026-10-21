@@ -1,9 +1,9 @@
 {
   "schemaVersion": "guard.mcp-server-contribution.v1",
   "id": "mcp.fablecut",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "FableCut",
-  "description": "Reviews the FableCut video-editor tools that change the user's timeline or write files: replacing or patching the project, importing media, loudness, ducking and noise reduction, reference analysis and export. Reading the project, the manual, scopes and export presets is allowed. Off until you turn it on.",
+  "description": "Reviews the FableCut video-editor tools that change the user's timeline or write files: replacing or patching the project, importing media, loudness, ducking and noise reduction, motion tracking, reference analysis, export, and frames read from any local media path. Reading the project, the manual, scopes and export presets is allowed. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -19,7 +19,7 @@
     "command": "npx",
     "package": "fablecut"
   },
-  "riskClasses": ["local-project-overwrite", "local-media-import", "local-file-write"],
+  "riskClasses": ["local-project-overwrite", "local-media-import", "local-media-read", "local-file-write"],
   "tools": [
     { "name": "fablecut_set_project", "state": "review" },
     { "name": "fablecut_patch_project", "state": "review" },
@@ -29,6 +29,8 @@
     { "name": "fablecut_auto_duck", "state": "review" },
     { "name": "fablecut_denoise", "state": "review" },
     { "name": "fablecut_analyze_reference", "state": "review" },
+    { "name": "fablecut_track", "state": "review" },
+    { "name": "fablecut_frame", "state": "review" },
     { "name": "fablecut_status", "state": "allow" },
     { "name": "fablecut_get_project", "state": "allow" },
     { "name": "fablecut_docs", "state": "allow" },
@@ -46,6 +48,8 @@
     "Keep fablecut_set_project on Review: it replaces the whole timeline. fablecut_patch_project with baseRevision refuses to land on an edit made after the agent last read the project.",
     "fablecut_import_media copies a local file or downloads an HTTPS URL into the media folder; it refuses http, localhost and private addresses.",
     "Locked clips and tracks are refused by patch unless an op passes force:true, so lock finished work in the editor before letting an agent edit.",
-    "fablecut_export, fablecut_denoise and fablecut_analyze_reference only write new files under the FableCut data folder (~/FableCut when run with npx)."
+    "fablecut_export, fablecut_denoise and fablecut_analyze_reference only write new files under the FableCut data folder (~/FableCut when run with npx).",
+    "fablecut_track changes the project: it stores the track on the clip and, with apply, adds keyframes to a mask or another clip.",
+    "Keep fablecut_frame on Review: its path can name any local image or video, not only project media, and the frame goes into the model's context. Without a path it renders the timeline. It only writes a frame cache in the FableCut data folder."
   ]
 }

@@ -101,13 +101,15 @@ def test_remote_instapods_review_default_strengthens_allow() -> None:
 
 
 def test_remote_instapods_review_default_strengthens_allow_in_runtime_path(tmp_path: Path) -> None:
+    authority = _instapods_store()
+
     class _RuntimeStore(GuardStore):
         def read_extension_control_authority_for_registry(
             self, registry: object, **_kwargs
         ) -> ExtensionControlAuthorityView:
-            return _instapods_store().read_extension_control_authority_for_registry(registry)
+            return authority.read_extension_control_authority_for_registry(registry)
 
-    guard_home = tmp_path / "guard-home"
+    guard_home = authority.guard_home
     config = GuardConfig(guard_home=guard_home, workspace=tmp_path, mode="prompt", default_action="allow")
     artifact = _remote_artifact("change_plan")
     decision = evaluate_tool_call(

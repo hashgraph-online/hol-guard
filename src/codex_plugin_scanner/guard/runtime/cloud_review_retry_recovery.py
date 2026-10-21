@@ -8,6 +8,9 @@ from ..store import GuardStore
 from .cloud_request_native import cloud_error_texts
 
 _REPLAY_MARKER = "guard_cloud_review_retry_identity_replay"
+# Cloud stores these quarantines against the event id and never revalidates
+# them, so every retry of the same event returns the same result.
+_TERMINAL_QUARANTINE_CODES = frozenset({"review_event_runtime_grant_missing"})
 
 
 def retry_result_message(items: list[dict[str, object]]) -> str:
@@ -103,7 +106,7 @@ def quarantine_terminal_binding_failures(
     events: dict[int, dict[str, object]],
     binding: dict[str, str],
 ) -> tuple[list[int], list[dict[str, object]]]:
-    """Retain retryable results and quarantine immutable continuation mismatches.
+    """Retain retryable results and quarantine results Cloud will never change.
 
     A failed store transition stays retryable so concurrent delivery or a
     changed binding cannot silently discard unacknowledged evidence.
@@ -122,6 +125,19 @@ def quarantine_terminal_binding_failures(
                 sequence,
                 reason="review_continuation_binding_mismatch",
                 error="Cloud rejected the immutable continuation binding; retained for diagnostics.",
+                **binding,
+            )
+            > 0
+        ):
+            continue
+        code = result.get("code")
+        if (
+            isinstance(code, str)
+            and code in _TERMINAL_QUARANTINE_CODES
+            and store.quarantine_review_event(
+                sequence,
+                reason=code,
+                error="Cloud quarantined this event permanently; retained for diagnostics.",
                 **binding,
             )
             > 0

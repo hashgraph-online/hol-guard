@@ -19,7 +19,10 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 
-from .adapters.codex_daemon_dead_fastpath import NATIVE_RUNTIME_DEAD_REASON, NATIVE_RUNTIME_DEAD_REASON_CODE
+from .adapters._modules.codex.codex_daemon_dead_fastpath import (
+    NATIVE_RUNTIME_DEAD_REASON,
+    NATIVE_RUNTIME_DEAD_REASON_CODE,
+)
 from .codex_hook_launch_runtime import run_isolated_hook_process
 from .fork_safety import forget_in_child
 

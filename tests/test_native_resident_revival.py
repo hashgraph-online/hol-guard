@@ -353,10 +353,7 @@ def _unavailable_denial(tmp_path: Path, failure_code: str | None, event_name: st
             harness="codex",
             event_name=event_name,
             reason_code="native_pre_tool_unavailable",
-            workspace=None,
-            home_dir=tmp_path,
             guard_home=tmp_path,
-            recording_only=False,
         )
     finally:
         record_native_resident_client_failure_code(None)

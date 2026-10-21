@@ -107,6 +107,10 @@ pub(crate) fn is_unlinked_connector_setup_reason(text: &str) -> bool {
 /// its own text, and the install hint does not apply to it.
 const BUILD_REVIEW_PREFIX: &str = "HOL Guard requires review before this build or test command";
 
+/// `_READ_REVIEW_PREFIX`: a review of a direct read of one path says why in
+/// its own text, and the advice for narrowing a search does not apply to it.
+const READ_REVIEW_PREFIX: &str = "HOL Guard requires review before this file read";
+
 /// `_REASON_CODE_HINTS`: plain-language next steps keyed by the native
 /// decision's reason code; unknown codes have none.
 fn reason_code_hint(reason_code: &str) -> &'static str {
@@ -161,7 +165,8 @@ pub(crate) fn safe_alternative_reason_with_retry(
     if reason_code.is_none() && approval_queued.is_none() {
         return py_strip(&format!("{reason} {SAFE_ALTERNATIVE_GUIDANCE}")).to_owned();
     }
-    let hint = if reason.starts_with(BUILD_REVIEW_PREFIX) {
+    let hint = if reason.starts_with(BUILD_REVIEW_PREFIX) || reason.starts_with(READ_REVIEW_PREFIX)
+    {
         ""
     } else {
         reason_code_hint(reason_code.unwrap_or_default())
@@ -254,6 +259,21 @@ mod tests {
             ));
             assert_eq!(text.contains("Approve it in the HOL Guard inbox"), offered);
         }
+    }
+
+    #[test]
+    fn a_direct_read_review_leaves_out_the_search_advice() {
+        let read = "HOL Guard requires review before this file read can execute. `src/lib/auth` \
+             is named like a credential store, so Guard holds a read of it.";
+        let text = safe_alternative_reason(read, Some("native_file_read_review"), Some(true));
+        assert!(text.starts_with(read));
+        assert!(!text.contains("A search is checked"), "{text}");
+        let search = safe_alternative_reason(
+            "HOL Guard requires review before this file action can execute.",
+            Some("native_file_read_review"),
+            Some(true),
+        );
+        assert!(search.contains("A search is checked"), "{search}");
     }
 
     #[test]

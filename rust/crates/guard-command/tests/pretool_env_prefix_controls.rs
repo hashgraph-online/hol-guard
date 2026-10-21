@@ -316,3 +316,66 @@ fn a_heap_only_node_options_setting_points_to_the_sandboxed_node_form() {
         );
     }
 }
+
+/// An `env` that names no program prints the environment and exits. Reading it
+/// as an interpreter that launches a file nobody opened blocked `env`,
+/// `env -0` and `env | grep '^PATH='` outright, with no approval row to give
+/// them. The dump is still a read of every secret the session exports, so it
+/// stays at review; what it must not be is unapprovable.
+#[test]
+fn an_env_that_names_no_program_is_reviewed_rather_than_refused() {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("guard-env-dump-{}-{nonce}", std::process::id()));
+    std::fs::create_dir_all(root.join("project")).unwrap();
+    let _cleanup = FixtureCleanup(root.clone());
+
+    for command in [
+        "env",
+        "env -0",
+        "env | grep '^PATH='",
+        "/usr/bin/env | head -5",
+        "env -u NODE_OPTIONS | sort",
+    ] {
+        let result = evaluate(&root, command);
+        assert_ne!(
+            result.reason_code, "native_command_extension_evaluation_failed",
+            "{command}: {}",
+            result.reason
+        );
+        assert!(
+            matches!(
+                result.minimum_action.as_str(),
+                "review" | "sandbox-required"
+            ),
+            "{command}: {} ({})",
+            result.minimum_action,
+            result.reason
+        );
+    }
+
+    // An `env` that does name a program still runs whatever that program is,
+    // so the prefix keeps the evaluation failure it arrived with. `-S` and
+    // `--split-string` carry the program inside the option's own value, so the
+    // launch arrives as one dash-prefixed word and must be read as a launch.
+    for command in [
+        "env -i sh -c 'echo hi'",
+        "env -S bash",
+        "env -Sbash",
+        "env --split-string=sh",
+        "env -iS'sh -c id'",
+    ] {
+        let result = evaluate(&root, command);
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("block", "native_command_extension_evaluation_failed"),
+            "{command}: {}",
+            result.reason
+        );
+    }
+}

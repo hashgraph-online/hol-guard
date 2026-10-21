@@ -59,7 +59,7 @@ from .policy_integrity import (
     is_remote_policy_source,
 )
 from .runtime.actions import GuardActionEnvelope
-from .runtime.approval_context import parse_approval_context_token
+from .runtime.approval_context import approval_context_token_is_well_formed
 from .runtime.scanner_cache import scanner_cache_key
 from .schemas.guard_event_v1 import GuardEventV1
 from .sqlite_tuning import (
@@ -197,6 +197,7 @@ _GUARD_CLOUD_RESET_STATE_KEYS = (
     "headless_app_sync_summary",
     "managed_controls_active",
     "managed_controls_negotiated_capabilities",
+    "network_protection_bundle",
     *_GUARD_CLOUD_COMMAND_STATE_KEYS,
 )
 
@@ -1480,7 +1481,9 @@ def _is_runtime_scoped_exact_match_key(value: str | None) -> bool:
 
 
 def _is_approval_context_token(value: object) -> bool:
-    return parse_approval_context_token(value) is not None
+    # A harness or global policy row drops a hash this rejects, so an
+    # unreachable native authority must not widen the row to the whole family.
+    return approval_context_token_is_well_formed(value, keep_prefixed_when_unavailable=True)
 
 
 def _policy_integrity_ready_for_local_write(payload: Mapping[str, object]) -> bool:

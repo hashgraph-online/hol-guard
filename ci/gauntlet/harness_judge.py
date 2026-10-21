@@ -14,6 +14,8 @@ import shlex
 from typing import Any
 
 from .approval_retry import pinned_retry_outcome, retry_assessment
+from .approval_retry_bash import BASH_LIFECYCLE_ORACLE
+from .approval_retry_bash import assessment as bash_lifecycle_assessment
 from .catalog import Scenario
 from .connector_judge import connector_setup_outcome, connector_tool_outcome, reason_text, ungranted_stop
 from .interruptions import case_interruptions, describe
@@ -22,7 +24,7 @@ from .proofs import BLOCK_REASONS, block_reasons, required_checks
 
 _PRE_EVENTS = frozenset({"PreToolUse", "preToolUse", "beforeShellExecution", "beforeReadFile", "beforeMCPExecution"})
 _PROMPT_EVENTS = frozenset({"UserPromptSubmit", "beforeSubmitPrompt"})
-# Lifecycle callbacks Guard only observes (its LIFECYCLE_OBSERVE_EVENTS, plus
+# Lifecycle callbacks Guard only observes (its _LIFECYCLE_OBSERVE_EVENTS, plus
 # Cursor's lowercase stop). The resident worker answers them with no receipt and
 # counts that answer under the native_fail_safe route.
 _LIFECYCLE_EVENTS = frozenset(
@@ -224,6 +226,8 @@ def _outcome(scenario: Scenario, case: dict[str, Any]) -> tuple[str, str]:
     hooked = [c for c in calls if c.get("tool") in _HOOKED_TOOLS]
     if len(decisions) < len(hooked):
         return "harness-error", f"{len(hooked) - len(decisions)} of {len(hooked)} tool calls ran without a Guard review"
+    if scenario.oracle == BASH_LIFECYCLE_ORACLE:
+        return bash_lifecycle_assessment(scenario.id, case, decisions)
     stops = [d for d in decisions if d["decision"] != "allow"]
     if scenario.expectation == "setup":
         return connector_setup_outcome(scenario, case, decisions, calls)

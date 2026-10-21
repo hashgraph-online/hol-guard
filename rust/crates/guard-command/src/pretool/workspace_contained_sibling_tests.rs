@@ -559,6 +559,11 @@ fn a_script_in_a_sibling_repository_runs_contained_from_its_root() {
             "bun {0}/node_modules/vite/bin/vite.js build --root {0}",
             other.display()
         ),
+        // A heap size ahead of the script leaves the script as the program.
+        format!(
+            "node --max-old-space-size=4096 {}/node_modules/vite/bin/vite.js build",
+            other.display()
+        ),
     ] {
         assert_eq!(
             contained(&reason("omp", &home, &main, &command)),
@@ -584,6 +589,11 @@ fn a_script_outside_a_sibling_repository_keeps_its_review() {
         format!("jq . {}/package.json", tree.display()),
         format!("rg -n report {}/scripts", tree.display()),
         format!("python3 -c 1 {}", script.display()),
+        format!(
+            "node --max-old-space-size=4096 {}/node_modules/vite/bin/vite.js {}/probe.py",
+            tree.parent().unwrap().join("other").display(),
+            loose.display()
+        ),
     ] {
         assert!(
             !contained(&reason("omp", &home, &main, &command)),

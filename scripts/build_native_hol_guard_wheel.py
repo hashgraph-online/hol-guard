@@ -9,18 +9,18 @@ refuses any project other than ``hol-guard``. It rewrites only wheel metadata
 required by the platform artifact plus RECORD hashes.
 """
 
+# pyright: reportImplicitRelativeImport=false
+
 from __future__ import annotations
 
 import argparse
-import base64
-import csv
 import hashlib
-import io
 import json
 import os
 import re
 import stat
-import subprocess
+import subprocess as subprocess
+import sys
 import unicodedata
 import zipfile
 from dataclasses import dataclass
@@ -28,12 +28,34 @@ from email.parser import BytesParser
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO
 
+if __package__:
+    from .native_wheel_metadata import _record_content as _record_content
+    from .native_wheel_metadata import (
+        binding,
+        compiler_manifest,
+        rewrite_wheel_metadata,
+        runtime_manifest,
+        verify_engine,
+    )
+    from .native_wheel_provenance import runtime_capabilities
+else:
+    # Isolated release assembly (-I -S) omits the script directory from sys.path.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from native_wheel_metadata import _record_content as _record_content
+    from native_wheel_metadata import (
+        binding,
+        compiler_manifest,
+        rewrite_wheel_metadata,
+        runtime_manifest,
+        verify_engine,
+    )
+    from native_wheel_provenance import runtime_capabilities
+
 _MAX_RUNTIME_BYTES = 128 * 1024 * 1024
 _MAX_SOURCE_WHEEL_BYTES = 256 * 1024 * 1024
 _MAX_SOURCE_ENTRY_BYTES = 64 * 1024 * 1024
 _MAX_SOURCE_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
 _MAX_SOURCE_ENTRIES = 16_384
-_MAX_CAPABILITIES_BYTES = 64 * 1024
 _PLATFORM_TAG_RE = re.compile(r"^[A-Za-z0-9_.]+$")
 _SHA40_RE = re.compile(r"^[0-9a-f]{40}$")
 _SHA64_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -58,14 +80,6 @@ class SourceWheel:
     record_path: str
     entries: dict[str, bytes]
     modes: dict[str, int]
-
-
-@dataclass(frozen=True, slots=True)
-class RuntimeCapabilities:
-    protocol_version: int
-    runtime_version: str
-    rule_digest: str
-    build_sha: str
 
 
 def _wheel_version_for_filename(version: str) -> str:
@@ -271,61 +285,8 @@ def _packaged_program_digest(source: SourceWheel) -> str:
     return digest
 
 
-def _runtime_capabilities(path: Path) -> RuntimeCapabilities:
-    environment = {
-        key: value
-        for key, value in os.environ.items()
-        if key.upper()
-        in {
-            "COMSPEC",
-            "HOME",
-            "LANG",
-            "PATHEXT",
-            "SYSTEMROOT",
-            "TEMP",
-            "TMP",
-            "TMPDIR",
-            "USERPROFILE",
-            "WINDIR",
-        }
-        or key.upper().startswith("LC_")
-    }
-    try:
-        completed = subprocess.run(
-            (str(path.resolve(strict=True)), "capabilities", "--json"),
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            check=False,
-            timeout=5.0,
-            env=environment,
-        )
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise NativeWheelError("runtime capabilities probe failed") from exc
-    if completed.returncode != 0 or len(completed.stdout) > _MAX_CAPABILITIES_BYTES:
-        raise NativeWheelError("runtime capabilities probe failed")
-    try:
-        payload = json.loads(completed.stdout.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise NativeWheelError("runtime capabilities response is invalid") from exc
-    if not isinstance(payload, dict):
-        raise NativeWheelError("runtime capabilities response is invalid")
-    protocol_version = payload.get("protocol_version")
-    runtime_version = payload.get("runtime_version")
-    rule_digest = payload.get("rule_digest")
-    build_sha = payload.get("build_sha")
-    if (
-        not isinstance(protocol_version, int)
-        or not isinstance(runtime_version, str)
-        or not isinstance(rule_digest, str)
-        or not isinstance(build_sha, str)
-    ):
-        raise NativeWheelError("runtime capabilities response is invalid")
-    return RuntimeCapabilities(
-        protocol_version=protocol_version,
-        runtime_version=runtime_version,
-        rule_digest=rule_digest,
-        build_sha=build_sha,
-    )
+def _runtime_capabilities(path: Path):
+    return runtime_capabilities(path, NativeWheelError)
 
 
 def _verify_runtime_provenance(
@@ -334,9 +295,11 @@ def _verify_runtime_provenance(
     version: str,
     source_sha: str,
     rule_digest: str,
+    engine: str | None = None,
 ) -> bytes:
     before = _load_runtime(path)
     capabilities = _runtime_capabilities(path)
+    verify_engine(path, engine)
     after = _load_runtime(path)
     if not hashlib.sha256(before).digest() == hashlib.sha256(after).digest():
         raise NativeWheelError("runtime changed during capabilities verification")
@@ -349,31 +312,6 @@ def _verify_runtime_provenance(
     if capabilities.build_sha != source_sha:
         raise NativeWheelError("runtime build SHA does not match requested source SHA")
     return before
-
-
-def _rewrite_wheel_metadata(raw: bytes, *, platform_tag: str) -> bytes:
-    lines = raw.decode("utf-8").splitlines()
-    rewritten = [line for line in lines if not line.startswith("Root-Is-Purelib:") and not line.startswith("Tag:")]
-    rewritten.extend(["Root-Is-Purelib: false", f"Tag: py3-none-{platform_tag}"])
-    return ("\n".join(rewritten).rstrip("\n") + "\n").encode("utf-8")
-
-
-def _record_hash(content: bytes) -> str:
-    digest = hashlib.sha256(content).digest()
-    encoded = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
-    return f"sha256={encoded}"
-
-
-def _record_content(entries: dict[str, bytes], *, record_path: str) -> bytes:
-    output = io.StringIO(newline="")
-    writer = csv.writer(output, lineterminator="\n")
-    for name in sorted(entries):
-        if name == record_path:
-            continue
-        content = entries[name]
-        writer.writerow([name, _record_hash(content), str(len(content))])
-    writer.writerow([record_path, "", ""])
-    return output.getvalue().encode("utf-8")
 
 
 def _zip_info(name: str, *, mode: int) -> zipfile.ZipInfo:
@@ -452,33 +390,37 @@ def build_native_wheel(
     source = _load_source_wheel(source_wheel, version=version)
     if base_program_digest is not None and base_program_digest != _packaged_program_digest(source):
         raise NativeWheelError("base program digest must match the packaged native command program")
+    try:
+        bundle = binding(source.entries, source_sha=source_sha, engine=implementation_digest)
+    except ValueError as error:
+        raise NativeWheelError("installed bundle differs from the verified native source or engine") from error
     runtime_bytes = _verify_runtime_provenance(
         runtime,
         version=version,
         source_sha=source_sha,
         rule_digest=rule_digest,
+        engine=implementation_digest if bundle is not None else None,
     )
     runtime_name = "hol-guard-runtime.exe" if platform_tag.startswith("win") else "hol-guard-runtime"
     runtime_path = f"{_NATIVE_DIR}/{runtime_name}"
 
     entries = dict(source.entries)
     modes = dict(source.modes)
-    entries[source.wheel_path] = _rewrite_wheel_metadata(
+    entries[source.wheel_path] = rewrite_wheel_metadata(
         entries[source.wheel_path],
         platform_tag=platform_tag,
     )
     runtime_sha256 = hashlib.sha256(runtime_bytes).hexdigest()
-    manifest = {
-        "schema": "hol-guard-native-runtime.v1",
-        "protocol_version": 1,
-        "package_version": version,
-        "target": target,
-        "platform_tag": platform_tag,
-        "source_sha": source_sha,
-        "rule_digest": rule_digest,
-        "runtime_sha256": runtime_sha256,
-        "runtime_size": len(runtime_bytes),
-    }
+    manifest = runtime_manifest(
+        version=version,
+        target=target,
+        platform_tag=platform_tag,
+        source_sha=source_sha,
+        rule_digest=rule_digest,
+        runtime_sha256=runtime_sha256,
+        runtime_size=len(runtime_bytes),
+        bundle=bundle,
+    )
     entries[runtime_path] = runtime_bytes
     entries[_RUNTIME_MANIFEST_PATH] = (json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n").encode()
     modes[runtime_path] = 0o755
@@ -486,19 +428,12 @@ def build_native_wheel(
     if implementation_digest is not None:
         # The runtime hosts the source compiler, so the packaged compiler
         # manifest binds the compiler identity to the runtime executable bytes.
-        source_compiler_manifest = {
-            "schema": "hol-guard-native-source-compiler.v2",
-            "protocol_version": 1,
-            "package_version": version,
-            "target": target,
-            "platform_tag": platform_tag,
-            "source_sha": source_sha,
-            "implementation_digest": implementation_digest,
-            "base_program_digest": base_program_digest,
-            "executable": runtime_name,
-            "compiler_sha256": runtime_sha256,
-            "compiler_size": len(runtime_bytes),
-        }
+        source_compiler_manifest = compiler_manifest(
+            runtime=manifest,
+            implementation_digest=implementation_digest,
+            base_program_digest=base_program_digest,
+            executable=runtime_name,
+        )
         entries[_SOURCE_COMPILER_MANIFEST_PATH] = (
             json.dumps(source_compiler_manifest, sort_keys=True, separators=(",", ":")) + "\n"
         ).encode()

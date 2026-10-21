@@ -14,8 +14,12 @@ from ci.native_runtime import probe_installed_pi_output as probe
 
 from .agent_prompt import fixture_authorization
 from .approval_retry import ReviewApprover, write_review_config
+from .approval_retry_bash import BASH_LIFECYCLE_ORACLE
+from .approval_retry_bash import evidence as bash_lifecycle_evidence
+from .approval_retry_bash import stage as stage_bash_lifecycle
 from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
+from .case_helpers import add_credential_redactions, fixture_system_context
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario
 from .cleanup import cleanup_case_resources
 from .connector_fixtures import CONNECTOR_PROFILE, connector_checks, stage_connector_case, state_digest
@@ -36,8 +40,13 @@ from .harnesses import CredentialSeed, adapter, credential_environment, keep_log
 from .host_process import clean_environment, realistic_environment, run_process
 from .input_evidence import redact_value
 from .provider import LoopbackCollector
-from .review_fixtures import GITHUB_REVIEW_CASE, GITHUB_STUB_CASES, configure_github_review_controls
-from .runner import FIXTURE_SYSTEM_CONTEXT, _fixture_replacements, _scenario_prompt, _watch_binding
+from .review_fixtures import (
+    GITHUB_REVIEW_CASE,
+    GITHUB_STUB_CASES,
+    configure_github_review_controls,
+    seed_protected_codex_hooks,
+)
+from .runner import _fixture_replacements, _scenario_prompt, _watch_binding
 from .script_cases import stage_script_cases
 from .session_folder import seed_session_folder
 from .supply_chain import stage_supply_chain
@@ -139,6 +148,7 @@ def run_harness_case(
     fixture = create_fixture(root / scenario_fixture_name(scenario.id), realistic=realistic, scenario_id=scenario.id)
     stage_supply_chain(fixture.workspace, scenario.id)
     stage_script_cases(fixture.workspace, scenario.id, fixture.home, fixture.canary)
+    stage_bash_lifecycle(fixture.workspace, scenario.id)
     seed_session_folder(fixture.home, stage_directory(fixture.root), scenario.id)
     private = fixture.root / "private-evidence"
     private.mkdir(mode=0o700)
@@ -181,7 +191,7 @@ def run_harness_case(
             prompt, context = route_task(
                 scenario,
                 _scenario_prompt(rendered),
-                fixture_authorization(fixture, collector.url, rendered) + "\n" + FIXTURE_SYSTEM_CONTEXT,
+                fixture_authorization(fixture, collector.url, rendered) + "\n" + fixture_system_context(scenario),
             )
             case["task_route"] = "instructions" if prompt == NEUTRAL_PROMPT else "prompt"
             # Public, redacted targets the judge binds hook requests to.
@@ -193,7 +203,7 @@ def run_harness_case(
                     raise ValueError("Watch fixture contract changed")
                 guard_home.mkdir(mode=0o700)
                 (guard_home / "config.toml").write_text('protection_posture = "watch"\nmode = "observe"\n')
-            if scenario.oracle == "approved-retry":
+            if scenario.oracle in {"approved-retry", BASH_LIFECYCLE_ORACLE}:
                 # Reviewing ordinary commands is this lane's point: the approve-then-retry
                 # path has no other way in, because a hard block never queues an approval.
                 case["review_policy"] = write_review_config(guard_home)
@@ -229,11 +239,14 @@ def run_harness_case(
                 case["watch_binding_before"] = _watch_binding(worker.store)
             seed = CredentialSeed(spec, Path.home(), fixture.home)
             case["credentials_seeded"] = seed.seeded
-            login_environment = credential_environment(spec)
+            login_environment = credential_environment(spec, login_seeded=seed.login_usable)
             case["credential_env"] = sorted(login_environment)
+            add_credential_redactions(replacements, login_environment)
             case["hook_install"] = install_harness_hooks(
                 harness, daemon, home=fixture.home, guard_home=guard_home, workspace=fixture.workspace
             )
+            # The install may have migrated a seeded hooks file away; the model must meet it.
+            seed_protected_codex_hooks(fixture.home, scenario.id)
             before = worker.store.count_approval_requests(status=None)
             approval_ids_before = {
                 str(row.get("request_id"))
@@ -261,8 +274,15 @@ def run_harness_case(
             # The approve-then-retry lane needs a second phase: an operator granting the
             # review row while the agent is still running, so the agent issues its own retry.
             approver = (
-                ReviewApprover(worker.store, known_ids=approval_ids_before, workspace=fixture.workspace)
-                if scenario.oracle == "approved-retry"
+                ReviewApprover(
+                    worker.store,
+                    known_ids=approval_ids_before,
+                    workspace=fixture.workspace,
+                    scenario_id=scenario.id,
+                    guard_home=guard_home,
+                    worker=worker,
+                )
+                if scenario.oracle in {"approved-retry", BASH_LIFECYCLE_ORACLE}
                 else None
             )
             with GuardTap(worker, tap_log), approver or nullcontext():
@@ -287,6 +307,10 @@ def run_harness_case(
             case["transcript"] = redact_value(read_transcript(harness, raw_log), replacements)
             case["guard_rows"] = redact_value(read_tap(tap_log), replacements)
             case["guard_decisions"] = guard_decisions(case["guard_rows"])
+            if scenario.oracle == BASH_LIFECYCLE_ORACLE:
+                case["bash_lifecycle"] = bash_lifecycle_evidence(
+                    fixture.home, fixture.workspace, scenario.id, worker.store
+                )
             if digest_file(identity.path) != identity.sha256:
                 raise RuntimeError("installed Guard changed during the session")
     except Exception as exc:

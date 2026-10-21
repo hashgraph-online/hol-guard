@@ -110,11 +110,7 @@ fn first_sensitive_entry(
             if !tree::descendant_allowed(&path, &root, metadata.is_file()) {
                 // The name alone holds the search; a clearance may admit it.
                 if !clearance.is_some_and(|clearance| clearance.admits(&path, &metadata)) {
-                    return path
-                        .strip_prefix(&root)
-                        .ok()
-                        .and_then(|relative| relative.to_str())
-                        .map(str::to_owned);
+                    return shell_relative(&path, &root);
                 }
                 if metadata.is_file() {
                     continue;
@@ -124,11 +120,7 @@ fn first_sensitive_entry(
                 if clearance.is_some_and(|clearance| clearance.clears(&path)) {
                     continue;
                 }
-                return path
-                    .strip_prefix(&root)
-                    .ok()
-                    .and_then(|relative| relative.to_str())
-                    .map(str::to_owned);
+                return shell_relative(&path, &root);
             }
         }
         if metadata.is_dir() {
@@ -143,6 +135,19 @@ fn first_sensitive_entry(
         }
     }
     None
+}
+
+/// `path` below `root`, spelled with `/` as the command line spells it. The
+/// name is joined to the operand the agent typed, so a Windows separator here
+/// would leave a path mixed from both.
+fn shell_relative(path: &std::path::Path, root: &std::path::Path) -> Option<String> {
+    let parts = path
+        .strip_prefix(root)
+        .ok()?
+        .components()
+        .map(|part| part.as_os_str().to_str())
+        .collect::<Option<Vec<_>>>()?;
+    Some(parts.join("/"))
 }
 
 #[cfg(test)]

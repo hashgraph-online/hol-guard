@@ -5,7 +5,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::{containment, handoff, lease, restart_budget, CLIENT_RETRY_DELAY};
-use crate::resident_diagnostics::{observe, Phase};
+use crate::resident_diagnostics::{note, observe, Phase};
 use crate::resident_state::{
     acquire_startup_lock, clear_stale_startup_lock, discover_home_states_prefer, next_generation,
     runtime_digest, state_scope, token_from_state, validate_package_process_identity,
@@ -18,6 +18,12 @@ use crate::resident_state::{
 const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(9_000);
 const DAEMON_LIFECYCLE_START_TIMEOUT: Duration =
     Duration::from_millis(super::DAEMON_LIFECYCLE_TIMEOUT_CEILING_MS);
+// Each owner-lock probe also runs discovery, so poll the exiting owner more
+// slowly than the live-state retry loop.
+const OWNER_RELEASE_POLL: Duration = Duration::from_millis(25);
+// An exiting owner releases the lock within about a second of retiring its
+// state, even with diagnostics draining; a holder past this is not exiting.
+const OWNER_RELEASE_WAIT: Duration = Duration::from_secs(2);
 
 fn startup_limit(payload: &[u8]) -> Duration {
     let value = crate::strict_json_value(payload).ok();
@@ -63,8 +69,9 @@ fn try_home_states(
     preferred_digest: &str,
 ) -> Result<Option<Vec<u8>>, String> {
     let runtime_digest = runtime_digest()?;
-    for (scope, _digest, state) in discover_home_states_prefer(state_base, Some(preferred_digest))?
-    {
+    let states = discover_home_states_prefer(state_base, Some(preferred_digest))?;
+    note("client_states", states.len());
+    for (scope, _digest, state) in states {
         if deadline.saturating_duration_since(Instant::now()).is_zero() {
             return Ok(None);
         }
@@ -77,6 +84,7 @@ fn try_home_states(
             &runtime_digest,
             deadline,
         ) {
+            note("client_state_foreign_retired", 1);
             continue;
         }
         let same_runtime = runtime_digest == state.runtime_sha256;
@@ -127,10 +135,16 @@ fn try_home_states(
                     &runtime_digest,
                     &response,
                     deadline,
-                ) => {}
+                ) =>
+            {
+                note("client_state_foreign_rejected", 1);
+            }
             Ok(response) => return Ok(Some(response)),
             Err(error)
-                if containment::skip_failed_home_state_request(&error, same_runtime, &state) => {}
+                if containment::skip_failed_home_state_request(&error, same_runtime, &state) =>
+            {
+                note("client_state_request_skipped", 1);
+            }
             Err(error) => {
                 let code = if error.code.len() <= 96
                     && !error.code.is_empty()
@@ -148,19 +162,87 @@ fn try_home_states(
     Ok(None)
 }
 
-/// Whether discovery finds a live resident that runs `digest`.
-fn live_resident_of_runtime(state_base: &Path, digest: &str) -> bool {
-    // An unreadable state keeps the old behaviour of spending the budget.
-    // Discovery also returns this runtime's states whose process has exited,
-    // so a state counts as dead only when its process is provably gone or its
-    // PID now belongs to a process with another start marker. A process that
-    // cannot be inspected still counts as live.
-    match discover_home_states_prefer(state_base, Some(digest)) {
-        Ok(states) => states
-            .iter()
-            .any(|(_, _, state)| state.runtime_sha256 == digest && state_may_be_live(state)),
-        Err(_) => true,
+/// What holds the home-wide owner lock, as far as discovery can tell.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OwnerHolder {
+    /// A live resident of this runtime, or discovery could not say.
+    ThisRuntime,
+    /// A live resident of another Guard install.
+    OtherRuntime,
+    /// No live resident: the holder already retired its generation file.
+    Exiting,
+}
+
+/// Return once a spawned resident can take the home-wide owner lock.
+///
+/// A live resident from another Guard install holds the owner lock. A spawn
+/// here could only fail on that lock, so name the owner at once instead of
+/// spending the restart budget on it. A live resident of this runtime holding
+/// the lock is unhealthy, not foreign: it keeps spending the budget so the
+/// restart circuit still opens.
+///
+/// This client holds the startup lock, so the holder may also be a resident
+/// that has retired its generation file and not yet released the lock on its
+/// way out. A successor spawned in that window fails on the lock at once, and
+/// the spawn wait then spends the whole startup limit on a resident that never
+/// publishes. Only that holder is waited for, and for at most
+/// `OWNER_RELEASE_WAIT` within `deadline`, before the owner is named.
+fn await_owner_release(state_base: &Path, digest: &str, deadline: Instant) -> Result<(), String> {
+    await_owner_release_with(
+        state_base,
+        deadline.min(Instant::now() + OWNER_RELEASE_WAIT),
+        || owner_holder(state_base, digest),
+    )
+}
+
+fn await_owner_release_with(
+    state_base: &Path,
+    release_deadline: Instant,
+    mut holder: impl FnMut() -> OwnerHolder,
+) -> Result<(), String> {
+    loop {
+        match super::acquire_managed_owner_lock(state_base) {
+            Err(error) if error == "native_resident_owner_busy" => match holder() {
+                OwnerHolder::ThisRuntime => return Ok(()),
+                OwnerHolder::OtherRuntime => return Err(error),
+                OwnerHolder::Exiting if Instant::now() >= release_deadline => return Err(error),
+                OwnerHolder::Exiting => {}
+            },
+            probe => {
+                drop(probe);
+                return Ok(());
+            }
+        }
+        thread::sleep(
+            OWNER_RELEASE_POLL.min(release_deadline.saturating_duration_since(Instant::now())),
+        );
     }
+}
+
+fn owner_holder(state_base: &Path, digest: &str) -> OwnerHolder {
+    // An unreadable state keeps the old behaviour of spending the budget.
+    match discover_home_states_prefer(state_base, Some(digest)) {
+        Ok(states) => classify_owner_holder(states.iter().map(|(_, _, state)| state), digest),
+        Err(_) => OwnerHolder::ThisRuntime,
+    }
+}
+
+/// Discovery also returns states whose process has exited, so a state counts
+/// as dead only when its process is provably gone or its PID now belongs to a
+/// process with another start marker. A process that cannot be inspected
+/// still counts as live.
+fn classify_owner_holder<'a>(
+    states: impl IntoIterator<Item = &'a crate::resident_state::ResidentState>,
+    digest: &str,
+) -> OwnerHolder {
+    let mut holder = OwnerHolder::Exiting;
+    for state in states.into_iter().filter(|state| state_may_be_live(state)) {
+        if state.runtime_sha256 == digest {
+            return OwnerHolder::ThisRuntime;
+        }
+        holder = OwnerHolder::OtherRuntime;
+    }
+    holder
 }
 
 fn state_may_be_live(state: &crate::resident_state::ResidentState) -> bool {
@@ -275,21 +357,12 @@ fn client_request_with_deadline_inner(
         return Ok(response);
     }
     let (generation, token, mut spawned) = observe(Phase::ClientSpawn, || -> Result<_, String> {
-        // A resident from another Guard install holds the home-wide owner
-        // lock. A spawn here could only fail on that lock, so name the owner
-        // instead of spending the restart budget on it. A live resident of
-        // this runtime holding the lock is unhealthy, not foreign: it keeps
-        // spending the budget so the restart circuit still opens.
-        match super::acquire_managed_owner_lock(state_base) {
-            Err(error)
-                if error == "native_resident_owner_busy"
-                    && !live_resident_of_runtime(state_base, &digest) =>
-            {
-                return Err(error)
-            }
-            probe => drop(probe),
-        }
-        restart_budget::consume_for_spawn(state_base, &scope)?;
+        await_owner_release(
+            state_base,
+            &digest,
+            overall_deadline.min(Instant::now() + startup_limit(payload)),
+        )?;
+        restart_budget::consume_for_spawn(state_base, &scope, overall_deadline)?;
         let generation = next_generation(&scope, &digest)?;
         let mut token = [0u8; crate::AUTH_TOKEN_BYTES];
         getrandom::fill(&mut token).map_err(|_| "native_client_random_failed".to_owned())?;

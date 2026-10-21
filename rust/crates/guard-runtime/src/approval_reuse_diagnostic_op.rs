@@ -116,7 +116,52 @@ fn evaluate(request: &ApprovalReuseDiagnosticRequestV1) -> Result<Value, String>
     connection
         .busy_timeout(std::time::Duration::from_millis(5000))
         .map_err(|_| "native_approval_reuse_diagnostic_store_unavailable".to_owned())?;
-    diagnose(&connection, request, now)
+    let answer = diagnose(&connection, request, now)?;
+    Ok(with_reuse(request, answer))
+}
+
+/// Say what the miss means for reuse, when the caller named its recomputed
+/// action. A near match that could not authorize the request is saved
+/// evidence the caller must not read as a grant, so the resident composes
+/// the reuse decision here instead of leaving the caller to name a saved
+/// action for it. The stored hash is read by the same token grammar the
+/// resident mints, so the decision also carries whether the rejected
+/// approval was ever bound to the context-token contract.
+fn with_reuse(request: &ApprovalReuseDiagnosticRequestV1, answer: Value) -> Value {
+    let Some(current_action) = request.current_action.as_ref() else {
+        return answer;
+    };
+    if answer.get("need").is_some() {
+        return answer;
+    }
+    let reason = answer
+        .get("reason")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let saved_present = reason.is_some();
+    let saved_action = saved_present.then(|| json!("allow"));
+    let mut decision = guard_command::approval_reuse::evaluate_approval_reuse(
+        current_action,
+        saved_action.as_ref(),
+        Some(saved_present),
+        reason.as_deref(),
+        false,
+        false,
+    );
+    if let Some(stored) = answer.get("stored_hash") {
+        if stored.as_str().is_some_and(|value| !value.is_empty()) {
+            decision.saved_artifact_hash_is_context_token =
+                Some(crate::context_digest::parse_context_token(stored).is_some());
+        }
+    }
+    let Ok(reuse) = serde_json::to_value(&decision) else {
+        return answer;
+    };
+    let mut answer = answer;
+    if let Some(object) = answer.as_object_mut() {
+        object.insert("reuse".to_owned(), reuse);
+    }
+    answer
 }
 
 /// Probe the store and name the first reason a near match did not authorize.
@@ -287,4 +332,97 @@ fn diagnose_row(
         return Some(("approval_reuse_identity_changed".to_owned(), hash()));
     }
     None
+}
+
+#[cfg(test)]
+mod with_reuse_tests {
+    use super::*;
+
+    const CONTEXT_TOKEN_PAYLOAD: &str = "eyJjYXBhYmlsaXRpZXMiOiJhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwiY29udGVudCI6ImJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIiLCJpZGVudGl0eSI6ImNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2MiLCJwb2xpY3kiOiJkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkIiwic2FuZGJveCI6ImVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWUiLCJ2ZXJzaW9uIjoxfQ";
+
+    fn request(current_action: Option<Value>) -> ApprovalReuseDiagnosticRequestV1 {
+        ApprovalReuseDiagnosticRequestV1 {
+            schema: APPROVAL_REUSE_DIAGNOSTIC_REQUEST_SCHEMA.to_owned(),
+            request_id: String::new(),
+            store_path: String::new(),
+            guard_home: String::new(),
+            harness: "claude".to_owned(),
+            artifact_id: "artifact".to_owned(),
+            artifact_hash: None,
+            workspace: None,
+            publisher: None,
+            now: "2026-01-01T00:00:00Z".to_owned(),
+            evidence: None,
+            current_action,
+        }
+    }
+
+    #[test]
+    fn answer_is_unchanged_without_a_current_action() {
+        let answer = json!({"reason": "approval_reuse_content_changed", "stored_hash": "deadbeef"});
+        assert_eq!(with_reuse(&request(None), answer.clone()), answer);
+    }
+
+    #[test]
+    fn a_need_is_never_composed() {
+        let answer = json!({"need": "integrity_evidence", "policy": true, "local_once": false});
+        assert_eq!(
+            with_reuse(&request(Some(json!("review"))), answer.clone()),
+            answer
+        );
+    }
+
+    #[test]
+    fn no_near_match_composes_the_no_saved_decision_projection() {
+        let answer = json!({"reason": null, "stored_hash": null});
+        let composed = with_reuse(&request(Some(json!("review"))), answer);
+        let reuse = &composed["reuse"];
+        assert_eq!(composed["reason"], Value::Null);
+        assert_eq!(reuse["status"], "not-applicable");
+        assert_eq!(reuse["reason_code"], "approval_reuse_no_saved_decision");
+        assert_eq!(reuse["action"], "review");
+        assert_eq!(reuse["saved_action"], Value::Null);
+        assert_eq!(reuse["should_claim"], false);
+        // Nothing was stored, so the token provenance stays unstated.
+        assert!(reuse.get("saved_artifact_hash_is_context_token").is_none());
+    }
+
+    #[test]
+    fn a_rejected_near_match_never_grants_reuse() {
+        let answer = json!({
+            "reason": "approval_reuse_content_changed",
+            "stored_hash": "0".repeat(64),
+        });
+        let composed = with_reuse(&request(Some(json!("review"))), answer);
+        let reuse = &composed["reuse"];
+        assert_eq!(reuse["status"], "rejected");
+        assert_eq!(reuse["action"], "review");
+        assert_eq!(reuse["should_claim"], false);
+        // A legacy artifact hash was never bound to the context-token contract.
+        assert_eq!(reuse["saved_artifact_hash_is_context_token"], false);
+    }
+
+    #[test]
+    fn a_stored_context_token_is_named_as_one() {
+        let answer = json!({
+            "reason": "approval_reuse_content_changed",
+            "stored_hash": format!(
+                "{}{CONTEXT_TOKEN_PAYLOAD}",
+                guard_contracts::APPROVAL_CONTEXT_TOKEN_PREFIX
+            ),
+        });
+        let composed = with_reuse(&request(Some(json!("review"))), answer);
+        assert_eq!(
+            composed["reuse"]["saved_artifact_hash_is_context_token"],
+            true
+        );
+    }
+
+    #[test]
+    fn a_saved_allow_never_lowers_a_blocked_request() {
+        let answer = json!({"reason": "approval_reuse_expired", "stored_hash": null});
+        let composed = with_reuse(&request(Some(json!("block"))), answer);
+        assert_eq!(composed["reuse"]["action"], "block");
+        assert_eq!(composed["reuse"]["should_claim"], false);
+    }
 }

@@ -1,5 +1,8 @@
 //! Walking a launcher's own options to the program it runs.
-use super::{is_launcher, prefix_reads_a_program_file, program_index};
+use super::{
+    command_reads_a_program_file, is_launcher, launch_only, prefix_reads_a_program_file,
+    program_index,
+};
 
 fn program(command: &str) -> Option<&str> {
     let words: Vec<&str> = command.split_whitespace().collect();
@@ -128,5 +131,120 @@ fn a_stacked_launcher_is_walked_to_its_own_program() {
         "nohup setsid stdbuf -oL cargo test",
     ] {
         assert!(!reads(command), "{command}");
+    }
+}
+
+/// `env` is an interpreter only when a program follows it. With nothing but
+/// its own options it writes the environment and exits, so nothing unread
+/// runs and the command stays reviewable instead of refused outright.
+#[test]
+fn an_env_without_a_program_launches_nothing() {
+    for command in [
+        "env",
+        "env -0",
+        "env -i",
+        "env -u NODE_OPTIONS",
+        "env -uNODE_OPTIONS",
+        "env --unset NODE_OPTIONS",
+        "env --unset=NODE_OPTIONS",
+        "env --",
+    ] {
+        assert!(!dumps(command), "{command}");
+    }
+    for command in [
+        "env sh -c 'id'",
+        "env -i sh -c 'id'",
+        "env -u NODE_OPTIONS bash -lc 'id'",
+        "env -- bash -lc 'id'",
+        "env ./deploy.sh",
+    ] {
+        assert!(dumps(command), "{command}");
+    }
+}
+
+/// `-S`/`--split-string` carries its program inside its own value, so the
+/// whole launch arrives as one dash-prefixed word. An option scan that skipped
+/// whatever it did not recognise would read these as environment dumps and
+/// offer a shell launch an approval, so every option but the ones known to run
+/// nothing says a program runs.
+#[test]
+fn an_env_that_carries_its_program_in_an_option_launches_it() {
+    for command in [
+        "env -S bash",
+        "env -Sbash",
+        "env --split-string=sh",
+        "env --split-string 'sh -c id'",
+        "env -iS'sh -c id'",
+        "env -C /tmp",
+        "env --chdir=/tmp",
+        "env -P /opt/bin",
+        "env --unknown-option",
+    ] {
+        assert!(dumps(command), "{command}");
+    }
+}
+
+fn dumps(command: &str) -> bool {
+    command_reads_a_program_file(command)
+}
+
+/// An `env` that names no program is a wrapper around nothing: it writes the
+/// environment and exits. No launcher grammar covers it, so the wrapper arm
+/// refused it along with the shells, and `env`, `env -0` and
+/// `env | grep '^PATH='` blocked with no approval to give them. The pipeline
+/// behind the dump is read the same way any other text is.
+#[test]
+fn an_env_that_runs_no_program_is_a_launch_of_what_the_text_names() {
+    for command in [
+        "env",
+        "env -0",
+        "env | grep ^PATH=",
+        "/usr/bin/env | head -5",
+        "env -u NODE_OPTIONS | sort",
+        "env FOO=bar",
+    ] {
+        assert!(launch_only(command), "{command}");
+    }
+    // An `env` that does name a program hands it work this scan never read,
+    // and a pipeline member that does keeps its failure too.
+    for command in [
+        "env sh -c id",
+        "env -S bash",
+        "env ./deploy.sh",
+        "env | xargs bash -c",
+        "sudo env",
+    ] {
+        assert!(!launch_only(command), "{command}");
+    }
+}
+
+/// An assignment ends `env`'s option parsing, so a flag standing after one is
+/// the name of the program it runs. Reading the operands out of order would
+/// read `env PATH=. -i` as a dump and hand a file named `-i` an approval.
+#[test]
+fn an_option_after_an_env_assignment_is_the_program_it_runs() {
+    for command in [
+        "env PATH=. -i",
+        "env FOO=bar sh -c id",
+        "env -u NODE_OPTIONS FOO=bar ./deploy.sh",
+        "env FOO=bar -0",
+    ] {
+        assert!(!launch_only(command), "{command}");
+    }
+    for command in ["env FOO=bar BAZ=qux", "env -i FOO=bar"] {
+        assert!(launch_only(command), "{command}");
+    }
+}
+
+/// `--` ends option parsing the same way an assignment does, and what stands
+/// after it is read the same way: `env -- FOO=bar` sets a variable for nothing
+/// and prints the environment, so it is a dump rather than a launch.
+#[test]
+fn an_env_that_names_no_program_after_a_double_dash_is_a_dump() {
+    for command in ["env -- FOO=bar", "env --", "env -i -- FOO=bar BAZ=qux"] {
+        assert!(launch_only(command), "{command}");
+    }
+    for command in ["env -- sh -c id", "env -- FOO=bar ./deploy.sh", "env -- -i"] {
+        assert!(!launch_only(command), "{command}");
     }
 }

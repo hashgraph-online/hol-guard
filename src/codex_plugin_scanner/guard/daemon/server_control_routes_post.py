@@ -18,6 +18,7 @@ from ..approvals import ApprovalRequestAlreadyResolvedError, ApprovalRequestNotF
 from ..native_approval_scope import ApprovalScopeUnavailableError
 from ..native_daemon_route import NativeDaemonRouteError, native_resolve_request
 from ..native_resident_revival import native_route_unavailable_body
+from .background_diagnostics import failure_detail, record_background_event
 from .command_activity_api import handle_command_activity_feedback
 from .extension_control_api import ExtensionControlApiError
 from .harness_version_api import WRITE_PATHS as HARNESS_VERSION_WRITE_PATHS
@@ -84,7 +85,27 @@ class _ControlPostRoutes:
                         require_fresh_totp=self._request_uses_protection_repair_session(),
                     )
                 else:
-                    response = self._daemon_server().extension_control_api.refresh()
+                    # The dashboard posts here when the catalog it read and the
+                    # effective controls it read name different catalogs. Only
+                    # the daemon-wide refresh recaptures the active activation
+                    # and rebinds the control API to it; the service's own
+                    # refresh re-reads for the registry it is already bound to,
+                    # which cannot close that gap. It reads under the authority
+                    # lease and commits nothing, and keeps the installed
+                    # snapshot when the read fails.
+                    try:
+                        self._daemon_server().refresh_extension_control_runtime()
+                    except Exception as error:
+                        # A refresh that cannot run is the state this endpoint
+                        # exists to recover from, so failing the request would
+                        # leave the page with no way forward. Record it and
+                        # serve what the runtime holds; the page compares the
+                        # catalog digests again and retries on its own ladder.
+                        record_background_event("extension_control_refresh_failed", failure_detail(error))
+                    # The refresh above already re-read durable authority under
+                    # the lease. Taking it again here would make this repair
+                    # wait on a second lock for an answer it just installed.
+                    response = self._daemon_server().extension_control_api.effective(reread=False)
             except ExtensionControlApiError as error:
                 self._write_json(error.to_payload(), status=error.status)
                 return
@@ -294,6 +315,7 @@ class _ControlPostRoutes:
                     requested_scope=scope,
                     contract_version=scope_contract_version,
                     contract_digest=scope_contract_digest,
+                    guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
                 )
                 if existing_request.get("status") != "pending":
                     if (
@@ -356,12 +378,20 @@ class _ControlPostRoutes:
                         requested_scope=scope,
                         contract_version=scope_contract_version,
                         contract_digest=scope_contract_digest,
+                        guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
                     )
                 except StaleApprovalScopeContractError as error:
                     self._write_stale_approval_scope_error(error)
                     return
                 except IneligibleApprovalScopeError as error:
                     self._write_ineligible_approval_scope_error(error)
+                    return
+                except ApprovalScopeUnavailableError:
+                    self._write_json(
+                        {"resolved": False, "error": "native_approval_scope_unavailable"},
+                        status=503,
+                        extra_headers={"Cache-Control": "no-store"},
+                    )
                     return
                 except ValueError as error:
                     self._write_json({"resolved": False, "error": str(error)}, status=400)

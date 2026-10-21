@@ -168,9 +168,9 @@ def test_observed_stop_callback_is_not_an_off_route_answer():
 
 def test_judge_knows_every_lifecycle_event_guard_only_observes():
     from ci.gauntlet.harness_judge import _LIFECYCLE_EVENTS
-    from codex_plugin_scanner.guard.daemon.hook_availability_policy import LIFECYCLE_OBSERVE_EVENTS
+    from codex_plugin_scanner.guard.daemon.hook_availability_policy import _LIFECYCLE_OBSERVE_EVENTS
 
-    assert LIFECYCLE_OBSERVE_EVENTS <= _LIFECYCLE_EVENTS
+    assert _LIFECYCLE_OBSERVE_EVENTS <= _LIFECYCLE_EVENTS
 
 
 def test_block_with_extra_requests_is_not_exercised():
@@ -497,9 +497,7 @@ def test_installed_lane_refuses_a_runner_without_the_user_database_before_any_se
 
 @pytest.mark.skipif(os.name == "nt", reason="the account home comes from the POSIX user database")
 @pytest.mark.parametrize(("harness", "refused"), [("codex", True), ("claude-code", True), ("cursor", True)])
-def test_every_managed_harness_lane_needs_the_user_database(
-    monkeypatch, tmp_path, capsys, harness, refused
-):
+def test_every_managed_harness_lane_needs_the_user_database(monkeypatch, tmp_path, capsys, harness, refused):
     import pwd
 
     from ci.gauntlet import harness_suite

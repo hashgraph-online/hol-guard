@@ -61,6 +61,25 @@ def test_gate_inventories_reachable_io_and_passes_current_sources() -> None:
     assert "unclassified_python_io" not in categories
     assert "unclassified_python_content_io" not in categories
 
+    # The remaining unclassified I/O is Python control plane, not a gate backlog.
+    remainder = report["control_plane_remainder"]
+    assert remainder["reachable_count"] == 0
+    assert remainder["operation_count"] == sum(
+        count for category, count in report["inventory_by_category"].items() if category.startswith("unclassified_")
+    )
+
+    # The CLI hook command anchors the walk so that the two steps running ahead of any native
+    # call are inside the gate. Asserting the root itself is reachable would prove nothing --
+    # `_reachable_records` seeds itself from `ROOTS` -- so name the callees the root reaches.
+    reachable = {
+        (record.path, record.qualname) for record in MODULE._reachable_records(ROOT, MODULE._function_map(ROOT))
+    }
+    assert (
+        "src/codex_plugin_scanner/guard/runtime/harness_attribution.py",
+        "resolve_runtime_hook_harness",
+    ) in reachable
+    assert ("src/codex_plugin_scanner/guard/cli/commands_support_hook_payload.py", "_load_hook_payload") in reachable
+
 
 def test_gate_rejects_python_content_read_on_native_edge(tmp_path: Path) -> None:
     _copy_gate_sources(tmp_path)
@@ -195,3 +214,159 @@ def test_validation_reloads_sources_between_passes(tmp_path: Path, mutation: str
         edge.write_text(original.replace(marker, marker + '    open("new-secret.txt")\n', 1), encoding="utf-8")
         with pytest.raises(RuntimeError, match="reachable unclassified Python I/O"):
             MODULE.validate(tmp_path)
+
+
+def test_the_hook_worker_branch_check_ignores_root_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Adding an entry point ahead of the hook worker must not retarget the branch assertions."""
+    _copy_gate_sources(tmp_path)
+    records = MODULE._function_map(tmp_path)
+    assert MODULE._branch_failures(tmp_path, records) == []
+
+    reordered = tuple(reversed(MODULE.ROOTS))
+    assert reordered[0] is not MODULE.HOOK_WORKER_ROOT
+    monkeypatch.setattr(MODULE, "ROOTS", reordered)
+    assert MODULE._branch_failures(tmp_path, records) == []
+
+
+def test_the_remainder_block_says_the_unclassified_io_is_off_the_decision_path(tmp_path: Path) -> None:
+    """The raw category totals read like a backlog; the remainder block says what they are."""
+    _copy_gate_sources(tmp_path)
+    # Control-plane I/O the walk never reaches: the gate reports it without failing.
+    helper = tmp_path / "src/codex_plugin_scanner/guard/cli/unreached_control_plane.py"
+    helper.write_text('def export() -> None:\n    open("report.csv")\n', encoding="utf-8")
+
+    remainder = MODULE.validate(tmp_path)["control_plane_remainder"]
+
+    assert remainder["reachable_count"] == 0
+    assert remainder["operation_count"] >= 1
+    assert remainder["by_subpackage"]["cli"] >= 1
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("src/codex_plugin_scanner/guard/store.py", "<top-level>"),
+        ("src/codex_plugin_scanner/guard/cli/commands_hook.py", "cli"),
+        ("src/codex_plugin_scanner/guard/daemon/hook_worker.py", "daemon"),
+    ],
+)
+def test_the_remainder_groups_by_subpackage(path: str, expected: str) -> None:
+    assert MODULE._subpackage(path) == expected
+
+
+def _module_observations(root: Path, source: str) -> list[tuple[str, str]]:
+    path = _write_guard_fixture(root, "subject", source)
+    tree = ast.parse(source)
+    return [
+        (record.qualname, observation.operation)
+        for record in MODULE._functions(tree, path)
+        for observation in MODULE._observations(record, MODULE._shadowed_names(root, path, tree, record))
+    ]
+
+
+_REDACTION_HELPER = "def _redact_secrets(value):\n    return value[:4]\n"
+
+
+def test_a_sibling_export_renamed_over_an_operation_is_not_that_operation(tmp_path: Path) -> None:
+    # `resolve` here is this package's own redaction helper, not `Path.resolve`.
+    _write_guard_fixture(tmp_path, "runtime_resolution", _REDACTION_HELPER)
+    source = (
+        "def redact(value):\n"
+        "    from .runtime_resolution import _redact_secrets as resolve\n"
+        "\n"
+        "    return resolve(value)\n"
+    )
+    assert _module_observations(tmp_path, source) == []
+
+
+def test_a_renamed_sibling_that_does_io_is_still_counted(tmp_path: Path) -> None:
+    # The helper hashes executable bytes, so every call site that reaches it
+    # under an operation's name keeps its entry.
+    _write_guard_fixture(
+        tmp_path,
+        "executables",
+        "import hashlib\n\ndef _executable_sha256(path):\n    return hashlib.sha256(path.read_bytes()).hexdigest()\n",
+    )
+    source = "from .executables import _executable_sha256 as sha256\n\ndef digest(path):\n    return sha256(path)\n"
+    assert _module_observations(tmp_path, source) == [("digest", "sha256")]
+
+
+def test_an_unresolved_renamed_sibling_is_still_counted(tmp_path: Path) -> None:
+    source = "def redact(value):\n    from .missing import _redact_secrets as resolve\n\n    return resolve(value)\n"
+    assert _module_observations(tmp_path, source) == [("redact", "resolve")]
+
+
+def test_a_rename_in_one_function_does_not_hide_an_operation_in_another(tmp_path: Path) -> None:
+    _write_guard_fixture(tmp_path, "runtime_resolution", _REDACTION_HELPER)
+    source = (
+        "def load(path):\n"
+        "    return path.exists()\n"
+        "\n"
+        "def check(path):\n"
+        "    return exists(path)\n"
+        "\n"
+        "def redact(value):\n"
+        "    from .runtime_resolution import _redact_secrets as exists\n"
+        "\n"
+        "    return exists(value)\n"
+    )
+    assert _module_observations(tmp_path, source) == [("load", "exists"), ("check", "exists")]
+
+
+def test_a_name_the_module_also_binds_absolutely_is_still_counted(tmp_path: Path) -> None:
+    _write_guard_fixture(tmp_path, "runtime_resolution", _REDACTION_HELPER)
+    source = (
+        "from os.path import exists\n"
+        "\n"
+        "def redact(value):\n"
+        "    from .runtime_resolution import _redact_secrets as exists\n"
+        "\n"
+        "    return exists(value)\n"
+    )
+    assert _module_observations(tmp_path, source) == [("redact", "exists")]
+
+
+def test_a_local_wrapper_does_not_excuse_the_call_sites_that_reach_it(tmp_path: Path) -> None:
+    # `sha256` names code in this package, but the gate still owes an entry for
+    # every site that hashes through it.
+    source = "from .io import sha256\n\ndef digest(value):\n    return sha256(value)\n"
+    assert _module_observations(tmp_path, source) == [("digest", "sha256")]
+
+
+def test_an_absolute_import_of_an_operation_is_still_counted(tmp_path: Path) -> None:
+    # Only a relative import can be renamed into a false match; `hashlib` is
+    # still the real thing under any spelling the gate can see.
+    source = "from hashlib import sha256\n\ndef digest(value):\n    return sha256(value).hexdigest()\n"
+    assert _module_observations(tmp_path, source) == [("digest", "sha256")]
+
+
+def test_pending_authority_waivers_all_name_a_reachable_module() -> None:
+    report = MODULE.validate(ROOT)
+    waived = {item["path"] for item in report["inventory"] if item["category"] == "pending_authority_migration"}
+
+    assert waived
+    assert set(MODULE._PENDING_AUTHORITY_PATHS) == waived
+    assert all((ROOT / path).is_file() for path in MODULE._PENDING_AUTHORITY_PATHS)
+
+
+def test_gate_rejects_a_waiver_for_a_module_the_hook_graph_no_longer_reaches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    retired = "src/codex_plugin_scanner/guard/runtime/bounded_json_depth.py"
+    assert (ROOT / retired).is_file()
+    assert retired not in MODULE._PENDING_AUTHORITY_PATHS
+    monkeypatch.setattr(MODULE, "_PENDING_AUTHORITY_PATHS", MODULE._PENDING_AUTHORITY_PATHS | {retired})
+
+    with pytest.raises(RuntimeError, match=rf"stale pending_authority_migration waiver: {retired}"):
+        MODULE.validate(ROOT)
+
+
+def test_gate_ignores_a_waiver_for_a_module_outside_the_analysed_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    absent = "src/codex_plugin_scanner/guard/runtime/not_in_this_tree.py"
+    _copy_gate_sources(tmp_path)
+    monkeypatch.setattr(MODULE, "_PENDING_AUTHORITY_PATHS", MODULE._PENDING_AUTHORITY_PATHS | {absent})
+
+    assert not (tmp_path / absent).exists()
+    assert MODULE.validate(tmp_path)["status"] == "passed"

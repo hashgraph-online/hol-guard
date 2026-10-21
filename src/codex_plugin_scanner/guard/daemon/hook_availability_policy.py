@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from pathlib import Path
-
 # Native review covers tool events and supported prompt callbacks. Other
 # lifecycle events remain inventory-only: failing them closed freezes a turn
 # without adding enforcement. Unreviewable prompts pause protected hosts;
 # acknowledged Watch and monitor-only prompt callbacks continue without enforcement.
-LIFECYCLE_OBSERVE_EVENTS = frozenset(
+_LIFECYCLE_OBSERVE_EVENTS = frozenset(
     {
         "SessionStart",
         "SessionEnd",
@@ -30,7 +27,7 @@ def _compact_hook_event_name(event_name: str) -> str:
 
 
 _LIFECYCLE_CANONICAL_BY_COMPACT = {
-    **{_compact_hook_event_name(name): name for name in LIFECYCLE_OBSERVE_EVENTS},
+    **{_compact_hook_event_name(name): name for name in _LIFECYCLE_OBSERVE_EVENTS},
     "userpromptsubmit": "UserPromptSubmit",
     "userpromptsubmitted": "UserPromptSubmit",
     "subagentend": "SubagentStop",
@@ -38,15 +35,18 @@ _LIFECYCLE_CANONICAL_BY_COMPACT = {
 
 
 def hook_event_pauses_when_unavailable(event_name: str) -> bool:
-    """True when native miss must pause the harness instead of continuing the turn."""
+    """True when native miss must pause the harness instead of continuing the turn.
+
+    This answer cannot come from the resident: it is the policy for the turns
+    where the resident is the thing that could not be reached.
+    """
 
     compact = _compact_hook_event_name(event_name)
     if compact in {"userpromptsubmit", "userpromptsubmitted"}:
         return True
     if compact in _LIFECYCLE_CANONICAL_BY_COMPACT:
         return False
-    if compact in {"posttooluse", "posttool"} or compact.startswith("after"):
-        return False
+    # The tool already ran, so pausing the turn protects nothing.
     return compact not in {"posttooluse", "posttool"} and not compact.startswith("after")
 
 
@@ -102,16 +102,11 @@ def hook_reason_continues_session(reason_code: str) -> bool:
 
 
 def availability_harness_response(
-    payload: Mapping[str, object],
     *,
     harness: str,
     event_name: str,
     reason_code: str,
     reason: str,
-    workspace: Path | None = None,
-    home_dir: Path | None = None,
-    guard_home: Path | None = None,
-    recording_only: bool = False,
     prompt_reason: str | None = None,
 ) -> dict[str, object]:
     """Fixed harness result when native review is unavailable.
@@ -121,7 +116,6 @@ def availability_harness_response(
     deny. Integrity failures stay denied as well.
     """
 
-    del payload, workspace, home_dir, guard_home, recording_only
     from .hook_fail_closed import fail_closed_response
 
     return fail_closed_response(
@@ -129,21 +123,13 @@ def availability_harness_response(
     )
 
 
-def cursor_fallback_permission(
-    payload: Mapping[str, object],
-    *,
-    hook_event_name: str,
-    workspace: Path | None = None,
-    home_dir: Path | None = None,
-    guard_home: Path | None = None,
-    recording_only: bool = False,
-) -> tuple[dict[str, object], int]:
+def cursor_fallback_permission(*, hook_event_name: str) -> tuple[dict[str, object], int]:
     """Deny protected Cursor actions when no evaluator supplies a decision.
 
-    Retain legacy keyword arguments without accepting them as mode authority.
+    A hook script written by an older release still passes the payload and
+    mode keywords; the call fails, and that script denies with the same reply.
     """
 
-    del payload, workspace, home_dir, guard_home, recording_only
     compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
     if compact in {"aftershellexecution", "aftermcpexecution"}:
         return {}, 0
@@ -155,23 +141,12 @@ def cursor_fallback_permission(
     }, 2
 
 
-def cursor_unparseable_input_permission(
-    hook_event_name: str,
-    *,
-    recording_only: bool = False,
-) -> tuple[dict[str, object], int]:
-    """Deny unparsed actions unless the caller supplies acknowledged mode authority.
-
-    Set recording_only only after independently verifying acknowledged mode
-    authority. A local configuration flag alone cannot establish it. Generated
-    hooks with unparsed input cannot establish it and use the protected default.
-    """
+def cursor_unparseable_input_permission(hook_event_name: str) -> tuple[dict[str, object], int]:
+    """Deny unparsed actions: unparsed input carries no acknowledged mode authority."""
 
     compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
     if compact in {"aftershellexecution", "aftermcpexecution"}:
         return {}, 0
-    if recording_only:
-        return {"permission": "allow"}, 0
     return {
         "permission": "deny",
         "user_message": "Guard could not process this hook request safely. Retry or repair Guard from a terminal.",
@@ -179,7 +154,6 @@ def cursor_unparseable_input_permission(
 
 
 __all__ = [
-    "LIFECYCLE_OBSERVE_EVENTS",
     "availability_harness_response",
     "cursor_fallback_permission",
     "cursor_unparseable_input_permission",

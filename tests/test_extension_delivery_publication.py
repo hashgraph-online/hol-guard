@@ -92,10 +92,12 @@ def test_selector_does_not_hide_unrelated_validation_errors(selector, monkeypatc
     monkeypatch.setattr(selector, "current", lambda: ("1" * 40, selection("1" * 40, "11.1")))
     commits = []
     monkeypatch.setattr(selector, "pointer_commit", lambda *args: commits.append(args) or "2" * 40)
+
     def github(*args):
         if "PATCH" in args:
             raise RuntimeError("Invalid sha (HTTP 422)")
         return json.dumps({"status": "ahead"})
+
     monkeypatch.setattr(selector, "github", github)
     with pytest.raises(RuntimeError, match="Invalid sha"):
         selector.select(selection())
@@ -153,6 +155,28 @@ def test_asset_plan_rejects_unbound_duplicate_changed_and_missing_files(publishe
     (tmp_path / "assets" / target["tag"] / target["asset"]).write_bytes(b"changed")
     with pytest.raises(ValueError, match="bytes differ"):
         read_plan(tmp_path, expected, source, publication_id)
+
+
+def test_a_full_data_release_still_fits_the_distribution_anchor(publisher, monkeypatch):
+    """Every data release also carries the signed root, so a full batch plus
+    that pair must stay inside the publisher's release inventory bound."""
+    from extension_delivery_assets import ASSETS_PER_RELEASE
+
+    from codex_plugin_scanner.guard.catalog_delivery.transport import PROVENANCE_ASSET, ROOT_ASSET
+
+    def refuse(tag):
+        raise RuntimeError("inventory bound accepted")
+
+    monkeypatch.setattr(publisher, "release", refuse)
+    inventory = {f"objects-{index:06}.zip": {"sha256": "0" * 64, "length": 1} for index in range(ASSETS_PER_RELEASE)}
+    inventory[ROOT_ASSET] = {"sha256": "0" * 64, "length": 1}
+    inventory[PROVENANCE_ASSET] = {"sha256": "0" * 64, "length": 1}
+    with pytest.raises(RuntimeError, match="inventory bound accepted"):
+        publisher.publish_assets("extension-data-" + "1" * 40 + "-12.1-000000", "1" * 40, inventory, inventory)
+
+    inventory["objects-999999.zip"] = {"sha256": "0" * 64, "length": 1}
+    with pytest.raises(ValueError, match="asset inventory invalid"):
+        publisher.publish_assets("extension-data-" + "1" * 40 + "-12.1-000000", "1" * 40, inventory, inventory)
 
 
 def test_retries_use_separate_data_releases_without_overwriting_prior_attempt(publisher, tmp_path):

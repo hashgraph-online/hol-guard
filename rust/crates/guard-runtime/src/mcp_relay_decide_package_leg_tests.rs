@@ -60,6 +60,7 @@ fn view() -> HarnessView {
         "harness_actions": Value::Null,
         "risk_actions": {},
         "harness_risk_actions": {},
+        "harness_postures": {},
         "security_level": "balanced",
         "protection_posture": "balanced",
         "protection_posture_explicit": false,
@@ -105,6 +106,10 @@ fn leg(edit: impl FnOnce(&mut McpRelayDecideRequestV1)) -> Result<Packaged, &'st
         &request,
         inputs,
         &subject,
+        &crate::contributed_mcp_decision_op::Catalog {
+            guard_home: &request.guard_home,
+            controls: None,
+        },
         QueueBinding {
             blocked_request_mode: Some("safe-alternative"),
             redaction_level: view.receipt_redaction_level.as_deref(),

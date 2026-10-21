@@ -53,7 +53,23 @@ pub fn from_graph(
             content_sha256: code.content_sha256.clone(),
         });
     }
+    for code in &graph.startup {
+        inputs.push(NativeScriptCodeInputV1 {
+            kind: NativeScriptInputKindV1::Startup,
+            requested_path: code.original_path.clone(),
+            resolved_path: code.resolved_path.clone(),
+            content_sha256: code.content_sha256.clone(),
+        });
+    }
     for (path, digest) in &graph.native_images {
+        inputs.push(NativeScriptCodeInputV1 {
+            kind: NativeScriptInputKindV1::Native,
+            requested_path: path.clone(),
+            resolved_path: path.clone(),
+            content_sha256: digest.clone(),
+        });
+    }
+    for (path, digest) in &graph.brokered_images {
         inputs.push(NativeScriptCodeInputV1 {
             kind: NativeScriptInputKindV1::Native,
             requested_path: path.clone(),
@@ -86,6 +102,7 @@ pub fn from_graph(
         context: observed.context,
         argv: observed.argv.to_vec(),
         code_inputs: inputs,
+        package_bindings: Vec::new(),
         environment_bindings: observed
             .environment
             .iter()
@@ -101,7 +118,13 @@ pub fn from_graph(
             })
             .collect(),
         outputs,
-        execution_assurance: NativeBashAssuranceV1::MacosReadonlyRootFramedOutputsV1,
+        execution_assurance: if !graph.brokered_images.is_empty() {
+            NativeBashAssuranceV1::MacosHardenedBrokerV1
+        } else if graph.startup.is_empty() {
+            NativeBashAssuranceV1::MacosReadonlyRootFramedOutputsV1
+        } else {
+            NativeBashAssuranceV1::MacosReadonlyRootHttpReadV1
+        },
     };
     subject.validate()?;
     Ok(subject)

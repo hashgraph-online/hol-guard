@@ -4,6 +4,11 @@ The daemon rewrites an eligible native containment receipt into the
 contained sink before answering. Hook clients fall back to ``guard hook``
 when the daemon is down, so this path must apply the same rewrite or the
 harness sees a bare denial for ordinary test commands.
+
+Which step a result takes is the resident's ``containment_route`` answer, the
+same one the daemon asks, so both paths route a call identically. No answer
+raises ``NativeHookDecisionError`` and the caller answers with the host outage
+response.
 """
 
 from __future__ import annotations
@@ -18,6 +23,7 @@ from ..action_lattice import normalize_guard_action
 from ..adapters.zcode_contained_tests import route_zcode_containment
 from ..daemon.hook_contained_grant import granted_containment_response
 from ..daemon.hook_fail_closed import render_pre_tool
+from ..native_hook_containment_route import edge_containment_route
 from .commands_support_command_activity import record_pre_hook_command_activity_best_effort
 
 if TYPE_CHECKING:
@@ -35,13 +41,22 @@ def emit_native_containment_route(
 ) -> int | None:
     """Emit the contained-sink rewrite, or return ``None`` to keep the normal render."""
 
-    if not isinstance(edge, Mapping) or edge.get("recording_only") or edge.get("event_name") != "PreToolUse":
+    if not isinstance(edge, Mapping):
         return None
     result = edge.get("result")
     if not isinstance(result, Mapping):
         return None
+    route = edge_containment_route(
+        edge,
+        result,
+        event_name=edge.get("event_name"),
+        recording_only=bool(edge.get("recording_only")),
+        guard_home=context.guard_home,
+    )
+    if route == "none":
+        return None
     harness = str(edge.get("harness") or "")
-    if result.get("minimum_action") != "sandbox-required":
+    if route == "grant":
         # An outside-roots review this device's grant covers runs contained too.
         routed = granted_containment_response(
             store,

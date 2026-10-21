@@ -18,6 +18,7 @@ use std::fs::File;
 use std::io::Read;
 use std::io::{Seek, Write};
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 /// One supervisor-owned file per runtime scope, beside `restart-budget.json`
 /// in `<guard-home>/native-runtime/resident-v3-<digest>/`.
@@ -28,6 +29,12 @@ pub(crate) const RESIDENT_FAILURE_FILE_NAME: &str = "resident-stderr.v1.log";
 const MAX_RESIDENT_FAILURE_BYTES: usize = 64 * 1024;
 #[cfg(not(windows))]
 const DRAIN_CHUNK_BYTES: usize = 4096;
+/// Another supervisor holds the record only while it rewrites at most
+/// `MAX_RESIDENT_FAILURE_BYTES`. A record still locked after these retries is
+/// skipped: the supervisor must go on to release its restart charge and its
+/// exit hold, and a Windows stop waits on that hold.
+const RECORD_LOCK_RETRY_DELAY: Duration = Duration::from_millis(10);
+const RECORD_LOCK_RETRIES: u32 = 20;
 
 /// The record of one supervised resident run. Nothing is created until the
 /// run has something to report, so a resident that starts, serves and exits
@@ -71,19 +78,7 @@ impl ResidentFailureLog {
     }
 
     fn create(&self) -> Option<File> {
-        let private_root = crate::resident_state::private_root_for_scope(&self.scope).ok()?;
-        let path = Self::path(&self.scope);
-        #[cfg(windows)]
-        let mut file = {
-            let (file, directory_binding) =
-                crate::resident_state::private_lock_file(&path, &private_root).ok()?;
-            // The supervisor must not hold a directory barrier for the
-            // resident's lifetime; other clients still bind this ancestry.
-            drop(directory_binding);
-            file
-        };
-        #[cfg(not(windows))]
-        let mut file = crate::resident_state::private_lock_file(&path, &private_root).ok()?;
+        let mut file = open_record(&self.scope)?;
         file.set_len(0).ok()?;
         file.rewind().ok()?;
         Some(file)
@@ -116,6 +111,24 @@ impl ResidentFailureLog {
     }
 }
 
+/// Open the scope's record without truncating it.
+fn open_record(scope: &Path) -> Option<File> {
+    let private_root = crate::resident_state::private_root_for_scope(scope).ok()?;
+    let path = ResidentFailureLog::path(scope);
+    #[cfg(windows)]
+    let file = {
+        let (file, directory_binding) =
+            crate::resident_state::private_lock_file(&path, &private_root).ok()?;
+        // The supervisor must not hold a directory barrier for the
+        // resident's lifetime; other clients still bind this ancestry.
+        drop(directory_binding);
+        file
+    };
+    #[cfg(not(windows))]
+    let file = crate::resident_state::private_lock_file(&path, &private_root).ok()?;
+    Some(file)
+}
+
 /// Read a resident's stderr to end of file, keeping at most the bytes the
 /// record can hold. The pipe is drained past that bound so a resident never
 /// blocks on a stderr write that nobody is reading, and the bytes are held
@@ -140,23 +153,91 @@ pub(crate) fn collect_resident_stderr(mut reader: impl Read) -> Vec<u8> {
     collected
 }
 
+/// Publish one run with no ordering check.
+#[cfg(test)]
+pub(crate) fn write_run(scope: &Path, stderr: &[u8], note: Option<&str>) {
+    let _ = publish_run(ResidentFailureLog::for_scope(scope), stderr, note);
+}
+
 /// Publish one supervised run: the resident's stderr, then the supervisor's
 /// own classification of the exit. The note is written from space reserved
 /// for it, so a resident that floods stderr cannot push the one line that
 /// explains the exit out of the record.
-pub(crate) fn write_run(scope: &Path, stderr: &[u8], note: Option<&str>) {
+fn publish_run(
+    mut record: ResidentFailureLog,
+    stderr: &[u8],
+    note: Option<&str>,
+) -> ResidentFailureLog {
     let reserved = note.map_or(0, |note| note.len() + 1);
     let kept = MAX_RESIDENT_FAILURE_BYTES
         .saturating_sub(reserved)
         .min(stderr.len());
-    if kept == 0 && note.is_none() {
-        return;
-    }
-    let mut record = ResidentFailureLog::for_scope(scope);
     record.append(&stderr[..kept]);
     if let Some(note) = note {
         record.note(note);
     }
+    record
+}
+
+/// Publish one supervised run unless a later run has already published its
+/// own record. A Unix stop no longer waits for the supervisor, so a run that
+/// replaced this one can fail and record why while this supervisor is still
+/// waiting out its stderr tail; the older record must not erase that newer
+/// evidence.
+///
+/// Runs are ordered by when they started, not by when they wrote: a record
+/// takes its run's start as its modification time. Otherwise an older run
+/// that writes late, after a newer run has started, would make that newer
+/// run's own failure look superseded.
+///
+/// The check, the rewrite and the timestamp all happen under one exclusive
+/// lock on the record, so two supervisors finishing together cannot both
+/// pass the check and let the older one overwrite the newer record. The
+/// lock goes with the handle when this returns.
+pub(crate) fn write_run_unless_superseded(
+    scope: &Path,
+    stderr: &[u8],
+    note: Option<&str>,
+    run_started: SystemTime,
+) {
+    if stderr.is_empty() && note.is_none() {
+        // A clean run leaves the previous failure in place.
+        return;
+    }
+    let Some(mut file) = open_record(scope) else {
+        return;
+    };
+    if !lock_record(&file) {
+        return;
+    }
+    // Opening may have just created the file, and a published record is
+    // never empty, so only a non-empty record can be a later run's.
+    let superseded = file.metadata().is_ok_and(|metadata| {
+        metadata.len() > 0
+            && metadata
+                .modified()
+                .is_ok_and(|recorded_run| recorded_run > run_started)
+    });
+    if superseded || file.set_len(0).is_err() || file.rewind().is_err() {
+        return;
+    }
+    let mut record = ResidentFailureLog::for_scope(scope);
+    record.file = Some(file);
+    if let Some(file) = publish_run(record, stderr, note).file {
+        let _ = file.set_modified(run_started);
+    }
+}
+
+fn lock_record(file: &File) -> bool {
+    for attempt in 0..=RECORD_LOCK_RETRIES {
+        if fs2::FileExt::try_lock_exclusive(file).is_ok() {
+            return true;
+        }
+        if attempt < RECORD_LOCK_RETRIES {
+            std::thread::sleep(RECORD_LOCK_RETRY_DELAY);
+        }
+    }
+    false
 }
 
 #[cfg(test)]

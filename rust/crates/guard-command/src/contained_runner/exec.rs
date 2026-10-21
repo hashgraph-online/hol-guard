@@ -255,3 +255,95 @@ impl Drop for TempRoot {
         }
     }
 }
+
+/// Backend selection and the refusals that precede any spawn.
+#[cfg(test)]
+mod backend_selection_tests {
+    use super::super::contract::Policy;
+    use super::super::vector_support::Workspace;
+    use super::*;
+
+    fn request(workspace: &Workspace) -> Request {
+        let path = workspace.path.to_string_lossy().into_owned();
+        let tool = workspace.path.join("tool");
+        fs::write(&tool, b"#!/bin/sh\nexit 0\n").expect("write tool");
+        fs::set_permissions(&tool, fs::Permissions::from_mode(0o755)).expect("tool mode");
+        Request::new(
+            &[tool.to_string_lossy().into_owned()],
+            &path,
+            &[],
+            Policy::new(&path).expect("policy"),
+            Vec::new(),
+            &"1".repeat(64),
+            &file_sha256(&tool).expect("digest"),
+            "op.contained.exec",
+        )
+        .expect("request")
+    }
+
+    #[test]
+    fn a_platform_without_a_backend_has_no_selection() {
+        // There is no soft landing for an unknown platform: with no backend
+        // there is nothing to enforce with, so selection returns nothing and
+        // the caller fails closed rather than running the command bare.
+        for platform in ["win32", "freebsd", "sunos", "", "darwinish"] {
+            assert!(select_backend(platform).is_none(), "{platform}");
+        }
+    }
+
+    #[test]
+    fn a_selected_backend_is_an_executable_file_with_a_digest() {
+        let Some(backend) = select_backend(platform()) else {
+            // A host without bubblewrap installed has nothing to describe.
+            return;
+        };
+        assert!(Path::new(&backend.path).is_file());
+        assert_eq!(backend.digest.len(), 64);
+        assert_eq!(
+            backend.digest,
+            file_sha256(Path::new(&backend.path)).expect("backend digest")
+        );
+        assert_ne!(backend.kind, Backend::Unsupported);
+    }
+
+    #[test]
+    fn an_unsupported_platform_reports_a_failure_attestation() {
+        let workspace = Workspace::new();
+        let request = request(&workspace);
+
+        let result = failure_result(
+            &request,
+            Failure::UnsupportedPlatform,
+            Backend::Unsupported,
+            None,
+        )
+        .expect("failure result");
+
+        assert!(!result.enforced());
+        assert_eq!(result.stderr, "unsupported-platform");
+        assert_eq!(result.exit_code, None);
+        assert!(!result.timed_out);
+        assert_eq!(
+            result.attestation.failure,
+            Some(Failure::UnsupportedPlatform)
+        );
+        assert_eq!(
+            result.attestation.backend_digest,
+            text_digest("unavailable:unsupported")
+        );
+    }
+
+    #[test]
+    fn a_timeout_outside_the_supported_range_is_refused() {
+        let workspace = Workspace::new();
+        let request = request(&workspace);
+
+        for timeout in [0.0, 0.09, 600.1, f64::NAN] {
+            let refusal = match execute_contained(&request, timeout) {
+                Err(message) => message,
+                Ok(_) => panic!("{timeout} must be refused before any spawn"),
+            };
+            assert_eq!(refusal, "timeout_seconds must be between 0.1 and 600");
+        }
+    }
+}

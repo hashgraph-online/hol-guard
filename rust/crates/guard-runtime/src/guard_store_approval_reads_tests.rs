@@ -187,6 +187,7 @@ pub(crate) fn with_execution_capabilities(value: Value) -> Value {
             {
                 let field = |name: &str| fields.get(name).cloned();
                 let item = ApprovalScopeItemV1 {
+                    request_id: field("request_id"),
                     artifact_id: field("artifact_id"),
                     artifact_type: field("artifact_type"),
                     artifact_hash: field("artifact_hash"),

@@ -111,7 +111,7 @@ fn path_class(c: char) -> bool {
     !is_py_space(c) && !"'\"`<>|;(){}[]".contains(c)
 }
 
-/// One `_PROMPT_PATH_TOKEN_PATTERN` match at `index`: its end, if any.
+/// One path-shaped token starting at `index`: where it ends, if one does.
 fn path_token_at(chars: &[char], index: usize) -> Option<usize> {
     let at = |offset: usize| chars.get(index + offset).copied();
     let previous_ok = index == 0 || {
@@ -141,7 +141,7 @@ fn path_token_at(chars: &[char], index: usize) -> Option<usize> {
     Some(end)
 }
 
-/// `_PROMPT_PATH_TOKEN_PATTERN.finditer(text)`: each token and its start.
+/// Every path-shaped token in `chars`, each with the offset it starts at.
 fn path_tokens(chars: &[char]) -> Vec<(usize, String)> {
     let mut tokens = Vec::new();
     let mut index = 0;

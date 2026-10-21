@@ -643,6 +643,9 @@ pub struct GuardConfig {
     /// `harness_risk_actions` (config.py :419).
     pub harness_risk_actions:
         Option<std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>>,
+    /// `harness_postures` (config.py :421), canonically keyed as
+    /// `coerce_loaded_harness_postures` leaves them.
+    pub harness_postures: Option<std::collections::BTreeMap<String, String>>,
     /// `managed_policy_status` (config.py :426).
     pub managed_policy_status: String,
     /// `managed_policy_hash` (config.py :427).
@@ -1077,6 +1080,12 @@ pub const VALID_RISK_ACTION_KEYS: &[&str] = &[
     "guard_bypass",
     "cloud_advisory",
     "encoded_exfiltration",
+    "package_unknown",
+    "package_lockfile_drift",
+    "package_direct_source",
+    "package_custom_registry",
+    "package_install",
+    "low_trust_artifact",
 ];
 
 /// `DEFAULT_SECURITY_LEVEL` (config.py).
@@ -1656,6 +1665,24 @@ pub fn resolve_risk_action(
     if !VALID_RISK_ACTION_KEYS.contains(&risk_class) {
         return None;
     }
+    let resolved = resolve_configured_risk_action(config, risk_class, harness);
+    if harness_posture_override(config, harness) == Some("extra_careful") {
+        // A per-harness Extra careful override only ever strengthens.
+        return stricter_risk_action(
+            resolved,
+            posture_risk_actions("extra_careful").and_then(|rows| rows.get(risk_class).cloned()),
+        );
+    }
+    resolved
+}
+
+/// The explicit-then-default half of `resolve_risk_action`, before the
+/// per-harness Extra careful floor.
+fn resolve_configured_risk_action(
+    config: &GuardConfig,
+    risk_class: &str,
+    harness: Option<&str>,
+) -> Option<String> {
     if let Some(h) = harness {
         if let Some(harness_map) = config.harness_risk_actions.as_ref() {
             if let Some(inner) = harness_map.get(h) {
@@ -1671,6 +1698,38 @@ pub fn resolve_risk_action(
         }
     }
     posture_or_level_defaults(config).get(risk_class).cloned()
+}
+
+/// `harness_posture.harness_posture_override` (:120-126) against the mirror.
+/// `runtime_harness_key` resolves a registered id or alias and otherwise falls
+/// back to the normalized name, so an unregistered harness simply matches no
+/// override.
+fn harness_posture_override<'a>(config: &'a GuardConfig, harness: Option<&str>) -> Option<&'a str> {
+    let raw = harness?;
+    let postures = config.harness_postures.as_ref()?;
+    let normalized = raw.trim().to_lowercase().replace('_', "-");
+    if normalized.is_empty() {
+        return None;
+    }
+    let key =
+        crate::harness_identity::canonical_harness_id(&normalized).unwrap_or(normalized.as_str());
+    postures.get(key).map(String::as_str)
+}
+
+/// `harness_posture.stricter_risk_action` (:209-214).
+fn stricter_risk_action(base: Option<String>, floor: Option<String>) -> Option<String> {
+    match (base, floor) {
+        (None, floor) => floor,
+        (base, None) => base,
+        (Some(base), Some(floor)) => Some(
+            crate::action_lattice::most_restrictive_guard_action(
+                &[Value::String(base), Value::String(floor)],
+                crate::effect_decision::GuardAction::Block,
+            )
+            .as_str()
+            .to_owned(),
+        ),
+    }
 }
 
 /// `_posture_or_level_defaults` (config.py :1053-1058).
@@ -1708,6 +1767,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "warn"),
                 ("cloud_advisory", "allow"),
                 ("encoded_exfiltration", "warn"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "warn"),
             ],
         ),
         (
@@ -1727,6 +1792,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "warn"),
                 ("cloud_advisory", "allow"),
                 ("encoded_exfiltration", "warn"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "warn"),
             ],
         ),
         (
@@ -1746,6 +1817,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "warn"),
                 ("encoded_exfiltration", "require-reapproval"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
         (
@@ -1765,6 +1842,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "require-reapproval"),
                 ("encoded_exfiltration", "block"),
+                ("package_unknown", "block"),
+                ("package_lockfile_drift", "require-reapproval"),
+                ("package_direct_source", "require-reapproval"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
         (
@@ -1784,6 +1867,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "block"),
                 ("encoded_exfiltration", "block"),
+                ("package_unknown", "block"),
+                ("package_lockfile_drift", "block"),
+                ("package_direct_source", "block"),
+                ("package_custom_registry", "block"),
+                ("package_install", "block"),
+                ("low_trust_artifact", "block"),
             ],
         ),
         (
@@ -1803,6 +1892,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "warn"),
                 ("encoded_exfiltration", "require-reapproval"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
     ];
@@ -1849,6 +1944,12 @@ fn posture_risk_rows(posture: &str) -> Option<&'static [(&'static str, &'static 
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "allow"),
                 ("encoded_exfiltration", "block"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
         (
@@ -1868,6 +1969,12 @@ fn posture_risk_rows(posture: &str) -> Option<&'static [(&'static str, &'static 
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "require-reapproval"),
                 ("encoded_exfiltration", "block"),
+                ("package_unknown", "require-reapproval"),
+                ("package_lockfile_drift", "require-reapproval"),
+                ("package_direct_source", "require-reapproval"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
     ];
@@ -2058,33 +2165,23 @@ pub fn build_supply_chain_status_payload(
     payload
 }
 
-/// `_build_package_manager_protection` (:3171-3190).
+/// `_build_package_manager_protection`: the resident's protection projection.
+///
+/// The shape and the "which detected managers are unprotected" rule live in
+/// [`crate::shims::package_shim_protection_from_status`]; this only supplies
+/// the dashboard status and the default shim directory.
 pub fn build_package_manager_protection(
     store: &dyn SupplyChainStore,
     shims: &dyn ShimsApi,
 ) -> Map<String, Value> {
     let home_dir = expand_tilde_inner(Path::new("~"));
-    let status = dict_payload(Some(&shims.package_shim_dashboard_status(
-        &home_dir,
-        None,
-        store.guard_home(),
-    )))
+    let guard_home = store.guard_home();
+    let status = dict_payload(Some(
+        &shims.package_shim_dashboard_status(&home_dir, None, guard_home),
+    ))
     .unwrap_or_default();
-    let managed = status
-        .get("managed")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let supported_managers = shims.package_shim_supported_managers();
-    let mut protection = Map::new();
-    protection.insert("managed".into(), json!(managed));
-    protection.insert("supported_managers".into(), json!(supported_managers));
-    if let Some(s) = status.get("state") {
-        protection.insert("state".into(), s.clone());
-    }
-    if let Some(s) = status.get("detail") {
-        protection.insert("detail".into(), s.clone());
-    }
-    protection
+    let default_shim_dir = guard_home.join("package-shims").join("bin");
+    crate::shims::package_shim_protection_from_status(&status, &default_shim_dir.to_string_lossy())
 }
 
 /// `_call_sync_with_optional_auth_context` — retries with refreshed auth when
@@ -2352,10 +2449,9 @@ fn oauth_entitlement(
 /// `_connect_state_entitlement` (:156) — reconnect verdict from the persisted
 /// guard-connect state when it asserts a failed/expired connect.
 fn connect_state_entitlement(
-    store: &dyn SupplyChainStore,
-    now: &Timestamp,
+    facts: &PackageFirewallEntitlementFacts,
 ) -> Option<Map<String, Value>> {
-    let oauth_payload = store.get_sync_payload("oauth_local_credentials");
+    let oauth_payload = facts.oauth_payload.clone();
     let oauth_fields = oauth_entitlement_fields_from_sync_payload(oauth_payload.as_ref());
     if let Some(fields) = &oauth_fields {
         if let Some(plan_id) = entitlement_optional_string(fields.get("supply_chain_plan_id")) {
@@ -2364,8 +2460,7 @@ fn connect_state_entitlement(
             }
         }
     }
-    let latest_state = store.get_effective_guard_connect_state(&now.isoformat());
-    let latest_state = latest_state.as_ref()?.as_object()?;
+    let latest_state = facts.connect_state.as_ref()?.as_object()?;
     let status = entitlement_optional_string(latest_state.get("status"));
     let milestone = entitlement_optional_string(latest_state.get("milestone"));
     let missing_oauth_after_success = status.as_deref() == Some("connected")
@@ -2442,10 +2537,9 @@ fn reconnect_required_entitlement(
 }
 
 /// `_connect_required_entitlement` (:214).
-fn connect_required_entitlement(store: &dyn SupplyChainStore) -> Map<String, Value> {
-    let oauth_payload = store.get_sync_payload("oauth_local_credentials");
+fn connect_required_entitlement(facts: &PackageFirewallEntitlementFacts) -> Map<String, Value> {
     let mut tier = "unknown".to_string();
-    if let Some(Value::Object(p)) = &oauth_payload {
+    if let Some(Value::Object(p)) = &facts.oauth_payload {
         if let Some(plan_id) = entitlement_optional_string(p.get("supply_chain_plan_id")) {
             tier = plan_id.to_lowercase();
         }
@@ -2467,11 +2561,11 @@ fn connect_required_entitlement(store: &dyn SupplyChainStore) -> Map<String, Val
 /// `_requires_guard_cloud_connect` (:229) — whether a fresh Guard Cloud
 /// connect is required before trusting the bundle/OAuth claim.
 fn requires_guard_cloud_connect(
-    store: &dyn SupplyChainStore,
+    facts: &PackageFirewallEntitlementFacts,
     bundle: Option<&Map<String, Value>>,
     _oauth: Option<&Map<String, Value>>,
 ) -> bool {
-    let oauth_health = store.get_oauth_local_credential_health();
+    let oauth_health = facts.oauth_health.clone();
     let oauth_configured = oauth_health
         .as_ref()
         .and_then(|h| h.get("configured"))
@@ -2481,11 +2575,10 @@ fn requires_guard_cloud_connect(
         .as_ref()
         .and_then(|h| h.get("state"))
         .and_then(Value::as_str);
-    let cloud_profile = store.get_cloud_sync_profile();
     if oauth_configured && oauth_state == Some("healthy") {
         return false;
     }
-    if cloud_profile.is_some() {
+    if facts.has_cloud_sync_profile {
         return false;
     }
     if oauth_configured {
@@ -2499,17 +2592,47 @@ fn requires_guard_cloud_connect(
             .unwrap_or(false))
 }
 
+/// Everything the entitlement resolution reads, gathered once.
+///
+/// The resolution itself is a pure function of these facts, so a caller that
+/// already holds the store rows — the resident answering a compose query for a
+/// hook or CLI flow — resolves the same entitlement without a store of its own.
+#[derive(Debug, Clone, Default)]
+pub struct PackageFirewallEntitlementFacts {
+    /// The `supply_chain_bundle_entitlement` sync payload.
+    pub bundle_payload: Option<Value>,
+    /// The `oauth_local_credentials` sync payload.
+    pub oauth_payload: Option<Value>,
+    /// The OAuth local-credential health record.
+    pub oauth_health: Option<Value>,
+    /// The effective Guard connect state as of `now`.
+    pub connect_state: Option<Value>,
+    /// A cloud sync profile exists for this home.
+    pub has_cloud_sync_profile: bool,
+}
+
 /// `resolve_package_firewall_entitlement` (:275) — read-only entitlement
 /// resolution. Ported 1:1 from Python.
 pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map<String, Value> {
     let now = Timestamp::now_utc();
-    let bundle = bundle_entitlement(
-        store
-            .get_sync_payload("supply_chain_bundle_entitlement")
-            .as_ref(),
-    );
-    let oauth_health = store.get_oauth_local_credential_health();
-    let oauth_payload = store.get_sync_payload("oauth_local_credentials");
+    let facts = PackageFirewallEntitlementFacts {
+        bundle_payload: store.get_sync_payload("supply_chain_bundle_entitlement"),
+        oauth_payload: store.get_sync_payload("oauth_local_credentials"),
+        oauth_health: store.get_oauth_local_credential_health().map(Value::Object),
+        connect_state: store.get_effective_guard_connect_state(&now.isoformat()),
+        has_cloud_sync_profile: store.get_cloud_sync_profile().is_some(),
+    };
+    resolve_package_firewall_entitlement_from_facts(&facts, &now)
+}
+
+/// The entitlement these facts resolve to at `now`.
+pub fn resolve_package_firewall_entitlement_from_facts(
+    facts: &PackageFirewallEntitlementFacts,
+    now: &Timestamp,
+) -> Map<String, Value> {
+    let bundle = bundle_entitlement(facts.bundle_payload.as_ref());
+    let oauth_health = facts.oauth_health.clone();
+    let oauth_payload = facts.oauth_payload.clone();
     // Python gates `oauth_fields` on a healthy credential so a degraded secret
     // cannot mint a paid/unpaid claim from stale metadata.
     let oauth_fields = if oauth_health
@@ -2522,8 +2645,8 @@ pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map
     } else {
         None
     };
-    let oauth = oauth_entitlement(oauth_fields.as_ref(), &now);
-    let connect_state = connect_state_entitlement(store, &now);
+    let oauth = oauth_entitlement(oauth_fields.as_ref(), now);
+    let connect_state = connect_state_entitlement(facts);
     let is_healthy_profile = oauth_health
         .as_ref()
         .and_then(|h| h.get("state"))
@@ -2538,7 +2661,7 @@ pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map
             return state;
         }
     }
-    if requires_guard_cloud_connect(store, bundle.as_ref(), oauth.as_ref()) {
+    if requires_guard_cloud_connect(facts, bundle.as_ref(), oauth.as_ref()) {
         if bundle
             .as_ref()
             .is_some_and(|b| b.get("allowed").and_then(Value::as_bool).unwrap_or(false))
@@ -2549,7 +2672,7 @@ pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map
                 oauth_payload.as_ref(),
             );
         }
-        return connect_required_entitlement(store);
+        return connect_required_entitlement(facts);
     }
     if bundle
         .as_ref()
@@ -2588,7 +2711,7 @@ pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map
     if let Some(o) = &oauth {
         return o.clone();
     }
-    connect_required_entitlement(store)
+    connect_required_entitlement(facts)
 }
 
 // ---------------------------------------------------------------------------
@@ -3568,6 +3691,7 @@ fn workspace_scan_intent(
         execution_context_hashes: Vec::new(),
         execution_context_cwds: Vec::new(),
         execution_context_reason_codes: Vec::new(),
+        routine_local_runner: false,
     })
 }
 
@@ -4305,10 +4429,15 @@ pub fn package_evaluation_requires_external_archive_binding(
     evaluation: &PackageRequestEvaluation,
 ) -> bool {
     let source_hashes = evaluation.external_archive_source_hashes();
-    if source_hashes
-        .iter()
-        .any(|h| h.as_str().is_some_and(|s| s.len() == 64))
-    {
+    if source_hashes.iter().any(|h| {
+        // Python measures the hash in characters, and Python is the authority
+        // this lane must agree with. Counting bytes instead moved the trigger
+        // in both directions -- a 64-character hash that encodes to more than
+        // 64 bytes stopped demanding a binding, and a 64-byte string shorter
+        // than 64 characters started demanding one. Neither is the digest this
+        // looks for; matching Python is the contract, not a tighter rule.
+        h.as_str().is_some_and(|s| s.chars().count() == 64)
+    }) {
         return true;
     }
     if evaluation

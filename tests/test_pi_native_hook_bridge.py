@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import native_hook_bridge
-from codex_plugin_scanner.guard.adapters.pi_extension_native_hook import (
+from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_native_hook import (
     PI_HOOK_BRIDGE_FEATURE,
     PI_HOOK_BRIDGE_SWITCH,
     native_hook_reply_source,

@@ -9,6 +9,7 @@ from typing import cast
 
 from ..native_command_control_binding import NativeCommandProgramMetadata
 from ..runtime.extension_control_authority import authenticated_record, verify_authenticated_record
+from . import lifecycle
 from .activation_types import ActivationHeader
 from .authority import DIGEST, SHA
 from .located_store import LocatedStore
@@ -19,6 +20,7 @@ from .selection import PUBLICATION
 
 PURPOSE = "command-pack-activation.v1"
 SCHEMA = "guard.command-pack-activation.v1"
+SCHEMA_V2 = "guard.command-pack-activation.v2"
 MAX_RECORD_BYTES = 64 * 1024
 REGISTRY_PAGE = "guard.command-pack-registry-page.v1"
 EXECUTABLE_PAGE = "guard.command-pack-executables-page.v1"
@@ -74,15 +76,27 @@ def seal(prepared, *, key: bytes, revision: int, previous_digest=None, now=None)
         raise ValueError("activation predecessor invalid")
     publication = decode(prepared._publication)
     now = int(time.time()) if now is None else now
-    if type(now) is not int or not publication["issued_at"] <= now < publication["expires_at"]:
+    profile = prepared.authority_profile
+    if (
+        type(now) is not int
+        or not lifecycle.invoke(
+            "admission",
+            profile=profile,
+            now=now,
+            issued_at=publication.get("issued_at"),
+            expires_at=publication.get("expires_at"),
+        )["current"]
+    ):
         raise ValueError("prepared publication expired before activation")
+    if profile == "committed-subset" and prepared.predecessor_digest != previous_digest:
+        raise ValueError("offline subset predecessor differs from committed authority")
     if len(prepared.candidate_executables) > MAX_EXECUTABLES:
         raise ValueError("activation executable metadata exceeds budget")
     local = ObjectStore(prepared.directory / "objects")
     registry = _pages(local, [decode(value) for value in prepared._registry_refs], REGISTRY_PAGE)
     executables = _pages(local, list(prepared.candidate_executables), EXECUTABLE_PAGE)
     payload: dict[str, object] = {
-        "schema": SCHEMA,
+        "schema": SCHEMA_V2,
         "revision": revision,
         "previous_digest": previous_digest,
         "program_digest": prepared.metadata.program_digest,
@@ -94,8 +108,8 @@ def seal(prepared, *, key: bytes, revision: int, previous_digest=None, now=None)
         "root_digest": prepared.root_digest,
         "authority_epoch": prepared.authority_epoch,
         "revocation_epoch": prepared.revocation_epoch,
-        "issued_at": publication["issued_at"],
-        "expires_at": publication["expires_at"],
+        "issued_at": publication.get("issued_at"),
+        "expires_at": publication.get("expires_at"),
         "selection": decode(prepared._selection_ref),
         "selected_count": len(prepared.selected),
         "registry": registry,
@@ -104,6 +118,7 @@ def seal(prepared, *, key: bytes, revision: int, previous_digest=None, now=None)
         "executable_count": len(prepared.candidate_executables),
         "distribution": local.put(prepared._publication),
     }
+    payload["authority_profile"] = profile
     result = authenticated_record(payload, key=key, purpose=PURPOSE)
     if len(result[0].encode()) > MAX_RECORD_BYTES:
         raise ValueError("activation record exceeds byte budget")
@@ -167,12 +182,23 @@ def verify_header(data, expected_digest, expected_mac, *, key) -> ActivationHead
         "issued_at",
         "expires_at",
     }
-    if set(value) != fields or value["schema"] != SCHEMA:
+    if value.get("schema") == SCHEMA_V2:
+        fields.add("authority_profile")
+        if value.get("authority_profile") not in {"installed", "committed-subset", "remote"}:
+            raise ValueError("activation authority profile invalid")
+    if set(value) != fields or value["schema"] not in {SCHEMA, SCHEMA_V2}:
         raise ValueError("activation record schema invalid")
     for field in ("program_digest", "catalog_digest", "trust_digest", "engine", "root_digest"):
         candidate = value[field]
         if not isinstance(candidate, str) or DIGEST.fullmatch(candidate) is None:
             raise ValueError("activation digest invalid")
+    installed = value["issued_at"] is None and value["expires_at"] is None
+    if installed and (value["schema"] != SCHEMA_V2 or value["publication_id"] != "0.0"):
+        raise ValueError("activation installed authority invalid")
+    if value.get("authority_profile") == "installed" and not installed:
+        raise ValueError("installed activation cannot claim remote freshness")
+    if value.get("authority_profile") == "committed-subset" and value["previous_digest"] is None:
+        raise ValueError("offline subset requires a committed predecessor")
     if (
         not isinstance(value["source_sha"], str)
         or SHA.fullmatch(value["source_sha"]) is None
@@ -184,7 +210,7 @@ def verify_header(data, expected_digest, expected_mac, *, key) -> ActivationHead
         candidate = value[field]
         if type(candidate) is not int or not minimum <= candidate < 2**64:
             raise ValueError("activation epoch or revision invalid")
-    if (
+    if not installed and (
         type(value["issued_at"]) is not int
         or type(value["expires_at"]) is not int
         or not 0 <= value["issued_at"] < value["expires_at"]
@@ -218,6 +244,16 @@ def verify_header(data, expected_digest, expected_mac, *, key) -> ActivationHead
     return cast(ActivationHeader, cast(object, value))
 
 
+def admission_is_current(header: ActivationHeader, now: int) -> bool:
+    return lifecycle.invoke(
+        "admission",
+        profile=header.get("authority_profile", "remote"),
+        issued_at=header["issued_at"],
+        expires_at=header["expires_at"],
+        now=now,
+    )["current"]
+
+
 def open_record(data, expected_digest, expected_mac, *, key, directory):
     value = verify_header(data, expected_digest, expected_mac, key=key)
     reader = PackReader(directory / "objects")
@@ -230,7 +266,8 @@ def open_record(data, expected_digest, expected_mac, *, key, directory):
     distribution = reader.json(value["distribution"])
     if (
         not isinstance(distribution, dict)
-        or distribution.get("schema") != "guard.extension-distribution.v2"
+        or distribution.get("schema")
+        != ("guard.command-pack-bundle.v1" if value["issued_at"] is None else "guard.extension-distribution.v2")
         or any(
             distribution.get(field) != value[field]
             for field in ("source_sha", "engine", "publication_id", "authority_epoch", "issued_at", "expires_at")

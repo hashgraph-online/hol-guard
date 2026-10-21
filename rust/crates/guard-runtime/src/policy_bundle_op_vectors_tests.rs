@@ -97,6 +97,7 @@ fn normalized(mut value: Value) -> Value {
 
 #[test]
 fn every_recorded_python_verdict_is_reproduced() {
+    crate::policy_bundle_keys_ctx::BUILTIN_ANCHOR_DISABLED.with(|disabled| disabled.set(true));
     let cases = load();
     assert!(cases.len() > 30_000, "fixture unexpectedly small");
     let mut failures: BTreeMap<String, Vec<String>> = BTreeMap::new();

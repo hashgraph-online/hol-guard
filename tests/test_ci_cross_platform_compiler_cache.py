@@ -31,8 +31,7 @@ def test_runtime_cache_preserves_the_optimized_profile_and_cold_build_allowance(
         job = workflow["jobs"][name]
         assert job["timeout-minutes"] == 15
         assert "CARGO_PROFILE_RELEASE_OPT_LEVEL" not in job.get("env", {})
-    for name in ("native-release-size", "native-command-evaluators"):
-        assert "CARGO_PROFILE_RELEASE_OPT_LEVEL" not in workflow["jobs"][name].get("env", {})
+    assert "CARGO_PROFILE_RELEASE_OPT_LEVEL" not in workflow["jobs"]["native-command-evaluators"].get("env", {})
     assert "macos-native-runtime" in workflow["jobs"]["required"]["needs"]
     assert "windows-native-runtime" in workflow["jobs"]["required"]["needs"]
 

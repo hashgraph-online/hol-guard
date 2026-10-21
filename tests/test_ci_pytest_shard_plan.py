@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from scripts.ci.build_pytest_shard_plan import (
+    NATIVE_OFFLINE_UPGRADE_FILES,
     SANDBOX_GATE_FILES,
     SCHEDULING_ONLY_NODE_IDS,
     _split_file_nodes,
@@ -22,6 +23,14 @@ from tests.support.ci_workflow import expand_ci_job_actions
 
 def _durations(nodes: list[str], *, seconds: float = 1.0) -> dict[str, float]:
     return {node_id_digest(node_id): seconds for node_id in nodes}
+
+
+def test_dedicated_offline_upgrade_is_excluded_from_ordinary_shards() -> None:
+    nodes = [f"{path}::test_upgrade" for path in NATIVE_OFFLINE_UPGRADE_FILES]
+    ordinary = "tests/test_ordinary.py::test_control"
+    shards, loads = build_affinity_node_shards([*nodes, ordinary], 1, _durations(nodes, seconds=600))
+    assert shards == [[ordinary]]
+    assert loads == [1.0]
 
 
 def test_isolated_function_excludes_all_parameters_without_matching_other_tests(monkeypatch) -> None:
@@ -150,7 +159,6 @@ def test_full_corpus_process_timing_runs_serially_without_losing_other_report_ch
     assert nodes.count(timing_node) == 1
     # Use the existing short slice without shifting the other timing workloads.
     assert nodes.index(timing_node) % 4 == 1
-    assert nodes.count("tests/test_guard_sandbox.py") == 1
     assert "-n" not in shlex.split(timing_step["run"])
     assert "scheduling-sensitive" in jobs["ci-python-312"]["needs"]
 

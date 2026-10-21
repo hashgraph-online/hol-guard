@@ -104,4 +104,17 @@ mod tests {
         assert_eq!(digest.len(), 64);
         assert!(digest.bytes().all(|b| b.is_ascii_hexdigit()));
     }
+
+    #[test]
+    fn rule_material_starts_with_every_version() {
+        let versions: Vec<&str> = RULE_MATERIAL.lines().take(3).collect();
+        assert_eq!(
+            versions,
+            [
+                SCANNER_VERSION,
+                SOURCE_CLASSIFIER_VERSION,
+                SOURCE_READ_VERSION
+            ]
+        );
+    }
 }

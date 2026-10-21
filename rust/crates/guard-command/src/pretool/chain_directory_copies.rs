@@ -80,9 +80,12 @@ const GIT_VALUE_OPTIONS: &[&str] = &[
 /// A non-Git segment, or a Git segment whose subcommand cannot write the
 /// work tree.
 fn leaves_work_tree(segment: &CommandSegmentV1) -> bool {
-    if segment.executable.as_deref() != Some("git") {
-        return true;
-    }
+    segment.executable.as_deref() != Some("git")
+        || git_subcommand(segment).is_some_and(|name| WORK_TREE_READERS.contains(&name))
+}
+
+/// The subcommand of a Git segment, after any global options and their values.
+pub(super) fn git_subcommand(segment: &CommandSegmentV1) -> Option<&str> {
     let mut index = 0;
     while let Some(argument) = segment.arguments.get(index) {
         if GIT_VALUE_OPTIONS.contains(&argument.as_str()) {
@@ -90,10 +93,10 @@ fn leaves_work_tree(segment: &CommandSegmentV1) -> bool {
         } else if argument.starts_with('-') {
             index += 1;
         } else {
-            return WORK_TREE_READERS.contains(&argument.as_str());
+            return Some(argument.as_str());
         }
     }
-    false
+    None
 }
 
 /// A `cp` segment in a [`mkdir_chain`] whose destination no `mkdir` in the

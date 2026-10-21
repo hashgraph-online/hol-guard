@@ -10,6 +10,8 @@ rust-version.workspace = true
 autotests = false
 
 [dependencies]
+rusqlite.workspace = true
+tempfile = "3.10"
 base64.workspace = true
 caseless.workspace = true
 mailparse.workspace = true
@@ -62,12 +64,16 @@ tempfile = "3.10"
 guard-contained-process = { path = "../guard-contained-process" }
 flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 rcgen = { version = "=0.13.2", default-features = false, features = ["crypto", "ring"] }
-rustls = { version = "=0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
+rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 # Keep synthetic-certificate tests compatible with the workspace MSRV.
 time = "=0.3.47"
 
 [lints]
 workspace = true
+
+[[bin]]
+name = "guard-cloud-catalog"
+path = "src/cloud_catalog_cli.rs"
 
 [[test]]
 name = "integration"
@@ -90,8 +96,20 @@ name = "pretool_git_push_unregistered"
 path = "tests/pretool_git_push_unregistered.rs"
 
 [[test]]
+name = "pretool_windows_drive_path_writes"
+path = "tests/pretool_windows_drive_path_writes.rs"
+
+[[test]]
+name = "pretool_windows_sibling_repository_writes"
+path = "tests/pretool_windows_sibling_repository_writes.rs"
+
+[[test]]
 name = "pretool_worktree_cd_windows"
 path = "tests/pretool_worktree_cd_windows.rs"
+
+[[test]]
+name = "pretool_windows_sibling_project_root"
+path = "tests/pretool_windows_sibling_project_root.rs"
 
 [[test]]
 name = "shim_admin_vectors"

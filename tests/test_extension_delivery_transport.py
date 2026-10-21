@@ -139,6 +139,69 @@ def test_approved_redirect_reenters_managed_transport_without_credentials(monkey
     assert len(calls) == 2
 
 
+def test_transient_refusals_are_retried_and_permanent_ones_are_not(monkeypatch):
+    monkeypatch.setattr(transport.time, "sleep", lambda seconds: None)
+    calls = []
+
+    def refusing(status, body=b"ok"):
+        def open_managed(request, **kwargs):
+            calls.append(request.full_url)
+            if len(calls) <= 2:
+                raise urllib.error.HTTPError(request.full_url, status, "refused", {}, io.BytesIO())
+            return Response(body, {"Content-Length": str(len(body))})
+
+        return open_managed
+
+    monkeypatch.setattr(transport, "managed_urlopen", refusing(429))
+    assert transport.download("https://github.com/asset", 100) == b"ok"
+    assert len(calls) == 3
+
+    calls.clear()
+    monkeypatch.setattr(transport, "managed_urlopen", refusing(503))
+    assert transport.download("https://github.com/asset", 100) == b"ok"
+    assert len(calls) == 3
+
+    # A connection that never completed is the same transient shape.
+    calls.clear()
+
+    def unreachable(request, **kwargs):
+        calls.append(request.full_url)
+        if len(calls) <= 2:
+            raise urllib.error.URLError("unreachable")
+        return Response(b"ok", {"Content-Length": "2"})
+
+    monkeypatch.setattr(transport, "managed_urlopen", unreachable)
+    assert transport.download("https://github.com/asset", 100) == b"ok"
+    assert len(calls) == 3
+
+    # A missing release and a refused request are answers, not outages.
+    for status, error in ((404, transport.MissingReleaseError), (403, urllib.error.HTTPError)):
+        calls.clear()
+
+        def permanent(request, _status=status, **kwargs):
+            calls.append(request.full_url)
+            raise urllib.error.HTTPError(request.full_url, _status, "no", {}, io.BytesIO())
+
+        monkeypatch.setattr(transport, "managed_urlopen", permanent)
+        with pytest.raises(error):
+            transport.download("https://github.com/asset", 100)
+        assert len(calls) == 1
+
+
+def test_retry_gives_up_after_a_bounded_number_of_attempts(monkeypatch):
+    monkeypatch.setattr(transport.time, "sleep", lambda seconds: None)
+    calls = []
+
+    def open_managed(request, **kwargs):
+        calls.append(request.full_url)
+        raise urllib.error.HTTPError(request.full_url, 503, "refused", {}, io.BytesIO())
+
+    monkeypatch.setattr(transport, "managed_urlopen", open_managed)
+    with pytest.raises(urllib.error.HTTPError):
+        transport.download("https://github.com/asset", 100)
+    assert len(calls) == len(transport._RETRY_DELAYS) + 1
+
+
 def test_redirect_loop_is_bounded(monkeypatch):
     calls = []
 

@@ -7,8 +7,9 @@ from typing import Any
 
 from .business_policy import BUSINESS_CLI_CASES
 from .catalog import Scenario
-from .clone_fixtures import LONG_LIVED_CLONE_CASE
+from .clone_fixtures import LONG_LIVED_CLONE_CASE, LONG_LIVED_WORKTREE_CASE
 from .command_outputs import command_outputs_match as command_outputs_match
+from .fast_forward_fixtures import FAST_FORWARD_CASE, FAST_FORWARD_HOOK_CASE
 from .input_evidence import input_digest, input_matches, post_input_matches
 from .native_routes import native_route_error
 from .remote_code import REMOTE_CODE_CASES
@@ -81,6 +82,12 @@ def required_checks(scenario: Scenario) -> set[str]:
         checks.add("protected:.codex/hooks.json:not-written")
     if scenario.id == LONG_LIVED_CLONE_CASE:
         checks.add("long-lived-branch-checked-out")
+    if scenario.id == LONG_LIVED_WORKTREE_CASE:
+        checks.add("long-lived-worktrees-added")
+    if scenario.id == FAST_FORWARD_CASE:
+        checks.update({"fast-forward-head-advanced", "fast-forward-upstream-file-exact"})
+    if scenario.id == FAST_FORWARD_HOOK_CASE:
+        checks.update({"fast-forward-head-unchanged", "post-merge-hook-not-run"})
     if scenario.id == SESSION_EDIT_CASE:
         checks.add("session-folder-edit-exact")
     if scenario.id == SESSION_SHELL_CASE:

@@ -10,6 +10,7 @@ from typing import Protocol
 
 from .approval_resolution import require_resolvable_approval_request
 from .dpop_key_binding import verified_dpop_jwk_thumbprint
+from .native_approval_queue_identity import connection_guard_home
 from .runtime.time_support import parse_utc_timestamp
 from .store_approvals import get_approval_request as load_approval_request
 from .store_approvals import resolve_one_request_only as persist_one_resolution
@@ -227,7 +228,7 @@ class StoreExactCloudReviewMixin:
                 )
             except sqlite3.IntegrityError:
                 return {"checked_at": resolved_at, "replayed": True, "resolved": False}
-            require_resolvable_approval_request(request)
+            require_resolvable_approval_request(request, guard_home=connection_guard_home(connection))
             resolved = persist_one_resolution(
                 connection,
                 request_id,

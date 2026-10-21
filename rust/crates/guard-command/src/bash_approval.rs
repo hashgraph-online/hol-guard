@@ -13,6 +13,7 @@ use tree_sitter::{Node, ParseOptions, Parser};
 mod commands;
 mod descriptor_context;
 pub use descriptor_context::is_descriptor_reference;
+pub mod curl_startup;
 pub mod delivery;
 pub mod graph;
 mod source;
@@ -34,6 +35,8 @@ pub struct Operation {
     pub line: usize,
     pub command_start: usize,
     pub command_end: usize,
+    #[serde(default)]
+    pub pipeline_input: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -170,6 +173,7 @@ fn analyze_inner(
         total_effects: 0,
         source_context,
         exported_names: &exported_names,
+        pipeline_input: false,
     };
     state.walk(tree.root_node(), 0)?;
     Ok(state.analysis)
@@ -213,6 +217,7 @@ struct State<'a, 'context> {
     total_effects: usize,
     source_context: Option<source::Context<'context>>,
     exported_names: &'context BTreeSet<String>,
+    pipeline_input: bool,
 }
 
 impl State<'_, '_> {
@@ -299,12 +304,15 @@ impl State<'_, '_> {
                 // Bash runs pipeline members in subshell environments. A
                 // declaration inside one must not authorize a following line.
                 let mut cursor = node.walk();
-                for child in node.named_children(&mut cursor) {
+                let previous_input = self.pipeline_input;
+                for (index, child) in node.named_children(&mut cursor).enumerate() {
                     let variables = self.variables.clone();
+                    self.pipeline_input = index > 0;
                     self.walk(child, depth + 1)?;
                     self.variables = variables;
                     self.stopped = false;
                 }
+                self.pipeline_input = previous_input;
                 Ok(())
             }
             _ => Err(self.error(node, "bash_unsupported_statement")),

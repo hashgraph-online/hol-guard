@@ -36,7 +36,7 @@ from tests.benign_fp_gate_connectors import allow_ready_cli, assert_connector_se
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
 from tests.benign_fp_gate_mcp import McpCase, mcp_cases, mcp_failure, replay
 from tests.benign_fp_gate_projects import host_tool_path
-from tests.gauntlet_replay import OMP_CONTAINED, cursor_hook_fields
+from tests.gauntlet_replay import OMP_CONTAINED, cursor_hook_fields, source_ref_payload
 from tests.native_gate_retry import BUDGET_MISS_REASONS, review_with_unavailable_retry
 
 pytestmark = pytest.mark.usefixtures("native_hook_force")
@@ -70,7 +70,10 @@ _FIXED_TOOLS = {
 _ALLOWED_PR = {"unassigned"}
 # The session-* cases replay prompts users approved by hand. Those still
 # reviewed on Linux CI are recorded here until their fixes land.
-_PENDING_CEILING = 3
+# Every entry is the same class: Cursor is the one harness with no containment
+# route, so work the other four run quietly inside the workspace sandbox reaches
+# a Cursor user as a review card. One route fixes all of them at once.
+_PENDING_CEILING = 4
 _RENDERED_KEYS = ("reason", "notice", "message", "systemMessage", "stopReason")
 _RENDERED_SPECIFIC_KEYS = ("permissionDecisionReason", "additionalContext")
 # Pending entries are recorded against the Linux CI host. Git helper context and
@@ -94,6 +97,9 @@ class GateCase:
     expect: str
     event: str = "PreToolUse"
     tool_response: object = None
+    # Attach the source-file proof Oh My Pi's extension sends with a
+    # PostToolUse read, which routes the review through the source path.
+    source_ref: bool = False
     # Variables the agent shell inherits, such as a user's RIPGREP_CONFIG_PATH.
     environment: tuple[tuple[str, str], ...] = ()
 
@@ -114,6 +120,7 @@ def _expand() -> list[GateCase]:
                     expect=entry["expect"],
                     event=entry.get("event", "PreToolUse"),
                     tool_response=entry.get("tool_response"),
+                    source_ref=bool(entry.get("source_ref", False)),
                     environment=tuple(sorted(entry.get("environment", {}).items())),
                 )
             )
@@ -212,6 +219,11 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
     }
     if case.tool_response is not None:
         payload["tool_response"] = case.tool_response
+    if case.source_ref:
+        tool_input = payload["tool_input"]
+        assert isinstance(tool_input, dict)
+        spelled = str(tool_input.get("path") or tool_input["file_path"])
+        payload["guard_source_ref"] = source_ref_payload(spelled, fixture.cwd(case.cwd))
     if case.harness == "cursor":
         payload.update(cursor_hook_fields(case.tool, payload))
     # Approval baselines stay from before the first attempt, so a retry never hides a row.
@@ -289,10 +301,19 @@ def _decision(result: dict[str, object]) -> str:
 
 
 def _rendered_text(result: dict[str, object]) -> bool:
-    """True when the harness response carries text the agent or user would see."""
+    """True when the harness response carries text the agent or user would see.
+
+    ``notice`` is the PostToolUse display mode, not a message: every allowed
+    output review carries one, and ``none`` is the value that says the harness
+    shows nothing at all.
+    """
     specific = result.get("hookSpecificOutput")
     specific = specific if isinstance(specific, dict) else {}
-    return any(result.get(key) for key in _RENDERED_KEYS) or any(specific.get(key) for key in _RENDERED_SPECIFIC_KEYS)
+    if any(result.get(key) for key in _RENDERED_KEYS if key != "notice"):
+        return True
+    if result.get("notice") not in (None, "", "none"):
+        return True
+    return any(specific.get(key) for key in _RENDERED_SPECIFIC_KEYS)
 
 
 def _quiet_allow(result: dict[str, object], approvals: int) -> bool:
@@ -417,6 +438,37 @@ def test_one_connector_groups_its_setup_reviews_by_action(gate_environment: tupl
     assert len(groups) == 1, f"one connector must queue under one identity, got {len(groups)}"
     assert len(next(iter(groups.values()))) == len(commands), "distinct actions must keep distinct action digests"
     assert len(rows) == len(commands) * 2, "every harness call keeps its own evidence row"
+
+
+def test_an_environment_dump_is_reviewed_rather_than_refused(
+    gate_environment: tuple[BenignFixture, HookWorker],
+) -> None:
+    """Reading every exported variable asks, and the ask is one the user can answer.
+
+    A whole-environment dump is the cheapest read of every token a session
+    exports, so ``neg-printenv-all`` and ``neg-env-all`` keep it off the silent
+    path. That is a review, not a refusal: ``env``, ``env -0`` and
+    ``env | grep '^PATH='`` were read as interpreters launching a file nobody
+    opened and came back as a hard block with no approval row at all, so no
+    user could allow their own shell to print its own environment.
+    """
+    fixture, worker = gate_environment
+    for index, command in enumerate(("env", "env -0", "env | grep '^PATH='", "printenv")):
+        case = GateCase(
+            case_id=f"env-dump-{index}@claude-code",
+            base_id=f"env-dump-{index}",
+            fix_area="shell",
+            harness="claude-code",
+            tool="shell",
+            tool_input={"command": command},
+            cwd="worktree",
+            expect="not_allow",
+        )
+        result, approvals = _review(case, fixture, worker)
+        description = _describe(case, result, approvals)
+        assert _decision(result) != "allow", f"environment dump was allowed: {description}"
+        assert approvals == 1, f"environment dump left no approval to give: {description}"
+        assert not always_gap(_ROWS[case.case_id]), f"environment dump offers no Always allow: {description}"
 
 
 @pytest.mark.parametrize("case", mcp_cases(_DOCUMENT), ids=lambda case: case.case_id)

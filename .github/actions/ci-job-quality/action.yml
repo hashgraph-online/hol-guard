@@ -54,7 +54,6 @@ runs:
         src/ \
         tests/test_guard_durable_io.py \
         tests/test_guard_managed_install_context.py \
-        tests/test_guard_node_semver.py \
         tests/test_guard_private_file_io.py
     shell: bash
   - name: Check formatting for production sources
@@ -63,7 +62,6 @@ runs:
         src/ \
         tests/test_guard_durable_io.py \
         tests/test_guard_managed_install_context.py \
-        tests/test_guard_node_semver.py \
         tests/test_guard_private_file_io.py
     shell: bash
   - run: uv run --no-sync basedpyright --level error

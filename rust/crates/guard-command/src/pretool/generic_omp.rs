@@ -7,6 +7,8 @@
 
 #[path = "generic_omp_eval.rs"]
 mod eval;
+#[path = "generic_omp_grep_glob.rs"]
+mod grep_glob;
 #[path = "generic_omp_learn.rs"]
 mod learn;
 #[path = "generic_omp_yield.rs"]
@@ -15,6 +17,7 @@ mod yield_report;
 use super::extract::GenericSignals;
 use super::result::{generic_action, generic_result};
 use crate::native_command_controls::CompiledNativeCommandControls;
+use grep_glob::glob_directory;
 use guard_contracts::{PreToolActionTypeV1, PreToolOperationV1, PreToolResultV1};
 use serde_json::{Map, Value};
 use std::time::Instant;
@@ -344,6 +347,24 @@ fn listing(
             && !super::super::sensitive_command(target)
             && !super::super::sensitive_read_path_argument(target)
     };
+    // A name inside a linked worktree this repository registers lists nothing
+    // when nothing is there, and every existing file in that worktree is
+    // already routed, so saying nothing is there reveals no more than a
+    // listing the agent may already run.
+    let registered = |target: &str| {
+        missing(target)
+            && super::super::git_routes::missing_path_in_registered_worktree(target, home, cwd)
+    };
+    if targets
+        .iter()
+        .all(|target| proven(target) || registered(target))
+    {
+        return Some(directory_allow(
+            context,
+            "native_missing_worktree_listing",
+            "The Rust authority proved this listing names a path with nothing behind it inside a linked worktree this repository registers, so it lists nothing and the tool reports the missing path itself.",
+        ));
+    }
     targets
         .iter()
         .all(|target| proven(target) || missing(target))
@@ -534,7 +555,7 @@ fn project_skill_listing(target: &str, context: &OmpContext<'_>) -> bool {
 /// segment, such as `src/*.ts`. Oh My Pi matches that segment against the
 /// directory's own entries only: its glob tool passes `recursive: false` and
 /// its input schema has no field that turns recursion on (checked in Oh My Pi
-/// 18.4.12 and 18.8.3). `listing` rejects any key outside that schema, and a
+/// 18.4.12, 18.8.3 and 18.11.3). `listing` rejects any key outside that schema, and a
 /// `pattern` key keeps the walk. A selector with no literal directory gains
 /// a `**/` prefix there, and `**` crosses directories, so neither is
 /// single-level.
@@ -741,7 +762,7 @@ fn walk_inside_session(target: &str, context: &OmpContext<'_>) -> bool {
 
 /// Oh My Pi's `lsp` tool asks the session's language servers about code.
 /// The actions its read-only sessions keep (`LSP_READONLY_ACTIONS`, checked
-/// in Oh My Pi 18.4.12 and 18.8.3) only report on files. Every other action
+/// in Oh My Pi 18.4.12, 18.8.3 and 18.11.3) only report on files. Every other action
 /// can change the workspace or reach the server unchecked: `rename` and
 /// `code_actions` apply edits across files, `rename_file` moves a file to any
 /// destination, and `request` sends a raw server request. Those go to review
@@ -806,55 +827,6 @@ fn lsp_read(
     })
 }
 
-fn glob_directory(target: &str) -> Option<&str> {
-    let Some(index) = target.find(['*', '?', '[', '{']) else {
-        return Some(target);
-    };
-    // A Windows drive root (`C:/` or, on Windows, `C:\`) anchors the
-    // selector like `/` does. On Windows a backslash is a separator there,
-    // never a glob escape.
-    let drive = matches!(
-        target.as_bytes(),
-        [letter, b':', b'/', ..] if letter.is_ascii_alphabetic()
-    ) || (cfg!(windows)
-        && matches!(
-            target.as_bytes(),
-            [letter, b':', b'\\', ..] if letter.is_ascii_alphabetic()
-        ));
-    let selector = if drive {
-        &target[3..]
-    } else {
-        target
-            .strip_prefix("~/")
-            .or_else(|| target.strip_prefix('/'))
-            .unwrap_or(target)
-    };
-    let separators: &[char] = if drive && cfg!(windows) {
-        &['/', '\\']
-    } else {
-        &['/']
-    };
-    // Restrict this proof to simple globs. Alternatives and escaped syntax can
-    // synthesize traversal segments that are absent from the literal input.
-    if !contained_selector(selector)
-        || target.starts_with("//")
-        || selector.contains("..")
-        || selector.contains(|c: char| c == '\\' && !separators.contains(&c))
-        || selector.contains(['[', ']', '{', '}', '(', ')'])
-        // A colon after a drive names an alternate data stream.
-        || (drive && selector.contains(':'))
-    {
-        return None;
-    }
-    let prefix = &target[..index];
-    match prefix.rsplit_once(separators) {
-        Some(("", _)) => Some("/"),
-        Some((root, _)) if drive && root.len() == 2 => Some(&target[..3]),
-        Some((directory, _)) => Some(directory),
-        None => Some("."),
-    }
-}
-
 fn grep_scope(
     payload: &Value,
     signals: &GenericSignals,
@@ -881,8 +853,7 @@ fn grep_scope(
     // A `file:N-M` entry searches only those lines of one file, so it carries
     // the proof `read` gives the same selector.
     let list = targets.len() > 1;
-    // A `glob` or `type` override can re-include a gitignored file, so with
-    // either one no ignore file narrows the proof.
+    // A `glob` or `type` override can re-include a gitignored file: no ignore file narrows it.
     let gitignore = input.get("gitignore").and_then(Value::as_bool) != Some(false)
         && !input.contains_key("glob")
         && !input.contains_key("type");
@@ -890,6 +861,7 @@ fn grep_scope(
     // A plain pattern that no reachable sensitive file contains cannot print
     // a line from one, so those files need not hold the search.
     let clearance = super::super::search_pattern_clearance::PatternClearance::new(pattern);
+    let globs = grep_glob::EntryProofs::default();
     let proven = |target: &str| {
         super::super::search_scope::omp_grep_scope_proven(
             target,
@@ -899,6 +871,7 @@ fn grep_scope(
             clearance.as_ref(),
         ) || (list && super::super::read_paths::existing_regular_read_target(target, home, cwd))
             || super::super::read_paths::bounded_omp_file_selector_target(target, home, cwd)
+            || globs.proven(target, home, cwd, clearance.as_ref())
     };
     if targets.iter().all(|target| proven(target)) {
         return Some(directory_allow(
@@ -920,6 +893,26 @@ fn grep_scope(
     } else {
         "HOL Guard did not run this search because its path does not exist. Check the path, for example by listing its parent directory, and try again with the correct one."
     };
+    // The same holds for a search: a name inside a registered linked worktree
+    // with nothing behind it searches nothing, and that worktree's existing
+    // files are already in scope.
+    let registered = |target: &str| {
+        missing(target)
+            && !signals.sensitive_target
+            && !super::super::sensitive_command(target)
+            && !super::super::sensitive_read_path_argument(target)
+            && super::super::git_routes::missing_path_in_registered_worktree(target, home, cwd)
+    };
+    if targets
+        .iter()
+        .all(|target| proven(target) || registered(target))
+    {
+        return Some(directory_allow(
+            context,
+            "native_missing_worktree_search",
+            "The Rust authority proved this search names a path with nothing behind it inside a linked worktree this repository registers, so it searches nothing and the tool reports the missing path itself.",
+        ));
+    }
     targets
         .iter()
         .all(|target| proven(target) || missing(target))
@@ -1115,36 +1108,4 @@ fn selector_chunks_ok<'a>(mut chunks: impl Iterator<Item = &'a str>) -> bool {
         range |= is_range;
         fresh
     })
-}
-
-#[cfg(test)]
-mod glob_directory_tests {
-    use super::glob_directory;
-
-    #[test]
-    fn drive_rooted_globs_prove_their_fixed_directory() {
-        assert_eq!(
-            glob_directory("C:/Users/x/.agent/skills/**/SKILL.md"),
-            Some("C:/Users/x/.agent/skills")
-        );
-        assert_eq!(glob_directory("C:/*.md"), Some("C:/"));
-        assert_eq!(
-            glob_directory(r"C:\Users\x\.agent\skills\**\SKILL.md"),
-            cfg!(windows).then_some(r"C:\Users\x\.agent\skills")
-        );
-        for escape in [
-            "C:/Users/x/**/../../.ssh/*",
-            "C:/Users/x/{a,..}/*",
-            "C:*.md",
-            "C:/Users/x:stream/*",
-            r"\\?\C:\Users\x\*",
-        ] {
-            assert_eq!(glob_directory(escape), None, "{escape:?}");
-        }
-        // A backslash escapes the star on Unix and separates on Windows.
-        assert_eq!(
-            glob_directory(r"C:/Users/x/\*/*"),
-            cfg!(windows).then_some("C:/Users/x/")
-        );
-    }
 }

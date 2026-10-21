@@ -26,10 +26,6 @@ from ..native_daemon_handler import (
     native_headless_action_state,
     native_headless_cursor_surface_error,
 )
-from ..package_firewall_entitlement import (
-    package_firewall_available_actions,
-    package_firewall_block_details,
-)
 from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..receipts.manager import build_receipt
 from ..shims import (
@@ -227,14 +223,19 @@ class _HeadlessRoutes:
             return
         entitlement = self._supply_chain_entitlement()
         if not bool(entitlement["allowed"]):
-            status, error_code, message = package_firewall_block_details(entitlement)
             current_status = package_shim_status(self._supply_chain_context(payload))
+            access = self._package_firewall_access(
+                entitlement,
+                operation=None,
+                has_installed_managers=bool(current_status.get("installed_managers")),
+                reported_operation=action,
+            )
+            if access is None:
+                return
+            status, error_code, message = access.block
             self._write_json(
                 {
-                    "available_actions": package_firewall_available_actions(
-                        entitlement,
-                        has_installed_managers=bool(current_status.get("installed_managers")),
-                    ),
+                    "available_actions": access.available_actions,
                     "entitlement": entitlement,
                     "error": error_code,
                     "message": message,
@@ -436,6 +437,12 @@ class _HeadlessRoutes:
         registry, snapshot = api.recommendation_inputs()
         store = self._daemon_server().store
         hint = store.get_approval_extension_allow_hint(str(approval.get("request_id", "")))
+        if hint is None:
+            from .native_review_allow_hint import live_approval_extension_allow_hint
+
+            hint = live_approval_extension_allow_hint(
+                approval, guard_home=store.guard_home, snapshot=snapshot, registry=registry
+            )
         payload = with_approval_extension_recommendation(
             {**approval, "extension_allow_hint": hint}, registry=registry, snapshot=snapshot, include=True
         )

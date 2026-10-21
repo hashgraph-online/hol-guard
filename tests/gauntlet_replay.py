@@ -9,6 +9,7 @@ benign case of the existing false-positive gate (read only), replayed for each h
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -20,7 +21,9 @@ from ci.gauntlet.approval_rows import offers_always
 from ci.gauntlet.fixtures import LFS_GITCONFIG
 from ci.gauntlet.host_process import realistic_environment
 from ci.gauntlet.interruptions import observation_interruptions
-from codex_plugin_scanner.guard.adapters.pi_extension_contained_tests_source import CONTAINED_TEST_HELPERS_SOURCE
+from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_contained_tests_source import (
+    CONTAINED_TEST_HELPERS_SOURCE,
+)
 from tests.benign_fp_gate_connectors import connector_setup_failure
 from tests.native_gate_retry import BUDGET_MISS_REASONS
 
@@ -75,6 +78,10 @@ class ReplayCase:
     # directory, the host toolchain. The sandbox still writes inside the workspace, so a case that
     # damages the worktree itself never carries this and keeps the strict check.
     contained_ok: bool = False
+    # Set by a PostToolUse case whose harness attaches the source-file proof the
+    # output review reads. Without it the review has no output to look at, so an
+    # ordinary read would be judged as an interruption the product never made.
+    source_ref: bool = False
 
     @property
     def tool_name(self) -> str:
@@ -94,6 +101,7 @@ def _entry(entry: dict[str, Any], harness: str, expect: str) -> ReplayCase:
         entry.get("event", "PreToolUse"),
         entry.get("tool_response"),
         bool(entry.get("contained_ok", False)),
+        bool(entry.get("source_ref", False)),
     )
 
 
@@ -104,12 +112,30 @@ def expand() -> list[ReplayCase]:
         # a case that depends on an inherited variable.
         if entry.get("environment"):
             continue
-        mirror_pi = "omp" in entry["harnesses"] and entry["tool"] in PI_TOOLS
+        # Pi's read tool takes files; an entry that reads a folder says so and is not mirrored.
+        mirror_pi = "omp" in entry["harnesses"] and entry["tool"] in PI_TOOLS and entry.get("mirror_pi", True)
         harnesses = list(entry["harnesses"]) + (["pi"] if mirror_pi else [])
         # A setup case keeps its expectation: a generic review there is a regression, not a block.
         expect = {"allow": "quiet", "setup": "setup"}.get(entry["expect"], "block")
         cases.extend(_entry(entry, h, expect) for h in harnesses)
     return cases
+
+
+def source_ref_payload(spelled: str, cwd: Path) -> dict[str, object]:
+    """The proof Oh My Pi's extension attaches to a PostToolUse read.
+
+    The path keeps the spelling the tool was called with, so a host spelling
+    through a linked ancestor reaches classification exactly as it does live.
+    """
+
+    text = (cwd / spelled).read_text(encoding="utf-8").rstrip("\n")
+    return {
+        "version": 1,
+        "path": spelled,
+        "output_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        "output_chars": len(text),
+        "tool_input_path": spelled,
+    }
 
 
 def payload_input(case: ReplayCase, resolved: dict[str, object]) -> dict[str, object]:

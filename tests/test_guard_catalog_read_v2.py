@@ -104,7 +104,9 @@ class _Resident:
 
         def status(*, deadline_monotonic: float | None = None) -> SimpleNamespace:
             self.status_probes.append(deadline_monotonic)
-            return SimpleNamespace(identity=identity)
+            return SimpleNamespace(
+                identity=identity, capabilities=SimpleNamespace(features=[transport.CATALOG_READ_FEATURE])
+            )
 
         monkeypatch.setattr(transport, "native_runtime_status", status)
         monkeypatch.setattr(transport, "_supports_catalog_read", lambda _status: available)
@@ -169,6 +171,14 @@ def test_busy_resident_is_a_retryable_fault_not_protocol_absence(
     assert resident.failures == []
 
 
+@pytest.mark.parametrize("error", ["native_overloaded", "native_request_deadline_exceeded"])
+def test_native_queue_fault_does_not_trigger_whole_catalog_fallback(tmp_path, monkeypatch, error):
+    resident = _Resident(json.dumps({"error": error, "retryable": True}).encode())
+    resident.install(monkeypatch)
+    assert _read(tmp_path) == NativeCatalogReadResult(status=503, error_code=transport.CATALOG_READ_TRANSPORT_FAILED)
+    assert resident.failures == [] and resident.successes == 0
+
+
 @pytest.mark.parametrize(
     ("response", "reason"),
     [
@@ -220,7 +230,9 @@ class _Recorder:
 @pytest.fixture
 def daemon(tmp_path: Path) -> Iterator[SimpleNamespace]:
     store = GuardStore(tmp_path / "guard-home")
-    server = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    # Explicit metadata preparation happens before the first HTTP request and
+    # can outlast the ephemeral home's five-second idle shutdown.
+    server = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
     server.start()
     try:
         token = load_guard_daemon_auth_token(store.guard_home)
@@ -437,6 +449,21 @@ def test_real_native_read_model_traverses_index_and_revalidates(
     _use_reader(monkeypatch, functools.partial(transport.native_catalog_read, timeout_seconds=60.0))  # type: ignore[arg-type]
     guard_home = daemon.guard_home
     token = daemon.token
+    status = transport.native_runtime_status()
+    if transport.CATALOG_DISCOVERY_FEATURE in status.capabilities.features:
+        # Source tests have no installed wheel/bundle manifests. Supply the
+        # prepared publication fixture through the factory-handle interface;
+        # production still uses only its fixed installed loader by default.
+        from codex_plugin_scanner.guard.catalog_delivery.discovery import prepare_discovery
+        from tests.test_catalog_discovery_backend import prepared_fixture
+
+        catalog_path = Path(__file__).parents[1] / "contracts/extensions/command-catalog.v1.json"
+        entries = json.loads(catalog_path.read_bytes())["catalog"]
+        verified, fetch, _, _ = prepared_fixture(guard_home.parent, monkeypatch, catalog_entries=entries)
+        handle = prepare_discovery(guard_home, verified, fetch=fetch)
+        _use_reader(
+            monkeypatch, functools.partial(transport.native_catalog_read, timeout_seconds=60.0, discovery_handle=handle)
+        )
     try:
         # A cold debug resident can exceed the Rust client's fixed 9s start
         # window while it also builds the snapshot; warm it before measuring.

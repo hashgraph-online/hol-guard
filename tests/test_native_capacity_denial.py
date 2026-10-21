@@ -11,7 +11,6 @@ from tests.daemon_control_patching import patch_daemon_global
 def test_capacity_failure_does_not_accept_local_watch_as_native_authority(monkeypatch: pytest.MonkeyPatch) -> None:
     handler = object.__new__(daemon._GuardDaemonHandler)
     handler.server = Mock(store=Mock(guard_home="fixture-home"))
-    monkeypatch.setattr(handler, "_validated_fail_safe_hook_paths", lambda _params, **_kwargs: (None, None))
     patch_daemon_global(
         monkeypatch,
         "load_guard_config",

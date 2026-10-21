@@ -97,6 +97,7 @@ REVIEW = {"minimum_action": "review", "reason": "Network installer piped to a sh
 DEFINITE = {
     "minimum_action": "review",
     "reason": "Extension review.",
+    "reason_code": "native_command_review_required",
     "command_extensions": {"binding": {"uncertainty_count": 0, "observations_digest": "sha256:obs"}},
 }
 ORIGIN_RECEIPT = {

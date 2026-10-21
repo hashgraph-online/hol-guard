@@ -5,26 +5,25 @@ what the install will run. The package evaluator can: an npm 11.9+ install
 with ``--ignore-scripts --allow-git=none``, or an older npm install with
 ``--ignore-scripts`` whose dependency tree registry metadata proves free of git
 dependencies, only writes registry package files, and a target that resolves
-on the public registry is identified well enough to continue. This module
-proves which npm the agent will run, hands the request to the evaluator, and
-settles the review from its verdict.
+on the public registry is identified well enough to continue. The resident
+proves which npm the agent will run; this module hands the request to the
+evaluator and settles the review from its verdict.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
 import shlex
-import shutil
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, LIBRARY_SEARCH_PATH_NAMES
+from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..native_supply_chain_registry_cache import RegistryDeadlineError, registry_wait_deadline
+from ..native_verified_npm import NativeVerifiedNpmError, verified_npm_proof
 from .hook_fail_closed import render_pre_tool
 from .hook_request_parsing import pre_tool_command
 
@@ -53,39 +52,6 @@ _OUTPUT_FILTER = rf"(?:tail|head)(?: +-[0-9]+| +-n *[0-9]+)?|grep(?: +-[iEFvcnw]
 _FILTERED_COMMAND = re.compile(
     rf"(?P<command>{_SIMPLE_COMMAND.pattern})(?: +2>&1)?(?P<filters>(?: *\| *(?:{_OUTPUT_FILTER}))*)"
 )
-_MAX_PACKAGE_JSON_BYTES = 256 * 1024
-_MAX_NPMRC_BYTES = 64 * 1024
-# npm settings that move where packages come from or how transport is trusted.
-# The evaluator checks the project `.npmrc`; these are the files above it.
-# `prefix` is left out: outside the command line it only moves global installs.
-_FETCH_REDIRECTING_KEYS = frozenset(
-    {
-        "registry",
-        "replace-registry-host",
-        "strict-ssl",
-        "ca",
-        "cafile",
-        "proxy",
-        "https-proxy",
-        "http-proxy",
-        "noproxy",
-        "no-proxy",
-        "global",
-        "location",
-        "globalconfig",
-        "userconfig",
-    }
-)
-# Settings that change what npm or node load before the command line is read,
-# where npm finds its global config, or whether node checks certificates at
-# all. NODE_EXTRA_CA_CERTS only adds a trusted CA, usually a company's
-# TLS-inspecting proxy, and leaves the registry where it was.
-_ENVIRONMENT_OVERRIDES = ("npm_config_", "node_options", "node_path")
-_ENVIRONMENT_NAMES = frozenset({"prefix", "destdir", "node_tls_reject_unauthorized"})
-# npm settings that only say where npm keeps its own cache and how it reports.
-# They leave the registry, transport trust and what runs where they were.
-# Developer shells and `npx` launches export `npm_config_cache`.
-_INERT_NPM_SETTINGS = frozenset({"cache", "update-notifier", "fund", "audit", "loglevel", "progress", "color"})
 
 
 def native_package_review_response(
@@ -116,8 +82,19 @@ def native_package_review_response(
     if tokens[0] != "npm":
         return None
     environment = payload.get(HOOK_EXECUTION_ENVIRONMENT_KEY)
-    version = verified_npm_version(environment, workspace=workspace)
-    if version is None or not _filters_outside_workspace(shape.group("filters"), environment, workspace):
+    try:
+        version, filters_outside = npm_install_proof(
+            environment,
+            workspace=workspace,
+            guard_home=guard_home,
+            filters=shape.group("filters"),
+            deadline=deadline,
+        )
+    except NativeVerifiedNpmError:
+        # Nothing was proven, so the native review stands.
+        _LOGGER.warning("Native npm proof unavailable for a package review", exc_info=True)
+        return None
+    if version is None or not filters_outside:
         return None
     try:
         with registry_wait_deadline(deadline):
@@ -172,25 +149,34 @@ def _blocked(
     return response
 
 
-def _filters_outside_workspace(filters: str, environment: object, workspace: Path) -> bool:
-    """Whether each output filter resolves to a program outside the workspace.
+def _filter_programs(filters: str) -> list[str]:
+    """The programs an install pipes its output through, in first-seen order."""
 
-    A workspace could otherwise put its own `tail` on ``PATH`` ahead of the
-    real one and run code through an install that never runs package code.
-    """
+    programs: list[str] = []
+    for segment in filters.split("|"):
+        words = segment.split()
+        if words and words[0] not in programs:
+            programs.append(words[0])
+    return programs
 
-    names = {segment.split()[0] for segment in filters.split("|") if segment.strip()}
-    if not names:
-        return True
-    search_path = environment.get("path") if isinstance(environment, Mapping) else None
-    if not isinstance(search_path, str) or not search_path:
-        return False
-    try:
-        root = workspace.resolve(strict=True)
-        programs = [_resolve_executable(name, search_path) for name in names]
-    except (OSError, RuntimeError):
-        return False
-    return all(program is not None and not program.is_relative_to(root) for program in programs)
+
+def npm_install_proof(
+    environment: object,
+    *,
+    workspace: Path,
+    guard_home: Path,
+    filters: str,
+    deadline: float | None,
+) -> tuple[str | None, bool]:
+    """The resident's npm proof for this install, applied without re-deriving it."""
+
+    return verified_npm_proof(
+        environment,
+        workspace=workspace,
+        guard_home=guard_home,
+        filter_programs=_filter_programs(filters),
+        deadline=deadline,
+    )
 
 
 def _script_free_watch(evaluation: PackageRequestEvaluation) -> bool:
@@ -235,7 +221,14 @@ def _evaluate(
         or shlex.split(intent.redacted_command) != tokens
     ):
         return None
-    artifact = build_package_request_artifact(harness, intent, config_path="hol-guard.toml", source_scope="project")
+    artifact = build_package_request_artifact(
+        harness,
+        intent,
+        config_path="hol-guard.toml",
+        source_scope="project",
+        guard_home=guard_home,
+        deadline_monotonic=deadline,
+    )
     artifact = replace(artifact, metadata={**artifact.metadata, VERIFIED_NPM_VERSION_KEY: version})
     return evaluate_package_request_artifact(
         artifact=artifact, store=cast("GuardStore", store), workspace_dir=workspace
@@ -244,122 +237,3 @@ def _evaluate(
 
 def _first_message(reasons: tuple[dict[str, object], ...]) -> str | None:
     return next((str(reason["message"]) for reason in reasons if reason.get("message")), None)
-
-
-def verified_npm_version(environment: object, *, workspace: Path) -> str | None:
-    """The version of the npm the agent's ``PATH`` runs, or ``None``.
-
-    Only a standard npm install qualifies: ``npm`` resolves through absolute
-    ``PATH`` entries to ``npm/bin/npm-cli.js`` inside a package named npm,
-    neither npm nor node comes from the workspace, and no environment setting
-    changes what npm or node load. Shims and wrappers fail closed because
-    their version cannot be read without running them.
-    """
-
-    if not isinstance(environment, Mapping):
-        return None
-    names = environment.get("environment_names")
-    if not isinstance(names, list) or any(not isinstance(name, str) or _changes_npm(name) for name in names):
-        return None
-    search_path = environment.get("path")
-    if not isinstance(search_path, str) or not search_path:
-        return None
-    try:
-        root = workspace.resolve(strict=True)
-        if not _loader_paths_outside(names, environment.get("library_search_paths"), root):
-            return None
-        npm = _resolve_executable("npm", search_path)
-        node = _resolve_executable("node", search_path)
-        if npm is None or node is None or any(path.is_relative_to(root) for path in (npm, node)):
-            return None
-        if npm.name != "npm-cli.js" or npm.parent.name != "bin":
-            return None
-        package_json = npm.parent.parent / "package.json"
-        if package_json.stat().st_size > _MAX_PACKAGE_JSON_BYTES:
-            return None
-        manifest = json.loads(package_json.read_text(encoding="utf-8"))
-    except (OSError, RuntimeError, ValueError):
-        return None
-    if not isinstance(manifest, dict) or manifest.get("name") != "npm":
-        return None
-    # Without an absolute HOME the user config cannot be located, so it
-    # cannot be shown not to move the fetch.
-    home = environment.get("home")
-    if not isinstance(home, str) or not os.path.isabs(home):
-        return None
-    config_files = [npm.parent.parent / "npmrc", node.parent.parent / "etc" / "npmrc", Path(home) / ".npmrc"]
-    if any(_npmrc_redirects_fetch(path) for path in config_files):
-        return None
-    version = manifest.get("version")
-    return version if isinstance(version, str) and version else None
-
-
-def _changes_npm(name: str) -> bool:
-    """Whether an environment variable may change what npm or node load or fetch."""
-
-    lowered = name.lower()
-    if lowered.startswith("npm_config_"):
-        # npm reads `npm_config_update_notifier` as `update-notifier`.
-        return lowered.removeprefix("npm_config_").replace("_", "-") not in _INERT_NPM_SETTINGS
-    return lowered.startswith(_ENVIRONMENT_OVERRIDES) or lowered in _ENVIRONMENT_NAMES
-
-
-def _loader_paths_outside(names: list[str], stamped: object, root: Path) -> bool:
-    """Whether every exported loader search path stays out of the workspace.
-
-    The same search path reaches `npm test` and every other process the agent
-    starts without review, so refusing it only for the install adds an
-    approval without keeping a planted library out. A relative or empty entry
-    searches the working directory, and an entry inside the workspace names a
-    directory the agent writes, so those still fail closed. A loader variable
-    exported without its stamped value cannot be checked and fails closed too.
-    """
-
-    paths = stamped if isinstance(stamped, Mapping) else {}
-    for name in LIBRARY_SEARCH_PATH_NAMES:
-        if name not in names and name not in paths:
-            continue
-        value = paths.get(name)
-        if not isinstance(value, str) or not value:
-            return False
-        for entry in value.split(":"):
-            if not os.path.isabs(entry) or Path(os.path.realpath(entry)).is_relative_to(root):
-                return False
-    return True
-
-
-def _npmrc_redirects_fetch(path: Path) -> bool:
-    """Whether an npm config file may change the fetch; unreadable counts."""
-
-    try:
-        if not path.exists():
-            return False
-        if not path.is_file() or path.stat().st_size > _MAX_NPMRC_BYTES:
-            return True
-        text = path.read_text(encoding="utf-8")
-    except (OSError, ValueError):
-        return True
-    for line in text.splitlines():
-        key = line.split("=", 1)[0].strip()
-        if key.startswith(("#", ";")):
-            continue
-        key = key.strip("\"'").lower()
-        if key.endswith(":registry") or key in _FETCH_REDIRECTING_KEYS:
-            return True
-    return False
-
-
-def _resolve_executable(name: str, search_path: str) -> Path | None:
-    """Resolve ``name`` the way a shell would, refusing relative entries.
-
-    A relative or empty ``PATH`` entry is searched from the working directory,
-    so one ahead of the match could pick a different executable per cwd.
-    """
-
-    for entry in search_path.split(os.pathsep):
-        if not entry or not os.path.isabs(entry):
-            return None
-        found = shutil.which(name, path=entry)
-        if found is not None:
-            return Path(found).resolve(strict=True)
-    return None

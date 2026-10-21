@@ -273,14 +273,31 @@ const REMOTE_MCP: &[u8] = include_bytes!(concat!(
 #[test]
 fn canonical_mcp_inputs_preserve_native_fields_and_remain_opt_in() {
     let baseline: Value = serde_json::from_slice(packaged_command_program_bytes()).unwrap();
+    let mut metadata =
+        serde_json::from_slice::<Value>(crate::native_command_catalog::embedded_catalog_bytes())
+            .unwrap()["catalog"]
+            .as_array()
+            .unwrap()
+            .clone();
     for bytes in [FILESYSTEM_MCP, REMOTE_MCP] {
         let lowered = mcp::lower(bytes).unwrap();
-        let original = baseline["extensions"]
+        assert!(!baseline["extensions"]
             .as_array()
             .unwrap()
             .iter()
-            .find(|row| row["extension_id"] == lowered.document.extension.extension_id)
-            .unwrap();
+            .any(|row| row["extension_id"] == lowered.document.extension.extension_id));
+        let ids = BTreeSet::from([lowered.document.extension.extension_id.clone()]);
+        let permissions = lowered
+            .document
+            .extension
+            .permissions
+            .iter()
+            .map(|permission| permission.permission_id.clone())
+            .collect();
+        let pack = catalog::compile_pack(&[], &[bytes], TRUST, (&ids, &permissions)).unwrap();
+        let original = &pack.program["extensions"][0];
+        assert_eq!(original["activation"], "opt-in");
+        metadata.extend(pack.catalog.as_array().unwrap().iter().cloned());
         assert_eq!(lowered.wire, original["mcp"]);
         assert_eq!(
             lowered.document.extension.permissions[0].permission_id,
@@ -300,8 +317,12 @@ fn canonical_mcp_inputs_preserve_native_fields_and_remain_opt_in() {
     assert_eq!(output.catalog[0]["permissions"][0]["configurable"], false);
     assert!(output.descriptors.is_empty());
     source["launch"]["package"] = serde_json::json!("@modelcontextprotocol/server-filesystem");
+    let context = baseline::ValidationBase {
+        catalog: metadata,
+        programs: vec![],
+    };
     assert!(matches!(
-        compile_addition_with_mcp(&[], &[&serde_json::to_vec(&source).unwrap()], TRUST),
+        context.prepare(&[], &[&serde_json::to_vec(&source).unwrap()], false),
         Err("command_source_mcp_package_duplicate")
     ));
 }

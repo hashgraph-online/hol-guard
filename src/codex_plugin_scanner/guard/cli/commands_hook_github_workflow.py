@@ -14,6 +14,7 @@ from ..native_command_control_authority_io import (
     NativeCommandControlMutationRequiredError,
 )
 from ..native_github_workflow import GitHubWorkflowDescriptor, github_workflow_describe_native
+from ..native_hook_decision import NativeHookDecisionError
 from ..runtime.command_decision_adapter import effect_decision_to_dict
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot, extension_control_policy_version
@@ -21,13 +22,25 @@ from ..runtime.github_workflow_approval_record import GitHubWorkflowApprovalReco
 from ..runtime.github_workflow_runtime import (
     claim_resolved_github_workflow_authorization,
     github_workflow_capability_required,
+    resolved_github_workflow_capability_preflight,
 )
-from ..runtime.native_command_evaluation import evaluate_command_native
+from ..runtime.native_command_evaluation import native_command_review, resolve_native_command_review
 from ..store import GuardStore
 from .commands_support_runtime_policy import (
     _runtime_artifact_command_action_floor,
     _runtime_hook_effective_policy_config,
 )
+
+_AUTHORITY_UNAVAILABLE = "native_github_workflow_authority_unavailable"
+_EVALUATION_UNAVAILABLE = "native_github_workflow_evaluation_unavailable"
+
+
+class GitHubWorkflowEvaluationUnavailableError(NativeHookDecisionError):
+    """No resident evaluation for a claimed workflow approval.
+
+    The hook pipeline answers it with the host outage response; Python never
+    floors the decision itself.
+    """
 
 
 @dataclass(frozen=True)
@@ -57,6 +70,10 @@ def prepare_github_workflow_hook_state(
     required = approval_request_id is not None and github_workflow_capability_required(store, approval_request_id)
     if descriptor is None or approval_request_id is None:
         return GitHubWorkflowHookState(artifact, descriptor, record, False, required)
+    if not resolved_github_workflow_capability_preflight(store, approval_request_id, descriptor):
+        # No live capability to claim: the hook goes on without one and needs
+        # no resident review for it.
+        return GitHubWorkflowHookState(artifact, descriptor, record, False, required)
     try:
         authority = store.read_extension_control_authority_for_registry(
             BUILT_IN_COMMAND_EXTENSION_REGISTRY,
@@ -64,32 +81,37 @@ def prepare_github_workflow_hook_state(
         )
     except (NativeCommandControlAuthorityUnavailableError, NativeCommandControlMutationRequiredError):
         # A lease that is busy or needs a migration leaves this hook without a
-        # reading. It floors the decision rather than raising: the hook still
-        # runs, and the authority it could not read grants nothing.
-        metadata = dict(artifact.metadata)
-        metadata["command_action_floor"] = "require-reapproval"
-        metadata["command_evaluation_status"] = "native_unavailable"
-        return GitHubWorkflowHookState(replace(artifact, metadata=metadata), descriptor, record, False, required)
+        # reading, and nothing has been claimed yet: the host outage response.
+        raise GitHubWorkflowEvaluationUnavailableError(_AUTHORITY_UNAVAILABLE) from None
     snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(authority)
+    # The resident reviews the command before the claim, so a resident that
+    # cannot answer never spends one of the approval's uses.
+    review = native_command_review(
+        artifact.command or "",
+        guard_home=guard_home,
+        cwd=workspace,
+        extension_control_snapshot=snapshot,
+    )
+    if review is None:
+        raise GitHubWorkflowEvaluationUnavailableError(_EVALUATION_UNAVAILABLE)
+    if review.native.get("minimum_action") == "block":
+        # A workflow proof never relaxes a resident block, so the claim could
+        # not change this hook's answer: leave the use unspent.
+        return GitHubWorkflowHookState(artifact, descriptor, record, False, required)
     authorization = claim_resolved_github_workflow_authorization(store, approval_request_id, descriptor)
     if authorization is None:
         return GitHubWorkflowHookState(artifact, descriptor, record, False, required)
     metadata = dict(artifact.metadata)
-    evaluation = evaluate_command_native(
-        artifact.command or "",
-        guard_home=guard_home,
-        extension_control_snapshot=snapshot,
+    evaluation = resolve_native_command_review(
+        review,
         compatibility_action_class=_optional_string(metadata.get("action_class")),
         compatibility_reason=_optional_string(metadata.get("runtime_request_reason")),
-        cwd=workspace,
         workflow_authorization=authorization,
     )
     if evaluation is None:
-        metadata["command_action_floor"] = "require-reapproval"
-        metadata["command_evaluation_status"] = "native_unavailable"
-        return GitHubWorkflowHookState(replace(artifact, metadata=metadata), descriptor, record, True, required)
-    metadata["command_action_floor"] = evaluation.decision_plane.action
-    metadata["command_decision_plane"] = effect_decision_to_dict(evaluation.decision_plane)
+        raise GitHubWorkflowEvaluationUnavailableError(_EVALUATION_UNAVAILABLE)
+    metadata["command_action_floor"] = evaluation.evaluation.decision_plane.action
+    metadata["command_decision_plane"] = effect_decision_to_dict(evaluation.evaluation.decision_plane)
     return GitHubWorkflowHookState(replace(artifact, metadata=metadata), descriptor, record, True, required)
 
 
@@ -137,6 +159,7 @@ def _optional_string(value: object) -> str | None:
 
 
 __all__ = [
+    "GitHubWorkflowEvaluationUnavailableError",
     "GitHubWorkflowHookState",
     "claimed_approval_request_id",
     "github_workflow_approval_evidence",

@@ -40,10 +40,16 @@ the control-plane SQLite insert (`INSERT OR IGNORE` on `decision_id`).
 
 The queue is capped at 2,000 records and 16 MiB. Full queues, journal/storage
 errors, writer crashes, SQLite busy/locked/corrupt/unavailable states, restart
-replay, and retry exhaustion set aggregate degraded/failure counters or leave a
-durable pending journal record. They never change the Rust action and never
-extend the hook decision deadline. Loss of evidence is explicitly degraded;
-there is no semantic fallback.
+replay, and a stop whose drain budget runs out set aggregate degraded/failure
+counters or leave a durable pending journal record. A failed store write goes
+to the back of the queue and waits out its own backoff (50 ms doubling to 1 s)
+while the records behind it are written. A busy or locked store is waited out
+however long it lasts. Any other refusal gets eight attempts; a record refused
+on all eight is counted as dropped and removed from the journal, so a write the
+store can never take does not grow the journal or spin the worker. A stop whose
+drain budget runs out first leaves the record journaled for the next writer.
+They never change the Rust action and never extend the hook decision deadline.
+Loss of evidence is explicitly degraded; there is no semantic fallback.
 
 `decision_id` is a SHA-256 over the canonical receipt identity. Strict field
 validation and `INSERT OR IGNORE` make retries and process restarts

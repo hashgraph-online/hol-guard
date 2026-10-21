@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import restricted_linux_mappings as mapping
+from tests.restricted_linux_test_support import native_mount_targets, native_path_identity, native_validate_records
 
 pytestmark = pytest.mark.usefixtures("native_context_digest")
 
@@ -14,7 +14,7 @@ def _record(path):
     path.write_bytes(b"synthetic approved executable")
     return {
         "path": str(path),
-        "identity": list(mapping._identity(path.stat())),
+        "identity": list(native_path_identity(path.stat())),
         "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "targets": [str(path)],
     }
@@ -23,7 +23,7 @@ def _record(path):
 def test_valid_mapping_evidence_keeps_exact_targets(tmp_path):
     path = tmp_path / "approved"
     record = _record(path)
-    validated = mapping.validate_records([record], approved_paths={path})
+    validated = native_validate_records([record], approved_paths={path})
     assert validated == [(path, tuple(record["identity"]), record["sha256"], (path,))]
 
 
@@ -53,7 +53,7 @@ def test_malformed_mapping_evidence_is_rejected(tmp_path, mutation):
     else:
         records.append(record)
     with pytest.raises(ValueError):
-        mapping.validate_records(records, approved_paths=approved)
+        native_validate_records(records, approved_paths=approved)
 
 
 def test_noexec_remounts_preserve_devices_and_readonly_mounts():
@@ -63,7 +63,7 @@ def test_noexec_remounts_preserve_devices_and_readonly_mounts():
         b"3 1 0:3 / /lib ro,nodev - bind bind ro\n"
         b"4 1 0:4 / /space\\040name rw,nodev - bind bind rw\n"
     )
-    targets = dict(mapping.mount_targets(raw))
+    targets = dict(native_mount_targets(raw))
     assert targets[Path("/")] == 2 | 8 | (1 << 24)
     assert targets[Path("/dev")] == 2 | 8 | (1 << 24)  # NODEV would break private null/random devices.
     assert targets[Path("/lib")] == 1 | 2 | 4 | 8 | (1 << 24)
@@ -82,10 +82,10 @@ def test_noexec_remounts_preserve_devices_and_readonly_mounts():
 )
 def test_noexec_remount_preserves_locked_atime_flags(options, flags):
     raw = b"1 0 0:1 / / rw," + options + b" - tmpfs tmpfs rw\n"
-    assert dict(mapping.mount_targets(raw))[Path("/")] == 2 | 8 | flags
+    assert dict(native_mount_targets(raw))[Path("/")] == 2 | 8 | flags
 
 
 @pytest.mark.parametrize("raw", [b"", b"broken", b"1 0 0:1 / / ro,rw - tmpfs tmpfs rw\n"])
 def test_invalid_mount_snapshot_is_not_ignored(raw):
     with pytest.raises(ValueError):
-        mapping.mount_targets(raw)
+        native_mount_targets(raw)

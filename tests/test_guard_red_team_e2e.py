@@ -15,13 +15,14 @@ Uses actual detector IDs from the runtime registry:
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
-from codex_plugin_scanner.guard.runtime.composition_rules import CompositionResult, compose_action_from_signals
 from codex_plugin_scanner.guard.runtime.detectors import DetectorContext, DetectorRegistry, register_default_detectors
 
 pytestmark = pytest.mark.usefixtures("native_runtime_detectors_runtime")
@@ -124,22 +125,31 @@ def _make_context(tmp_path: Path) -> DetectorContext:
     )
 
 
+Composer = Callable[[Sequence[object], object], SimpleNamespace]
+
+
 def _run_detectors(action: GuardActionEnvelope, context: DetectorContext) -> list[str]:
     registry = _make_registry()
     result = registry.run(action, context, timeout_ms=50)
     return [sig.detector for sig in result.signals if sig.detector]
 
 
-def _compose(action: GuardActionEnvelope, context: DetectorContext) -> CompositionResult:
+def _compose(
+    action: GuardActionEnvelope,
+    context: DetectorContext,
+    compose: Composer,
+) -> SimpleNamespace:
     registry = _make_registry()
     result = registry.run(action, context, timeout_ms=50)
-    return compose_action_from_signals(result.signals, "warn")
+    return compose(result.signals, "warn")
 
 
 class TestRedTeamMaliciousSkill:
     """L351 — Malicious skill exfil fixture triggers detection signals."""
 
-    def test_malicious_mcp_skill_exfil_prompt_triggers_safe_decode(self, tmp_path: Path) -> None:
+    def test_malicious_mcp_skill_exfil_prompt_triggers_safe_decode(
+        self, tmp_path: Path, native_signal_composition: Composer
+    ) -> None:
         fixture = _FIXTURES / "malicious-mcp-skill-exfil.md"
         assert fixture.exists()
         content = fixture.read_text(encoding="utf-8")
@@ -151,7 +161,7 @@ class TestRedTeamMaliciousSkill:
         )
         unrelated = [d for d in detectors if d not in {"safe-decode.content", "prompt.injection"}]
         assert not unrelated, f"Unexpected detector signals fired: {unrelated}"
-        outcome = _compose(action, context)
+        outcome = _compose(action, context, native_signal_composition)
         assert outcome.action != "allow", (
             f"Malicious MCP exfil prompt should not be allowed; got action={outcome.action!r}"
         )
@@ -275,7 +285,9 @@ class TestFalsePositiveSourceSearch:
         blocking = [d for d in detectors if d in ("data_flow.exfiltration", "bypass.shell")]
         assert not blocking, f"Benign source search should not trigger blocking signals; got {blocking}"
 
-    def test_benign_source_search_fixture_as_prompt_has_no_safe_decode_signal(self, tmp_path: Path) -> None:
+    def test_benign_source_search_fixture_as_prompt_has_no_safe_decode_signal(
+        self, tmp_path: Path, native_signal_composition: Composer
+    ) -> None:
         fixture = _FIXTURES / "benign-source-search.py"
         assert fixture.exists()
         content = fixture.read_text(encoding="utf-8")
@@ -285,7 +297,7 @@ class TestFalsePositiveSourceSearch:
         assert "safe-decode.content" not in detectors, (
             f"Benign source search should not trigger safe-decode detector; got {detectors}"
         )
-        outcome = _compose(action, context)
+        outcome = _compose(action, context, native_signal_composition)
         assert outcome.action != "block", (
             f"Benign source search prompt should not be blocked; got action={outcome.action!r}"
         )
@@ -294,16 +306,20 @@ class TestFalsePositiveSourceSearch:
 class TestFalsePositiveFakeToken:
     """L355 — Fake token fixture is allowed (no real secret exfil)."""
 
-    def test_benign_fake_token_docs_file_read_has_no_secret_path_signal(self, tmp_path: Path) -> None:
+    def test_benign_fake_token_docs_file_read_has_no_secret_path_signal(
+        self, tmp_path: Path, native_signal_composition: Composer
+    ) -> None:
         fixture_path = str(_FIXTURES / "benign-docs-fake-token.py")
         action = _file_read_action(fixture_path)
         context = _make_context(tmp_path)
         detectors = _run_detectors(action, context)
         assert "secret.path" not in detectors, f"Docs file read should not trigger secret.path; got {detectors}"
-        outcome = _compose(action, context)
+        outcome = _compose(action, context, native_signal_composition)
         assert outcome.action != "block", f"Docs file read should not be blocked; got action={outcome.action!r}"
 
-    def test_benign_fake_token_fixture_prompt_not_blocked(self, tmp_path: Path) -> None:
+    def test_benign_fake_token_fixture_prompt_not_blocked(
+        self, tmp_path: Path, native_signal_composition: Composer
+    ) -> None:
         fixture = _FIXTURES / "benign-docs-fake-token.py"
         assert fixture.exists()
         content = fixture.read_text(encoding="utf-8")
@@ -312,20 +328,24 @@ class TestFalsePositiveFakeToken:
         detectors = _run_detectors(action, context)
         blocking = [d for d in detectors if d in {"data_flow.exfiltration", "bypass.shell", "secret.path"}]
         assert not blocking, f"Docs with fake token text triggered blocking detectors: {blocking}"
-        outcome = _compose(action, context)
+        outcome = _compose(action, context, native_signal_composition)
         assert outcome.action != "block", (
             f"Docs with fake token text should not be blocked; got action={outcome.action!r}, detectors={detectors}"
         )
 
-    def test_benign_nvmrc_fake_creds_file_read_has_no_secret_path_signal(self, tmp_path: Path) -> None:
+    def test_benign_nvmrc_fake_creds_file_read_has_no_secret_path_signal(
+        self, tmp_path: Path, native_signal_composition: Composer
+    ) -> None:
         action = _file_read_action("~/.nvmrc")
         context = _make_context(tmp_path)
         detectors = _run_detectors(action, context)
         assert "secret.path" not in detectors, f"Benign nvmrc file read should not trigger secret.path; got {detectors}"
-        outcome = _compose(action, context)
+        outcome = _compose(action, context, native_signal_composition)
         assert outcome.action != "block", f"nvmrc file read should not be blocked; got action={outcome.action!r}"
 
-    def test_benign_nvmrc_fixture_prompt_has_no_blocking_signals(self, tmp_path: Path) -> None:
+    def test_benign_nvmrc_fixture_prompt_has_no_blocking_signals(
+        self, tmp_path: Path, native_signal_composition: Composer
+    ) -> None:
         fixture = _FIXTURES / "benign-nvmrc-fake-creds.py"
         assert fixture.exists()
         content = fixture.read_text(encoding="utf-8")
@@ -334,7 +354,7 @@ class TestFalsePositiveFakeToken:
         detectors = _run_detectors(action, context)
         blocking = [d for d in detectors if d in {"data_flow.exfiltration", "bypass.shell"}]
         assert not blocking, f"nvmrc fixture content triggered blocking detectors: {blocking}"
-        outcome = _compose(action, context)
+        outcome = _compose(action, context, native_signal_composition)
         assert outcome.action != "block", (
             f"nvmrc fixture as prompt should not be blocked; got action={outcome.action!r}, detectors={detectors}"
         )
@@ -343,7 +363,9 @@ class TestFalsePositiveFakeToken:
 class TestFalsePositiveHealthEndpoint:
     """L356 — Health endpoint fetch is allowed."""
 
-    def test_benign_health_endpoint_prompt_has_no_safe_decode_signal(self, tmp_path: Path) -> None:
+    def test_benign_health_endpoint_prompt_has_no_safe_decode_signal(
+        self, tmp_path: Path, native_signal_composition: Composer
+    ) -> None:
         fixture = _FIXTURES / "benign-health-endpoint.py"
         assert fixture.exists()
         content = fixture.read_text(encoding="utf-8")
@@ -355,7 +377,7 @@ class TestFalsePositiveHealthEndpoint:
         )
         blocking = [d for d in detectors if d in {"data_flow.exfiltration", "bypass.shell", "secret.path"}]
         assert not blocking, f"Health endpoint prompt triggered blocking detectors: {blocking}"
-        outcome = _compose(action, context)
+        outcome = _compose(action, context, native_signal_composition)
         assert outcome.action != "block", (
             f"Health endpoint prompt should not be blocked; got action={outcome.action!r}, detectors={detectors}"
         )

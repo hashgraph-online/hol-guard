@@ -137,11 +137,12 @@ from ..native_cisco_preflight import (
     policy_action_for_cisco_signals,
     scan_action_for_cisco_evidence,
 )
+from ..native_hook_artifact_compose import NativeHookComposeError
 from ..native_prompt import extract_prompt_requests
 from ..package_firewall_entitlement import (
-    package_firewall_action_states,
-    package_firewall_available_actions,
-    package_firewall_block_details,
+    PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE,
+    PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE_MESSAGE,
+    package_firewall_access,
 )
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2, guard_action_severity
 from ..protect import build_protect_payload
@@ -166,17 +167,20 @@ from ..runtime.runner import (
     GuardSyncNotAvailableError,
     GuardSyncNotConfiguredError,
     sync_local_guard_cloud_proof,
+    sync_network_protection_bundle,
+    sync_network_protection_bundle_best_effort,
     sync_receipts,
     sync_runtime_session,
     sync_supply_chain_bundle,
 )
 from ..runtime.secret_file_requests import (
-    build_file_read_request_artifact,
-    build_file_write_request_artifact,
     build_tool_action_request_artifact,
     extract_sensitive_file_read_request,
+    extract_sensitive_file_read_request_artifact,
+    extract_sensitive_file_read_request_artifact_from_action,
     extract_sensitive_file_read_request_from_action,
     extract_sensitive_file_write_request,
+    extract_sensitive_file_write_request_artifact,
     extract_sensitive_tool_action_request,
     literal_cd_execution_context,
 )
@@ -267,9 +271,9 @@ _SETTINGS_POLICY_RISK_ACTIONS: dict[str, dict[str, dict[str, str]]] = {
         "ask-all": {"malicious_skill": "require-reapproval"},
     },
     "packages": {
-        "warn": {"package_script": "warn"},
-        "ask-lifecycle": {"package_script": "require-reapproval"},
-        "ask-all": {"package_script": "require-reapproval"},
+        "warn": {"package_script": "warn", "package_install": "allow"},
+        "ask-lifecycle": {"package_script": "require-reapproval", "package_install": "allow"},
+        "ask-all": {"package_script": "require-reapproval", "package_install": "require-reapproval"},
     },
     "output-scanning": {
         "off": {

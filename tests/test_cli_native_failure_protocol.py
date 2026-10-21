@@ -37,7 +37,6 @@ def test_native_failure_preserves_codex_wire_response(
             raise RuntimeError("injected native failure")
         if failure == "worker_response":
             return availability_harness_response(
-                payload,
                 harness="codex",
                 event_name=event,
                 reason_code="native_hook_worker_exception",
@@ -75,10 +74,8 @@ def test_pipeline_unavailable_preserves_codex_wire_response(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], event: str, json_requested: bool
 ) -> None:
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard-home")
-    payload = {"hook_event_name": event, "tool_name": "Bash", "tool_input": {"command": "printf test > output.txt"}}
     result = pipeline._emit_native_unavailable(
         Mock(harness="codex", json=json_requested),
-        payload=payload,
         workspace=None,
         context=context,
         event_name=event,

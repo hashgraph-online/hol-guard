@@ -1,3 +1,15 @@
+//! Text filters that read their input rather than change anything.
+//!
+//! After a pipe these filters only reshape the proven producer's output, so
+//! the options alone are screened. Given a file operand they open that file,
+//! which is the ordinary read `cat` proves, so each operand takes the same
+//! read proof. `tr` never opens a file: every operand is a character set.
+//! `uniq` is the exception that writes — `uniq INPUT OUTPUT` truncates the
+//! second operand — so only a single operand is proven for it.
+
+/// Enough operands for an ordinary command line, not a fan-out.
+const MAX_INPUTS: usize = 16;
+
 pub(super) fn safe_arguments(tool: &str, arguments: &[String]) -> bool {
     match tool {
         "sort" => arguments
@@ -80,6 +92,12 @@ fn safe_base64_arguments(arguments: &[String]) -> bool {
 }
 
 fn safe_cut_arguments(arguments: &[String]) -> bool {
+    let mut operands = Vec::new();
+    cut_arguments(arguments, &mut operands) && operands.is_empty()
+}
+
+/// `cut`'s option grammar, collecting the file operands it was given.
+fn cut_arguments<'a>(arguments: &'a [String], operands: &mut Vec<&'a str>) -> bool {
     let mut selection = None;
     let mut delimiter = false;
     let mut index = 0;
@@ -90,7 +108,9 @@ fn safe_cut_arguments(arguments: &[String]) -> bool {
             continue;
         }
         let Some(option) = argument.strip_prefix('-') else {
-            return false;
+            operands.push(argument.as_str());
+            index += 1;
+            continue;
         };
         let mut chars = option.chars();
         let Some(flag) = chars.next() else {
@@ -155,4 +175,47 @@ fn bounded_selection(value: &str) -> bool {
             number(part).is_some()
         }
     })
+}
+
+/// The same filters given a file operand instead of a pipe. Every operand is
+/// opened for reading, so every operand takes the ordinary read proof.
+pub(super) fn safe_file_arguments(
+    tool: &str,
+    arguments: &[String],
+    context: super::PathContext<'_>,
+) -> bool {
+    let mut operands: Vec<&str> = Vec::new();
+    let options_proven = match tool {
+        "sort" => partition_short_flags(arguments, "bnrufdhMVs", &mut operands),
+        "uniq" => partition_short_flags(arguments, "cdui", &mut operands),
+        "cut" => cut_arguments(arguments, &mut operands),
+        _ => false,
+    };
+    let maximum = if tool == "uniq" { 1 } else { MAX_INPUTS };
+    options_proven
+        && !operands.is_empty()
+        && operands.len() <= maximum
+        && operands
+            .iter()
+            .all(|operand| super::safe_reads::command_read_target(operand, context, false))
+}
+
+/// Split a short-flag command line into its flags and its file operands.
+fn partition_short_flags<'a>(
+    arguments: &'a [String],
+    allowed: &str,
+    operands: &mut Vec<&'a str>,
+) -> bool {
+    let mut after_options = false;
+    for argument in arguments {
+        let value = argument.as_str();
+        if after_options || !value.starts_with('-') {
+            operands.push(value);
+        } else if value == "--" {
+            after_options = true;
+        } else if !short_flags(value, allowed) {
+            return false;
+        }
+    }
+    true
 }

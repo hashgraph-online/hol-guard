@@ -21,7 +21,7 @@ from typing import Any
 from ci.native_runtime import probe_installed_pi_output as probe
 
 from .approval_rows import approval_rows
-from .case_helpers import _fixture_replacements
+from .case_helpers import _fixture_replacements, add_credential_redactions
 from .catalog import Scenario
 from .cleanup import cleanup_case_resources
 from .evidence import sha256_bytes
@@ -190,8 +190,9 @@ def run_harness_full_task(
             worker = daemon._server.hook_worker
             seed = CredentialSeed(spec, Path.home(), fixture.home)
             case["credentials_seeded"] = seed.seeded
-            login_environment = credential_environment(spec)
+            login_environment = credential_environment(spec, login_seeded=seed.login_usable)
             case["credential_env"] = sorted(login_environment)
+            add_credential_redactions(replacements, login_environment)
             case["hook_install"] = install_harness_hooks(
                 harness, daemon, home=fixture.home, guard_home=guard_home, workspace=fixture.workspace
             )

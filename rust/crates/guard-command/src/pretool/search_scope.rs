@@ -86,7 +86,7 @@ pub(super) fn claude_grep_directory_scope_proven(
         return false;
     };
     !super::read_paths::inside_agent_state_tree(&root, home_dir)
-        && walk_scope(&root, &filter, Ignores::Ripgrep, false, &mut None).is_ok()
+        && walk_scope(&root, &filter, Ignores::Ripgrep, false, home_dir, &mut None).is_ok()
 }
 
 /// Shell `rg` with `-g` inclusions the name screen cannot clear, such as
@@ -109,7 +109,8 @@ pub(super) fn rg_glob_scope_proven(
         |target| match verified_directory_root(target, home_dir, cwd) {
             Some(root) => {
                 !super::read_paths::inside_agent_state_tree(&root, home_dir)
-                    && walk_scope(&root, &filter, Ignores::Ripgrep, false, &mut None).is_ok()
+                    && walk_scope(&root, &filter, Ignores::Ripgrep, false, home_dir, &mut None)
+                        .is_ok()
             }
             None => cwd.is_some_and(|cwd| {
                 std::fs::symlink_metadata(Path::new(cwd).join(target))
@@ -178,7 +179,7 @@ pub(super) fn content_search_scope_proven(
     unfiltered_directory_root(target, home_dir, cwd).is_some_and(|root| {
         (!super::read_paths::inside_agent_state_tree(&root, home_dir)
             || super::read_paths::agent_state_tree_holds_only_documents(&root, home_dir))
-            && unfiltered_walk_proven(&root)
+            && unfiltered_walk_proven(&root, home_dir)
     })
 }
 
@@ -192,7 +193,7 @@ pub(super) fn unfiltered_directory_scope_proven(
     cwd: Option<&str>,
 ) -> bool {
     unfiltered_directory_root(target, home_dir, cwd)
-        .is_some_and(|root| unfiltered_walk_proven(&root))
+        .is_some_and(|root| unfiltered_walk_proven(&root, home_dir))
 }
 
 /// The first sensitive file an unfiltered content search of `target` would
@@ -207,19 +208,31 @@ pub(super) fn content_search_blocker(
     let root = unfiltered_directory_root(target, home_dir, cwd)?;
     let filter = SearchFilter::from_input(&Map::new())?;
     let mut blocker = None;
-    walk_scope_cleared(&root, &filter, Ignores::None, clearance, &mut blocker).err()?;
+    walk_scope_cleared(
+        &root,
+        &filter,
+        Ignores::None,
+        clearance,
+        home_dir,
+        &mut blocker,
+    )
+    .err()?;
     blocker.and_then(|path| path.strip_prefix(&root).ok().map(Path::to_path_buf))
 }
 
-fn unfiltered_walk_proven(root: &Path) -> bool {
-    unfiltered_walk_cleared(root, None)
+fn unfiltered_walk_proven(root: &Path, home: Option<&str>) -> bool {
+    unfiltered_walk_cleared(root, None, home)
 }
 
 /// [`unfiltered_walk_proven`], where a sensitive file the `clearance` pattern
 /// provably cannot match does not fail the proof.
-fn unfiltered_walk_cleared(root: &Path, clearance: Option<&PatternClearance>) -> bool {
+fn unfiltered_walk_cleared(
+    root: &Path,
+    clearance: Option<&PatternClearance>,
+    home: Option<&str>,
+) -> bool {
     SearchFilter::from_input(&Map::new()).is_some_and(|filter| {
-        walk_scope_cleared(root, &filter, Ignores::None, clearance, &mut None).is_ok()
+        walk_scope_cleared(root, &filter, Ignores::None, clearance, home, &mut None).is_ok()
     })
 }
 
@@ -244,7 +257,16 @@ pub(super) fn omp_glob_scope_proven(
     });
     let names_walk = |ignores, outside_link: &dyn Fn(&Path) -> bool| {
         SearchFilter::from_input(&Map::new()).is_some_and(|filter| {
-            walk_scope_with(&root, &filter, ignores, true, outside_link, &mut None).is_ok()
+            walk_scope_with(
+                &root,
+                &filter,
+                ignores,
+                true,
+                outside_link,
+                home_dir,
+                &mut None,
+            )
+            .is_ok()
         })
     };
     // A linked worktree of a repository inside the workspace holds the same
@@ -256,7 +278,7 @@ pub(super) fn omp_glob_scope_proven(
                 .is_some_and(|checkout| checkout.starts_with(&cwd))
     });
     if !in_workspace {
-        return unfiltered_walk_proven(&root) && names_walk(Ignores::None, &|_| false);
+        return unfiltered_walk_proven(&root, home_dir) && names_walk(Ignores::None, &|_| false);
     }
     // A linked worktree often borrows its gitignored dependencies through a
     // link into the main checkout. Without ignore rules the host may list
@@ -280,9 +302,9 @@ pub(super) fn omp_glob_scope_proven(
             && target.to_str().is_some_and(|target| {
                 super::safe_reads::bounded_omp_directory_read_target(target, home_dir, cwd)
             })
-            && unfiltered_walk_proven(target)
+            && unfiltered_walk_proven(target, home_dir)
             && SearchFilter::from_input(&Map::new()).is_some_and(|filter| {
-                walk_scope(target, &filter, Ignores::None, true, &mut None).is_ok()
+                walk_scope(target, &filter, Ignores::None, true, home_dir, &mut None).is_ok()
             })
     };
     // Without ignore rules the walk covers every entry the host can reach,
@@ -311,11 +333,18 @@ pub(super) fn omp_grep_scope_proven(
             || super::read_paths::agent_state_tree_holds_only_documents(&root, home_dir))
             && if gitignore {
                 SearchFilter::from_input(&Map::new()).is_some_and(|filter| {
-                    walk_scope_cleared(&root, &filter, Ignores::Gitignore, clearance, &mut None)
-                        .is_ok()
+                    walk_scope_cleared(
+                        &root,
+                        &filter,
+                        Ignores::Gitignore,
+                        clearance,
+                        home_dir,
+                        &mut None,
+                    )
+                    .is_ok()
                 })
             } else {
-                unfiltered_walk_cleared(&root, clearance)
+                unfiltered_walk_cleared(&root, clearance, home_dir)
             }
     })
 }
@@ -456,9 +485,22 @@ fn ancestor_git_rules(root: &Path, repository: &Path) -> Result<Vec<IgnoreRule>,
     Ok(rules)
 }
 
-fn sensitive_scope_file(path: &Path) -> bool {
+/// Whether a name the walk reaches marks credential material.
+///
+/// A repository keeps its sign-in and token code in `src/lib/auth`,
+/// `app/api/auth` or `packages/token`, which the credential-path screen reads
+/// as a store. A direct read of a document in one is already admitted as the
+/// feature code it is, so a search that reaches the same file is held for
+/// nothing: every checkout with a sign-in feature loses `grep` over its own
+/// tree. The exemption is the read path's own, with its repository root and
+/// its refusal to exempt anything below a home directory that is itself a
+/// work tree, so the walk admits exactly what a read of that file would. It
+/// relaxes the credential-name screen alone; the sensitive-family screen
+/// still runs on every name.
+fn sensitive_scope_file(path: &Path, home: Option<&str>) -> bool {
     guard_secure_fs::sensitive_path_family(path).is_some()
-        || guard_secure_fs::credential_named_path(path)
+        || (guard_secure_fs::credential_named_path(path)
+            && !super::read_paths::feature_directories::feature_only_credential_name(path, home))
 }
 
 /// Whether a link out of the walked root can only ever contribute its own
@@ -473,9 +515,9 @@ fn sensitive_scope_file(path: &Path) -> bool {
 ///
 /// The target's own name is still held to the sensitive screens, so a link
 /// that stands in for a credential file keeps the review.
-fn single_outside_name(path: &Path, target: Option<&Path>) -> bool {
+fn single_outside_name(path: &Path, target: Option<&Path>, home: Option<&str>) -> bool {
     target.is_some_and(|target| {
-        target.is_file() && !sensitive_scope_file(path) && !sensitive_scope_file(target)
+        target.is_file() && !sensitive_scope_file(path, home) && !sensitive_scope_file(target, home)
     })
 }
 
@@ -493,9 +535,10 @@ fn walk_scope(
     filter: &SearchFilter,
     ignores: Ignores,
     names: bool,
+    home: Option<&str>,
     blocker: &mut Option<PathBuf>,
 ) -> Result<(), ScopeUnproven> {
-    walk_scope_with(root, filter, ignores, names, &|_| false, blocker)
+    walk_scope_with(root, filter, ignores, names, &|_| false, home, blocker)
 }
 
 /// A content walk where a sensitive file `clearance` proves the pattern
@@ -505,9 +548,19 @@ fn walk_scope_cleared(
     filter: &SearchFilter,
     ignores: Ignores,
     clearance: Option<&PatternClearance>,
+    home: Option<&str>,
     blocker: &mut Option<PathBuf>,
 ) -> Result<(), ScopeUnproven> {
-    walk_scope_inner(root, filter, ignores, false, &|_| false, clearance, blocker)
+    walk_scope_inner(
+        root,
+        filter,
+        ignores,
+        false,
+        &|_| false,
+        clearance,
+        home,
+        blocker,
+    )
 }
 
 /// [`walk_scope`], where a names-only walk also accepts a link out of `root`
@@ -518,11 +571,22 @@ fn walk_scope_with(
     ignores: Ignores,
     names: bool,
     outside_link: &dyn Fn(&Path) -> bool,
+    home: Option<&str>,
     blocker: &mut Option<PathBuf>,
 ) -> Result<(), ScopeUnproven> {
-    walk_scope_inner(root, filter, ignores, names, outside_link, None, blocker)
+    walk_scope_inner(
+        root,
+        filter,
+        ignores,
+        names,
+        outside_link,
+        None,
+        home,
+        blocker,
+    )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn walk_scope_inner(
     root: &Path,
     filter: &SearchFilter,
@@ -530,6 +594,7 @@ fn walk_scope_inner(
     names: bool,
     outside_link: &dyn Fn(&Path) -> bool,
     clearance: Option<&PatternClearance>,
+    home: Option<&str>,
     blocker: &mut Option<PathBuf>,
 ) -> Result<(), ScopeUnproven> {
     let repository = repository_root(root).filter(|_| ignores != Ignores::None);
@@ -604,13 +669,13 @@ fn walk_scope_inner(
             let path = entry.path();
             let name = entry.file_name();
             let name = name.to_str().ok_or(ScopeUnproven)?;
-            // The Claude walk models ripgrep and skips .git. The host-neutral
-            // walk has no such model, so it must inspect repository metadata.
-            if name == ".git" && (ignores == Ignores::Ripgrep || names) {
-                continue;
-            }
             // Metadata only: never follow links or open a candidate secret.
             let metadata = std::fs::symlink_metadata(&path).map_err(|_| ScopeUnproven)?;
+            // Ripgrep's walk skips .git, a names walk all but a link; a content walk inspects it.
+            if name == ".git" && (ignores == Ignores::Ripgrep || (names && !metadata.is_symlink()))
+            {
+                continue;
+            }
             if metadata.file_type().is_symlink() {
                 // Claude's Grep does not follow links. Still refuse a link
                 // whose name or file target is sensitive, in case it would.
@@ -622,15 +687,15 @@ fn walk_scope_inner(
                         ignores != Ignores::None && link_ignored(&tiers, &path, target.as_deref())?;
                     if escapes
                         && !skipped
-                        && !single_outside_name(&path, target.as_deref())
+                        && !single_outside_name(&path, target.as_deref(), home)
                         && !target.as_deref().is_some_and(outside_link)
                     {
                         return Err(ScopeUnproven);
                     }
-                } else if sensitive_scope_file(&path)
-                    || target
-                        .as_deref()
-                        .is_some_and(|target| target.is_file() && sensitive_scope_file(target))
+                } else if sensitive_scope_file(&path, home)
+                    || target.as_deref().is_some_and(|target| {
+                        target.is_file() && sensitive_scope_file(target, home)
+                    })
                 {
                     return Err(ScopeUnproven);
                 }
@@ -663,7 +728,7 @@ fn walk_scope_inner(
                 });
             } else if searched
                 && !names
-                && sensitive_scope_file(&path)
+                && sensitive_scope_file(&path, home)
                 && !tracked.non_secret(&path)
                 && !clearance.is_some_and(|clearance| clearance.clears(&path))
             {

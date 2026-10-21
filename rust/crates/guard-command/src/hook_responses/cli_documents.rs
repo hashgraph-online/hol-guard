@@ -198,6 +198,11 @@ pub fn cli_response(harness: &str, params: &Object) -> Option<Object> {
             Some(payload)
         }
         _ => {
+            if canonical == "hermes" {
+                // Hermes reads a single decision object for a verdict event,
+                // named the same way here and in the daemon bridge.
+                return Some(super::hermes::native_decision(action, reason));
+            }
             let decision = permission_decision(action, canonical);
             if harness == "codex" && event == "PreToolUse" && decision.is_none() {
                 return None;

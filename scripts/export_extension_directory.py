@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import stat
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
@@ -36,6 +38,26 @@ MAX_SOURCE_BYTES = 1_048_576
 MAX_CATALOG_BYTES = 1_048_576
 MIN_SUMMARY_LENGTH = 20
 MAX_SUMMARY_LENGTH = 2_048
+
+
+@lru_cache(maxsize=1)
+def native_extensions():
+    """Read complete build-time metadata from the native source compiler."""
+    from codex_plugin_scanner.guard.extension_builder.native_source_compiler import compile_source
+    from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import _extension
+
+    spec = importlib.util.spec_from_file_location(
+        "directory_native_build_inputs", ROOT / "scripts/build_native_command_program.py"
+    )
+    if spec is None or spec.loader is None:
+        raise ValueError("Canonical native build inputs are unavailable")
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    compiler = os.environ.get("HOL_GUARD_BUILD_SOURCE_COMPILER")
+    compiled = compile_source(builder.build_request(), compiler=Path(compiler) if compiler else None)
+    if compiled.get("catalog_projection_kind") != "complete":
+        raise ValueError("Public directory requires a complete native source projection")
+    return tuple(_extension(entry) for entry in compiled["catalog"])
 
 
 def _sources(root: Path) -> dict[str, tuple[str, dict[str, object], str]]:
@@ -158,9 +180,7 @@ def _export_directory(
     extensions=None,
 ) -> dict[str, object]:
     if extensions is None:
-        from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-
-        extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
+        extensions = native_extensions()
     listings = {extension_id: item[1] for extension_id, item in listing_sources.items()}
     mcp_ids = {catalog_id_for_mcp_id(key): key for key in sources if key.startswith("mcp.")}
     entries: list[dict[str, object]] = []
@@ -278,11 +298,11 @@ def _render(payload: dict[str, object]) -> str:
     return rendered
 
 
-def render_directories(root: Path = ROOT) -> dict[Path, str]:
+def render_directories(root: Path = ROOT, *, extensions=None) -> dict[Path, str]:
     """Render both public versions from one validated source snapshot."""
 
     sources, listing_sources, command_sources = _snapshot(root)
-    v1 = _export_directory(sources, listing_sources)
+    v1 = _export_directory(sources, listing_sources, extensions=extensions)
     v2 = _export_directory_v2(v1, sources, listing_sources, command_sources)
     return {OUTPUT_V1: _render(v1), OUTPUT_V2: _render(v2)}
 

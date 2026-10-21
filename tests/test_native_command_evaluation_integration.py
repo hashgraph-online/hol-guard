@@ -49,8 +49,11 @@ def test_real_native_transparent_wrapper_preserves_uncertain_envelope() -> None:
 def test_real_native_review_classification_accepts_explicit_stash_permission(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # A stash write, not `git stash list`: a printing stash form now clears
+    # only through the Git helper probe, and an explicit Allow never settles
+    # that helper floor.
     fixture = real_native_review_fixture(
-        "git stash list",
+        "git stash push -m wip",
         force_rule_ids=("command.git.stash",),
         controls=(("permission", "command.git.permission.stash", "enabled"),),
     )

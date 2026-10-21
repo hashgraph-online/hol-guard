@@ -109,7 +109,7 @@ def test_windows_discovery_separators_still_bind_every_source():
 
 @pytest.mark.parametrize("identifier", OUTPUTS)
 def test_pinned_omp_timing_notice_preserves_required_stdout(identifier):
-    """OMP 18.4.12 appends timing after stdout, including its trailing newline."""
+    """OMP 18.11.3 appends timing after stdout, including its trailing newline."""
     case = _observed(identifier)
     for event in case["events"]:
         if event["type"] == "tool_execution_end":
@@ -117,6 +117,35 @@ def test_pinned_omp_timing_notice_preserves_required_stdout(identifier):
             result["content"][0]["text"] += "\n\nWall time: 0.13 seconds"
             result["details"] = {"timeoutSeconds": 300, "wallTimeMs": 125.0}
     assert assess_case(CATALOG[identifier], case)["outcome"] == "pass"
+
+
+@pytest.mark.parametrize("identifier", OUTPUTS)
+def test_short_run_without_timing_notice_keeps_stdout(identifier):
+    """OMP 18.11.3 adds no timing notice below one second and says so in the result details."""
+    case = _observed(identifier)
+    for event in case["events"]:
+        if event["type"] == "tool_execution_end":
+            event["result"]["details"] = {"wallTimeNoticeEmitted": False, "timeoutSeconds": 300, "wallTimeMs": 125.0}
+    assert assess_case(CATALOG[identifier], case)["outcome"] == "pass"
+
+
+@pytest.mark.parametrize(
+    "text_suffix,details",
+    [
+        ("", {"wallTimeNoticeEmitted": False, "wallTimeMs": 1000}),
+        ("", {"wallTimeNoticeEmitted": False, "wallTimeMs": 340.6e3}),
+        ("", {"wallTimeNoticeEmitted": False, "wallTimeMs": float("nan")}),
+        ("", {"wallTimeNoticeEmitted": False, "wallTimeMs": -1}),
+        ("\n\nWall time: 0.13 seconds", {"wallTimeNoticeEmitted": False, "wallTimeMs": 125}),
+        ("", {"wallTimeNoticeEmitted": True, "wallTimeMs": 1500}),
+    ],
+)
+def test_missing_timing_notice_needs_the_sdk_to_have_skipped_it(text_suffix, details):
+    case = _observed("stdin-sed-transformation")
+    result = next(event["result"] for event in case["events"] if event["type"] == "tool_execution_end")
+    result["content"][0]["text"] += text_suffix
+    result["details"] = details
+    assert assess_case(CATALOG["stdin-sed-transformation"], case)["outcome"] == "task-incomplete"
 
 
 @pytest.mark.parametrize(

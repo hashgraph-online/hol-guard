@@ -15,6 +15,7 @@ from ..models import format_local_http_origin
 from ..native_daemon_handler import native_events_cursor
 from ..runtime.network_status import build_network_status
 from ..store import GuardStore
+from .command_activity_health_repair import auto_repair_command_activity_health_if_degraded
 from .dashboard_update import merge_dashboard_update_progress
 from .extension_control_api import ExtensionControlApiError
 from .harness_version_api import attach_version_compatibility
@@ -80,6 +81,7 @@ class _DashboardRuntimeReadRoutes:
                 store=store,
                 managed_controls_publish=_managed_controls_publish_for(self._daemon_server()),
             )
+            auto_repair_command_activity_health_if_degraded(store)
             config = load_guard_config(store.guard_home)
             daemon_server = self._daemon_server()
             include_receipts = self._query_bool(parsed.query, "include_receipts", default=True)

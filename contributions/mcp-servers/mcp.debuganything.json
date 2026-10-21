@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.debuganything",
+  "version": "1.0.0",
+  "name": "Debug Anything",
+  "description": "Reviews Debug Anything tools that attach observation probes to running processes, containers, or pods (strace, py-spy, perf, gdb/lldb, heap snapshots) or capture network traffic. Debug Anything is read-only by design and never elevates: when a probe needs root it fails closed and prints the sudo command for the operator to run themselves, then analyzes the saved output via import_artifact. Listing and reporting tools inherit host policy. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "github.shreyassaw5394",
+    "displayName": "Debug Anything",
+    "url": "https://github.com/shreyassaw5394/debuganything"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#0B0F17"
+  },
+  "homepage": "https://debuganything.dev",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "debuganything"
+  },
+  "riskClasses": [
+    "external-command-execution",
+    "external-process-inspection",
+    "external-network-capture",
+    "external-filesystem-write"
+  ],
+  "tools": [
+    {
+      "name": "readiness",
+      "state": "inherit"
+    },
+    {
+      "name": "list_processes",
+      "state": "inherit"
+    },
+    {
+      "name": "attach",
+      "state": "review"
+    },
+    {
+      "name": "detach",
+      "state": "inherit"
+    },
+    {
+      "name": "trace_syscalls",
+      "state": "review"
+    },
+    {
+      "name": "profile_cpu",
+      "state": "review"
+    },
+    {
+      "name": "dump_stacks",
+      "state": "review"
+    },
+    {
+      "name": "inspect_sockets",
+      "state": "inherit"
+    },
+    {
+      "name": "inspect_files",
+      "state": "inherit"
+    },
+    {
+      "name": "capture_traffic",
+      "state": "review"
+    },
+    {
+      "name": "snapshot_memory",
+      "state": "review"
+    },
+    {
+      "name": "diff_runs",
+      "state": "inherit"
+    },
+    {
+      "name": "container_info",
+      "state": "inherit"
+    },
+    {
+      "name": "report",
+      "state": "inherit"
+    },
+    {
+      "name": "import_artifact",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/shreyassaw5394/debuganything",
+    "https://debuganything.dev",
+    "https://www.npmjs.com/package/debuganything"
+  ],
+  "saferAlternatives": [
+    "Use readiness, list_processes, inspect_sockets, inspect_files, container_info and report, which only read system state and never attach to a process.",
+    "When a probe would need elevation, run the printed sudo command yourself and feed the saved output to import_artifact instead of granting Debug Anything anything.",
+    "capture_traffic additionally requires consent: true in the call itself and is capped at 30 seconds."
+  ]
+}

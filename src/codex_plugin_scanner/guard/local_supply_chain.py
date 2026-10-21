@@ -27,7 +27,11 @@ from .cloud_audit_request import build_cloud_workspace_audit_request
 from .config import GuardConfig
 from .mdm.network import managed_urlopen
 from .models import GuardAction, GuardArtifact
-from .native_mcp_proxy_decision import NativeMcpProxyDecisionError, native_external_archive_bind
+from .native_mcp_proxy_decision import (
+    NativeMcpProxyDecisionError,
+    native_external_archive_bind,
+    native_external_archive_binding_required,
+)
 from .native_package_approval_hash import native_package_approval_hash
 from .native_package_audit_projection import (
     native_batch_url,
@@ -64,7 +68,7 @@ from .runtime.package_protect_projection import (
     resolve_local_supply_chain_harness as _resolve_local_supply_chain_harness,
 )
 from .runtime.restricted_archive_download import RestrictedArchiveDownload
-from .shims import package_shim_dashboard_status, package_shim_supported_managers
+from .shims import package_shim_protection, package_shim_supported_managers
 from .store import GuardStore
 from .store_guard_home_binding import binds_store_guard_home
 
@@ -313,7 +317,7 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
     entitlement_module = _package_firewall_entitlement_module()
     runner = _runtime_runner_module()
 
-    entitlement = entitlement_module.resolve_package_firewall_entitlement(store)
+    entitlement = entitlement_module.package_firewall_entitlement_or_denied(store)
     if bool(entitlement.get("allowed")):
         return entitlement
     if store.get_cloud_sync_profile() is None:
@@ -363,7 +367,7 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
             break
         except (runner.GuardSyncNotAvailableError, runner.GuardSyncNotConfiguredError, OSError, RuntimeError):
             continue
-    return entitlement_module.resolve_package_firewall_entitlement(store)
+    return entitlement_module.package_firewall_entitlement_or_denied(store)
 
 
 def _workspace_has_project_markers(workspace_dir: Path) -> bool:
@@ -417,29 +421,10 @@ def _cleanup_external_archive_downloads(evaluation: object) -> None:
         download.cleanup()
 
 
-def _package_evaluation_requires_external_archive_binding(evaluation: object) -> bool:
-    source_hashes = getattr(evaluation, "external_archive_source_hashes", ())
-    if isinstance(source_hashes, (list, tuple)) and any(
-        isinstance(item, str) and len(item) == 64 for item in source_hashes
-    ):
-        return True
-    reasons = getattr(evaluation, "reasons", ())
-    if isinstance(reasons, (list, tuple)) and any(
-        isinstance(reason, Mapping) and reason.get("code") == "external_tarball_source" for reason in reasons
-    ):
-        return True
-    packages = getattr(evaluation, "packages", ())
-    if not isinstance(packages, (list, tuple)):
-        return False
-    return any(
-        isinstance(package, Mapping)
-        and isinstance(package_reasons := package.get("reasons"), (list, tuple))
-        and any(
-            isinstance(reason, Mapping) and reason.get("code") == "external_tarball_source"
-            for reason in package_reasons
-        )
-        for package in packages
-    )
+def _package_evaluation_requires_external_archive_binding(evaluation: object, *, guard_home: Path) -> bool:
+    """Whether this evaluation only permits a request bound to its verified archives."""
+
+    return native_external_archive_binding_required(evaluation, guard_home=guard_home)
 
 
 def _bound_external_archive_launch_command(
@@ -451,7 +436,7 @@ def _bound_external_archive_launch_command(
     """The launch argv bound to the resident-verified archives, or ``None`` (deny)."""
 
     downloads = _external_archive_downloads(evaluation)
-    requires_binding = _package_evaluation_requires_external_archive_binding(evaluation)
+    requires_binding = _package_evaluation_requires_external_archive_binding(evaluation, guard_home=guard_home)
     if not downloads:
         return None if requires_binding else list(launch_command)
     try:
@@ -538,6 +523,7 @@ def _build_package_protect_authority(
         sanitized_intent,
         config_path="hol-guard.toml",
         source_scope="project",
+        guard_home=store.guard_home,
     )
     evaluation = evaluate_package_request_artifact(
         artifact=artifact,
@@ -1104,6 +1090,33 @@ def _coerce_command_error_output(error: subprocess.TimeoutExpired | OSError) -> 
     return "\n".join(part for part in parts if part)
 
 
+def _unavailable_package_manager_protection(store: Any, code: str) -> dict[str, object]:
+    """The shape the posture renders when the resident cannot answer.
+
+    No manager is reported as protected or unprotected here; the block only
+    says the projection is unavailable and why.
+    """
+
+    return {
+        "path_status": "unavailable",
+        "error": code,
+        "path_contains_shim_dir": False,
+        "restart_shell_required": False,
+        "process_path_status": "missing",
+        "process_restart_required": False,
+        "shell_profile_configured": False,
+        "shell_profile_path": None,
+        "shim_dir": str(store.guard_home / "package-shims" / "bin"),
+        "supported_managers": list(package_shim_supported_managers(store.guard_home)),
+        "detected_managers": [],
+        "installed_managers": [],
+        "active_managers": [],
+        "missing_shims": [],
+        "protected_managers": [],
+        "unprotected_managers": [],
+    }
+
+
 def _build_package_manager_protection(store: Any) -> dict[str, object]:
     context = HarnessContext(
         home_dir=Path.home().resolve(),
@@ -1111,44 +1124,11 @@ def _build_package_manager_protection(store: Any) -> dict[str, object]:
         guard_home=store.guard_home,
     )
     try:
-        status = package_shim_dashboard_status(context)
+        return package_shim_protection(context)
     except NativeShimAdminError as error:
         # Posture still renders when the resident cannot answer; the shim
         # fields read as unavailable instead of failing the whole projection.
-        status = {"path_status": "unavailable", "error": error.code}
-    shim_dir = Path(str(status.get("shim_dir") or store.guard_home / "package-shims" / "bin"))
-    installed_managers = sorted(set(_string_items(status.get("installed_managers"))))
-    active_managers = sorted(set(_string_items(status.get("active_managers"))))
-    missing_shims = sorted(set(_string_items(status.get("missing_managers"))))
-    supported_managers = list(package_shim_supported_managers(store.guard_home))
-    detected_managers = sorted(set(_string_items(status.get("detected_managers"))))
-    protected_managers = sorted(set(_string_items(status.get("protected_managers"))))
-    protected_set = set(protected_managers)
-    path_status = str(status.get("path_status") or "missing_from_path")
-    coverage_managers = set(detected_managers)
-    staged_managers = (
-        set(installed_managers).intersection(coverage_managers) if path_status == "restart_required" else set()
-    )
-    unprotected_managers = [
-        manager for manager in detected_managers if manager not in protected_set and manager not in staged_managers
-    ]
-    return {
-        "path_status": path_status,
-        "path_contains_shim_dir": bool(status.get("path_contains_shim_dir")),
-        "restart_shell_required": bool(status.get("restart_shell_required")),
-        "process_path_status": str(status.get("process_path_status") or "missing"),
-        "process_restart_required": bool(status.get("process_restart_required")),
-        "shell_profile_configured": bool(status.get("shell_profile_configured")),
-        "shell_profile_path": status.get("shell_profile_path"),
-        "shim_dir": str(shim_dir),
-        "supported_managers": supported_managers,
-        "detected_managers": detected_managers,
-        "installed_managers": installed_managers,
-        "active_managers": active_managers,
-        "missing_shims": missing_shims,
-        "protected_managers": protected_managers,
-        "unprotected_managers": unprotected_managers,
-    }
+        return _unavailable_package_manager_protection(store, error.code)
 
 
 def _execute_cloud_workspace_audit_request(
@@ -1389,11 +1369,20 @@ def sync_supply_chain_cloud_state(
     workspace_dir: Path | None = None,
 ) -> dict[str, object]:
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    bundle_summary = _call_sync_with_optional_auth_context(
-        sync_supply_chain_bundle,
-        store=store,
-        auth_context=resolved_auth_context,
-    )
+    try:
+        bundle_summary = _call_sync_with_optional_auth_context(
+            sync_supply_chain_bundle,
+            store=store,
+            auth_context=resolved_auth_context,
+        )
+    except Exception:
+        # The network bundle has its own endpoint; refresh it before the
+        # supply-chain failure propagates.
+        _runtime_runner_module().sync_network_protection_bundle_best_effort(
+            store,
+            auth_context=resolved_auth_context,
+        )
+        raise
     payload = dict(bundle_summary) if isinstance(bundle_summary, dict) else {}
     workspace_audits = sync_managed_workspace_audits(
         store,
@@ -1402,6 +1391,10 @@ def sync_supply_chain_cloud_state(
     )
     payload["workspace_audits"] = workspace_audits
     payload.setdefault("synced_at", workspace_audits.get("synced_at"))
+    payload["network_protection"] = _runtime_runner_module().sync_network_protection_bundle_best_effort(
+        store,
+        auth_context=resolved_auth_context,
+    )
     return payload
 
 
@@ -1428,12 +1421,6 @@ def _redact_command_token(token: str) -> str:
         if any(fragment in key.lower() for fragment in ("token", "secret", "api_key", "api-key", "password")):
             return f"{key}: *****"
     return redact_text(token).text
-
-
-def _string_items(value: object) -> tuple[str, ...]:
-    if not isinstance(value, (list, tuple)):
-        return ()
-    return tuple(item for item in value if isinstance(item, str))
 
 
 def _int_value(value: object) -> int | None:

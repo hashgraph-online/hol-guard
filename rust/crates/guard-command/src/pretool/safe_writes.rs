@@ -9,13 +9,14 @@ mod screens;
 use super::read_paths::{
     existing_regular_read_target, expand_home_read_path, resolved_location_allowed,
 };
-pub(super) use copies::safe_copy_arguments;
+pub(super) use copies::{safe_copy_arguments, safe_copy_arguments_into};
 pub(crate) use plan_notes::plan_note_write_sources;
 pub(super) use plan_notes::plan_note_write_target;
 pub(super) use screens::autostart_write_target;
+use screens::home_execution_control_target;
+pub(super) use screens::home_spelling_matches_target;
 #[cfg(windows)]
 use screens::shared_library_part;
-use screens::{home_execution_control_target, home_spelling_matches_target};
 
 pub(super) fn bounded_file_write_target(
     value: &str,
@@ -376,11 +377,13 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
 }
 
 /// Windows `mktemp -d` (Git Bash `/tmp`) creates its directory in the user's
-/// profile temp folder. Only a directory strictly below the exact
-/// `<home>\AppData\Local\Temp` is admitted, located from the canonical home
-/// rather than the caller-controlled `TEMP`/`TMP`. The profile ACL keeps other
-/// non-administrator users out of that tree, and the exact-spelling checks
-/// reject junctions, short names and case aliases on the way there.
+/// profile temp folder. A file in the exact `<home>\AppData\Local\Temp`, or
+/// in a directory below it, is admitted, located from the canonical home
+/// rather than the caller-controlled `TEMP`/`TMP`. A file directly in that
+/// folder is what Git Bash writes for `/tmp/name`, which the POSIX spelling
+/// already admits. The profile ACL keeps other non-administrator users out of
+/// that tree, and the exact-spelling checks reject junctions, short names and
+/// case aliases on the way there.
 #[cfg(windows)]
 fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
     use super::directory_targets::exact_drive_spelling;
@@ -420,7 +423,6 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
         return false;
     };
     if !exact_drive_spelling(parent_text, &parent)
-        || parent == temp_root
         || !parent.starts_with(&temp_root)
         || !parent.is_dir()
         || shared_library_part(&name.to_ascii_lowercase())

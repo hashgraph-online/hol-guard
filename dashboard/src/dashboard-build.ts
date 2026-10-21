@@ -201,14 +201,57 @@ export function dashboardBuildIsStale(): boolean {
   return isDashboardBuildStale(currentBuildState());
 }
 
+let restoreClaimOnLeave: (() => void) | null = null;
+
+/**
+ * A screen holding a draft cancels the leave prompt. If the user answers Stay,
+ * this attempt never happened, so the tab gets its one recovery back. The
+ * listener is added after the claim and runs after the screens' own handlers,
+ * so it sees whether one of them cancelled the event. Every `beforeunload`
+ * listener runs before the prompt, so it cannot tell Stay from Leave: a
+ * one-shot `pagehide`, which fires only when the document really goes, records
+ * the claim again so a Leave keeps it for the new document.
+ */
+function releaseClaimIfLeaveIsCancelled(build: string): void {
+  if (restoreClaimOnLeave !== null) {
+    // Left over from an earlier Stay; this attempt records its own.
+    window.removeEventListener("pagehide", restoreClaimOnLeave);
+    restoreClaimOnLeave = null;
+  }
+  window.addEventListener(
+    "beforeunload",
+    (event) => {
+      if (!event.defaultPrevented) {
+        return;
+      }
+      const storage = browserSessionStorage();
+      releaseStaleBuildClaim(storage);
+      const restore = () => {
+        restoreClaimOnLeave = null;
+        try {
+          storage?.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, build);
+        } catch {
+          // Storage is unavailable; the tab falls back to normal error handling.
+        }
+      };
+      restoreClaimOnLeave = restore;
+      window.addEventListener("pagehide", restore, { once: true });
+    },
+    { once: true },
+  );
+}
+
 /**
  * Load `href` (or reload this page) with the bundle the daemon now serves when
  * this tab runs an older one. Returns `true` when the document is leaving.
  */
 export function loadCurrentDashboardBuild(href?: string): boolean {
-  if (typeof window === "undefined" || !claimStaleBuildReload(currentBuildState(), browserSessionStorage())) {
+  const state = currentBuildState();
+  const storage = browserSessionStorage();
+  if (typeof window === "undefined" || state.serverBuild === null || !claimStaleBuildReload(state, storage)) {
     return false;
   }
+  releaseClaimIfLeaveIsCancelled(state.serverBuild);
   const target = href ? new URL(href, window.location.href) : null;
   if (target === null) {
     window.location.reload();

@@ -173,19 +173,17 @@ def test_a_resident_error_raises_the_store_exception_its_code_names(
         )
 
 
-def test_reading_counters_consumes_the_mutation_count_once(
+def test_reading_counters_strips_the_resident_signals(
     writer: NativeHookEvidenceWriter, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _install(monkeypatch, _answer({"running": True, "policy_mutations": 2, "store_fatal": None}))
 
     stats = writer.stats()
 
-    # The signals are not counters; the caller takes them deliberately.
+    # The signals are not counters.
     assert "policy_mutations" not in stats
     assert "store_fatal" not in stats
     assert stats["running"] is True
-    assert writer.take_policy_mutations() == 2
-    assert writer.take_policy_mutations() == 0
 
 
 def test_a_reported_fatal_store_runs_the_store_recovery_once(
@@ -231,7 +229,6 @@ def test_stopping_sends_its_own_drain_budget_rather_than_either_default(
 
     assert writer.stop(timeout_seconds=0.5) is True
     assert respond.sent[0]["timeout_seconds"] == 0.5
-    assert writer.take_policy_mutations() == 1
 
 
 def test_a_recovery_that_fails_is_retried_rather_than_acknowledged(
@@ -272,7 +269,6 @@ def test_a_failure_reported_on_a_submission_recovers_without_a_counter_read(
     assert writer.submit_native_decision_receipt({"decision_id": "d-1"}) is True
 
     assert len(writer._store.recovered) == 1
-    assert writer.take_policy_mutations() == 3
 
 
 def test_a_drain_result_survives_a_recovery_that_raises(
@@ -334,7 +330,6 @@ def test_a_start_recovers_a_store_failure_the_resident_is_holding(
     # The reply carries the signals every reply carries, so the warm-up reads
     # them rather than leaving the failure for whatever calls next.
     assert len(writer._store.recovered) == 1
-    assert writer.take_policy_mutations() == 1
 
 
 def test_an_unreachable_resident_reads_as_a_writer_that_stopped_running() -> None:

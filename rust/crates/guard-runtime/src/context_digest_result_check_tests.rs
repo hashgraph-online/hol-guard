@@ -34,6 +34,7 @@ fn every_kind_name_is_a_contract_tag() {
     let names = [
         "build_approval_context_token",
         "validate_approval_context_tokens",
+        "approval_context_token_well_formed",
         "configured_environment_hash",
         "configured_headers_hash",
         "launch_argv_digest",

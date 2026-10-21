@@ -300,3 +300,252 @@ mod windows_tests {
         fs::remove_dir_all(&root).unwrap();
     }
 }
+
+#[cfg(all(test, unix))]
+mod unix_tests {
+    use super::*;
+    use crate::codex_output_env::{GitCheck, GitRun, InspectionHost};
+    use std::os::unix::fs::PermissionsExt;
+
+    /// A host that answers the two questions this check asks of its caller:
+    /// the real owner uid, and whether the body text holds a secret.
+    struct BodyHost {
+        secret: bool,
+        uid: u32,
+    }
+
+    /// The uid that owns a path the test itself created, which is the uid the
+    /// check must accept. The crate forbids `unsafe_code`, so the owner is read
+    /// from the filesystem rather than from `getuid`.
+    fn owner_uid(path: &Path) -> u32 {
+        use std::os::unix::fs::MetadataExt;
+        fs::metadata(path).unwrap().uid()
+    }
+
+    impl InspectionHost for BodyHost {
+        fn env(&self, _: &str) -> Option<String> {
+            None
+        }
+        fn current_uid(&self) -> Option<u32> {
+            Some(self.uid)
+        }
+        fn secret_content_found(&self, _: &str, _: bool) -> bool {
+            self.secret
+        }
+        fn git_executable(&self) -> Option<String> {
+            None
+        }
+        fn git_safety(&self, _: GitCheck, _: Option<&str>, _: &[String]) -> bool {
+            false
+        }
+        fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
+            false
+        }
+        fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
+            GitRun::Failed("body-file test host does not run git")
+        }
+    }
+
+    /// A fresh private directory, the shape `tmp_path` has in the retired
+    /// Python suite.
+    fn scratch(label: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "guard-pr-body-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::canonicalize(&root).unwrap()
+    }
+
+    fn is_safe(operand: &str, cwd: &Path, home: &Path) -> bool {
+        let host = BodyHost {
+            secret: false,
+            uid: owner_uid(cwd),
+        };
+        let ctx = Ctx::new(&host, "/", "/");
+        github_pr_body_file_is_safe(operand, Some(cwd), Some(home), &ctx)
+    }
+
+    #[test]
+    fn bounded_owner_controlled_markdown_is_accepted_for_both_line_endings() {
+        let root = scratch("newline");
+        for (label, payload) in [
+            ("lf", "## Summary\n- Focused change.\n"),
+            ("crlf", "## Summary\r\n- Focused change.\r\n"),
+        ] {
+            let body = root.join(format!("{label}-pr-body.md"));
+            fs::write(&body, payload).unwrap();
+            assert!(
+                is_safe(&body.to_string_lossy(), &root, root.parent().unwrap()),
+                "{label}"
+            );
+        }
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn canonical_pr_body_names_are_accepted_and_other_markdown_is_not() {
+        let root = scratch("names");
+        for name in [
+            "pr-body.md",
+            "pr-body.markdown",
+            "PR-BODY.MD",
+            "PR_BODY.md",
+            "PR_BODY_PROTECTION.md",
+        ] {
+            let body = root.join(name);
+            fs::write(&body, "## Summary\n- Focused change.\n").unwrap();
+            assert!(
+                is_safe(&body.to_string_lossy(), &root, root.parent().unwrap()),
+                "{name}"
+            );
+            fs::remove_file(&body).unwrap();
+        }
+        // An arbitrary name, and a name that only carries the marker as a
+        // suffix, stay outside the allowed shape.
+        for name in ["internal-notes.md", "internal_notes_pr_body.md"] {
+            let body = root.join(name);
+            fs::write(&body, "Private planning notes.\n").unwrap();
+            assert!(
+                !is_safe(&body.to_string_lossy(), &root, root.parent().unwrap()),
+                "{name}"
+            );
+            fs::remove_file(&body).unwrap();
+        }
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_named_body_under_cascade_projects_is_authored_outside_the_working_tree() {
+        let root = scratch("cascade");
+        let home = root.join("home");
+        let workspace = home.join("CascadeProjects").join("active-project");
+        let body_directory = home.join("CascadeProjects").join("proposal-worktree");
+        fs::create_dir_all(&workspace).unwrap();
+        fs::create_dir_all(&body_directory).unwrap();
+        // The check refuses group-writable directories and bodies, so a
+        // permissive umask must not decide the outcome.
+        for directory in [
+            &home,
+            &home.join("CascadeProjects"),
+            &workspace,
+            &body_directory,
+        ] {
+            fs::set_permissions(directory, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        let body = body_directory.join("PR_BODY_PROTECTION.md");
+        fs::write(&body, "## Summary\n- Focused change.\n").unwrap();
+        fs::set_permissions(&body, fs::Permissions::from_mode(0o600)).unwrap();
+
+        assert!(is_safe(
+            "~/CascadeProjects/proposal-worktree/PR_BODY_PROTECTION.md",
+            &workspace,
+            &home
+        ));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn oversized_empty_and_sensitive_bodies_are_refused() {
+        let root = scratch("bounds");
+        let home = root.parent().unwrap();
+
+        let oversized = root.join("pr-body.md");
+        fs::write(&oversized, vec![b'x'; (MAX_PR_BODY_BYTES + 1) as usize]).unwrap();
+        assert!(!is_safe(&oversized.to_string_lossy(), &root, home));
+
+        fs::write(&oversized, []).unwrap();
+        assert!(!is_safe(&oversized.to_string_lossy(), &root, home));
+
+        let sensitive = root.join(".env-pr-body.md");
+        fs::write(&sensitive, "## Summary\n- Focused change.\n").unwrap();
+        assert!(!is_safe(&sensitive.to_string_lossy(), &root, home));
+
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_padded_or_symlinked_operand_never_resolves() {
+        let root = scratch("operand");
+        let home = root.parent().unwrap();
+        let body = root.join("pr-body.md");
+        fs::write(&body, "## Summary\n- Focused change.\n").unwrap();
+        let text = body.to_string_lossy().into_owned();
+
+        for padding in [" ", "\t", "\n"] {
+            assert!(
+                !is_safe(&format!("{padding}{text}"), &root, home),
+                "{padding:?}"
+            );
+        }
+
+        let alias = root.join("alias-pr-body.md");
+        std::os::unix::fs::symlink(&body, &alias).unwrap();
+        assert!(!is_safe(&alias.to_string_lossy(), &root, home));
+
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_shared_body_or_a_shared_parent_directory_is_refused() {
+        let root = scratch("shared");
+        let home = root.parent().unwrap();
+
+        let shared_body = root.join("pr-body.md");
+        fs::write(&shared_body, "## Summary\n- Focused change.\n").unwrap();
+        fs::set_permissions(&shared_body, fs::Permissions::from_mode(0o620)).unwrap();
+        assert!(!is_safe(&shared_body.to_string_lossy(), &root, home));
+        fs::set_permissions(&shared_body, fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(is_safe(&shared_body.to_string_lossy(), &root, home));
+
+        let shared_directory = root.join("shared");
+        fs::create_dir(&shared_directory).unwrap();
+        fs::set_permissions(&shared_directory, fs::Permissions::from_mode(0o777)).unwrap();
+        let nested = shared_directory.join("pr-body.md");
+        fs::write(&nested, "## Summary\n- Focused change.\n").unwrap();
+        fs::set_permissions(&nested, fs::Permissions::from_mode(0o600)).unwrap();
+        assert!(!is_safe(&nested.to_string_lossy(), &root, home));
+
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn body_text_that_classifies_as_secret_is_refused() {
+        let root = scratch("secret");
+        let body = root.join("pr-body.md");
+        fs::write(&body, "## Summary\n- Focused change.\n").unwrap();
+        let host = BodyHost {
+            secret: true,
+            uid: owner_uid(&root),
+        };
+        let ctx = Ctx::new(&host, "/", "/");
+        assert!(!github_pr_body_file_is_safe(
+            &body.to_string_lossy(),
+            Some(&root),
+            Some(root.parent().unwrap()),
+            &ctx
+        ));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_missing_working_directory_or_home_fails_closed() {
+        let root = scratch("missing");
+        let body = root.join("pr-body.md");
+        fs::write(&body, "## Summary\n- Focused change.\n").unwrap();
+        let host = BodyHost {
+            secret: false,
+            uid: owner_uid(&root),
+        };
+        let ctx = Ctx::new(&host, "/", "/");
+        let text = body.to_string_lossy().into_owned();
+        assert!(!github_pr_body_file_is_safe(&text, None, Some(&root), &ctx));
+        assert!(!github_pr_body_file_is_safe(&text, Some(&root), None, &ctx));
+        fs::remove_dir_all(&root).unwrap();
+    }
+}

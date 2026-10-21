@@ -276,6 +276,12 @@ def _bind_native_runtime_override(env: dict[str, str]) -> None:
     if binary and Path(binary).is_absolute() and mode in {"shadow", "force"}:
         env["HOL_GUARD_NATIVE"] = mode
         env["HOL_GUARD_NATIVE_BINARY"] = binary
+    # Daemon startup asks the source compiler whether this installation carries
+    # a release bundle. A source checkout names its compiler the same way; the
+    # compiler refuses either override when a packaged compiler is present.
+    for key in ("HOL_GUARD_NATIVE_SOURCE_COMPILER", "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER"):
+        if (compiler := os.environ.get(key)) and Path(compiler).is_absolute():
+            env[key] = compiler
 
 
 def _trusted_daemon_prefix(value: str) -> Path:

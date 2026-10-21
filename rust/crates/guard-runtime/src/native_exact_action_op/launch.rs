@@ -24,7 +24,7 @@ use super::node_script::node_script;
 use super::node_script::NODE_LAUNCHERS;
 use super::operands::{argument_value, file_operand_hashes};
 #[cfg(not(windows))]
-use super::python_script::python_script;
+use super::python_script::observe as python_script;
 #[cfg(windows)]
 use super::reasons::GIT_HELPER_CONFIG;
 use super::reasons::{
@@ -95,7 +95,7 @@ pub(super) fn launch_identity(command: &str, cwd: &str, ctx: &Ctx) -> Proof<Valu
 }
 
 /// A single top-level invocation without wrappers, environment prefixes or redirects.
-pub(super) fn is_safe_single_invocation(model: &CanonicalCommand) -> bool {
+pub(crate) fn is_safe_single_invocation(model: &CanonicalCommand) -> bool {
     let simple_model = model.confidence == "exact"
         && model.redirects.is_empty()
         && model.embedded_commands.is_empty()
@@ -246,8 +246,9 @@ fn platform_segment(
             runner_local_bin(command, name, arguments, cwd, ctx, true)
         };
         let local_bin = local_bin.ok_or(MUTABLE_LAUNCHER)?;
+        let code = super::runner_code::bind(&local_bin, name, arguments, cwd, ctx)?;
         return Ok(
-            json!({"kind": "runner-local-bin", "runner": name, "local_bin": local_bin, "operands": operands}),
+            json!({"kind": "runner-local-bin", "runner": name, "local_bin": local_bin, "code":code, "operands": operands}),
         );
     }
     if NODE_LAUNCHERS.contains(&name) && !compound {

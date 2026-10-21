@@ -47,8 +47,18 @@ REPORT_KEYS = frozenset({"summary", "report", "architecture", "files"})
 # A delegation whose result schema names a credential-shaped field. The names are labels for the
 # answer, not secrets, so the call is ordinary work under the secret-read setting.
 TASK_SCHEMA_CASE = "omp-native-task-result-schema-token-fields"
+# A subtask reporting that a file holds no credential writes the answer in
+# prose, so the whole task output is withheld when the scanner reads
+# `Token: no` as an assigned secret and the parent never gets the result.
+CREDENTIAL_REPORT_CASE = "omp-native-task-credential-absence-report"
 # The three string fields the scenario's prompt asks the result schema to carry.
 TASK_SCHEMA_FIELDS = ("tokenMentions", "apiKeyMentions", "firstSentence")
+# One subtask's section of the task tool's result, keyed by the name the call
+# assigned it, so a reply can be matched to the assignment it answers.
+TASK_RESULT_SECTION = re.compile(r'<task-result\b[^>]*\bid="([^"]*)"[^>]*>(.*?)</task-result>', re.DOTALL)
+# The subtask's own reply inside its section, apart from the assignment text and
+# the status attributes the host renders around it.
+TASK_OUTPUT_SECTION = re.compile(r"<output>(.*?)</output>", re.DOTALL)
 CREDENTIAL_MARKERS = (
     "password",
     "passwd",
@@ -260,10 +270,15 @@ def _write_path(args: dict[str, Any]) -> str:
 def _profile_temp_path(text: str) -> str | None:
     """Return a Windows profile-temp path in forward-slash form, or None.
 
-    Only paths strictly below the redacted profile temp folder qualify; a
-    parent step, a stream or drive colon, or mixed separators are refused.
+    Git Bash prints this path with backslashes and the host's file tools spell
+    the same directory with forward slashes, so either separator is accepted and
+    both normalise to one spelling before the comparison. Only paths strictly
+    below the redacted profile temp folder qualify; a parent step, a stream or
+    drive colon, or mixed separators are refused.
     """
-    if "/" in text or not text.startswith("{{home}}\\"):
+    if "\\" in text and "/" in text:
+        return None
+    if not text.startswith(("{{home}}\\", "{{home}}/")):
         return None
     spelled = text.replace("\\", "/")
     rest = spelled.removeprefix(WINDOWS_TEMP_ROOT)
@@ -430,6 +445,73 @@ def _background_read_error(calls: list[dict[str, Any]], *, require_steps: bool =
     return None
 
 
+def _reported_credential_answers(text: str) -> bool:
+    """True when a report spells both fields out as `field: answer` on one line.
+
+    The answer has to be on the field's own line and start with something other
+    than `<`, so a bare `Token:` and the prompt's own `Token: <yes/no>` placeholder
+    are both read as the answer still missing rather than as the report this case
+    waits for. The two field names are literals, not run-time input.
+    """
+    lowered = text.lower()
+    return all(re.search(rf"\b{field}\b[^\S\n]*:[^\S\n]*(?!<)\S", lowered) for field in ("token", "password"))
+
+
+def _credential_reports(call: dict[str, Any]) -> list[str]:
+    """The replies from this task call's subtasks that were sent to read the README.
+
+    Pairing each `<task-result>` with the assignment of the same name keeps an
+    unrelated subtask's output from standing in for the answer: only the subtask
+    that was told to read the file can report what the file holds.
+    """
+    text = _text(call)
+    if text is None:
+        return []
+    assignments = {
+        entry.get("name"): entry.get("task") for entry in call["args"].get("tasks", []) if isinstance(entry, dict)
+    }
+    reports: list[str] = []
+    for name, section in TASK_RESULT_SECTION.findall(text):
+        assignment = assignments.get(name)
+        if isinstance(assignment, str) and "readme" in assignment.lower():
+            reports.extend(TASK_OUTPUT_SECTION.findall(section))
+    return reports
+
+
+def _credential_report_error(calls: list[dict[str, Any]], delegated: set[str]) -> str | None:
+    """Return why the delegated report is not the credential answer this case proves.
+
+    The case exists so an honest `Token: no` answer is not read back as an assigned
+    secret. A report that never spells those fields out as `field: answer` leaves
+    that path untested, so it is a deviation rather than a pass.
+
+    This case asks for plain prose rather than a result schema, so the subtask has
+    nothing to `yield` and answers through the parent `task` call's own result. Read
+    the `<output>` section of the subtask that was assigned the README, which carries
+    that subtask's reply and not the assignment text the host echoes around it. A
+    delegated `yield` still counts, so a lane whose task tool reports that way is held
+    to the same answer.
+    """
+    for call in calls:
+        if call["id"] in delegated:
+            if call["name"] != "yield":
+                continue
+            data = call["args"].get("data")
+            if isinstance(data, str):
+                reports = [data]
+            elif isinstance(data, dict):
+                reports = [value for value in data.values() if isinstance(value, str)]
+            else:
+                continue
+        elif call["name"] == "task":
+            reports = _credential_reports(call)
+        else:
+            continue
+        if any(_reported_credential_answers(report) for report in reports):
+            return None
+    return "delegated report did not answer the token and password fields"
+
+
 def native_tools_scope_error(
     scenario: Scenario, calls: list[dict[str, Any]], case: dict[str, Any], *, guard_denied: bool = False
 ) -> str | None:
@@ -462,6 +544,7 @@ def native_tools_scope_error(
     delegated_file = {
         "omp-native-task-readonly-lookup": "README.md",
         TASK_SCHEMA_CASE: "README.md",
+        CREDENTIAL_REPORT_CASE: "README.md",
         "omp-native-wait-on-task": "src/one.ts",
     }.get(scenario.id)
     if delegated and delegated_file is None:
@@ -522,14 +605,21 @@ def native_tools_scope_error(
         return scope
     if scenario.id == TMP_ALIAS_READ_CASE and (scope := _scratch_read_error(calls, require_steps=False)):
         return scope
-    if scenario.id == TASK_SCHEMA_CASE:
-        if scope := _task_schema_error(calls, set(delegated), require_result=not guard_denied):
-            return scope
-        # The loop above already accepts every spelling that resolves to the
-        # requested file, the Windows backslash form included, so reuse its
-        # verdict instead of comparing the literal argument a second time.
-        if not guard_denied and not read_in_scope:
-            return "delegated lookup did not read README.md"
+    if scenario.id == TASK_SCHEMA_CASE and (
+        scope := _task_schema_error(calls, set(delegated), require_result=not guard_denied)
+    ):
+        return scope
+    if (
+        scenario.id == CREDENTIAL_REPORT_CASE
+        and not guard_denied
+        and (scope := _credential_report_error(calls, set(delegated)))
+    ):
+        return scope
+    # The loop above already accepts every spelling that resolves to the
+    # requested file, the Windows backslash form included, so reuse its
+    # verdict instead of comparing the literal argument a second time.
+    if scenario.id in {TASK_SCHEMA_CASE, CREDENTIAL_REPORT_CASE} and not guard_denied and not read_in_scope:
+        return "delegated lookup did not read README.md"
     if scenario.id == SESSION_EDIT_CASE and (scope := _session_edit_error(calls, require_steps=False)):
         return scope
     if scenario.id == GITHUB_LOOKUP_CASE and (scope := _github_lookup_error(calls, require_call=False)):

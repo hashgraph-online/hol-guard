@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
+from typing import cast
 
 from ..approvals import record_unprompted_review
 from ..blocked_request_mode import safe_alternative_reason
 from ..config import GuardConfig
 from ..store import GuardStore
-from .commands_hook_native_state import NativeArtifactHookState, set_native_artifact_hook_final_action
+from .commands_hook_native_state import (
+    NativeArtifactHookState,
+    apply_native_artifact_hook_final_action,
+    plan_native_artifact_hook_final_action,
+)
 from .commands_support_hook_payload import _action_envelope_json
 from .commands_support_runtime_policy import _terminalize_runtime_action_copy
 from .commands_support_runtime_resolution import _runtime_detection, _runtime_request_summary
@@ -19,12 +25,21 @@ def apply_unprompted_native_review(
     args: argparse.Namespace,
     store: GuardStore,
     config: GuardConfig,
-    policy_action: str,
+    route: Mapping[str, object],
 ) -> None:
-    """Block the harness and keep a review-tier denial in the inbox."""
+    """Block the harness; keep a review-tier denial in the inbox.
 
+    ``route`` is the resident's silent review route: whether the denial is
+    recorded, and the verdict and lead sentence it carries.
+    """
+
+    silent = cast(Mapping[str, object], route["silent_review"])
+    policy_action = str(silent["action"])
     risk_summary = state.risk_summary
-    if policy_action in {"review", "require-reapproval"}:
+    # The settle is planned before the inbox record: a resident that cannot
+    # give it leaves no denial on file for a verdict the hook never made.
+    final_plan = plan_native_artifact_hook_final_action(state, "block")
+    if route["route"] == "silent_review":
         package_evaluation = state.package_evaluation
         package_evaluation_to_dict = getattr(package_evaluation, "to_dict", None)
         record_unprompted_review(
@@ -54,9 +69,9 @@ def apply_unprompted_native_review(
             store=store,
             redaction_level=config.receipt_redaction_level,
         )
-    set_native_artifact_hook_final_action(state, "block")
+    apply_native_artifact_hook_final_action(state, final_plan)
     state.approval_prompted = False
-    guidance = safe_alternative_reason(f"HOL Guard blocked this action. {risk_summary}")
+    guidance = safe_alternative_reason(f"{silent['reason']} {risk_summary}")
     _terminalize_runtime_action_copy(state.response_payload)
     state.response_payload.update(
         terminal_action="block",

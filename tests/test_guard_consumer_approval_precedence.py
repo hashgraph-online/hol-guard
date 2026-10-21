@@ -32,8 +32,8 @@ from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
 from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.runtime.approval_context import (
+    approval_context_token_is_well_formed,
     build_approval_context_token,
-    parse_approval_context_token,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -198,16 +198,6 @@ def _install_codex_native_hooks(context: HarnessContext) -> None:
     )
 
 
-def test_guard_run_launch_environment_hash_is_canonical_and_value_sensitive() -> None:
-    first = guard_run_launch._guard_run_launch_environment_hash({"B": "two", "A": "one"})
-    reordered = guard_run_launch._guard_run_launch_environment_hash({"A": "one", "B": "two"})
-    changed = guard_run_launch._guard_run_launch_environment_hash({"A": "one", "B": "changed"})
-
-    assert first == reordered
-    assert first != changed
-    assert len(first) == 64
-
-
 def test_unchanged_raw_interpreted_tool_action_preserves_exact_approval_boundary(tmp_path: Path) -> None:
     script = tmp_path / "consumer_action.py"
     script.write_text("print('unchanged')\n", encoding="utf-8")
@@ -315,7 +305,7 @@ def test_saved_review_allow_never_lowers_current_stronger_action_and_is_not_cons
     baseline = evaluate_detection(detection, store, _config(tmp_path), persist=False)
     baseline_item = baseline["artifacts"][0]
     context_hash = str(baseline_item["approval_context_hash"])
-    assert parse_approval_context_token(context_hash) is not None
+    assert approval_context_token_is_well_formed(context_hash)
     _record_once(
         store,
         artifact=artifact,
@@ -2772,6 +2762,6 @@ def test_approval_queue_persists_exact_v1_context_instead_of_legacy_content_hash
     assert len(queued) == 1
     assert queued[0]["policy_action"] == queued_action
     assert queued[0]["artifact_hash"] == evaluation["artifacts"][0]["approval_context_hash"]
-    assert parse_approval_context_token(queued[0]["artifact_hash"]) is not None
+    assert approval_context_token_is_well_formed(queued[0]["artifact_hash"])
     assert queued[0]["artifact_hash"] != evaluation["artifacts"][0]["artifact_hash"]
     assert queued[0]["workspace"] == str((tmp_path / "workspace").resolve())

@@ -78,10 +78,12 @@ def prepare(root, output, policy, native, compiler, source, *, resolve_claimants
             return previous
     with (output / "legacy-build.log").open("x") as log, contextlib.redirect_stdout(log):
         try:
-            result = compiler_script.main(["--compiler", str(compiler), "--check-public-descriptors"])
+            result = compiler_script.main(
+                ["--compiler", str(compiler), "--legacy-complete", "--check-public-descriptors"]
+            )
             if result:
                 raise ValueError("reviewed public descriptors differ from compiled sources")
-            compiler_script.main(["--compiler", str(compiler)])
+            compiler_script.main(["--compiler", str(compiler), "--legacy-complete"])
         except compiler_script.DeliveryBudgetError as error:
             return unavailable(error.code)
         except compiler_script.NativeCompilationError as error:

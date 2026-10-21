@@ -157,6 +157,18 @@ def test_scope_judge_accepts_the_windows_profile_temp_spelling() -> None:
     assert native_tools_scope_error(temp, [mk, scratch, scratch], {}) is None
     forward = _call("write", path="{{home}}/AppData/Local/Temp/tmp.ab/scratch-notes.txt")
     assert native_tools_scope_error(temp, [mk, scratch, forward], {}) is None
+    # The same directory printed with forward slashes names the same private
+    # temp folder, so it has to be judged as the backslash spelling is, whichever
+    # separator the created directory and the writes happen to use.
+    forward_mk = mktemp("{{home}}/AppData/Local/Temp/tmp.ab\n")
+    assert native_tools_scope_error(temp, [forward_mk, forward, forward], {}) is None
+    assert native_tools_scope_error(temp, [forward_mk, scratch, scratch], {}) is None
+    for path in (
+        "{{home}}/AppData/Local/Temp/scratch-notes.txt",
+        "{{home}}/AppData/Local/Temp/tmp.ab/../tmp.cd/scratch-notes.txt",
+        "{{home}}/AppData/Local/Temp/tmp.cd/scratch-notes.txt",
+    ):
+        assert native_tools_scope_error(temp, [forward_mk, forward, _call("write", path=path)], {}) is not None, path
     # The temp root itself, other profile folders, traversal, streams and mixed spellings stay out of scope.
     for printed in (
         "{{home}}\\AppData\\Local\\Temp\n",
@@ -165,6 +177,11 @@ def test_scope_judge_accepts_the_windows_profile_temp_spelling() -> None:
         "{{home}}\\AppData\\Local\\Temp\\tmp.ab:s\n",
         "{{home}}\\AppData/Local/Temp/tmp.ab\n",
         "C:\\Users\\u\\AppData\\Local\\Temp\\tmp.ab\n",
+        "{{home}}/AppData/Local/Temp\n",
+        "{{home}}/AppData/Roaming/tmp.ab\n",
+        "{{home}}/AppData/Local/Temp/../tmp.ab\n",
+        "{{home}}/AppData/Local/Temp/tmp.ab:s\n",
+        "C:/Users/u/AppData/Local/Temp/tmp.ab\n",
     ):
         assert native_tools_scope_error(temp, [mktemp(printed), scratch, scratch], {}) is not None, printed
     for path in (

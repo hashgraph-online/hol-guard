@@ -29,6 +29,7 @@ from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_tok
 from codex_plugin_scanner.guard.local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_daemon_handler import native_headless_action_error
+from codex_plugin_scanner.guard.native_hook_artifact_compose import NativeHookComposeError
 from codex_plugin_scanner.guard.policy_bundle_parser import (
     computed_policy_bundle_hash,
     payload_hash_for_policy_bundle,
@@ -377,6 +378,73 @@ def test_supply_chain_package_firewall_status_prefers_active_cloud_connect_flow(
     assert payload["connect_flow"]["state"] == "running"
     assert payload["connect_flow"]["request_id"] == "cloud-running-1"
     assert payload["connect_flow"]["authorize_url"] == "https://hol.org/mock-authorize"
+
+
+def _refuse_package_firewall_composition(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make every package-firewall composition unanswerable."""
+
+    def unavailable(kind: str, fields: dict[str, object], *, guard_home: object = None) -> dict[str, object]:
+        raise NativeHookComposeError("native_hook_artifact_compose_unavailable")
+
+    monkeypatch.setattr(package_firewall_entitlement_module, "native_hook_compose", unavailable)
+
+
+def test_supply_chain_package_firewall_status_fails_closed_when_the_resident_cannot_compose(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unreachable resident refuses the request instead of crashing the handler."""
+
+    _refuse_package_firewall_composition(monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims",
+                method="GET",
+                token=token,
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 503
+    assert payload["error"] == "package_firewall_authority_unavailable"
+    assert payload["operation"] == "status"
+    assert payload["available_actions"] == []
+
+
+def test_supply_chain_package_firewall_install_fails_closed_when_the_resident_cannot_compose(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A composition the resident cannot answer never becomes an install."""
+
+    _refuse_package_firewall_composition(monkeypatch)
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/supply-chain/package-shims/install",
+                token=token,
+                payload={"managers": ["npm"]},
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 503
+    assert payload["error"] == "package_firewall_authority_unavailable"
+    assert payload["operation"] == "install"
+    assert payload["available_actions"] == []
 
 
 def test_supply_chain_package_firewall_install_requires_cloud_connect_first(tmp_path: Path) -> None:

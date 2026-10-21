@@ -32,7 +32,7 @@ from ..models import (
     GuardRuntimeRegistration,
 )
 from ..package_firewall_entitlement import (
-    resolve_package_firewall_entitlement,
+    package_firewall_entitlement_or_denied,
 )
 from ..runtime.runner import (
     _requeue_cloud_review_privacy_projection,
@@ -165,7 +165,7 @@ class _RepairSettingsRoutes:
                         check_reasons[failed_check_id] = containment_reasons[failed_check_id]
                     try:
                         config = load_guard_config(store.guard_home)
-                        probe_reason = _repair_command_activity_persistence_health(store)
+                        _repair_command_activity_persistence_health(store)
                         store.maintain_command_activity(
                             now=datetime.now(timezone.utc),
                             detail_retain_days=config.evidence_retain_days,
@@ -174,9 +174,6 @@ class _RepairSettingsRoutes:
                         if evidence_health.active_error_count > 0:
                             failed_check_ids.append("decision_stream")
                             check_reasons["decision_stream"] = "decision_stream_degraded"
-                        elif probe_reason is not None:
-                            pending_check_ids.append("decision_stream")
-                            check_reasons["decision_stream"] = probe_reason
                         else:
                             repaired_check_ids.append("decision_stream")
                     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
@@ -227,7 +224,7 @@ class _RepairSettingsRoutes:
             check_reasons: dict[str, str] = {}
             try:
                 config = load_guard_config(store.guard_home)
-                probe_reason = _repair_command_activity_persistence_health(store)
+                _repair_command_activity_persistence_health(store)
             except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
                 check_reasons["decision_stream"] = "decision_stream_health_unavailable"
                 self._record_incomplete_protection_repair(check_reasons)
@@ -236,24 +233,6 @@ class _RepairSettingsRoutes:
                         "error": "protection_repair_failed",
                         "message": "Guard could not verify the command evidence store.",
                         "check_reasons": check_reasons,
-                    },
-                    status=409,
-                )
-                return
-            if probe_reason is not None:
-                check_reasons["decision_stream"] = probe_reason
-                self._record_incomplete_protection_repair(check_reasons)
-                self._write_json(
-                    {
-                        "repaired": False,
-                        "repair_scope": "local_integrity",
-                        "check_ids": [],
-                        "pending_check_ids": ["decision_stream"],
-                        "check_reasons": check_reasons,
-                        "message": (
-                            "Guard could not run the native policy engine to prove command evidence. "
-                            "Existing evidence was not changed."
-                        ),
                     },
                     status=409,
                 )
@@ -366,7 +345,7 @@ class _RepairSettingsRoutes:
                     approval_gate_grant=approval_gate_grant,
                 )
             config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
-            entitlement = resolve_package_firewall_entitlement(self.server.store)  # type: ignore[attr-defined]
+            entitlement = package_firewall_entitlement_or_denied(self.server.store)  # type: ignore[attr-defined]
             config = update_guard_settings(
                 guard_home,
                 config_settings,

@@ -688,6 +688,7 @@ dependencies = [
  "ring",
  "roxmltree 0.21.1",
  "rsa",
+ "rusqlite",
  "rustix",
  "rustls",
  "ruzstd",
@@ -731,10 +732,12 @@ dependencies = [
  "ring",
  "roxmltree 0.20.0",
  "rsa",
+ "rusqlite",
  "rustix",
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
  "toml 0.9.12+spec-1.1.0",
  "tree-sitter",
  "tree-sitter-bash",
@@ -959,6 +962,7 @@ dependencies = [
  "libproc",
  "nix",
  "pbkdf2",
+ "pep440_rs",
  "regex",
  "ring",
  "roxmltree 0.21.1",
@@ -1902,9 +1906,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.45"
+version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
+checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
  "log",
  "once_cell",
@@ -1943,9 +1947,9 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "ruzstd"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a252f5e20f038fe7b4ea53e073e65398d652c864cc162fc77c56c2f13717b888"
+checksum = "69e4ce4a039f42bf25920b95667e4d789e98749ab11bbb8d2c2936f788421bb5"
 
 [[package]]
 name = "salsa20"
@@ -2652,9 +2656,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.9"
+version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
+checksum = "1c1c8e20c8a38fc7d65abfe74eb7280e4aa667e8eec8bc84996d2874810748d9"
 dependencies = [
  "rustls-pki-types",
 ]

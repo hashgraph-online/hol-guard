@@ -1,102 +1,57 @@
 use super::*;
 use base64::{engine::general_purpose::STANDARD, Engine};
-use std::{fs, path::PathBuf};
+use std::fs;
 
 #[path = "native_command_program_collection_reader_tests.rs"]
 mod collection_reader_tests;
 #[path = "native_command_program_pack_cache_tests.rs"]
 mod pack_cache_tests;
 
-fn frame(stream: &mut Vec<u8>, bytes: &[u8]) {
-    stream.extend((bytes.len() as u32).to_be_bytes());
-    stream.extend(bytes);
-}
-
-fn sources() -> Vec<(Value, Vec<u8>)> {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    let mut result = Vec::new();
-    for (directory, kind) in [("command-sources", "command"), ("mcp-servers", "mcp")] {
-        let mut paths: Vec<_> = fs::read_dir(root.join("contributions").join(directory))
-            .unwrap()
-            .map(|entry| entry.unwrap().path())
-            .filter(|path| {
-                path.extension().is_some_and(|value| value == "json")
-                    && path.file_name().unwrap() != "migration-manifest.json"
-            })
-            .collect();
-        paths.sort();
-        for path in paths {
-            let bytes = fs::read(&path).unwrap();
-            let value: Value = serde_json::from_slice(&bytes).unwrap();
-            let id = if kind == "command" {
-                value["extension"]["extension_id"]
-                    .as_str()
-                    .unwrap()
-                    .to_owned()
-            } else {
-                format!(
-                    "command.mcp-{}",
-                    value["id"].as_str().unwrap().strip_prefix("mcp.").unwrap()
-                )
-            };
-            let binding: Value = serde_json::from_slice(
-                &fs::read(root.join(format!("contracts/extensions/trust/{id}.v1.json"))).unwrap(),
-            )
-            .unwrap();
-            let mut trust = json!({"schemaVersion":"guard.extension-trust-class-map.v1", "publishers":{
-                "hol":{"id":"hol", "displayName":"Hashgraph Online"}, "hol-curated":{"id":"hol-curated", "displayName":"HOL curated library"}},
-                "classes":{"first-party":[], "trusted-library":[], "external":[]}});
-            trust["classes"][binding["trustClass"].as_str().unwrap()] = json!([id]);
-            result.push((json!({"kind":kind, "trust":trust}), bytes));
-        }
-    }
-    result
-}
-
-fn stream(sources: &[(Value, Vec<u8>)]) -> Vec<u8> {
-    let mut stream = b"HGPS\x01".to_vec();
-    frame(
-        &mut stream,
-        &serde_json::to_vec(
-            &json!({"schema":"guard.command-pack-source-stream.v1", "count":sources.len()}),
-        )
-        .unwrap(),
-    );
-    for (metadata, bytes) in sources {
-        frame(&mut stream, &serde_json::to_vec(metadata).unwrap());
-        frame(&mut stream, bytes);
-    }
-    stream
-}
+use crate::native_command_program::authored_test_support::{sources, stream};
 
 #[test]
 fn complete_release_is_deterministic_and_reconstructs_exact_native_programs() {
     let mut sources = sources();
-    let mut trust = sources[0].0["trust"].clone();
-    for ids in trust["classes"].as_object_mut().unwrap().values_mut() {
-        *ids = json!([]);
-    }
-    let mut commands = Vec::new();
-    let mut servers = Vec::new();
+    let mut documents = BTreeMap::new();
     for (metadata, source) in &sources {
-        if metadata["kind"] == "command" {
-            commands.push(source.as_slice());
+        let document: SourceDocument = if metadata["kind"] == "command" {
+            serde_json::from_slice(source).unwrap()
         } else {
-            servers.push(source.as_slice());
-        }
-        for (class, ids) in metadata["trust"]["classes"].as_object().unwrap() {
-            trust["classes"][class]
-                .as_array_mut()
-                .unwrap()
-                .extend(ids.as_array().unwrap().iter().cloned());
-        }
+            mcp::lower(source).unwrap().document
+        };
+        assert!(documents
+            .insert(document.extension.extension_id.clone(), document)
+            .is_none());
     }
-    let legacy = catalog::compile_catalog_with_mcp(
-        &commands,
-        &servers,
-        &serde_json::to_vec(&trust).unwrap(),
-    )
-    .unwrap();
+    let extension_ids = documents.keys().cloned().collect();
+    let permission_ids = documents
+        .values()
+        .flat_map(|document| &document.extension.permissions)
+        .map(|permission| permission.permission_id.clone())
+        .collect();
+    // Independent per-pack lowering retains native bounds while the streamed
+    // compiler validates every source and the complete relationship interface.
+    let expected: BTreeMap<_, _> = sources
+        .iter()
+        .map(|(metadata, source)| {
+            let (commands, servers) = if metadata["kind"] == "command" {
+                (vec![source.as_slice()], vec![])
+            } else {
+                (vec![], vec![source.as_slice()])
+            };
+            let pack = catalog::compile_pack(
+                &commands,
+                &servers,
+                &serde_json::to_vec(&metadata["trust"]).unwrap(),
+                (&extension_ids, &permission_ids),
+            )
+            .unwrap();
+            (
+                pack.catalog[0]["extension_id"].as_str().unwrap().to_owned(),
+                pack,
+            )
+        })
+        .collect();
     let mut bytes = Vec::new();
     let root = compile_pack_stream(stream(&sources).as_slice(), &mut bytes).unwrap();
     sources.reverse();
@@ -121,8 +76,9 @@ fn complete_release_is_deterministic_and_reconstructs_exact_native_programs() {
     fn visit(
         reference: objects::ObjectRef,
         fetch: &mut impl FnMut(&str) -> Result<Vec<u8>, &'static str>,
-        count: &mut usize,
-        legacy: &super::super::CompiledSourceCatalog,
+        seen: &mut BTreeSet<String>,
+        expected: &BTreeMap<String, super::super::CompiledSourceCatalog>,
+        interfaces: (&BTreeSet<String>, &BTreeSet<String>),
     ) {
         let page: Value =
             serde_json::from_slice(&objects::read_blob(&reference, fetch).unwrap()).unwrap();
@@ -131,12 +87,19 @@ fn complete_release_is_deterministic_and_reconstructs_exact_native_programs() {
                 visit(
                     serde_json::from_value(child[2].clone()).unwrap(),
                     fetch,
-                    count,
-                    legacy,
+                    seen,
+                    expected,
+                    interfaces,
                 );
             }
         } else {
             for entry in page["entries"].as_array().unwrap() {
+                let id = entry[0].as_str().unwrap();
+                assert!(
+                    seen.insert(id.to_owned()),
+                    "duplicate pack in release index"
+                );
+                let expected_pack = &expected[id];
                 let manifest: Value = serde_json::from_slice(
                     &objects::read_blob(&serde_json::from_value(entry[1].clone()).unwrap(), fetch)
                         .unwrap(),
@@ -157,19 +120,10 @@ fn complete_release_is_deterministic_and_reconstructs_exact_native_programs() {
                     )
                     .unwrap();
                 }
-                for (id, node) in program["nodes"].as_object().unwrap() {
-                    assert_eq!(Some(node), legacy.program["nodes"].get(id));
-                }
-                for rule in program["rules"].as_array().unwrap() {
-                    assert_eq!(
-                        Some(rule),
-                        legacy.program["rules"]
-                            .as_array()
-                            .unwrap()
-                            .iter()
-                            .find(|candidate| candidate["rule_id"] == rule["rule_id"])
-                    );
-                }
+                assert_eq!(
+                    program, expected_pack.program,
+                    "exact native program for {id}"
+                );
                 let catalog: Value = serde_json::from_slice(
                     &objects::read_blob(
                         &serde_json::from_value(manifest["catalog"].clone()).unwrap(),
@@ -178,17 +132,7 @@ fn complete_release_is_deterministic_and_reconstructs_exact_native_programs() {
                     .unwrap(),
                 )
                 .unwrap();
-                for row in catalog.as_array().unwrap() {
-                    assert_eq!(
-                        Some(row),
-                        legacy
-                            .catalog
-                            .as_array()
-                            .unwrap()
-                            .iter()
-                            .find(|candidate| candidate["extension_id"] == row["extension_id"])
-                    );
-                }
+                assert_eq!(catalog, expected_pack.catalog, "exact catalog for {id}");
                 let descriptors: Value = serde_json::from_slice(
                     &objects::read_blob(
                         &serde_json::from_value(manifest["descriptors"].clone()).unwrap(),
@@ -197,14 +141,14 @@ fn complete_release_is_deterministic_and_reconstructs_exact_native_programs() {
                     .unwrap(),
                 )
                 .unwrap();
-                for descriptor in descriptors.as_array().unwrap() {
-                    assert!(
-                        legacy.descriptors.contains(descriptor),
-                        "public contribution descriptor must remain byte-equivalent"
-                    );
-                }
-                super::super::super::NativeCommandProgram::validate_compiler_pack(
+                assert_eq!(
+                    descriptors,
+                    json!(expected_pack.descriptors),
+                    "exact descriptors for {id}"
+                );
+                super::super::super::NativeCommandProgram::validate_compiler_pack_with_interfaces(
                     &serde_json::to_vec(&program).unwrap(),
+                    interfaces,
                 )
                 .unwrap();
                 let own = program["extensions"]
@@ -216,18 +160,19 @@ fn complete_release_is_deterministic_and_reconstructs_exact_native_programs() {
                 if own["trust_class"] == "external" {
                     assert_eq!(own["activation"], "opt-in");
                 }
-                *count += 1;
             }
         }
     }
-    let mut count = 0;
+    let mut seen = BTreeSet::new();
     visit(
         serde_json::from_value(root["index"].clone()).unwrap(),
         &mut fetch,
-        &mut count,
-        &legacy,
+        &mut seen,
+        &expected,
+        (&extension_ids, &permission_ids),
     );
-    assert_eq!(count, sources.len());
+    assert_eq!(seen, extension_ids);
+    assert_eq!(seen.len(), sources.len());
 }
 
 #[test]
@@ -300,6 +245,101 @@ fn cross_pack_relationships_are_checked_before_output() {
         "command_source_dependency_cycle_or_depth"
     );
     assert!(output.is_empty());
+}
+
+fn synthetic_pair(edit: impl Fn(usize, &mut Value)) -> Vec<(Value, Vec<u8>)> {
+    let mut sources = sources();
+    for index in 0..2 {
+        let (metadata, bytes) = synthetic(index);
+        let mut document: Value = serde_json::from_slice(&bytes).unwrap();
+        edit(index, &mut document["extension"]["permissions"][0]);
+        sources.push((metadata, serde_json::to_vec(&document).unwrap()));
+    }
+    sources
+}
+
+#[test]
+fn permission_replacement_metadata_is_checked_before_output() {
+    let permission = |index: usize| format!("command.scale-{index}.permission.destroy");
+    // (deprecated, replacement, target is deprecated too)
+    let cases = [
+        (true, None, false),
+        (false, Some(permission(1)), false),
+        (true, Some(permission(0)), false),
+        (true, Some(permission(1)), true),
+    ];
+    for (deprecated, replacement, target_deprecated) in cases {
+        let sources = synthetic_pair(|index, entry| {
+            if index == 0 {
+                entry["deprecated"] = json!(deprecated);
+                if let Some(target) = &replacement {
+                    entry["replacement_permission_id"] = json!(target);
+                }
+            } else if target_deprecated {
+                entry["deprecated"] = json!(true);
+                entry["replacement_permission_id"] = json!(permission(0));
+            }
+        });
+        let mut output = Vec::new();
+        assert_eq!(
+            compile_pack_stream(stream(&sources).as_slice(), &mut output).unwrap_err(),
+            "command_source_permission_replacement_invalid"
+        );
+        assert!(output.is_empty());
+    }
+}
+
+#[test]
+fn replacement_edges_take_part_in_permission_cycle_detection() {
+    let sources = synthetic_pair(|index, entry| {
+        if index == 0 {
+            entry["deprecated"] = json!(true);
+            entry["replacement_permission_id"] = json!("command.scale-1.permission.destroy");
+        } else {
+            entry["dependencies"] = json!(["command.scale-0.permission.destroy"]);
+        }
+    });
+    let mut output = Vec::new();
+    assert_eq!(
+        compile_pack_stream(stream(&sources).as_slice(), &mut output).unwrap_err(),
+        "command_source_dependency_cycle_or_depth"
+    );
+    assert!(output.is_empty());
+}
+
+#[test]
+fn permission_metadata_rules_are_enforced_before_output() {
+    let dependency = "command.scale-1.permission.destroy";
+    let cases = [
+        (
+            "typed capability",
+            "command_source_typed_capability_duplicate_or_unsupported",
+        ),
+        ("family", "command_source_family_owner_conflict"),
+        ("missing example", "command_source_permission_invalid"),
+        ("multiline example", "command_source_permission_invalid"),
+        ("duplicate dependency", "command_source_permission_invalid"),
+    ];
+    for (case, expected) in cases {
+        let sources = synthetic_pair(|index, entry| match (case, index) {
+            ("typed capability", 0) => entry["typed_capabilities"] = json!(["scale_capability"]),
+            ("typed capability", _) => entry["typed_capabilities"] = json!([" SCALE_CAPABILITY "]),
+            ("family", _) => entry["family"] = json!("shared-family"),
+            ("missing example", 0) => {
+                entry.as_object_mut().unwrap().remove("example_command");
+            }
+            ("multiline example", 0) => entry["example_command"] = json!("example-cli\ndestroy"),
+            ("duplicate dependency", 0) => entry["dependencies"] = json!([dependency, dependency]),
+            _ => {}
+        });
+        let mut output = Vec::new();
+        assert_eq!(
+            compile_pack_stream(stream(&sources).as_slice(), &mut output).unwrap_err(),
+            expected,
+            "{case}"
+        );
+        assert!(output.is_empty());
+    }
 }
 
 #[test]

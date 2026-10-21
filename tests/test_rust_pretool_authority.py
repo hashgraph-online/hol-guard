@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard import native_pretool as pretool
 from codex_plugin_scanner.guard import native_route_receipt as routes
 from codex_plugin_scanner.guard import native_runtime as runtime
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.native_hook_decision import NativeHookDecisionError
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -117,14 +118,24 @@ def test_missing_pretool_feature_records_fail_safe_provenance(
     assert routes.native_hook_route() == "native_fail_safe"
 
 
-def test_policy_floor_uses_native_block(
+def test_policy_floor_asks_the_resident_with_the_whole_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_pretool.review_pre_tool_native",
-        lambda *_args, **_kwargs: _native_block("rm -rf /"),
-    )
+    review = _native_block("rm -rf /")
+    reviewed: list[dict[str, Any]] = []
+    floored: list[tuple[dict[str, Any], Path | None]] = []
+
+    def review_pre_tool_native(*_args: object, **kwargs: Any) -> dict[str, Any]:
+        reviewed.append(kwargs)
+        return review
+
+    def native_pretool_floor(answer: dict[str, Any], *, guard_home: Path | None) -> str:
+        floored.append((answer, guard_home))
+        return "block"
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_pretool.review_pre_tool_native", review_pre_tool_native)
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_pretool.native_pretool_floor", native_pretool_floor)
     assert (
         pretool.native_pre_tool_policy_floor(
             "rm -rf /",
@@ -134,41 +145,18 @@ def test_policy_floor_uses_native_block(
         )
         == "block"
     )
+    # The floor path admits every canonical action, so a contained or
+    # reapproval answer reaches the resident instead of collapsing to a block.
+    assert [call["full_lattice"] for call in reviewed] == [True]
+    assert floored == [(review, tmp_path)]
 
 
-def test_policy_floor_defers_contextual_git_helper_review_to_python(
+def test_policy_floor_without_a_review_is_the_host_outage(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    native_review = _native_block("git diff --check")
-    native_review.update(
-        {
-            "decision": "deny",
-            "minimum_action": "review",
-            "policy_action": "review",
-            "reason_code": "native_git_helper_context_review",
-        }
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_pretool.review_pre_tool_native",
-        lambda *_args, **_kwargs: native_review,
-    )
-
-    assert (
-        pretool.native_pre_tool_policy_floor(
-            "git diff --check",
-            guard_home=tmp_path,
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-        is None
-    )
-
-
-def test_policy_floor_fails_closed_when_native_is_forced_unavailable(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+    # This used to return ``block``, a floor Python picked. No review is a
+    # resident outage, which the hook answers with the host outage response.
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.native_pretool.review_pre_tool_native",
         lambda *_args, **_kwargs: None,
@@ -182,15 +170,14 @@ def test_policy_floor_fails_closed_when_native_is_forced_unavailable(
             reason="missing",
         ),
     )
-    assert (
+    with pytest.raises(NativeHookDecisionError) as raised:
         pretool.native_pre_tool_policy_floor(
             "pwd",
             guard_home=tmp_path,
             cwd=tmp_path,
             home_dir=tmp_path,
         )
-        == "block"
-    )
+    assert raised.value.code == "native_pre_tool_floor_unavailable"
 
 
 def test_hook_worker_fails_closed_when_forced_native_is_missing(

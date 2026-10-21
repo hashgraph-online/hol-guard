@@ -3,7 +3,7 @@
  "description": "Language-neutral vectors for HookDecide. `expect` was captured by driving the pre-change Python generic-hook decision path (RTM-010 base) with the same inputs; it is a recursive subset of the decoded payload (objects match by listed keys, arrays and scalars exactly); `error` is the resident error code.",
  "vectors": [
   {
-   "name": "relax_asks_verified_apply_patch_first",
+   "name": "relax_asks_only_a_patch_about_its_target_paths",
    "query": {
     "kind": "compose_current",
     "inputs": {
@@ -12,11 +12,11 @@
      "event_fields": {
       "hook_event_name": "PreToolUse"
      },
-     "tool_name_text": "Bash",
+     "tool_name_text": "apply_patch",
      "configured_action": "review",
      "has_configured_override": false,
      "has_narrow_override": false,
-     "runtime_artifact_checked": false,
+     "runtime_artifact_checked": true,
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {},
@@ -26,12 +26,30 @@
      "native_edge": null,
      "daemon_status": null,
      "fail_mode": null,
-     "permission_decision_reason": null
+     "permission_decision_reason": null,
+     "native_request": {
+      "tool_name": "apply_patch",
+      "tool_input": {
+       "patch": "*** Begin Patch\n*** Update File: README.md\n*** End Patch\n"
+      },
+      "cwd": "/work/project",
+      "home_dir": "/work",
+      "host": {
+       "process_cwd": "/work/project",
+       "home": "/work",
+       "account_home": null,
+       "groups": [],
+       "environment": {
+        "HOME": "/work"
+       },
+       "git_executable": null
+      }
+     }
     }
    },
    "expect": {
     "needs_facts": [
-     "verified_apply_patch"
+     "apply_patch_targets_non_sensitive"
     ],
     "composition": null,
     "event_name": "PreToolUse"
@@ -54,9 +72,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -93,7 +109,7 @@
    }
   },
   {
-   "name": "relax_verified_apply_patch_short_circuits",
+   "name": "relax_a_verified_patch_short_circuits",
    "query": {
     "kind": "compose_current",
     "inputs": {
@@ -102,15 +118,15 @@
      "event_fields": {
       "hook_event_name": "PreToolUse"
      },
-     "tool_name_text": "Bash",
+     "tool_name_text": "apply_patch",
      "configured_action": "review",
      "has_configured_override": false,
      "has_narrow_override": false,
-     "runtime_artifact_checked": false,
+     "runtime_artifact_checked": true,
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {
-      "verified_apply_patch": true
+      "apply_patch_targets_non_sensitive": true
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -118,7 +134,25 @@
      "native_edge": null,
      "daemon_status": null,
      "fail_mode": null,
-     "permission_decision_reason": null
+     "permission_decision_reason": null,
+     "native_request": {
+      "tool_name": "apply_patch",
+      "tool_input": {
+       "patch": "*** Begin Patch\n*** Update File: README.md\n*** End Patch\n"
+      },
+      "cwd": "/work/project",
+      "home_dir": "/work",
+      "host": {
+       "process_cwd": "/work/project",
+       "home": "/work",
+       "account_home": null,
+       "groups": [],
+       "environment": {
+        "HOME": "/work"
+       },
+       "git_executable": null
+      }
+     }
     }
    },
    "expect": {
@@ -147,6 +181,108 @@
    }
   },
   {
+   "name": "relax_never_asks_about_a_patch_that_deletes_a_file",
+   "query": {
+    "kind": "compose_current",
+    "inputs": {
+     "harness": "codex",
+     "canonical_harness": "codex",
+     "event_fields": {
+      "hook_event_name": "PreToolUse"
+     },
+     "tool_name_text": "apply_patch",
+     "configured_action": "review",
+     "has_configured_override": false,
+     "has_narrow_override": false,
+     "runtime_artifact_checked": true,
+     "prompt_nonblank": false,
+     "has_command_text": true,
+     "facts": {},
+     "cli_action": null,
+     "has_payload_action": false,
+     "payload_action": null,
+     "native_edge": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "permission_decision_reason": null,
+     "native_request": {
+      "tool_name": "apply_patch",
+      "tool_input": {
+       "patch": "*** Begin Patch\n*** Delete File: README.md\n*** End Patch\n"
+      },
+      "cwd": "/work/project",
+      "home_dir": "/work",
+      "host": {
+       "process_cwd": "/work/project",
+       "home": "/work",
+       "account_home": null,
+       "groups": [],
+       "environment": {
+        "HOME": "/work"
+       },
+       "git_executable": null
+      }
+     }
+    }
+   },
+   "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse"
+   },
+   "requires_unix": true
+  },
+  {
+   "name": "relax_never_asks_about_a_patch_outside_codex",
+   "query": {
+    "kind": "compose_current",
+    "inputs": {
+     "harness": "cursor",
+     "canonical_harness": "cursor",
+     "event_fields": {
+      "hook_event_name": "PreToolUse"
+     },
+     "tool_name_text": "apply_patch",
+     "configured_action": "review",
+     "has_configured_override": false,
+     "has_narrow_override": false,
+     "runtime_artifact_checked": true,
+     "prompt_nonblank": false,
+     "has_command_text": true,
+     "facts": {},
+     "cli_action": null,
+     "has_payload_action": false,
+     "payload_action": null,
+     "native_edge": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "permission_decision_reason": null,
+     "native_request": {
+      "tool_name": "apply_patch",
+      "tool_input": {
+       "patch": "*** Begin Patch\n*** Update File: README.md\n*** End Patch\n"
+      },
+      "cwd": "/work/project",
+      "home_dir": "/work",
+      "host": {
+       "process_cwd": "/work/project",
+       "home": "/work",
+       "account_home": null,
+       "groups": [],
+       "environment": {
+        "HOME": "/work"
+       },
+       "git_executable": null
+      }
+     }
+    }
+   },
+   "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse"
+   },
+   "requires_unix": true
+  },
+  {
    "name": "review_default_stays_review_when_not_benign",
    "query": {
     "kind": "compose_current",
@@ -163,9 +299,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -218,9 +352,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -484,7 +616,7 @@
    }
   },
   {
-   "name": "prompt_submit_asks_prompt_clean",
+   "name": "prompt_submit_asks_whether_the_prompt_carries_a_request",
    "query": {
     "kind": "compose_current",
     "inputs": {
@@ -512,7 +644,82 @@
    },
    "expect": {
     "needs_facts": [
-     "prompt_clean"
+     "prompt_request_free"
+    ],
+    "composition": null,
+    "event_name": "UserPromptSubmit"
+   }
+  },
+  {
+   "name": "prompt_submit_asks_about_a_credential_file_next",
+   "query": {
+    "kind": "compose_current",
+    "inputs": {
+     "harness": "codex",
+     "canonical_harness": "codex",
+     "event_fields": {
+      "hook_event_name": "UserPromptSubmit"
+     },
+     "tool_name_text": "Bash",
+     "configured_action": "review",
+     "has_configured_override": false,
+     "has_narrow_override": false,
+     "runtime_artifact_checked": false,
+     "prompt_nonblank": true,
+     "has_command_text": false,
+     "facts": {
+      "prompt_request_free": true
+     },
+     "cli_action": null,
+     "has_payload_action": false,
+     "payload_action": null,
+     "native_edge": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "permission_decision_reason": null
+    }
+   },
+   "expect": {
+    "needs_facts": [
+     "prompt_credential_free"
+    ],
+    "composition": null,
+    "event_name": "UserPromptSubmit"
+   }
+  },
+  {
+   "name": "prompt_submit_asks_about_an_attachment_last",
+   "query": {
+    "kind": "compose_current",
+    "inputs": {
+     "harness": "codex",
+     "canonical_harness": "codex",
+     "event_fields": {
+      "hook_event_name": "UserPromptSubmit"
+     },
+     "tool_name_text": "Bash",
+     "configured_action": "review",
+     "has_configured_override": false,
+     "has_narrow_override": false,
+     "runtime_artifact_checked": false,
+     "prompt_nonblank": true,
+     "has_command_text": false,
+     "facts": {
+      "prompt_request_free": true,
+      "prompt_credential_free": true
+     },
+     "cli_action": null,
+     "has_payload_action": false,
+     "payload_action": null,
+     "native_edge": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "permission_decision_reason": null
+    }
+   },
+   "expect": {
+    "needs_facts": [
+     "prompt_attachment_free"
     ],
     "composition": null,
     "event_name": "UserPromptSubmit"
@@ -536,7 +743,9 @@
      "prompt_nonblank": true,
      "has_command_text": false,
      "facts": {
-      "prompt_clean": true
+      "prompt_request_free": true,
+      "prompt_credential_free": true,
+      "prompt_attachment_free": true
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -590,7 +799,7 @@
      "prompt_nonblank": true,
      "has_command_text": false,
      "facts": {
-      "prompt_clean": false
+      "prompt_request_free": false
      },
      "cli_action": null,
      "has_payload_action": false,
@@ -1588,9 +1797,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -2304,9 +2511,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -2407,9 +2612,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -2504,9 +2707,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -2604,9 +2805,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -2704,9 +2903,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -2804,9 +3001,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": "review",
      "has_payload_action": false,
      "payload_action": null,
@@ -2904,9 +3099,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -3001,9 +3194,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -3098,9 +3289,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -3195,9 +3384,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -3292,9 +3479,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -3389,9 +3574,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -3486,9 +3669,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -3583,9 +3764,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -3680,9 +3859,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -3777,9 +3954,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -3874,9 +4049,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -3970,9 +4143,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -4058,9 +4229,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -4151,9 +4320,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -4246,9 +4413,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -4339,9 +4504,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -4434,9 +4597,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -4524,9 +4685,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -4620,9 +4779,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -4714,9 +4871,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -4808,9 +4963,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -4905,9 +5058,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -4999,9 +5150,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -5094,9 +5243,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -5188,9 +5335,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -5282,9 +5427,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -5374,9 +5517,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -5468,9 +5609,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -5564,9 +5703,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -5660,9 +5797,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -5756,9 +5891,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": true,
      "payload_action": "block",
@@ -5852,9 +5985,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -5951,9 +6082,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -6048,9 +6177,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -6144,9 +6271,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -6241,9 +6366,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": false,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -6336,9 +6459,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -6433,9 +6554,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -6529,9 +6648,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -6624,9 +6741,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": true,
      "payload_action": "block",
@@ -6764,9 +6879,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -6861,9 +6974,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": "bogus",
      "has_payload_action": false,
      "payload_action": null,
@@ -6960,11 +7071,11 @@
      "event_fields": {
       "hook_event_name": "PreToolUse"
      },
-     "tool_name_text": "Bash",
+     "tool_name_text": "apply_patch",
      "configured_action": "review",
      "has_configured_override": false,
      "has_narrow_override": false,
-     "runtime_artifact_checked": false,
+     "runtime_artifact_checked": true,
      "prompt_nonblank": false,
      "has_command_text": true,
      "facts": {},
@@ -6974,7 +7085,25 @@
      "native_edge": null,
      "daemon_status": null,
      "fail_mode": null,
-     "permission_decision_reason": null
+     "permission_decision_reason": null,
+     "native_request": {
+      "tool_name": "apply_patch",
+      "tool_input": {
+       "patch": "*** Begin Patch\n*** Update File: README.md\n*** End Patch\n"
+      },
+      "cwd": "/work/project",
+      "home_dir": "/work",
+      "host": {
+       "process_cwd": "/work/project",
+       "home": "/work",
+       "account_home": null,
+       "groups": [],
+       "environment": {
+        "HOME": "/work"
+       },
+       "git_executable": null
+      }
+     }
     },
     "settled": {
      "current_policy_action": "review",
@@ -7015,9 +7144,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -7065,9 +7192,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -7115,9 +7240,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -7188,9 +7311,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -7266,9 +7387,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,
@@ -7344,9 +7463,7 @@
      "runtime_artifact_checked": false,
      "prompt_nonblank": false,
      "has_command_text": true,
-     "facts": {
-      "verified_apply_patch": false
-     },
+     "facts": {},
      "cli_action": null,
      "has_payload_action": false,
      "payload_action": null,

@@ -70,6 +70,24 @@ pub(super) fn validate(
     Ok(())
 }
 
+/// A held append descriptor preserves a first truncate followed by appends,
+/// or appends alone. It cannot model a later truncate. Cross-source ordering
+/// needs a separate proof; collection order is not execution order there.
+pub(super) fn validate_order(writes: &[OutputEffect]) -> Result<()> {
+    let mut owners = std::collections::BTreeMap::new();
+    for effect in writes {
+        if let Some(owner) = owners.insert(&effect.redirect.path, &effect.source_path) {
+            if owner != &effect.source_path || !effect.redirect.append {
+                return Err(Uncertainty {
+                    reason: "bash_output_order_unproven",
+                    line: effect.redirect.line,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

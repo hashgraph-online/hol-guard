@@ -34,6 +34,7 @@ pub struct PathContext<'a> {
 
 mod contained_wrapper;
 pub(crate) mod curl_reads;
+pub use curl_reads::bound_curl_read_destinations;
 pub(crate) mod dd_reads;
 mod digest_reads;
 pub(crate) mod docker_reads;
@@ -62,6 +63,7 @@ mod brace_words;
 mod brew_reads;
 mod bun_eval;
 mod chain_temporary;
+mod clone_siblings;
 mod compound_reason;
 mod fanout_reads;
 mod find_reads;
@@ -83,6 +85,7 @@ mod git_reads;
 mod git_ref_listings;
 mod git_rev_list;
 mod git_search_text;
+pub(crate) mod git_stash_reads;
 pub(crate) mod git_tag_listing;
 mod repo_create_reason;
 mod root_removal;
@@ -102,11 +105,13 @@ mod git_worktree;
 pub(crate) mod github_conversation;
 mod guard_diagnostics;
 mod listing_reads;
+mod listing_temporary;
 mod lookup_reads;
 mod metadata_reads;
 mod npm_environment;
 mod npm_reads;
 mod npmrc_keys;
+mod path_word_reads;
 mod pip_reads;
 mod postgres_reads;
 mod process_stops;
@@ -114,7 +119,10 @@ mod pytest_contained;
 mod tool_bin_listing;
 mod trailing_group;
 mod trusted_location;
-pub(crate) use git_routes::{git_dir_route_within_scope, git_route_within_workspace};
+pub(crate) use git_routes::{
+    git_dir_route_within_scope, git_route_within_workspace, git_route_without_repository,
+    reads_without_repository,
+};
 mod apply_patch_writes;
 mod data_heredocs;
 mod lockfile_install;
@@ -125,7 +133,7 @@ mod read_paths;
 mod source_reads;
 use source_reads::{plain_source_code_path, sensitive_command_input, source_file_read_segment};
 mod recursive_copy;
-mod restricted_tests;
+mod restricted_test_commands;
 mod rust_toolchain;
 mod rustfmt_writes;
 mod safe_links;
@@ -133,6 +141,7 @@ pub(crate) mod safe_reads;
 mod safe_scalar;
 mod safe_writes;
 mod script_content;
+pub(crate) use script_content::{argv_script, ArgvScript};
 mod search;
 mod search_pattern_clearance;
 mod search_scope;
@@ -178,7 +187,7 @@ pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
 pub(crate) use script_content::launch_loopback_ports;
 pub(crate) use script_content::{
-    sole_program_sources, sole_sourcing_sources, sourced_program_sources,
+    activation_script_text, sole_program_sources, sole_sourcing_sources, sourced_program_sources,
 };
 pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
 pub(crate) use worktree_add::new_checkout_route;
@@ -1067,4 +1076,8 @@ mod tests_benign_probes;
 #[cfg(test)]
 mod tests_fanout_reads;
 #[cfg(test)]
+mod tests_filter_file_reads;
+#[cfg(test)]
 mod tests_listing_find_probes;
+#[cfg(test)]
+mod tests_path_word_reads;

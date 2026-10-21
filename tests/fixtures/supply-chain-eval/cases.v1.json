@@ -502,6 +502,31 @@
    "lockfile_paths": [],
    "files": {},
    "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "external_tarball_source"
+    ],
+    "packages": [
+     [
+      "npm",
+      "demo",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "external_tarball_review_opt_in",
+   "targets": [
+    "demo@https://packages.example.com/demo-1.0.0.tgz"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
     "decision": "ask",
     "policy_action": "review",
     "enforcement": "free_local",
@@ -517,6 +542,11 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_direct_source = \"review\"\n"
+    }
    }
   },
   {
@@ -553,6 +583,31 @@
    "lockfile_paths": [],
    "files": {},
    "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "git_dependency_source"
+    ],
+    "packages": [
+     [
+      "npm",
+      "demo",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "git_dependency_review_opt_in",
+   "targets": [
+    "demo@git+https://github.com/org/demo.git"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
     "decision": "ask",
     "policy_action": "require-reapproval",
     "enforcement": "free_local",
@@ -568,10 +623,40 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_direct_source = \"require-reapproval\"\n"
+    }
    }
   },
   {
    "name": "unpinned_unknown",
+   "targets": [
+    "left-pad"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "no_cached_match"
+    ],
+    "packages": [
+     [
+      "npm",
+      "left-pad",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "unpinned_unknown_review_opt_in",
    "targets": [
     "left-pad"
    ],
@@ -594,10 +679,40 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_unknown = \"require-reapproval\"\n"
+    }
    }
   },
   {
    "name": "pinned_unknown",
+   "targets": [
+    "left-pad@1.0.0"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "no_cached_match"
+    ],
+    "packages": [
+     [
+      "npm",
+      "left-pad",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "pinned_unknown_review_opt_in",
    "targets": [
     "left-pad@1.0.0"
    ],
@@ -620,10 +735,47 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_unknown = \"require-reapproval\"\n"
+    }
    }
   },
   {
    "name": "lockfile_invalid_bytes",
+   "targets": [
+    "react@18.0.0"
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "files": {
+    "package-lock.json": {
+     "bytes_hex": "fffefd"
+    }
+   },
+   "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "summary_contains": "so it recorded this install without lockfile evidence.",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "lockfile_parse_incomplete"
+    ],
+    "packages": [
+     [
+      "npm",
+      "react",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "lockfile_invalid_bytes_review_opt_in",
    "targets": [
     "react@18.0.0"
    ],
@@ -652,6 +804,11 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_unknown = \"require-reapproval\"\n"
+    }
    }
   },
   {
@@ -742,6 +899,37 @@
     }
    },
    "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "lockfile_parse_incomplete"
+    ],
+    "packages": [
+     [
+      "npm",
+      "react",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "lockfile_duplicate_key_review_opt_in",
+   "targets": [
+    "react@18.0.0"
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "files": {
+    "package-lock.json": {
+     "text": "{\"packages\":{\"a\":{},\"a\":{}}}"
+    }
+   },
+   "expect": {
     "decision": "ask",
     "policy_action": "require-reapproval",
     "enforcement": "free_local",
@@ -757,10 +945,46 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_unknown = \"require-reapproval\"\n"
+    }
    }
   },
   {
    "name": "lockfile_clean",
+   "targets": [
+    "react@18.0.0"
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "files": {
+    "package-lock.json": {
+     "text": "{\"lockfileVersion\": 3, \"packages\": {\"\": {\"name\": \"a\"}, \"node_modules/react\": {\"version\": \"18.0.0\"}}}"
+    }
+   },
+   "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "no_cached_match"
+    ],
+    "packages": [
+     [
+      "npm",
+      "react",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "lockfile_clean_review_opt_in",
    "targets": [
     "react@18.0.0"
    ],
@@ -789,10 +1013,42 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_unknown = \"require-reapproval\"\n"
+    }
    }
   },
   {
    "name": "lockfile_missing",
+   "targets": [
+    "react@18.0.0"
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "files": {},
+   "expect": {
+    "decision": "monitor",
+    "policy_action": "allow",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "no_cached_match"
+    ],
+    "packages": [
+     [
+      "npm",
+      "react",
+      "monitor"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "lockfile_missing_review_opt_in",
    "targets": [
     "react@18.0.0"
    ],
@@ -817,6 +1073,11 @@
       "ask"
      ]
     ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "[risk_actions]\npackage_unknown = \"require-reapproval\"\n"
+    }
    }
   }
  ]

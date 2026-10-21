@@ -173,11 +173,12 @@ fn github_factor(
     }
     let assessment = classify_github_cli(arguments);
     let action_floor = assessment.action_floor();
+    // An explicitly enabled `unknown` permission is the user's consent to
+    // unverified GitHub commands, so Unknown suppresses like any other
+    // capability the user allowed; without that enablement `.all()` fails
+    // and the floor fires.
     if !indirect
         && action_floor != GuardAction::Block
-        && !assessment
-            .capabilities
-            .contains(&GitHubCommandCapability::Unknown)
         && assessment
             .capabilities
             .iter()

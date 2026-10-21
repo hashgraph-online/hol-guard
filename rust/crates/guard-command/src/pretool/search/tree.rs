@@ -30,7 +30,14 @@ pub(in crate::pretool) use literal_bracket::{
     safe_literal_bracket_read_target, safe_literal_bracket_search_target, safe_literal_bracket_tree,
 };
 
-const MAX_WALK_ENTRIES: usize = 10_000;
+/// An ordinary repository is already past ten thousand entries — this one
+/// counts 11,217 below its own root — so a lower bound decided every search
+/// named at a whole tree rather than bounding an unusual one. Refusing to
+/// finish looking is not a safety margin: the walk returns false and the
+/// search goes to review with nothing proven either way. The walk reads each
+/// entry's kind from the listing, so the raised bound costs a `lstat` only
+/// where the filesystem leaves that kind unknown.
+const MAX_WALK_ENTRIES: usize = 100_000;
 const MAX_WALK_DEPTH: usize = 64;
 const MAX_GLOB_MATCHES: usize = 256;
 const MAX_GLOB_ENTRIES: usize = 20_000;
@@ -178,6 +185,7 @@ fn safe_walk_target(
             git_metadata,
             follow_links,
             Some(clearance),
+            false,
         ),
         None => walk(
             root,
@@ -403,6 +411,7 @@ pub(super) fn walk(
         excluded_directories,
         git_metadata,
         follow_links,
+        false,
         || {
             walk_uncached(
                 root.clone(),
@@ -411,52 +420,79 @@ pub(super) fn walk(
                 git_metadata,
                 follow_links,
                 None,
+                false,
             )
         },
     )
 }
 
-fn walk_uncached(
+/// `skip_hidden` is for a lister that never descends into a hidden entry, so
+/// no hidden name below the root reaches its output and none of them holds
+/// the proof. Every visible entry is screened as it is for a walk that reads.
+pub(super) fn walk_uncached(
     root: PathBuf,
     excluded_files: &[&str],
     excluded_directories: &[&str],
     git_metadata: bool,
     follow_links: bool,
     clearance: Option<&PatternClearance>,
+    skip_hidden: bool,
 ) -> bool {
     // The third field marks an entry below a directory that only the clearance
     // admitted: its files have ordinary names, so nothing but their content
-    // says the pattern cannot match them.
-    let mut pending = vec![(root.clone(), 0_usize, false)];
+    // says the pattern cannot match them. The fourth carries the kind the
+    // directory listing already reported for the entry.
+    let mut pending = vec![(root.clone(), 0_usize, false, None::<std::fs::FileType>)];
     let mut inspected = 0_usize;
     // Inspect metadata only. Never follow links or read a secret to classify it.
-    while let Some((path, depth, admitted_below)) = pending.pop() {
+    while let Some((path, depth, admitted_below, listed)) = pending.pop() {
         let mut below = admitted_below;
         inspected += 1;
         if inspected > MAX_WALK_ENTRIES || depth > MAX_WALK_DEPTH {
             return false;
         }
-        let Ok(metadata) = std::fs::symlink_metadata(&path) else {
-            return false;
+        // The directory listing already carried this entry's kind, so reading
+        // it there spares a `lstat` per entry. It answers about the link
+        // itself, as `symlink_metadata` does, so a symlink is still neither a
+        // directory nor a file and still refuses the proof below.
+        let kind = match listed {
+            Some(kind) => kind,
+            None => match std::fs::symlink_metadata(&path) {
+                Ok(metadata) => metadata.file_type(),
+                Err(_) => return false,
+            },
         };
         // Only descendants are excluded: explicit operands and links still
         // require proof. Exact basenames avoid approximating grep's glob rules.
         if depth > 0 {
             let basename = path.file_name().and_then(|name| name.to_str());
+            if skip_hidden && basename.is_some_and(|name| name.starts_with('.')) {
+                continue;
+            }
             if basename.is_some_and(|name| {
-                (metadata.is_dir() && excluded_directories.contains(&name))
-                    || (metadata.is_file() && excluded_files.contains(&name))
+                (kind.is_dir() && excluded_directories.contains(&name))
+                    || (kind.is_file() && excluded_files.contains(&name))
             }) {
                 continue;
             }
             if git_metadata && basename == Some(".git") {
+                // A repository's own metadata directory is screened entry by
+                // entry, which needs the rest of what `lstat` answers.
+                let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+                    return false;
+                };
                 match super::git_metadata::safe_git_entry(&path, &metadata) {
                     true => continue,
                     false => return false,
                 }
             }
-            if !descendant_allowed(&path, &root, metadata.is_file()) {
+            if !descendant_allowed(&path, &root, kind.is_file()) {
                 // The name alone holds the search; a clearance may admit it.
+                // Only a name the screen refused reaches here, so reading the
+                // rest of its metadata leaves the ordinary entry as it was.
+                let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+                    return false;
+                };
                 if !clearance.is_some_and(|clearance| clearance.admits(&path, &metadata)) {
                     return false;
                 }
@@ -464,7 +500,7 @@ fn walk_uncached(
                     continue;
                 }
                 below = true;
-            } else if admitted_below && metadata.is_file() {
+            } else if admitted_below && kind.is_file() {
                 // Below an admitted directory every file clears on its own.
                 if !clearance.is_some_and(|clearance| clearance.clears(&path)) {
                     return false;
@@ -472,7 +508,7 @@ fn walk_uncached(
                 continue;
             }
         }
-        if metadata.is_dir() {
+        if kind.is_dir() {
             let Ok(entries) = std::fs::read_dir(&path) else {
                 return false;
             };
@@ -481,9 +517,12 @@ fn walk_uncached(
                 if pending.len() + inspected >= MAX_WALK_ENTRIES {
                     return false;
                 }
-                pending.push((entry.path(), depth + 1, below));
+                let Ok(entry_kind) = entry.file_type() else {
+                    return false;
+                };
+                pending.push((entry.path(), depth + 1, below, Some(entry_kind)));
             }
-        } else if !metadata.is_file() {
+        } else if !kind.is_file() {
             // A recursive tool lists a link without reading through it unless
             // it was asked to dereference one. The name was screened above;
             // the target belongs to whatever tree owns it, which this walk has
@@ -493,7 +532,7 @@ fn walk_uncached(
             // Only a link is listed rather than read. A FIFO, socket or device
             // is an entry a search can be told to read in place, and what comes
             // back is not a file this walk could have proven, so it refuses.
-            if follow_links || depth == 0 || !metadata.is_symlink() {
+            if follow_links || depth == 0 || !kind.is_symlink() {
                 return false;
             }
         }
@@ -506,6 +545,6 @@ fn expand_glob(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
     expand_glob_matches(value, context).filter(|matches| !matches.is_empty())
 }
 
-fn parent_component(value: &str) -> bool {
+pub(super) fn parent_component(value: &str) -> bool {
     value.split(['/', '\\']).any(|part| part == "..")
 }

@@ -180,6 +180,12 @@ pub(super) fn resolve_pytest_executable(
     let launched_from_workspace = path_is_within_lexically(&launch_executable, workspace);
     if !launched_from_workspace
         && !path_is_within_any(&executable, &TRUSTED_EXECUTABLE_ROOTS)
+        // `resolve_executable` answers the `/usr/bin` shim here, so the path
+        // under test is inside the developer directory rather than under a
+        // trusted root. `allowed_executable_path` already accepts it on the
+        // same terms; without the same exemption `python3 -m pytest` fails at
+        // plan time on exactly the hosts the shim resolution is for.
+        && !super::developer_shim::is_developer_tool(&executable)
         && venv::external_root(&launch_executable, &executable, workspace).is_none()
     {
         return Err(RestrictedPytestError::new(
@@ -232,48 +238,9 @@ pub(super) fn validate_pytest_args(args: &[String]) -> Result<(), RestrictedPyte
     Ok(())
 }
 
-/// `_python_args_target_pytest` (:171-194).
-pub(super) fn python_args_target_pytest(args: &[String]) -> bool {
-    let mut index = 0usize;
-    while index < args.len() {
-        let item = &args[index];
-        if item == "--" {
-            return false;
-        }
-        if item == "-c"
-            || item == "--command"
-            || item.starts_with("-c")
-            || item.starts_with("--command=")
-        {
-            return false;
-        }
-        if item == "-m" {
-            return args
-                .get(index + 1)
-                .map(|next| next.split('.').next() == Some("pytest"))
-                .unwrap_or(false);
-        }
-        if item.starts_with("-m") && item.len() > 2 {
-            return item[2..].split('.').next() == Some("pytest");
-        }
-        if matches!(item.as_str(), "-W" | "-X" | "--check-hash-based-pycs") {
-            index += 2;
-            continue;
-        }
-        if item.starts_with("-W")
-            || item.starts_with("-X")
-            || item.starts_with("--check-hash-based-pycs=")
-        {
-            index += 1;
-            continue;
-        }
-        if !item.starts_with('-') {
-            return false;
-        }
-        index += 1;
-    }
-    false
-}
+/// The Windows planner reads the same argv, so the reading lives in a
+/// module both platforms compile.
+pub use crate::pytest_argv::python_args_target_pytest;
 
 /// `_resolve_executable` (:195-218).
 pub(super) fn resolve_executable(
@@ -288,6 +255,11 @@ pub(super) fn resolve_executable(
             format!("Restricted pytest executable could not be resolved: {value}"),
         )
     })?;
+    // macOS ships `/usr/bin/python3` and its siblings as shims that ask
+    // `xcode-select` where the real tool is. That lookup cannot run inside
+    // containment, so it is answered here instead and the run execs the tool
+    // the shim would have forwarded to.
+    let resolved = super::developer_shim::forwarded_tool(&resolved).unwrap_or(resolved);
     let metadata = resolved.metadata().map_err(|_| {
         RestrictedPytestError::new(
             PYTEST_INVALID_COMMAND_REASON_CODE,

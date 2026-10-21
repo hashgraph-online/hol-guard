@@ -24,11 +24,19 @@ use serde_json::{json, Value};
 
 use crate::package_authority_op::evaluate_supply_chain_eval_with_seams;
 
-const VECTORS: &str = include_str!(concat!(
+pub(crate) const VECTORS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../../tests/fixtures/supply-chain-eval/cloud-cases.v1.json"
 ));
+#[cfg(not(windows))]
+const CACHE_CONTRACT: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../tests/fixtures/supply-chain-eval/cache-authority-contract.v2.json"
+));
 static CASE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+#[path = "supply_chain_cache_authority_tests.rs"]
+mod cache_authority_tests;
 
 type Seen = Arc<Mutex<Vec<(String, Value)>>>;
 
@@ -149,7 +157,7 @@ fn sql_value(value: &Value) -> SqlValue {
     }
 }
 
-fn seed_store(db_path: &Path, vectors: &Value, case: &Value) {
+pub(crate) fn seed_store(db_path: &Path, vectors: &Value, case: &Value) {
     let connection = rusqlite::Connection::open(db_path).expect("open store");
     for ddl in vectors["schema_sql"].as_object().expect("schema").values() {
         connection
@@ -187,6 +195,14 @@ fn case_dir(name: &str) -> PathBuf {
     ));
     std::fs::create_dir_all(root.join("home")).expect("home");
     std::fs::create_dir_all(root.join("ws")).expect("ws");
+    // The vectors predate package review settings, when a package Guard could
+    // not vouch for always paused. Pinning that action keeps them a replay of
+    // the evaluator; the settings have their own tests.
+    std::fs::write(
+        root.join("home").join("config.toml"),
+        "[risk_actions]\npackage_unknown = \"require-reapproval\"\n",
+    )
+    .expect("config");
     root
 }
 
@@ -194,10 +210,18 @@ fn case_dir(name: &str) -> PathBuf {
 fn run_case(vectors: &Value, case: &Value) -> Result<(), String> {
     let name = case["name"].as_str().expect("name");
     let (payload, sent) = evaluate_case(vectors, case)?;
-    if payload != case["expect"] {
+    let contract: Value = serde_json::from_str(CACHE_CONTRACT).expect("cache contract");
+    let mut expected = case["expect"].clone();
+    if let Some(patch) = contract["expected_patches"][name].as_object() {
+        for (key, value) in patch {
+            assert!(expected.get(key).is_some(), "unknown expected field {key}");
+            expected[key] = value.clone();
+        }
+    }
+    if payload != expected {
         return Err(format!(
             "{name}: evaluation differs\n{}",
-            diff(&case["expect"], &payload)
+            diff(&expected, &payload)
         ));
     }
     check_cloud_requests(name, case, &sent)
@@ -240,11 +264,17 @@ fn evaluate_case(vectors: &Value, case: &Value) -> Result<(Value, Vec<(String, V
             "access_token": vectors["sync_token"],
             "dpop_key_material": null,
         }));
+    } else if case["auth_context_override"].is_object() {
+        // Offline cache tests must not need a TCP server to establish a current
+        // synthetic session. Any unexpected egress is still rejected by drive.
+        request.sync_auth_context_override = Some(case["auth_context_override"].clone());
     }
     if !case["entitlement"].is_null() {
         request.package_entitlement_override = Some(case["entitlement"].clone());
     }
-    let mut result = drive(&mut request)?;
+    let offline_egress_error = case["offline_egress_error"].as_str();
+    assert!(offline_egress_error.is_none() || server.is_none());
+    let mut result = drive(&mut request, offline_egress_error)?;
     // A cached Cloud validation error needs the saved-policy lookup only the
     // caller can hydrate. The vector records what the Python lookup returned.
     let asked = result.code == "saved_policy_probe_required";
@@ -266,7 +296,7 @@ fn evaluate_case(vectors: &Value, case: &Value) -> Result<(Value, Vec<(String, V
             serde_json::from_value(case["saved_policy_probe"].clone())
                 .map_err(|e| format!("{name}: probe vector: {e}"))?,
         );
-        result = drive(&mut request)?;
+        result = drive(&mut request, offline_egress_error)?;
     }
     let sent = server.map(CloudServer::finish).unwrap_or_default();
     let _ = std::fs::remove_dir_all(&root);
@@ -283,7 +313,10 @@ fn evaluate_case(vectors: &Value, case: &Value) -> Result<(Value, Vec<(String, V
 /// repeat the request with the outcomes, until the resident answers. The
 /// exchanges go to a loopback server through a hand-written client so the
 /// transport under test is never the thing that fulfils it.
-fn drive(request: &mut SupplyChainEvalRequestV1) -> Result<SupplyChainEvalResultV1, String> {
+pub(crate) fn drive(
+    request: &mut SupplyChainEvalRequestV1,
+    offline_egress_error: Option<&str>,
+) -> Result<SupplyChainEvalResultV1, String> {
     for _ in 0..24 {
         let result = decode(&evaluate_supply_chain_eval_with_seams(request, true)?)?;
         if result.code != EGRESS_REQUIRED_CODE {
@@ -298,7 +331,12 @@ fn drive(request: &mut SupplyChainEvalRequestV1) -> Result<SupplyChainEvalResult
         let supplied = request.egress_supplied.get_or_insert_with(Vec::new);
         for need in required.needs {
             supplied.push(EgressSuppliedV1 {
-                outcome: perform_on_loopback(&need)?,
+                outcome: match offline_egress_error {
+                    Some(message) => EgressOutcomeV1::Error {
+                        message: message.to_owned(),
+                    },
+                    None => perform_on_loopback(&need)?,
+                },
                 class: need.class,
                 method: need.method,
                 url: need.url,
@@ -439,7 +477,11 @@ fn resident_cloud_evaluation_matches_recorded_python_vectors() {
     if let Some(path) = std::env::var_os("GUARD_VECTOR_REPORT") {
         std::fs::write(path, &report).expect("write report");
     }
-    assert!(failures.is_empty(), "{} case(s) differ", failures.len());
+    assert!(
+        failures.is_empty(),
+        "{} case(s) differ\n{report}",
+        failures.len()
+    );
 }
 
 #[test]

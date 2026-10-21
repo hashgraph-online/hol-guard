@@ -276,3 +276,29 @@ def test_daemon_request_detail_includes_recommendation(tmp_path: Path) -> None:
     assert recommendation["schema"] == RECOMMENDATION_SCHEMA
     assert recommendation["status"] in {"available", "authority_unavailable"}
     assert [item["permission_id"] for item in recommendation["permissions"]] == [GIT_ADD]
+
+
+def test_daemon_request_detail_computes_live_recommendation_for_legacy_pending_row(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.daemon import native_review_allow_hint
+
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-legacy", hint=None), "2026-10-09T10:00:00+00:00")
+    monkeypatch.setattr(
+        native_review_allow_hint,
+        "live_approval_extension_allow_hint",
+        lambda approval, **_kwargs: _hint(GIT_ADD) if approval.get("request_id") == "req-legacy" else None,
+    )
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        detail = _get_json(daemon.port, "/v1/requests/req-legacy", token=daemon._server.auth_token)
+    finally:
+        daemon.stop()
+
+    assert "extension_allow_hint" not in detail
+    recommendation = detail["extension_recommendation"]
+    assert recommendation["schema"] == RECOMMENDATION_SCHEMA
+    assert [item["permission_id"] for item in recommendation["permissions"]] == [GIT_ADD]

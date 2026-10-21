@@ -121,7 +121,10 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
     if encoded.len() * ESCAPE_FACTOR + ENVELOPE_BYTES > NATIVE_EXACT_ACTION_MAX_BYTES {
         return Err(HookDirectDefer::SavedDecision);
     }
-    let token = crate::native_exact_action_op::approval_token(&exact);
+    let token = crate::native_exact_action_op::approval_token_for_home(
+        &exact,
+        Path::new(context.guard_home),
+    );
 
     let custom;
     let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
@@ -379,18 +382,23 @@ fn approvable(result: &Object) -> bool {
 }
 
 /// `_native_review_is_overridable`: a review a broad local-CLI grant may lift.
-/// An unhashable action type, which raises there, is never overridable here.
 fn overridable(result: &Object) -> bool {
     let action_type = result
         .get("action")
         .and_then(Value::as_object)
         .and_then(|action| action.get("action_type"));
-    let overridable_type = match action_type {
+    approvable(result) && overridable_action_type(action_type)
+}
+
+/// Whether a review of this `action.action_type` may be lifted by a broad
+/// grant: never Guard control or a package action. An unhashable action type,
+/// which raises in Python, is never overridable here.
+pub(crate) fn overridable_action_type(action_type: Option<&Value>) -> bool {
+    match action_type {
         Some(Value::String(kind)) => !NON_OVERRIDABLE_ACTION_TYPES.contains(&kind.as_str()),
         Some(Value::Array(_) | Value::Object(_)) => false,
         _ => true,
-    };
-    approvable(result) && overridable_type
+    }
 }
 
 /// A review due only to non-recognition of a command that launches a local

@@ -9,6 +9,7 @@ import math
 import os
 import signal
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from .catalog import CATALOG, CONNECTOR_CATALOG, load_catalog
@@ -61,7 +62,15 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument(
         "--fail-fast",
         action="store_true",
-        help="Stop scheduling new cases after the first non-pass outcome; in-flight cases finish normally",
+        help="Stop scheduling new cases after the first false positive or false negative; a case the model "
+        "never exercised, a dead provider round or a host-tool failure is recorded and the run continues",
+    )
+    run.add_argument(
+        "--case-retries",
+        type=int,
+        default=0,
+        help="Re-run a case this many times when the model never exercised it, the provider round died "
+        "or a host tool failed; a false positive or false negative is never re-run",
     )
     run.add_argument(
         "--host-slots",
@@ -174,12 +183,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     qualify.add_argument("--sha", required=True, help="Full commit of the tested source or test merge")
     qualify.add_argument("--candidate-sha", help="PR head when qualifying its exact two-parent test merge")
-    qualify.add_argument("--attempts", type=int, default=2, help="Bounded fresh runs (1-3)")
+    # The ceiling is spelled here rather than imported so the parser stays cheap to build;
+    # `test_attempt_budget` pins it to `qualify.ATTEMPT_LIMIT`, which does the rejecting.
+    qualify.add_argument("--attempts", type=int, default=2, help="Bounded fresh runs (1-10)")
     qualify.add_argument(
         "--jobs",
         type=int,
         default=qualification_jobs(),
         help="Concurrent isolated cases (default: half the host CPUs, bounded to 1-8)",
+    )
+    qualify.add_argument(
+        "--case-retries",
+        type=int,
+        default=2,
+        help="Per-case re-runs each attempt spends on a case the model never exercised (0 disables)",
     )
     qualify.add_argument(
         "--host-slots",
@@ -200,6 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Total seconds to wait on host load before proceeding anyway",
     )
     qualify.add_argument("--effort", choices=("medium", "high", "low"), default="medium")
+    qualify.add_argument("--native-route", help="Explicit pinned native OMP backend (default: Luna)")
     qualify.add_argument("--cache-root", type=Path, default=Path.home() / ".cache" / "hol-guard-gauntlet")
     qualify.add_argument(
         "--run-root",
@@ -213,6 +231,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     qualify.add_argument(
         "--wheel", type=Path, help="Prebuilt native wheel; required on hosts other than macOS and Linux x86_64"
+    )
+    qualify.add_argument(
+        "--wheel-release-assets",
+        type=Path,
+        help="Directory of command packs that --wheel's build exported, served to the extension-control cases",
     )
     qualify.add_argument(
         "--release-profile-wheel",
@@ -302,7 +325,7 @@ def main(argv: list[str] | None = None) -> int:
 
             return qualify_main(args)
         full_task_cli.validate(args)
-        if args.profile in {"approval-retry", "connector-setup"} and args.harness == "omp":
+        if args.profile == "connector-setup" and args.harness == "omp":
             raise ValueError(f"--profile {args.profile} runs through an installed harness CLI, not the omp lane")
         if args.harness != "omp":
             return _run_harness(args)
@@ -331,9 +354,14 @@ def main(argv: list[str] | None = None) -> int:
         # argparse does not apply choices to an environment-supplied default.
         if args.reasoning_effort is not None and args.reasoning_effort not in REASONING_EFFORTS:
             raise ValueError("unsupported reasoning effort; use " + ", ".join(REASONING_EFFORTS))
+        from .case_retry import MAX_CASE_RETRIES
         from .parallel import MAX_SLOTS, validate_jobs
 
         validate_jobs(args.jobs)
+        if isinstance(args.case_retries, bool) or not 0 <= args.case_retries <= MAX_CASE_RETRIES:
+            raise ValueError(f"--case-retries must be an integer from 0 to {MAX_CASE_RETRIES}")
+        if args.profile != "core" and args.case_retries:
+            raise ValueError("--case-retries is only supported by the core profile")
         if args.profile not in ("core", "full-tasks") and args.jobs != 1:
             raise ValueError("--jobs is only supported by the core and full-tasks profiles")
         if args.profile != "full-tasks" and args.full_task_mode != "enforce":
@@ -372,6 +400,7 @@ def main(argv: list[str] | None = None) -> int:
         from .contained import run_contained_profile
         from .runner import run_suite
 
+        route_health: Callable[[], str | None] | None = None
         with contextlib.ExitStack() as stack:
             if args.native_luna_route:
                 from .luna_route import NativeLunaRoute
@@ -391,6 +420,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 )
                 provider = route.provider(max_rounds=args.max_inference_rounds, timeout=min(args.timeout, 120))
+                route_health = route.health
             else:
                 provider = {
                     "base_url": args.provider_url,
@@ -427,10 +457,13 @@ def main(argv: list[str] | None = None) -> int:
                     candidate_sha=args.candidate_sha,
                     jobs=args.jobs,
                     fail_fast=args.fail_fast,
+                    case_retries=args.case_retries,
+                    route_health=route_health,
                     host_slots=args.host_slots,
                     slot_dir=args.slot_dir,
                     max_load=args.max_load,
                     max_load_wait=args.max_load_wait if args.max_load_wait is not None else 180.0,
+                    profile=args.profile,
                 )
         print(
             json.dumps(
@@ -462,8 +495,16 @@ def _run_harness(args: argparse.Namespace) -> int:
         or args.omp
     ):
         raise ValueError("--harness uses the CLI's own login and model; omit provider, Luna and omp options")
-    if args.fail_fast or args.host_slots is not None or args.slot_dir is not None or args.max_load is not None:
-        raise ValueError("--fail-fast, --host-slots and --max-load are only supported by the omp harness")
+    if (
+        args.fail_fast
+        or args.host_slots is not None
+        or args.slot_dir is not None
+        or args.max_load is not None
+        or args.case_retries
+    ):
+        raise ValueError(
+            "--fail-fast, --case-retries, --host-slots and --max-load are only supported by the omp harness"
+        )
     if args.profile not in {"core", "full-tasks", "approval-retry", "connector-setup"}:
         raise ValueError("--harness supports only the core, full-tasks, approval-retry and connector-setup profiles")
     if args.profile != "full-tasks" and args.full_task_mode != "enforce":

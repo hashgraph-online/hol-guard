@@ -101,6 +101,42 @@ fn split_command_from_the_managed_worker_is_unambiguous() {
     assert_ne!(reason_code, json!("native_pre_tool_ambiguous_payload"));
 }
 
+/// The install canary sends only the compatibility copy, under the canonical
+/// event label and with no `tool_call`. Prepare reconciles that one copy, so
+/// evaluation must read it as a single call; a refusal here cancels every
+/// Cline tool call the moment the hooks are installed.
+#[test]
+fn a_lone_compatibility_copy_is_one_unambiguous_call() {
+    let payload = json!({
+        "hookName": "PreToolUse",
+        "taskId": "hol-guard-cline-canary",
+        "workspaceRoots": [CWD],
+        "preToolUse": {"toolName": "read_files", "parameters": {"paths": "[]"}},
+    });
+    let prepared = prepared(&payload).expect("the lone copy prepares");
+    assert_eq!(prepared["tool_name"], json!("read_file"));
+    let (decision, reason_code) = verdict(&prepared);
+    assert_ne!(reason_code, json!("native_pre_tool_ambiguous_payload"));
+    assert_eq!(decision, json!("allow"));
+}
+
+/// The same shape for the typed copy alone, which Cline sends once the
+/// compatibility copy is gone.
+#[test]
+fn a_lone_typed_copy_read_is_one_unambiguous_call() {
+    let payload = json!({
+        "hookName": "tool_call",
+        "taskId": "t1",
+        "workspaceRoots": [CWD],
+        "tool_call": {"id": "c1", "name": "read_files", "input": {"files": [{"path": "README.md"}]}},
+    });
+    let prepared = prepared(&payload).expect("the lone copy prepares");
+    assert_eq!(prepared["hook_event_name"], json!("PreToolUse"));
+    assert_eq!(prepared["tool_name"], json!("read_file"));
+    let (_, reason_code) = verdict(&prepared);
+    assert_ne!(reason_code, json!("native_pre_tool_ambiguous_payload"));
+}
+
 #[test]
 fn dual_copy_protected_read_still_stops() {
     let payload = cline_payload(

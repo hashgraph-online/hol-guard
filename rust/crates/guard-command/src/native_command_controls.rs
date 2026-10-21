@@ -17,12 +17,15 @@ use crate::CanonicalCommandV1;
 
 #[path = "native_command_controls_admission.rs"]
 mod admission;
+#[path = "native_command_controls_mcp.rs"]
+mod mcp;
 #[path = "native_command_controls_risk.rs"]
 mod risk;
 
 #[derive(Debug)]
 pub struct CompiledNativeCommandControls {
     program: Arc<NativeCommandProgram>,
+    catalog: Option<Arc<crate::native_command_catalog::CommandCatalog>>,
     binding: NativeCommandControlBindingV1,
     active_extensions: BTreeSet<String>,
     candidate_index: CommandCandidateIndex,
@@ -31,18 +34,11 @@ pub struct CompiledNativeCommandControls {
     explicitly_enabled_permissions: BTreeSet<String>,
     global_block: bool,
     rule_indices: BTreeMap<String, usize>,
+    quarantine_index: Option<CommandCandidateIndex>,
+    quarantine_pending: bool,
 }
 
 impl CompiledNativeCommandControls {
-    pub fn new(binding: &NativeCommandControlBindingV1) -> Result<Self, &'static str> {
-        Self::for_program(binding, packaged_command_program()?)
-    }
-
-    /// The authority health the bound control program reported.
-    pub fn health(&self) -> &str {
-        &self.binding.health
-    }
-
     fn for_program_inner(
         binding: &NativeCommandControlBindingV1,
         program: Arc<NativeCommandProgram>,
@@ -176,6 +172,7 @@ impl CompiledNativeCommandControls {
             .map(|(index, rule)| (rule.rule_id.clone(), index))
             .collect();
         Ok(Self {
+            catalog: None,
             candidate_index: CommandCandidateIndex::for_active(&program, &active_extensions),
             program,
             binding: binding.clone(),
@@ -185,6 +182,8 @@ impl CompiledNativeCommandControls {
             explicitly_enabled_permissions,
             global_block,
             rule_indices,
+            quarantine_index: None,
+            quarantine_pending: false,
         })
     }
 
@@ -273,9 +272,9 @@ impl CompiledNativeCommandControls {
         // so it takes the strongest of their floors and never less than review.
         // An unmodeled command already carries the floor of its possible owners.
         let mut uncertain_floor: Option<&'static str> = unmodeled;
-        // Uncertainty about a Git rule the user explicitly allowed reviews only
-        // when that Allow does not cover the whole command, or the command runs
-        // in a repository Guard could not inspect (below).
+        // Uncertainty about a rule the user explicitly allowed reviews only
+        // when that Allow does not cover the whole command, or a segment runs
+        // a shape Guard could not inspect (below).
         let mut enabled_uncertainty = false;
         for observation in &batch.observations {
             if !observation.uncertainty_reasons.is_empty() {
@@ -400,6 +399,7 @@ impl CompiledNativeCommandControls {
             reason = "native_command_extension_evaluation_failed";
         }
         strengthen(&mut result, floor, reason);
+        self.enforce_quarantine(command, tool, &mut result);
         floor::explain_expired_deadline(&mut result, deadline);
         let global_lockdown = self
             .binding
@@ -460,6 +460,8 @@ impl CompiledNativeCommandControls {
 
 #[path = "native_command_delegated.rs"]
 mod delegated;
+#[path = "native_command_quarantine.rs"]
+mod quarantine;
 pub(crate) use delegated::normalized_tool;
 
 #[path = "native_command_controls_floor.rs"]
@@ -469,7 +471,9 @@ mod precedence;
 #[path = "native_command_unmodeled.rs"]
 mod unmodeled;
 use floor::{add_authority_repair_hint, rank, rule_floor, strengthen};
-pub(crate) use unmodeled::{python_is_builtin_only, python_stdin, unread_file_interpreter};
+pub(crate) use unmodeled::{
+    bounds_its_owners, python_is_builtin_only, python_stdin, unread_file_interpreter,
+};
 
 #[cfg(test)]
 #[path = "native_command_controls_tests.rs"]
@@ -482,6 +486,10 @@ mod uncertainty_regressions;
 #[cfg(test)]
 #[path = "native_command_precedence_tests.rs"]
 mod precedence_regressions;
+
+#[cfg(test)]
+#[path = "native_command_precedence_generic_tests.rs"]
+mod precedence_generic_regressions;
 
 #[cfg(test)]
 #[path = "native_command_compound_controls_tests.rs"]

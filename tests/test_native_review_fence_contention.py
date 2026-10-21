@@ -26,18 +26,18 @@ from codex_plugin_scanner.guard.native_command_control_authority_io import (
 _SNAPSHOT = {"command_extensions_bound": True, "generation": 1}
 
 
-def _fence(guard_home: Path, *, budget: float) -> bool | None:
+def _fence(guard_home: Path, *, budget: float | None) -> bool | None:
     with native_review_fence(
         policy_snapshot=_SNAPSHOT,
         event_name="PreToolUse",
         recording_only=False,
         guard_home=guard_home,
-        deadline=time.monotonic() + budget,
+        deadline=None if budget is None else time.monotonic() + budget,
     ) as fenced:
         return fenced
 
 
-def _behind_a_held_mutation(guard_home: Path, *, budget: float):
+def _behind_a_held_mutation(guard_home: Path, *, budget: float | None):
     """Run one fence while another thread holds the authority lock."""
 
     held = threading.Event()
@@ -90,3 +90,11 @@ def test_a_contended_review_with_no_budget_left_is_refused(tmp_path):
     refused, _waited = _behind_a_held_mutation(tmp_path, budget=0.0)
     assert isinstance(refused, TimeoutError)
     assert str(refused) == "native_review_fence_deadline"
+
+
+def test_a_contended_review_with_no_deadline_is_not_refused(tmp_path):
+    """No deadline is not no time: the review runs and the caller checks it."""
+
+    fenced, waited = _behind_a_held_mutation(tmp_path, budget=None)
+    assert fenced is None
+    assert waited < 2.0

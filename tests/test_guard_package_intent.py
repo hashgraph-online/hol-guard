@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.models import GuardArtifact
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import (
     extract_package_intent_request,
     parse_package_intent,
@@ -320,3 +322,40 @@ def test_parse_package_intent_only_emits_package_metadata_and_redacted_command_s
     assert "user:pass" not in intent.redacted_command
     assert "deadbeef" not in intent.redacted_command
     assert "private-demo==1.2.3" in intent.redacted_command
+
+
+_GIT_COMMIT = "0123456789abcdef0123456789abcdef01234567"
+
+
+def _package_request_artifact_for_source(source: str) -> GuardArtifact:
+    intent = parse_package_intent(f"npm install {source}")
+    assert intent is not None
+    return build_package_request_artifact(
+        "codex",
+        intent,
+        config_path="codex.json",
+        source_scope="project",
+    )
+
+
+@pytest.mark.usefixtures("package_intent_native")
+@pytest.mark.parametrize(
+    "source",
+    [
+        f"git+https://GITHUB.com:443/hashgraph-online/hol-guard.git?token=ROTATING_SECRET#{_GIT_COMMIT}",
+        f"git+ssh://git@github.com:22/hashgraph-online/hol-guard.git#{_GIT_COMMIT}",
+        f"git@github.com:hashgraph-online/hol-guard.git#{_GIT_COMMIT}",
+    ],
+)
+def test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit(source: str) -> None:
+    first = _package_request_artifact_for_source(
+        f"github:Hashgraph-Online/hol-guard.git#{_GIT_COMMIT}"
+    )
+    equivalent = _package_request_artifact_for_source(source)
+    different_commit = _package_request_artifact_for_source(
+        "git+https://github.com/hashgraph-online/hol-guard.git#ffffffffffffffffffffffffffffffffffffffff"
+    )
+
+    assert first.artifact_id == equivalent.artifact_id
+    assert different_commit.artifact_id != first.artifact_id
+    assert "ROTATING_SECRET" not in equivalent.artifact_id

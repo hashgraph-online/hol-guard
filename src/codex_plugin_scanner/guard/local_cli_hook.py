@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -15,6 +16,7 @@ from .models import GuardAction
 from .native_context import _canonical_request_sha256, ensure_resident_prerequisite
 from .native_execution import _resident_request
 from .native_guard_store import _raise_for_code
+from .native_hook_decision import NativeHookDecisionError
 from .sqlite_tuning import sqlite_connect_timeout_seconds, sqlite_operation_deadline_monotonic
 
 if TYPE_CHECKING:
@@ -32,9 +34,10 @@ _CONNECTOR_SURFACES = frozenset({"cli", "package-scripts"})
 # A sandbox-bound action an allowed grant widens rather than lifts.
 ALLOW_CONTAINED_WITH_GRANT = "allow-contained-with-grant"
 _CONTAINED_FROM = frozenset({"sandbox-required", "review"})
+_CONTAINED_ROUTE_FIELDS = frozenset({"decision", "minimum_action", "policy_action", "reason_code", "reason"})
 _CONTAINED_GRANT_FIELDS = frozenset({"cli_id", "identity_hash", "name", "capabilities"})
 _GRANT_CAPABILITIES = ("loopback-network", "state-dir-read", "state-dir-write")
-_PAYLOAD_FIELDS = frozenset({"action", "connector", "contained_grant"})
+_PAYLOAD_FIELDS = frozenset({"action", "connector", "contained_grant", "contained_route"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +70,7 @@ class _Reply:
     action: str
     connector: SetupConnector | None
     contained_grant: ContainedGrant | None
+    contained_route: Mapping[str, str] | None = None
 
 
 def local_cli_grant_action(
@@ -80,7 +84,13 @@ def local_cli_grant_action(
     reason_code: str | None = None,
     path: str | None = None,
 ) -> GuardAction:
-    """Record the CLI the command launches and refine the action with its grant."""
+    """Record the CLI the command launches and refine the action with its grant.
+
+    The resident decides the refined action. No bound answer is a resident
+    outage: this raises ``NativeHookDecisionError`` and the hook answers with
+    the host outage response, as the direct hook path does, instead of an
+    action picked here.
+    """
 
     if command is None:
         return current_action
@@ -94,9 +104,9 @@ def local_cli_grant_action(
         reason_code=reason_code,
         path=path,
     )
-    if action is not None:
-        return action
-    return unverified_local_cli_action(store, current_action) if grant_allowed else current_action
+    if action is None:
+        raise NativeHookDecisionError("native_local_cli_hook_unavailable")
+    return action
 
 
 def observe_unlisted_cli(
@@ -150,8 +160,8 @@ def local_cli_contained_grant(
     current_action: GuardAction,
     reason_code: str | None,
     path: str | None = None,
-) -> tuple[str, ContainedGrant | None] | None:
-    """The refined action of a sandbox-bound command and the grant that widens it.
+) -> tuple[str, ContainedGrant | None, Mapping[str, str] | None] | None:
+    """The refined action of a sandbox-bound command, the grant that widens it, and its route.
 
     ``None`` is no bound answer. ``block`` means this device blocked the CLI.
     """
@@ -166,7 +176,7 @@ def local_cli_contained_grant(
         reason_code=reason_code,
         path=path,
     )
-    return None if reply is None else (reply.action, reply.contained_grant)
+    return None if reply is None else (reply.action, reply.contained_grant, reply.contained_route)
 
 
 def local_cli_setup_connector(
@@ -260,11 +270,16 @@ def _native_local_cli_hook_reply(
     if action == ALLOW_CONTAINED_WITH_GRANT:
         # Only a sandbox-bound action is widened, and only by a well-formed grant.
         grant = _contained_grant(payload.get("contained_grant"))
-        if current_action not in _CONTAINED_FROM or grant is None or "connector" in payload:
+        route = _contained_route(payload.get("contained_route"))
+        if current_action not in _CONTAINED_FROM or grant is None or route is None or "connector" in payload:
             return None
-        return _Reply(action, None, grant)
+        return _Reply(action, None, grant, route)
     # Only a grant can change the action, and only to allow, block or review.
-    if "contained_grant" in payload or (action != current_action and action not in _GRANT_ACTIONS):
+    if (
+        "contained_grant" in payload
+        or "contained_route" in payload
+        or (action != current_action and action not in _GRANT_ACTIONS)
+    ):
         return None
     connector = _setup_connector(payload.get("connector")) if action == "review" else None
     return _Reply(action, connector, None)
@@ -275,6 +290,21 @@ def _launch_env(path: str | None) -> dict[str, str]:
     if path is not None:
         env["PATH"] = path
     return env
+
+
+def _contained_route(value: object) -> Mapping[str, str] | None:
+    """The review fields the resident routes a granted outside-roots command to.
+
+    Every field is the resident's; this only refuses an answer that is not the
+    shape a route takes, so a malformed reply keeps the review it was holding.
+    """
+
+    if not isinstance(value, dict) or set(value) != _CONTAINED_ROUTE_FIELDS:
+        return None
+    fields = cast(dict[str, object], value)
+    if not all(isinstance(item, str) and item for item in fields.values()):
+        return None
+    return {key: cast(str, item) for key, item in fields.items()}
 
 
 def _contained_grant(value: object) -> ContainedGrant | None:
@@ -327,16 +357,3 @@ def _raise_store_failure(store: GuardStore, code: str) -> None:
         except Exception as recovery_error:
             raise recovery_error from failure
         raise
-
-
-def unverified_local_cli_action(store: object, current_action: GuardAction) -> GuardAction:
-    """Hold an otherwise allowed command for review while a block rule might apply."""
-
-    if current_action not in {"allow", "warn"}:
-        return current_action
-    probe = getattr(store, "has_local_cli_block_rules", None)
-    try:
-        has_blocks = bool(probe()) if callable(probe) else False
-    except Exception:
-        has_blocks = True
-    return "review" if has_blocks else current_action

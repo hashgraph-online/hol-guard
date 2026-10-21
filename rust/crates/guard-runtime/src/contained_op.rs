@@ -16,12 +16,14 @@ use guard_contracts::{
     ContainedNodeExecuteResultV1, ContainedPackageScriptExecuteRequestV1,
     ContainedPackageScriptExecuteResultV1, ContainedTypescriptExecuteRequestV1,
     ContainedTypescriptExecuteResultV1, ContainedWorkspaceWriteExecuteRequestV1,
-    ContainedWorkspaceWriteExecuteResultV1, CONTAINED_EXECUTE_REQUEST_SCHEMA,
+    ContainedWorkspaceWriteExecuteResultV1, ContainmentHealthProbeRequestV1,
+    ContainmentHealthProbeResultV1, CONTAINED_EXECUTE_REQUEST_SCHEMA,
     CONTAINED_EXECUTE_RESULT_SCHEMA, CONTAINED_NODE_EXECUTE_REQUEST_SCHEMA,
     CONTAINED_NODE_EXECUTE_RESULT_SCHEMA, CONTAINED_PACKAGE_SCRIPT_EXECUTE_REQUEST_SCHEMA,
     CONTAINED_PACKAGE_SCRIPT_EXECUTE_RESULT_SCHEMA, CONTAINED_TYPESCRIPT_EXECUTE_REQUEST_SCHEMA,
     CONTAINED_TYPESCRIPT_EXECUTE_RESULT_SCHEMA, CONTAINED_WORKSPACE_WRITE_EXECUTE_REQUEST_SCHEMA,
-    CONTAINED_WORKSPACE_WRITE_EXECUTE_RESULT_SCHEMA,
+    CONTAINED_WORKSPACE_WRITE_EXECUTE_RESULT_SCHEMA, CONTAINMENT_HEALTH_PROBE_REQUEST_SCHEMA,
+    CONTAINMENT_HEALTH_PROBE_RESULT_SCHEMA,
 };
 use serde_json::json;
 
@@ -204,6 +206,25 @@ pub(crate) fn evaluate_contained_execute(
     };
     crate::encode_response(&ContainedExecuteResultV1 {
         schema: CONTAINED_EXECUTE_RESULT_SCHEMA.to_owned(),
+        result: payload,
+    })
+}
+
+/// Answer one containment health question for the daemon.
+///
+/// The probe runs a real contained `/usr/bin/true` and reports whether the
+/// backend enforced it, so an unavailable or unenforced backend is reported as
+/// such instead of being inferred. A probe that could not run at all is `null`,
+/// which the caller treats as unavailable rather than healthy.
+pub(crate) fn evaluate_containment_health_probe(
+    request: &ContainmentHealthProbeRequestV1,
+) -> Result<Vec<u8>, String> {
+    if request.schema != CONTAINMENT_HEALTH_PROBE_REQUEST_SCHEMA {
+        return Err(schema_err(&request.schema));
+    }
+    let payload = contained_runner::containment_health_evidence(&request.daemon_fingerprint).ok();
+    crate::encode_response(&ContainmentHealthProbeResultV1 {
+        schema: CONTAINMENT_HEALTH_PROBE_RESULT_SCHEMA.to_owned(),
         result: payload,
     })
 }

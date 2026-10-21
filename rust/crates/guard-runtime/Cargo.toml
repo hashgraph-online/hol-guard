@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 guard-command = { path = "../guard-command" }
+guard-contained-process = { path = "../guard-contained-process" }
 guard-contracts = { path = "../guard-contracts" }
 guard-google-identity = { path = "../guard-google-identity" }
 guard-hook-core = { path = "../guard-hook-core" }
@@ -45,6 +46,7 @@ hmac.workspace = true
 sha2.workspace = true
 sha1.workspace = true
 pbkdf2.workspace = true
+pep440_rs.workspace = true
 scrypt.workspace = true
 base32ct.workspace = true
 sysinfo.workspace = true
@@ -54,13 +56,11 @@ guard-archive = { version = "0.1.0", path = "../guard-archive" }
 nix = { workspace = true, features = ["signal", "resource", "socket", "net", "user", "mount"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-guard-contained-process = { path = "../guard-contained-process" }
 guard-seatbelt = { path = "../guard-seatbelt" }
 libproc = "0.14.11"
 security-framework = "3.7.0"
 
 [target.'cfg(windows)'.dependencies]
-guard-contained-process = { path = "../guard-contained-process" }
 windows-permissions.workspace = true
 
 [target.'cfg(all(unix, target_os = "linux"))'.dependencies]

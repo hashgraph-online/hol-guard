@@ -11,6 +11,8 @@ persists. Local device metadata stays here.
 
 from __future__ import annotations
 
+import platform
+
 from .models import GuardAction
 
 # ruff: noqa: F403,F405
@@ -46,6 +48,33 @@ def inventory_artifact_wire(
         "approved": approved,
         "now": now,
     }
+
+
+# Sync payload naming the label someone set with ``hol-guard device label set``.
+DEVICE_LABEL_CHOICE_KEY = "device_label_choice"
+# Labels Guard seeds or falls back to before anyone names the machine.
+GENERIC_DEVICE_LABELS = frozenset({"", "local machine", "local-device", "this machine", "localhost"})
+
+
+def machine_display_name() -> str | None:
+    """The host name without its domain (``Ada-MacBook-Pro`` from ``Ada-MacBook-Pro.local``)."""
+
+    name = platform.node().strip().split(".", 1)[0].strip()
+    if name.lower() in GENERIC_DEVICE_LABELS:
+        return None
+    return name[:120]
+
+
+def effective_device_label(label: str, *, chosen: bool = False) -> str:
+    """The label Guard Cloud shows: the user's label, or the host name while it is still generic.
+
+    A label set with ``hol-guard device label set`` always wins; a seeded label such as
+    "Local machine" would make every machine in a fleet look the same.
+    """
+
+    if chosen or label.strip().lower() not in GENERIC_DEVICE_LABELS:
+        return label
+    return machine_display_name() or label
 
 
 class StoreInventoryMixin:
@@ -244,7 +273,24 @@ class StoreInventoryMixin:
                 """,
                 (normalized_label, now, _DEVICE_ROW_KEY),
             )
+        # A chosen label is kept even when it reads like a default ("Local machine");
+        # clearing the label hands the name back to the host name.
+        self.set_sync_payload(DEVICE_LABEL_CHOICE_KEY, {"label": normalized_label if label.strip() else None}, now)
         return self.get_device_metadata()
+
+    def device_display_name(self, label: str) -> str:
+        """``effective_device_label`` for the stored label, honouring an explicit choice.
+
+        Sync, policy matching and approval checks all name the machine through this
+        method, so a policy scoped to the name Guard Cloud shows matches everywhere.
+        """
+
+        try:
+            choice = self.get_sync_payload(DEVICE_LABEL_CHOICE_KEY)
+        except (OSError, RuntimeError, ValueError):
+            choice = None
+        chosen = isinstance(choice, dict) and choice.get("label") == label
+        return effective_device_label(label, chosen=chosen)
 
     def rotate_installation_id(self, now: str) -> dict[str, str]:
         new_installation_id = uuid4().hex

@@ -1,5 +1,6 @@
 //! Opt-in, payload-free phase evidence for native response-wait failures.
 
+use std::collections::HashMap;
 use std::fs::{File, Metadata};
 use std::io::{Cursor, Seek, Write};
 use std::path::Path;
@@ -16,6 +17,13 @@ const MAX_MANAGED_PHASE_BYTES: u64 = 64 * 1024;
 // of making a request thread wait for diagnostic file I/O.
 const MANAGED_PHASE_QUEUE_LINES: usize = 1024;
 const PHASE_LINE_BYTES: usize = 192;
+// The writer appends every line already queued in one write. Each append runs
+// the private-file checks, which cost far more than the write on Windows; one
+// check per line let a busy resident's backlog take seconds to drain on exit,
+// while it still held the owner lock.
+const PHASE_BATCH_BYTES: usize = 16 * 1024;
+// A batch larger than the bounded file would be refused and stop the writer.
+const _: () = assert!((PHASE_BATCH_BYTES as u64) < MAX_MANAGED_PHASE_BYTES);
 
 struct ManagedPhaseFile {
     file: File,
@@ -151,14 +159,28 @@ fn spawn_managed_writer(
             // Ends when the resident retires the sink (every sender dropped)
             // or when an append refuses an unlinked, altered, non-private, or
             // broken file. Dropping the receiver disconnects later emits.
-            for line in receiver {
-                if file.append(line.as_bytes()).is_none() {
+            while let Ok(line) = receiver.recv() {
+                if file.append(&next_batch(line, &receiver)).is_none() {
                     break;
                 }
             }
         })
         .ok()?;
     Some((sender, writer))
+}
+
+/// `first` followed by the lines already queued behind it, up to
+/// `PHASE_BATCH_BYTES`, in queue order.
+fn next_batch(first: PhaseLine, receiver: &mpsc::Receiver<PhaseLine>) -> Vec<u8> {
+    let mut batch = Vec::with_capacity(PHASE_BATCH_BYTES);
+    batch.extend_from_slice(first.as_bytes());
+    while batch.len() + PHASE_LINE_BYTES <= PHASE_BATCH_BYTES {
+        let Ok(line) = receiver.try_recv() else {
+            break;
+        };
+        batch.extend_from_slice(line.as_bytes());
+    }
+    batch
 }
 
 static PHASE_OUTPUT: LazyLock<Mutex<PhaseOutput>> =
@@ -239,6 +261,8 @@ pub(crate) enum Phase {
     ContextRuntimeExecutableIdentity,
     ContextRuntimeLaunchIdentity,
     ContextRuntimeLaunchIdentityMatches,
+    ContextGuardRunLaunchPlans,
+    ContextGuardRunAuthorizedPrefixes,
 }
 
 impl Phase {
@@ -270,6 +294,8 @@ impl Phase {
             Self::ContextRuntimeExecutableIdentity => "context_runtime_executable_identity",
             Self::ContextRuntimeLaunchIdentity => "context_runtime_launch_identity",
             Self::ContextRuntimeLaunchIdentityMatches => "context_runtime_launch_identity_matches",
+            Self::ContextGuardRunLaunchPlans => "context_guard_run_launch_plans",
+            Self::ContextGuardRunAuthorizedPrefixes => "context_guard_run_authorized_prefixes",
         }
     }
 }
@@ -303,20 +329,45 @@ pub(crate) fn enabled() -> bool {
 }
 
 fn emit(phase: Phase, status: Status, elapsed: Duration) {
-    // A broken diagnostic sink must not change native wire/error results.
-    // Render only finite phase/status labels and elapsed time into a bounded
-    // stack buffer. Helper stderr and the shared resident sink stay separate.
-    let mut line = [0u8; PHASE_LINE_BYTES];
-    let mut output = Cursor::new(line.as_mut_slice());
-    if writeln!(
-        output,
+    emit_line(format_args!(
         "native_resident_phase phase={} status={} elapsed_ms={}",
         phase.label(),
         status.label(),
         elapsed.as_millis()
-    )
-    .is_ok()
-    {
+    ));
+}
+
+static LAST_NOTES: LazyLock<Mutex<HashMap<&'static str, usize>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Records a finite count next to the phase lines, such as how many resident
+/// states one discovery pass returned. Only fixed names and numbers are
+/// written, never paths or request data. A spawn wait polls discovery every
+/// few milliseconds, so a note is written only when its value changes;
+/// otherwise repeats would push the phase lines out of the bounded tail.
+pub(crate) fn note(name: &'static str, value: usize) {
+    if !enabled() {
+        return;
+    }
+    let changed = LAST_NOTES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(name, value)
+        != Some(value);
+    if changed {
+        emit_line(format_args!(
+            "native_resident_note name={name} value={value}"
+        ));
+    }
+}
+
+fn emit_line(arguments: std::fmt::Arguments<'_>) {
+    // A broken diagnostic sink must not change native wire/error results.
+    // Render only finite labels and numbers into a bounded stack buffer.
+    // Helper stderr and the shared resident sink stay separate.
+    let mut line = [0u8; PHASE_LINE_BYTES];
+    let mut output = Cursor::new(line.as_mut_slice());
+    if writeln!(output, "{arguments}").is_ok() {
         let length = output.position() as usize;
         let mut sink = PHASE_OUTPUT
             .lock()
@@ -388,3 +439,7 @@ pub(crate) fn observe_value<T>(phase: Phase, operation: impl FnOnce() -> T) -> T
     emit(phase, Status::Ok, started.elapsed());
     result
 }
+
+#[cfg(test)]
+#[path = "resident_diagnostics_tests.rs"]
+mod tests;

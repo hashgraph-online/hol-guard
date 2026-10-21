@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_restricted_pytest as transport
-from codex_plugin_scanner.guard.adapters.zcode_contained_tests import platform_contains
+from codex_plugin_scanner.guard.native_hook_containment_route import native_containment_sink
 from codex_plugin_scanner.guard.runtime import restricted_node_tool
 from codex_plugin_scanner.guard.runtime.contained_wrapper import peel_contained_wrapper
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
@@ -295,11 +295,25 @@ def test_windows_build_runs_through_the_native_runner(windows, monkeypatch, tmp_
     assert not (app / "node_modules/.vite-temp").exists()
 
 
-def test_windows_contains_every_staged_node_profile(monkeypatch):
+def test_windows_contains_every_staged_node_profile(containment_resident, monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
-    assert platform_contains({"required_execution_profile": PROFILE})
-    assert platform_contains({"required_execution_profile": TOOL_PROFILE})
-    assert not platform_contains({"required_execution_profile": "package-test-readonly-v1"})
+    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "vite build"}}
+
+    def sink(reason: str, profile: str) -> tuple[str | None, str | None]:
+        receipt = {
+            "decision": "deny",
+            "policy_action": "sandbox-required",
+            "reason_code": reason,
+            "required_execution_profile": profile,
+        }
+        return native_containment_sink(
+            receipt, harness="claude-code", bridge=False, payload=payload, guard_home=containment_resident
+        )
+
+    assert sink("native_node_build_output_containment_required", PROFILE) == (PROFILE, None)
+    assert sink("native_node_tool_readonly_containment_required", TOOL_PROFILE) == (TOOL_PROFILE, None)
+    package = sink("native_package_test_readonly_containment_required", "package-test-readonly-v1")
+    assert package == (None, "platform_has_no_sink")
 
 
 def test_windows_peels_a_relative_cd_into_the_workspace(monkeypatch, tmp_path):

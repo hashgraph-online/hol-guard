@@ -23,40 +23,71 @@ _MAX_NATIVE_REQUEST_BYTES = 128 * 1024
 
 def hook_classifiers(
     *,
-    canonical_harness: str,
     guard_home: Path | None,
     home_dir: Path | None,
     payload: Mapping[str, object],
-    runtime_artifact_checked: bool,
     runtime_workspace: Path | None,
 ) -> dict[str, Callable[[str | None], bool]]:
     """Classifier verdicts keyed by the fact name the resident requests."""
 
-    def prompt_clean(_event: str | None) -> bool:
+    def _prompt_text() -> str | None:
+        prompt_text = payload.get("prompt")
+        return prompt_text if isinstance(prompt_text, str) else None
+
+    def prompt_request_free(_event: str | None) -> bool:
         from ..native_prompt import extract_prompt_requests
+
+        prompt_text = _prompt_text()
+        if prompt_text is None:
+            return False
+        return not extract_prompt_requests(prompt_text, guard_home=guard_home)
+
+    # The scans below run in the caller's own resident, and a resident that
+    # cannot answer leaves the prompt unclassified rather than ending the hook:
+    # an unanswered observation is not a clear one.
+    def prompt_credential_free(_event: str | None) -> bool:
+        from ..native_context import bound_context_digest_home
+        from ..native_sensitive_request import NativeSensitiveRequestError
         from .commands_support_codex_paths import _codex_prompt_credential_file_artifact
+
+        prompt_text = _prompt_text()
+        if prompt_text is None:
+            return False
+        try:
+            with bound_context_digest_home(guard_home):
+                return (
+                    _codex_prompt_credential_file_artifact(
+                        prompt_text=prompt_text,
+                        cwd=runtime_workspace,
+                        config_path="<runtime>",
+                    )
+                    is None
+                )
+        except NativeSensitiveRequestError:
+            return False
+
+    def prompt_attachment_free(_event: str | None) -> bool:
+        from ..native_context import bound_context_digest_home
+        from ..native_sensitive_request import NativeSensitiveRequestError
         from .commands_support_codex_prompt_attachments import _codex_prompt_attachment_artifact
 
-        prompt_text = payload.get("prompt")
-        if not isinstance(prompt_text, str) or extract_prompt_requests(prompt_text, guard_home=guard_home):
+        prompt_text = _prompt_text()
+        if prompt_text is None:
             return False
-        credential = _codex_prompt_credential_file_artifact(
-            prompt_text=prompt_text,
-            cwd=runtime_workspace,
-            config_path="<runtime>",
-        )
-        if credential is not None:
+        if home_dir is None:
+            return True
+        try:
+            with bound_context_digest_home(guard_home):
+                return (
+                    _codex_prompt_attachment_artifact(
+                        prompt_text=prompt_text,
+                        home_dir=home_dir,
+                        config_path="<runtime>",
+                    )
+                    is None
+                )
+        except NativeSensitiveRequestError:
             return False
-        return (
-            home_dir is None
-            or _codex_prompt_attachment_artifact(
-                prompt_text=prompt_text,
-                home_dir=home_dir,
-                guard_home=guard_home,
-                config_path="<runtime>",
-            )
-            is None
-        )
 
     def post_tool_read_only_inspection(_event: str | None) -> bool:
         from .commands_support_codex_commands import _codex_post_tool_command_is_read_only_source_inspection
@@ -67,22 +98,21 @@ def hook_classifiers(
             home_dir=home_dir,
         )
 
-    def verified_apply_patch(event: str | None) -> bool:
-        from .commands_support_apply_patch_policy import verified_non_sensitive_codex_apply_patch
+    def apply_patch_targets_non_sensitive(_event: str | None) -> bool:
+        from .commands_support_apply_patch_policy import apply_patch_targets_are_non_sensitive
 
-        return verified_non_sensitive_codex_apply_patch(
-            canonical_harness=canonical_harness,
-            event_name=event,
+        return apply_patch_targets_are_non_sensitive(
             home_dir=home_dir,
             payload=payload,
-            runtime_artifact_checked=runtime_artifact_checked,
             runtime_workspace=runtime_workspace,
         )
 
     return {
-        "prompt_clean": prompt_clean,
+        "prompt_request_free": prompt_request_free,
+        "prompt_credential_free": prompt_credential_free,
+        "prompt_attachment_free": prompt_attachment_free,
         "post_tool_read_only_inspection": post_tool_read_only_inspection,
-        "verified_apply_patch": verified_apply_patch,
+        "apply_patch_targets_non_sensitive": apply_patch_targets_non_sensitive,
     }
 
 

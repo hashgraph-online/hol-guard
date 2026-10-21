@@ -84,13 +84,15 @@ def test_blocked_output_with_approval_url_retains_hint_but_not_the_native_reason
     assert result["result"]["isError"] is True
     assert "HOL Guard blocked this tool output" in visible
     assert "Human approval is pending in HOL Guard: https://guard.example.test/approve/1234." in visible
-    assert ("credential-shaped text" if reason_code == "output_secret_match" else "instructions addressed to the agent") in visible
+    assert (
+        "credential-shaped text" if reason_code == "output_secret_match" else "instructions addressed to the agent"
+    ) in visible
     assert "AKIAIOSFODNN7EXAMPLE" not in visible
     assert "Secret output" not in visible
 
 
 def test_frozen_v1_body_retains_its_original_approval_hint_contract() -> None:
-    from codex_plugin_scanner.guard.adapters.pi_extension_source_body_shared_v1 import (
+    from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_source_body_shared_v1 import (
         build_source_body_shared_v1,
     )
 

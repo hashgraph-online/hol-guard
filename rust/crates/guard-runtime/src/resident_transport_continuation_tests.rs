@@ -181,7 +181,7 @@ fn continuation_io_leaves_the_evaluation_worker() {
     seed_store(&home, &socket, &["approval1", "approval2"]);
     let (mut first_client, first) = submit(&retry_bytes(&home, "approval1", 800));
     let started = Instant::now();
-    handle_pending_request(first, None);
+    handle_pending_request(first, None, None);
     assert!(
         started.elapsed() < Duration::from_millis(400),
         "continuation stayed on the evaluation worker"
@@ -194,11 +194,11 @@ fn continuation_io_leaves_the_evaluation_worker() {
 
     let (mut second_client, second) = submit(&retry_bytes(&home, "approval2", 800));
     let started = Instant::now();
-    handle_pending_request(second, None);
+    handle_pending_request(second, None, None);
     assert!(started.elapsed() < Duration::from_millis(400));
 
     let (mut third_client, third) = submit(&retry_bytes(&home, "approval1", 800));
-    handle_pending_request(third, None);
+    handle_pending_request(third, None, None);
     let overload = read_body(&mut third_client, Duration::from_millis(300)).expect("overload");
     let overload_text = String::from_utf8(overload).unwrap();
     assert!(
@@ -218,7 +218,7 @@ fn continuation_io_leaves_the_evaluation_worker() {
 
     let released = retry_bytes(&home, "missing", 50);
     let (mut released_client, released_pending) = submit(&released);
-    handle_pending_request(released_pending, None);
+    handle_pending_request(released_pending, None, None);
     let released_body =
         read_body(&mut released_client, Duration::from_millis(500)).expect("slot released");
     let released_text = String::from_utf8(released_body).unwrap();

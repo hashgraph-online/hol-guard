@@ -433,7 +433,7 @@ def test_the_integrity_key_binds_only_for_a_resident_that_answers_permission_not
 
 
 def test_the_bound_sink_command_starts_the_command_the_daemon_routes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    containment_resident: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(sys, "platform", "linux")
     workspace = tmp_path / "repo"

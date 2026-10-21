@@ -26,6 +26,9 @@ try:
 finally:
     sys.path.remove(_helper_dir)
 
+LINKEDIN_RE = re.compile(r"^https://(?:www\.)?linkedin\.com/(?:in|company)/[A-Za-z0-9][A-Za-z0-9-]{1,99}/?$")
+X_RE = re.compile(r"^https://(?:www\.)?(?:x\.com|twitter\.com)/[A-Za-z0-9_]{1,15}/?$")
+CONTRIBUTOR_PROFILE_FIELDS = frozenset({"description", "organization", "website", "linkedin", "x"})
 MARKER = "<!-- hol-extension-claim-notice:v1 -->"
 GUIDANCE_MARKER = "<!-- hol-extension-claim-guidance:v1 -->"
 DEFAULT_STUDIO_URL = "https://hol.org/guard/extension-studio"
@@ -325,6 +328,40 @@ def _public_reference(value: object, *, field: str) -> None:
         raise ClaimNoticeError(f"listing {field} must use public HTTPS without credentials") from error
 
 
+def _validate_contributor_profile(profile: object, extension_id: str) -> None:
+    """Presentation only. Profile contents are not claimant input."""
+
+    if not isinstance(profile, dict) or not profile or not frozenset(profile) <= CONTRIBUTOR_PROFILE_FIELDS:
+        raise ClaimNoticeError(f"{extension_id}: contributor profile fields do not match the canonical schema")
+    for field in ("description", "organization"):
+        if field in profile:
+            maximum = 280 if field == "description" else 80
+            minimum = 12 if field == "description" else 2
+            _plain_text(profile[field], minimum=minimum, maximum=maximum, field=f"contributors.profile.{field}")
+    website = _profile_link(profile, "website", extension_id)
+    if website is not None:
+        _public_reference(website, field="contributors.profile.website")
+    linkedin = _profile_link(profile, "linkedin", extension_id)
+    if linkedin is not None:
+        if LINKEDIN_RE.fullmatch(linkedin) is None:
+            raise ClaimNoticeError(f"{extension_id}: contributor LinkedIn link is invalid")
+        _public_reference(linkedin, field="contributors.profile.linkedin")
+    x_url = _profile_link(profile, "x", extension_id)
+    if x_url is not None:
+        if X_RE.fullmatch(x_url) is None:
+            raise ClaimNoticeError(f"{extension_id}: contributor X link is invalid")
+        _public_reference(x_url, field="contributors.profile.x")
+
+
+def _profile_link(profile: dict[str, Any], field: str, extension_id: str) -> str | None:
+    if field not in profile:
+        return None
+    value = profile[field]
+    if not isinstance(value, str):
+        raise ClaimNoticeError(f"{extension_id}: contributor profile fields do not match the canonical schema")
+    return value
+
+
 def _validate_v2_credit_fields(listing: dict[str, Any], extension_id: str) -> None:
     _plain_text(listing["summary"], minimum=20, maximum=2048, field="summary")
 
@@ -333,12 +370,20 @@ def _validate_v2_credit_fields(listing: dict[str, Any], extension_id: str) -> No
         raise ClaimNoticeError(f"{extension_id}: contributors must be an array of at most eight entries")
     contributor_ids: set[str] = set()
     for contributor in contributors:
-        if not isinstance(contributor, dict) or frozenset(contributor) != {
-            "githubId",
-            "githubLogin",
-            "roles",
-        }:
+        if (
+            not isinstance(contributor, dict)
+            or not {"githubId", "githubLogin", "roles"} <= frozenset(contributor)
+            or not frozenset(contributor)
+            <= {
+                "githubId",
+                "githubLogin",
+                "roles",
+                "profile",
+            }
+        ):
             raise ClaimNoticeError(f"{extension_id}: contributor fields do not match the canonical schema")
+        if "profile" in contributor:
+            _validate_contributor_profile(contributor["profile"], extension_id)
         github_id = contributor["githubId"]
         if not isinstance(github_id, str) or not GITHUB_ID_RE.fullmatch(github_id):
             raise ClaimNoticeError(f"{extension_id}: contributor GitHub ID is invalid")

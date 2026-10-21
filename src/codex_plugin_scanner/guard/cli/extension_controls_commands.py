@@ -320,6 +320,11 @@ def run_extension_controls_command(
 
     command = str(args.controls_command)
     try:
+        if command in {"prefetch", "export-offline", "import-offline", "cleanup-cache"}:
+            from .extension_offline_commands import run
+
+            _emit(run(args, GuardStore(guard_home=guard_home)), output_stream)
+            return 0
         if command == "enroll":
             return _enroll(guard_home, str(args.actor), output_stream)
         if command in {"recover-authority", "acknowledge-degraded"}:

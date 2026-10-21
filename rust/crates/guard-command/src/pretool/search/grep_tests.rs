@@ -150,6 +150,8 @@ fn a_plain_pattern_clears_the_sensitive_files_it_cannot_match() {
     write(&held, "keys/server.key", "placeholder\n");
     write(&held, "stores/.aws/credentials", "placeholder\n");
     write(&held, "links/real.txt", "placeholder\n");
+    // Creating a symlink on Windows needs a privilege the test cannot assume.
+    #[cfg(unix)]
     std::os::unix::fs::symlink(held.join("links/real.txt"), held.join("links/.env.link")).unwrap();
     let (home, repo, held) = (
         crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
@@ -179,7 +181,8 @@ fn a_plain_pattern_clears_the_sensitive_files_it_cannot_match() {
         (&held, "-rn handler .", false),
         (&held, "-rn handler keys", false),
         (&held, "-rn handler stores", false),
-        (&held, "-rn handler links", false),
+        // Without the link this folder holds only an ordinary file.
+        (&held, "-rn handler links", !cfg!(unix)),
     ] {
         let context = crate::pretool::PathContext {
             home_dir: home.to_str(),

@@ -60,6 +60,7 @@ fn command_for(fixture: &Value) -> CanonicalCommand {
 fn snapshot_for(fixture: &Value) -> NativeCommandControlBindingV1 {
     let s = &fixture["snapshot"];
     NativeCommandControlBindingV1 {
+        active_security_digest: None,
         schema: "guard.native-command-control-binding.v1".to_owned(),
         program_digest: String::new(),
         catalog_digest: String::new(),

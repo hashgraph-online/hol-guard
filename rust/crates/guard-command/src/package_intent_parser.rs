@@ -26,6 +26,10 @@ use crate::shell_execution_context::*;
 use crate::shell_execution_context_support::*;
 use crate::typescript_launch_evidence::*;
 
+#[path = "package_intent_parser/routine_local_runner.rs"]
+mod routine_local_runner;
+use routine_local_runner::*;
+
 #[path = "package_intent_parser/managers_js.rs"]
 mod managers_js;
 use managers_js::*;
@@ -73,6 +77,10 @@ mod tests;
 #[cfg(test)]
 #[path = "package_intent_parser/uvx_value_options_tests.rs"]
 mod uvx_value_options_tests;
+
+#[cfg(test)]
+#[path = "package_intent_parser/routine_local_runner_tests.rs"]
+mod routine_local_runner_tests;
 
 #[cfg(test)]
 #[path = "package_intent_parser/bun_value_options_tests.rs"]
@@ -344,7 +352,12 @@ pub fn parse_package_intent(
             intents.push(i);
         }
     }
-    combine_package_intents(&intents)
+    // The routine-runner verdict reads the manifests, lockfiles and executable
+    // this parser already resolved, so it is computed here rather than sent
+    // back for a second round trip.
+    let mut intent = combine_package_intents(&intents)?;
+    intent.routine_local_runner = routine_local_runner(&intent);
+    Some(intent)
 }
 
 /// Dispatch to the non-local-execution intent parsers.
@@ -455,6 +468,7 @@ fn build_intent(
         execution_context_hashes: Vec::new(),
         execution_context_cwds: Vec::new(),
         execution_context_reason_codes: Vec::new(),
+        routine_local_runner: false,
     }
 }
 

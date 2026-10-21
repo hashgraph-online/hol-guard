@@ -12,10 +12,17 @@ from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.clone_fixtures import (
     LONG_LIVED_BRANCH,
     LONG_LIVED_CLONE_CASE,
+    LONG_LIVED_WORKTREE_CASE,
     long_lived_clone_checks,
     long_lived_clone_config,
 )
 from ci.gauntlet.command_outputs import command_outputs_match
+from ci.gauntlet.fast_forward_fixtures import (
+    FAST_FORWARD_CASE,
+    FAST_FORWARD_HOOK_CASE,
+    ORIGIN_URL,
+    fast_forward_checks,
+)
 from ci.gauntlet.fixtures import (
     ALIAS_ESCAPES_CASE,
     INSTEAD_OF_CASE,
@@ -267,3 +274,47 @@ def test_long_lived_clone_fixture_signs_by_default_and_tracks_many_branches(tmp_
     assert long_lived_clone_checks(fixture.workspace, LONG_LIVED_CLONE_CASE) == {"long-lived-branch-checked-out": True}
     other = create_fixture(tmp_path / "other", realistic=True, scenario_id="omp-native-git-compound-reads")
     assert "retired/" not in _git(other.workspace, other.home, "config", "--list")
+
+
+def test_long_lived_clone_worktree_fixture_adds_both_sibling_worktrees(tmp_path: Path) -> None:
+    scenario = {s.id: s for s in load_catalog()}[LONG_LIVED_WORKTREE_CASE]
+    assert (scenario.expectation, scenario.oracle) == ("allow", "native-tools")
+    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=LONG_LIVED_WORKTREE_CASE)
+    main = fixture.home / "project"
+    assert len(_git(main, fixture.home, "config", "--null", "--list").encode()) > 256 * 1024
+    assert long_lived_clone_checks(fixture.workspace, LONG_LIVED_WORKTREE_CASE) == {"long-lived-worktrees-added": False}
+    for command in scenario.commands:
+        arguments = command.replace("{{home}}", str(fixture.home)).split()
+        assert arguments[:3] == ["git", "-C", str(main)]
+        _git(main, fixture.home, *arguments[3:])
+    assert long_lived_clone_checks(fixture.workspace, LONG_LIVED_WORKTREE_CASE) == {"long-lived-worktrees-added": True}
+
+
+@pytest.mark.parametrize("case", [FAST_FORWARD_CASE, FAST_FORWARD_HOOK_CASE])
+def test_fast_forward_fixture_puts_origin_one_commit_ahead(tmp_path: Path, case: str) -> None:
+    scenarios = {s.id: s for s in load_catalog()}
+    assert (scenarios[FAST_FORWARD_CASE].expectation, scenarios[FAST_FORWARD_CASE].oracle) == ("allow", "native-tools")
+    assert scenarios[FAST_FORWARD_HOOK_CASE].oracle == "blocked-command"
+    assert scenarios[FAST_FORWARD_HOOK_CASE].commands == ("git merge --ff-only origin/main",)
+    # The runner builds the realistic shapes only for the `native-tools` oracle,
+    # so the hook case must get its shape from the plain fixture it really runs in.
+    realistic = scenarios[case].oracle == "native-tools"
+    fixture = create_fixture(tmp_path / "fx", realistic=realistic, scenario_id=case)
+    assert _git(fixture.workspace, fixture.home, "remote", "get-url", "origin").strip() == ORIGIN_URL
+    assert _git(fixture.workspace, fixture.home, "rev-parse", "origin/main~1").strip() == (
+        _git(fixture.workspace, fixture.home, "rev-parse", "HEAD").strip()
+    )
+    hook = fixture.home / ".config/git/hooks/post-merge"
+    assert hook.exists() == (case == FAST_FORWARD_HOOK_CASE)
+    before = fast_forward_checks(fixture.workspace, case)
+    assert not all(before.values()) if case == FAST_FORWARD_CASE else all(before.values())
+    _git(fixture.workspace, fixture.home, "merge", "--ff-only", "origin/main")
+    after = fast_forward_checks(fixture.workspace, case)
+    # The allow case passes once the merge lands; the hook case fails if it ever does.
+    assert all(after.values()) if case == FAST_FORWARD_CASE else not any(after.values())
+    for realism in (True, False):
+        other = create_fixture(
+            tmp_path / f"other-{realism}", realistic=realism, scenario_id="omp-native-git-compound-reads"
+        )
+        assert not _git(other.workspace, other.home, "remote").strip()
+        assert not (other.home / ".config/git/hooks/post-merge").exists()

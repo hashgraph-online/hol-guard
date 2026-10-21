@@ -57,6 +57,15 @@ fn approved_runtime(path: &Path) -> bool {
     path_is_within_any(path, &TRUSTED_EXECUTABLE_ROOTS) || approved_user_python_runtime(path)
 }
 
+/// The image a launcher chain ends in, once `resolve_executable` has answered
+/// a `/usr/bin` shim. The shim sits under a trusted root, so the developer tool
+/// it forwards to stands on the same terms, as `allowed_executable_path` and
+/// the pytest executable check already accept. Only the resolved image is
+/// judged this way; a `pyvenv.cfg` `home` still has to pass `approved_runtime`.
+fn approved_image(path: &Path) -> bool {
+    approved_runtime(path) || super::developer_shim::is_developer_tool(path)
+}
+
 /// `path` is a Python-named entry directly inside `<root>/bin`.
 pub(super) fn in_bin(path: &Path, root: &Path) -> bool {
     python_named(path)
@@ -137,7 +146,13 @@ pub(super) fn launcher_root(launch: &Path) -> Option<PathBuf> {
 /// The root of an external venv launcher whose interpreter is an approved
 /// runtime; venvs inside, or holding, the workspace are not external.
 pub(super) fn external_root(launch: &Path, executable: &Path, workspace: &Path) -> Option<PathBuf> {
-    if !python_named(executable) || !approved_runtime(executable) {
+    if !python_named(executable) || !approved_image(executable) {
+        return None;
+    }
+    // The contained run execs the launcher, so its chain has to end in the
+    // image itself. One that still ends in a `/usr/bin` shim would run the
+    // shim's developer-directory lookup inside containment, where it fails.
+    if launch.canonicalize().ok().as_deref() != Some(executable) {
         return None;
     }
     let root = launcher_root(launch)?;

@@ -32,6 +32,15 @@ exception. They carry `retry_cannot_reuse_approval` and no exact-action
 binding, so the card cannot offer Allow once for them. Let the agent retry the
 command: the fresh request is queued under this rule and offers both choices.
 
+`require-reapproval` means "ask again when the artifact changes", not "ask again
+every time". A saved allow bound to the request's context token answers that
+exact artifact whatever scope carried it (artifact, workspace, publisher or
+harness), so the identical retry runs. A token whose hash differs is refused,
+and that refusal is the fresh approval the policy asks for. For a package
+request the workspace scope is the repository identity plus the dependency
+graph, so a workspace allow also answers the identical install in a linked
+worktree of the same repository.
+
 Only terminal verdicts are excluded. `block`, `sandbox-required` and `allow`
 are not reviews, so there is nothing to approve.
 
@@ -65,9 +74,18 @@ Changing any of these produces a new command, and Guard asks again.
 | Token for every review, with command-hash fallback | `rust/crates/guard-runtime/src/native_exact_action_op/token.rs` (`approval_token`, `command_hash`) |
 | Resident exact-action answer | `rust/crates/guard-runtime/src/native_exact_action_op.rs` (`decide`, `Fallback::CommandHash`) |
 | Allow once retry binding, with no package exclusion | `rust/crates/guard-runtime/src/native_exact_action_op/binding.rs` and the `Reuse::Argv` fallback in `native_exact_action_op.rs` |
+| Saved package allows reused under `require-reapproval`, any scope | `rust/crates/guard-runtime/src/package_policy_resolve_approvals.rs` (`is_durable_exact_artifact_approval`) |
 | Saved allows on the direct hook path | `rust/crates/guard-runtime/src/hook_direct_saved_decision.rs` (`approvable`) |
 | Approval scopes offered to the user | `rust/crates/guard-runtime/src/approval_scope_contract.rs` (`allow_is_non_overridable` excludes only non-review verdicts) |
 | Saved allows on the Python daemon path | `src/codex_plugin_scanner/guard/daemon/hook_native_saved_approval.py` (`_native_review_is_approvable`) |
+| Routing of a review-tier artifact verdict (queued for approval, never terminal unless the operator chose not to be asked) | `rust/crates/guard-runtime/src/hook_decision_artifact_review_route.rs` (`artifact_review_route`), executed by `src/codex_plugin_scanner/guard/cli/commands_hook_native_review.py` |
+| Final-action settle of an artifact verdict (a browser outcome other than allow, block or sandbox-required settles nothing; the settle never touches an approval choice) | `rust/crates/guard-runtime/src/hook_decision_artifact_finalize.rs` (`artifact_finalize`, `artifact_browser_outcome`), executed by `src/codex_plugin_scanner/guard/cli/commands_hook_native_state.py` and `src/codex_plugin_scanner/guard/cli/commands_hook_native_finish.py` |
+| Reuse of a saved approval on the artifact hook (claim, revalidate, settled). A saved allow is claimed before it is used, a claim that wins is always revalidated against the request it was issued for, a claim that loses never allows, reuse reads no scope, so Always allow is honored whichever scope saved it and under `require-reapproval` (only a trusted browser request's override reads the source, and it claims a gate-written allow), and a changed hash is refused and never claimed | `rust/crates/guard-runtime/src/hook_decision_artifact_reuse_step.rs` (`artifact_reuse_step`), executed by `src/codex_plugin_scanner/guard/cli/commands_hook_native_reuse.py` (`execute_reuse_plan`); an unreachable resident falls to the host outage, or to `package_reuse_floor` for a package request |
+| Choice of the handlers that answer a native hook (every review-capable event keeps a handler that offers both choices; only a devin or zcode permission request is handed to the harness prompt, and a route the resident cannot supply, or cannot supply within the harness's remaining budget, is the host outage response for every event, Claude permission dialogs and Stop included, never a verdict) | `rust/crates/guard-runtime/src/hook_decision_hook_route.rs` (`hook_route`), executed by `src/codex_plugin_scanner/guard/cli/commands_hook_native_route.py` and `commands_hook_native_route_handlers.py` |
+| Verdict for Claude Code's permission dialog on the CLI hook path (a Guard notice that expects an explicit answer sends Claude to the Guard approval question, any other notice or a review-tier artifact action defers to Claude's own dialog, so both offer Allow once and Always allow; only `block` and `sandbox-required` deny; a verdict the resident cannot supply is the host outage response, never a verdict computed in Python) | `rust/crates/guard-runtime/src/hook_decision_claude_permission_verdict.rs` (`claude_permission_verdict`), rendered by `src/codex_plugin_scanner/guard/cli/commands_hook_native_claude.py` |
+| Gathering of local tool-grant evidence on a native tool request, and the receipt `approval_source` label (a label of who approved; it never narrows the choices offered) | `rust/crates/guard-runtime/src/hook_artifact_compose_policy_tail.rs` (`local_eligibility_required`, `approval_source`), read by `src/codex_plugin_scanner/guard/cli/commands_hook_native_policy_tail.py` |
+| PreToolUse floor on a native command (a review or require-reapproval floor stays that tier and keeps both choices; a sandbox-required floor keeps that tier instead of collapsing to a block, while the containment rewrite stays routed from the edge result; an allowed local CLI grant never settles below a require-reapproval floor; no pre-tool review, or no local CLI grant answer, is the host outage response, never a floor or action the transport picks) | `rust/crates/guard-runtime/src/hook_decision_pretool_floor.rs` (`pretool_floor`), asked by `src/codex_plugin_scanner/guard/native_pretool.py` (`native_pre_tool_policy_floor`) through `src/codex_plugin_scanner/guard/native_hook_pretool_floor.py`; the local CLI step is `src/codex_plugin_scanner/guard/local_cli_hook.py` (`local_cli_grant_action`) |
+| Containment routing of a native PreToolUse answer (a review that is not routed keeps its card with both choices; only a sandbox-required answer goes to the contained sink, and only an outside-roots review the saved-approval path could also override asks the local CLI grant, which still ends at the sink; whether the sink takes a receipt is answered per harness and host, and a host with no sink for the profile, Windows included, keeps the receipt and says so instead of allowing; no resident answer is the host outage response, never a route the transport picks) | `rust/crates/guard-runtime/src/hook_decision_containment_route.rs` (`containment_route`, `containment_sink`; `edge_route` stamps the same route on the PreToolUse edge so no second round trip is needed), asked by `src/codex_plugin_scanner/guard/cli/commands_hook_native_containment.py` (`emit_native_containment_route`), `src/codex_plugin_scanner/guard/daemon/hook_worker_native.py` and `src/codex_plugin_scanner/guard/daemon/hook_contained_grant.py` through `src/codex_plugin_scanner/guard/native_hook_containment_route.py` |
 | Review card choices | `dashboard/src/approval-retry-guidance.ts`, `dashboard/src/review-decision-card.tsx` |
 
 ## Regression tests
@@ -75,11 +93,30 @@ Changing any of these produces a new command, and Guard asks again.
 - `rust/crates/guard-runtime/src/native_exact_action_op/approval_fallback_tests.rs`
 - `rust/crates/guard-runtime/src/native_exact_action_op_tests.rs` (`a_windows_launch_falls_back_to_the_command_hash`)
 - `rust/crates/guard-runtime/tests/fixtures/hook_direct_saved_decision_vectors.json` (`allow-guard-control`, `allow-package`)
+- `rust/crates/guard-runtime/src/package_policy_resolve_op_tests.rs` (`a_saved_allow_of_any_scope_lets_the_identical_require_reapproval_retry_run`, `a_changed_artifact_is_reviewed_again_whatever_scope_saved_the_allow`)
+- `tests/test_guard_package_workspace_approval.py` (`test_workspace_package_approval_is_reused_across_linked_worktrees_with_the_same_dependency_graph`)
 - `tests/test_native_review_exact_action_always.py`
 - `tests/test_native_exact_action_read_only_identity.py`
 - `tests/test_native_exact_action_benign_offers.py`
 - `tests/test_script_approval_reproduction.py`
 - `tests/test_guard_approval_scope_contract.py`
+- `rust/crates/guard-runtime/src/hook_decision_artifact_review_route_tests.rs` (`review_tier_verdicts_keep_allow_once_and_always_allow`)
+- `tests/test_artifact_review_route_parity.py` (`test_review_tier_verdicts_keep_allow_once_and_always_allow`)
+- `rust/crates/guard-runtime/src/hook_decision_artifact_finalize_tests.rs` (`only_an_approval_or_a_terminal_verdict_settles_the_hook`)
+- `tests/test_artifact_finalize_parity.py` (`test_the_settle_leaves_the_approval_choice_alone`)
+- `tests/test_artifact_finalize_wire.py` (`test_an_outcome_that_contradicts_the_browsers_verdict_fails_closed`)
+- `rust/crates/guard-runtime/src/hook_decision_artifact_reuse_step_tests.rs` (`allow_once_revalidates_the_request_it_was_issued_for`, `a_saved_allow_is_honored_at_any_scope`, `a_saved_package_allow_is_honored_under_require_reapproval`, `a_changed_hash_is_refused_and_never_claimed`, `a_lost_claim_never_allows`)
+- `tests/test_artifact_reuse_step_parity.py` and `tests/test_artifact_reuse_step_executor.py` (`test_allow_once_revalidates_the_request_it_was_issued_for`, `test_a_saved_package_allow_is_honored_under_require_reapproval`, `test_the_scope_that_carried_a_saved_allow_never_reaches_the_resident`, `test_an_expired_or_changed_hash_is_refused_and_never_claimed`)
+- `rust/crates/guard-runtime/src/hook_decision_hook_route_tests.rs` (`every_route_keeps_the_review_path_and_fails_closed`)
+- `tests/test_hook_route_parity.py` (`test_the_pipeline_runs_the_recorded_effects`, `test_a_malformed_route_fails_closed`)
+- `rust/crates/guard-runtime/src/hook_decision_claude_permission_verdict_tests.rs` (`claude_permission_reviews_keep_allow_once_and_always_allow`)
+- `tests/test_claude_permission_verdict.py` (`test_every_review_verdict_offers_a_way_to_approve`, `test_a_verdict_the_resident_cannot_supply_is_the_host_outage`)
+- `rust/crates/guard-runtime/src/hook_artifact_compose_policy_tail_tests.rs` (`review_tier_verdicts_keep_allow_once_and_always_allow`)
+- `tests/test_policy_stack_tail_parity.py` (`test_the_resident_pins_the_receipt_approval_source`)
+- `rust/crates/guard-runtime/src/hook_decision_pretool_floor_tests.rs` (`a_review_floor_keeps_allow_once_and_always_allow`, `sandbox_required_keeps_its_tier`); `rust/crates/guard-runtime/src/hook_artifact_compose_op_tests.rs` (`a_cli_grant_never_settles_below_a_reapproval_floor`)
+- `tests/test_pretool_floor_wire.py` (`test_a_review_floor_keeps_allow_once_and_always_allow`, `test_a_malformed_floor_is_an_outage_not_a_floor`), `tests/test_rust_pretool_authority.py` (`test_policy_floor_without_a_review_is_the_host_outage`) and `tests/test_guard_native_local_cli_identity.py` (`test_no_resident_answer_for_the_local_cli_step_is_the_host_outage`)
+- `rust/crates/guard-runtime/src/hook_decision_containment_route_tests.rs` (`a_review_keeps_allow_once_and_always_allow`, `a_host_with_no_sink_says_so`, `the_edge_carries_the_route_the_query_answers`)
+- `tests/test_containment_route_wire.py` (`test_a_review_keeps_allow_once_and_always_allow`, `test_a_malformed_route_is_an_outage_not_a_route`, `test_a_host_without_a_sink_keeps_the_receipt_and_says_so`)
 - `dashboard/src/approval-retry-ux.test.ts`, `dashboard/e2e/approval-scope-ui.spec.ts`
 
 If one of these fails after a change, fix the change. Do not relax the test.

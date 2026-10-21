@@ -10,7 +10,6 @@ use guard_contracts::NativeCommandControlBindingV1;
 use serde_json::Value;
 
 use crate::canonical_command::CanonicalCommand;
-use crate::command_action_risk_classes::risk_classes_for_command_action;
 use crate::command_contained_routine_candidates::contained_routine_candidate_factor;
 use crate::command_critical_floors::command_critical_floor_factors;
 use crate::command_decision_adapter::{
@@ -19,13 +18,15 @@ use crate::command_decision_adapter::{
 };
 use crate::command_evaluation::{
     decision_action_floor, match_precedence_key, rule_floor, stronger_floor, CommandDecisionFloor,
-    CompositeCommandEvaluation, OwnedCommandRuleMatch, UNAVAILABLE_AUTHORITY_FAIL_CLOSED_RISKS,
+    CompositeCommandEvaluation, OwnedCommandRuleMatch,
 };
 use crate::command_evaluation_controls::{
     authority_evidence, authority_failure_for_health, control_layers_from_binding,
 };
 use crate::command_evaluation_support::{
-    github_capability_from_str, owned_match, sorted_uncertainties,
+    current_critical_floor_factors, effective_observation_uncertainties,
+    filter_effective_evidence_batch, github_capability_from_str, owned_match, sorted_uncertainties,
+    unavailable_authority_fail_closed,
 };
 use crate::command_native_factors::{
     direct_github_permission_ids, explicit_permission_allow_factors, native_classification_factors,
@@ -36,8 +37,7 @@ use crate::effect_decision::{
     evaluate_effect_decision, DecisionFactor, EffectDecisionRequest, GuardAction,
     EFFECT_DECISION_SCHEMA_VERSION,
 };
-use crate::extension_control::{resolve_extension_controls, ControlSurface, ResolverFailureCode};
-use crate::extension_evidence::ExtensionEvidenceBatch;
+use crate::extension_control::{resolve_extension_controls, ControlSurface};
 use crate::extension_trust::filter_inert_external_observations;
 use crate::github_capability_contract::GitHubCommandCapability;
 use crate::github_workflow_authorization::{
@@ -47,6 +47,15 @@ use crate::native_command_catalog::CommandCatalog;
 use crate::native_command_extension_evidence::observations_from_native_evidence;
 
 const ERR_UNKNOWN_IDENTITY: &str = "native_command_extension_evidence_unknown_identity";
+
+/// Core classifier diagnostics that refine one catalog rule without being one
+/// of its action classes. A caller may present such a label only when native
+/// evidence for that exact rule is effective for this command; no rule owns the
+/// label, so it cannot be authenticated by ownership.
+const DIAGNOSTIC_LABEL_RULES: &[(&str, &str)] = &[(
+    "unverified Git remote refresh",
+    "command.git.unverified-fetch",
+)];
 
 /// Inputs of one evaluation. `read_factors` is the host-computed
 /// `shell_read_floor_factors` output.
@@ -108,7 +117,12 @@ pub fn evaluate_command(
     let compatibility_rule: Option<CompatRuleRef> = compatibility_action_class.and_then(|class| {
         selected
             .iter()
-            .find(|(_, _, rule, _)| rule.action_classes.iter().any(|item| item == class))
+            .find(|(_, _, rule, _)| {
+                rule.action_classes.iter().any(|item| item == class)
+                    || DIAGNOSTIC_LABEL_RULES
+                        .iter()
+                        .any(|(label, rule_id)| *label == class && *rule_id == rule.rule_id)
+            })
             .map(|(_, extension, rule, _)| CompatRuleRef {
                 extension_required: extension.required,
                 rule_severity: rule.severity.clone(),
@@ -116,8 +130,10 @@ pub fn evaluate_command(
                 rule_id: rule.rule_id.clone(),
             })
     });
-    let effective_compatibility_class = compatibility_action_class
-        .filter(|class| compatibility_rule.is_some() || !registry.has_action_class_owner(class));
+    // Sparse active catalogs omit inactive owners. Absence cannot authenticate
+    // a caller label: only effective native evidence for this command can.
+    let effective_compatibility_class =
+        compatibility_action_class.filter(|_| compatibility_rule.is_some());
 
     let mut owned_matches: Vec<OwnedCommandRuleMatch> = Vec::new();
     for (observation, _extension, rule, evidence) in &selected {
@@ -293,24 +309,19 @@ pub fn evaluate_command(
         minimum_action = stronger_floor(minimum_action, CommandDecisionFloor::Review);
     }
     let observation_uncertainties = extension_uncertainties(&observations);
-    if !observation_uncertainties.is_empty() {
+    let effective_observation_uncertainties =
+        effective_observation_uncertainties(command, &observations, &explicitly_enabled_rule_ids);
+    if !effective_observation_uncertainties.is_empty() {
         // Disabled controls still resolve to block through control_resolution.
         minimum_action = stronger_floor(minimum_action, CommandDecisionFloor::Review);
     }
     let evidence_batch = extension_evidence_batch(command, &observations)?;
-    let mut effective_evidence_batch = ExtensionEvidenceBatch {
-        evidence: evidence_batch
-            .evidence
-            .iter()
-            .filter(|evidence| {
-                let rule_id = &evidence.identity.rule_id;
-                !native_benign_rule_ids.contains(rule_id)
-                    && (!explicitly_enabled_rule_ids.contains(rule_id)
-                        || !evidence.uncertainty_reasons.is_empty())
-            })
-            .cloned()
-            .collect(),
-    };
+    let mut effective_evidence_batch = filter_effective_evidence_batch(
+        command,
+        &evidence_batch,
+        &native_benign_rule_ids,
+        &explicitly_enabled_rule_ids,
+    );
     // A native benign proof cannot establish the resolved target of a file
     // read, so secret-read floors remain active even for proven benign commands.
     let mut read_factors = read_factors;
@@ -343,6 +354,11 @@ pub fn evaluate_command(
             },
         )
     };
+    let current_critical_floor_factors = current_critical_floor_factors(
+        command,
+        &critical_floor_factors,
+        &explicitly_enabled_rule_ids,
+    );
     let explicit_permission_allow_factors = explicit_permission_allow_factors(
         command,
         &control_layers,
@@ -403,53 +419,35 @@ pub fn evaluate_command(
         &observation_uncertainties,
     ]);
     let decision_uncertainties = if effective_compatibility_class.is_none() {
-        baseline_uncertainties.clone()
+        sorted_uncertainties([
+            &command_uncertainties(command, !owned_matches.is_empty()),
+            &effective_observation_uncertainties,
+        ])
     } else {
         sorted_uncertainties([
             &command_uncertainties(command, true),
-            &observation_uncertainties,
+            &effective_observation_uncertainties,
         ])
     };
     // Unavailable authority still fail-closes cataloged, destructive, or write
     // commands. Secret reads and unmatched PATH tools keep their review floor.
-    let mut apply_control_fail_closed = false;
-    if control_resolution.blocked {
-        let authority_unavailable_only = !control_resolution.failures.is_empty()
-            && control_resolution
-                .failures
-                .iter()
-                .all(|failure| failure.code == ResolverFailureCode::AuthorityUnavailable);
-        apply_control_fail_closed = !authority_unavailable_only
-            || !extension_ids.is_empty()
-            || minimum_action == CommandDecisionFloor::Block
-            || !workspace_write_candidates.is_empty();
-        let fail_closed_risk = |risk: &str| UNAVAILABLE_AUTHORITY_FAIL_CLOSED_RISKS.contains(&risk);
-        if !apply_control_fail_closed {
-            apply_control_fail_closed = owned_matches.iter().any(|owned| {
-                owned
-                    .rule
-                    .risk_classes
-                    .iter()
-                    .any(|risk| fail_closed_risk(risk))
-            });
-        }
-        if !apply_control_fail_closed {
-            if let Some(class) = effective_compatibility_class {
-                apply_control_fail_closed = risk_classes_for_command_action(class)
-                    .iter()
-                    .any(|risk| fail_closed_risk(risk));
-            }
-        }
-        if apply_control_fail_closed {
-            minimum_action = stronger_floor(minimum_action, CommandDecisionFloor::Block);
-        }
+    let apply_control_fail_closed = unavailable_authority_fail_closed(
+        &control_resolution,
+        &extension_ids,
+        minimum_action,
+        &workspace_write_candidates,
+        &owned_matches,
+        effective_compatibility_class,
+    );
+    if apply_control_fail_closed {
+        minimum_action = stronger_floor(minimum_action, CommandDecisionFloor::Block);
     }
     let mut factors: Vec<DecisionFactor> = native_factors;
     factors.extend(current_decision_factors);
     factors.extend(contained_routine_candidate);
     factors.extend(verified_read_candidate);
     factors.extend(workspace_write_candidates);
-    factors.extend(critical_floor_factors);
+    factors.extend(current_critical_floor_factors);
     factors.extend(read_factors);
     if apply_control_fail_closed {
         factors.extend(control_resolution.factors.iter().cloned());

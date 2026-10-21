@@ -1,9 +1,11 @@
 """Native hook presentation pipeline driven by the Rust edge decision.
 
-The Rust edge supplies the request-time floor; this module performs the
-mechanical composition and presentation that remain Python-owned: payload
-normalization, harness state preparation, cursor/copilot/claude control-plane
-bridges, approval queueing, receipt persistence, and per-harness emission.
+The Rust edge supplies the request-time floor and the resident supplies the
+route (which handlers answer a prepared hook, in what order); this module
+performs the mechanical composition and presentation that remain Python-owned:
+payload normalization, harness state preparation, and the artifact flow, with
+the cursor/copilot/claude control-plane bridges in the route handlers, approval
+queueing, receipt persistence, and per-harness emission.
 """
 
 # ruff: noqa: F403, F405
@@ -11,11 +13,15 @@ bridges, approval queueing, receipt persistence, and per-harness emission.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from time import monotonic as _monotonic
 from typing import TYPE_CHECKING
 
 from ..daemon.hook_request_parsing import runtime_hook_event_name
 from ..daemon.runtime_hook_deadline import RuntimeHookDeadline
+from ..native_hook_artifact_compose import NativeHookComposeError
+from ..native_hook_artifact_facts import HookArtifactFactsUnavailableError
 from ..native_hook_decision import NativeHookDecisionError
+from ..native_hook_route import native_hook_route
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
@@ -24,54 +30,74 @@ from ..runtime.extension_control_runtime import (
 
 if TYPE_CHECKING:
     from ..daemon.hook_worker import HookWorker
-    from ._commands_shared import _now
 
 from ._commands_shared import *
 from .commands_hook_native_availability import _emit_native_unavailable
-from .commands_hook_native_claude import (
-    run_native_claude_permission_prompt_notification,
-    run_native_claude_permission_request,
-)
 from .commands_hook_native_compat import handle_native_cursor_post_tool, prepare_native_hook_payload
-from .commands_hook_native_containment import emit_native_containment_route
-from .commands_hook_native_copilot import (
-    run_native_copilot_permission_request,
-    run_native_copilot_pretool,
-)
 from .commands_hook_native_eval import evaluate_native_artifact_hook
 from .commands_hook_native_finish import finalize_native_artifact_hook
-from .commands_hook_native_generic import run_native_generic_payload as _run_native_generic_payload
 from .commands_hook_native_prepare import prepare_native_hook_state
 from .commands_hook_native_review import review_native_artifact_hook
+from .commands_hook_native_route import (
+    NativeHandler,
+    NativeHookRun,
+    hook_route_inputs,
+    route_budget_seconds,
+    run_route_plan,
+)
+from .commands_hook_native_route_handlers import HANDLERS
 from .commands_hook_native_state import NativeArtifactHookState
 from .commands_parser_helpers import *
 from .commands_support import *
-from .commands_support_claude_approval import (
-    _claude_guard_question_verdict,
-    _persist_claude_guard_question_decision,
-)
 from .commands_support_connect import _synced_policy_payload
 from .commands_support_hook_payload import _hook_action_envelope, _normalize_hook_payload
-from .commands_support_hook_state import _load_single_claude_pending_permission
-from .commands_support_permission_store import _discard_claude_pending_permissions
-from .commands_support_runtime_artifacts import _hook_event_name, _hook_runtime_artifact
+from .commands_support_runtime_artifacts import _hook_runtime_artifact, _runtime_data_flow_naming
 from .commands_support_runtime_policy import _runtime_action_data_flow_signals
 from .commands_support_runtime_resolution import (
-    _canonical_harness_name,
     _copilot_hook_stage,
     _copilot_runtime_tool_call,
-    _is_copilot_permission_request,
     _managed_install_for,
     _resolve_copilot_workspace_root,
 )
 from .commands_support_workspace import _workspace_from_hook_payload
 
-_NATIVE_EDGE_EVENTS = frozenset({"PreToolUse", "PostToolUse", "UserPromptSubmit"})
-# Harnesses whose PermissionRequest hook gets no decision, as on the daemon
-# path: each raises it only for a call its PreToolUse hook already sent to
-# Guard. Copilot and Codex keep their own permission-request flows on this
-# path.
-_PERMISSION_PASSTHROUGH_HARNESSES = frozenset({"devin", "zcode"})
+
+def _artifact_flow(run: NativeHookRun) -> int | None:
+    if run.runtime_artifact is None:
+        return None
+    try:
+        return _run_native_artifact_hook_flow(
+            run.args,
+            action_envelope=run.action_envelope,
+            config=run.config,
+            context=run.context,
+            data_flow_signals=run.data_flow_signals,
+            payload=run.payload,
+            runtime_artifact=run.runtime_artifact,
+            runtime_workspace=run.runtime_workspace,
+            store=run.store,
+            managed_install=run.managed_install,
+            output_stream=run.output_stream,
+            workspace=run.runtime_workspace,
+            native_edge_result=run.edge_mapping("result"),
+            native_edge_receipt=run.edge_mapping("receipt"),
+            native_recording_only=run.recording_only,
+            _claimed_saved_allow_hash=run.claimed_saved_allow_hash,
+            _claimed_trusted_request_override=run.claimed_trusted_request_override,
+            _claimed_approval_request_id=run.claimed_approval_request_id,
+            _claim_saved_approval=run.claim_saved_approval,
+        )
+    except HookArtifactFactsUnavailableError:
+        # The resident owns these facts, so an outage is a host outage.
+        return run.unavailable(HookArtifactFactsUnavailableError.code)
+    except (NativeHookComposeError, NativeHookDecisionError) as error:
+        # No resident directive or composition means no rendered verdict:
+        # the outage shape.
+        return run.unavailable(error.code)
+
+
+# The fixed table the resident's route indexes: every handler a plan may name.
+_HANDLERS: Mapping[str, NativeHandler] = {**HANDLERS, "artifact_flow": _artifact_flow}
 
 
 def run_native_hook_pipeline(
@@ -89,16 +115,11 @@ def run_native_hook_pipeline(
     _claimed_trusted_request_override: bool = False,
     _claimed_approval_request_id: str | None = None,
 ) -> int:
-    """Compose the native edge decision into the harness hook response."""
+    """Prepare the hook, ask the resident which handlers answer it, and run them."""
 
-    if (
-        runtime_hook_event_name(payload) == "PermissionRequest"
-        and _canonical_harness_name(args.harness) in _PERMISSION_PASSTHROUGH_HARNESSES
-    ):
-        # Empty output and exit 0 carry no decision, so the harness shows its
-        # own approval prompt instead of reading a review as a refusal.
-        return 0
+    invoked_event = runtime_hook_event_name(payload)
     # Anchor any harness-stamped hint at CLI entry, before state preparation.
+    entry_clock = _monotonic()
     edge_timing = RuntimeHookDeadline.cli_edge_kwargs(payload)
     if config is None:
         # Native-mode hooks defer config reads until after the payload loads;
@@ -135,245 +156,52 @@ def run_native_hook_pipeline(
     )
     if cursor_result is not None:
         return cursor_result
-
-    if _canonical_harness_name(args.harness) == "claude-code" and _hook_event_name(payload) == "PostToolUse":
-        pending_pair = _load_single_claude_pending_permission(store, payload)
-        if pending_pair is not None:
-            verdict = _claude_guard_question_verdict(payload, pending_pair[1])
-            if verdict.is_question:
-                _persist_claude_guard_question_decision(store, payload, pending_pair=pending_pair, verdict=verdict)
-                return 0
-
-    edge = worker.review_native_edge_decision(
-        payload=payload,
-        harness=args.harness,
-        default_harness=args.harness,
-        home_dir=context.home_dir,
-        guard_home=context.guard_home,
-        workspace=runtime_workspace,
-        **edge_timing,
+    inputs = hook_route_inputs(
+        args,
+        payload,
+        invoked_event=invoked_event,
+        copilot_stage=copilot_hook_stage,
+        copilot_tool_call_present=copilot_runtime_tool_call is not None,
     )
-    edge_result = edge.get("result") if isinstance(edge, Mapping) else None
-    edge_receipt = edge.get("receipt") if isinstance(edge, Mapping) else None
-    edge_failure = edge.get("failure_reason_code") if isinstance(edge, Mapping) else None
-    event_name = _hook_event_name(payload) or runtime_hook_event_name(payload)
-    if event_name in _NATIVE_EDGE_EVENTS and edge_result is None:
-        return _emit_native_unavailable(
-            args,
-            payload=payload,
-            workspace=runtime_workspace,
-            context=context,
-            event_name=event_name,
-            reason_code=str(edge_failure or "native_hook_event_unavailable"),
-            worker=worker,
-            recording_only=bool(edge.get("recording_only")) if isinstance(edge, Mapping) else False,
-        )
-    contained = emit_native_containment_route(edge, payload, context, runtime_workspace, output_stream, store)
-    if contained is not None:
-        return contained
-
-    def fresh_copilot_tool_call_authority():
-        fresh_config = overlay_synced_guard_policy(
-            load_guard_config(context.guard_home, workspace=runtime_workspace),
-            _synced_policy_payload(store),
-        )
-        fresh_tool_call = _copilot_runtime_tool_call(
-            payload=payload,
-            home_dir=context.home_dir,
-            workspace=runtime_workspace,
-            config=fresh_config,
-            preferred_workspace_config="ide" if workspace_was_explicit else "cli",
-        )
-        if fresh_tool_call is None:
-            return None
-        fresh_artifact, fresh_artifact_hash, fresh_arguments = fresh_tool_call
-        return fresh_config, fresh_artifact, fresh_artifact_hash, fresh_arguments
-
     try:
-        result = run_native_copilot_pretool(
-            args,
-            action_envelope=action_envelope,
-            config=config,
-            context=context,
-            copilot_hook_stage=copilot_hook_stage,
-            copilot_runtime_tool_call=copilot_runtime_tool_call,
-            output_stream=output_stream,
-            payload=payload,
-            runtime_workspace=runtime_workspace,
-            store=store,
-            fresh_tool_call_authority_provider=fresh_copilot_tool_call_authority,
-            native_edge_result=edge_result if isinstance(edge_result, Mapping) else None,
-        )
-        if result is not None:
-            return result
-        copilot_permission_request = (
-            _copilot_runtime_tool_call(
-                payload=payload,
-                home_dir=context.home_dir,
-                workspace=runtime_workspace,
-                config=config,
-                preferred_workspace_config="ide" if workspace_was_explicit else "cli",
-            )
-            if args.harness == "copilot" and _is_copilot_permission_request(payload)
-            else None
-        )
-        result = run_native_copilot_permission_request(
-            args,
-            action_envelope=action_envelope,
-            config=config,
-            context=context,
-            copilot_permission_request=copilot_permission_request,
+        route = native_hook_route(
+            inputs,
             guard_home=context.guard_home,
-            managed_install=managed_install,
-            output_stream=output_stream,
-            payload=payload,
-            runtime_workspace=runtime_workspace,
-            store=store,
-            fresh_tool_call_authority_provider=fresh_copilot_tool_call_authority,
+            budget_seconds=route_budget_seconds(edge_timing, started_at=entry_clock),
         )
-        if result is not None:
-            return result
     except NativeHookDecisionError as error:
-        # Same outage shape as the generic path, keeping the resident's reason code.
+        # No route means no handler to run: the host outage response, never a guess.
         return _emit_native_unavailable(
             args,
-            payload=payload,
             workspace=runtime_workspace,
             context=context,
-            event_name=event_name,
+            event_name=str(inputs["hook_event"] or inputs["runtime_event"]),
             reason_code=error.code,
             worker=worker,
-            recording_only=bool(edge.get("recording_only")) if isinstance(edge, Mapping) else False,
         )
-    data_flow_signals = _runtime_action_data_flow_signals(
-        action_envelope, workspace=runtime_workspace, guard_home=context.guard_home
-    )
-    extension_control_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-    )
-    with use_extension_control_snapshot(extension_control_snapshot):
-        runtime_artifact = _hook_runtime_artifact(
-            harness=args.harness,
-            payload=payload,
-            action_envelope=action_envelope,
-            data_flow_signals=data_flow_signals,
-            home_dir=context.home_dir,
-            guard_home=context.guard_home,
-            workspace=runtime_workspace,
-        )
-    result = run_native_claude_permission_request(
-        args,
-        config=config,
-        output_stream=output_stream,
-        payload=payload,
-        runtime_artifact=runtime_artifact,
-        runtime_workspace=runtime_workspace,
-        store=store,
-    )
-    if result is not None:
-        return result
-    result = run_native_claude_permission_prompt_notification(
-        args,
-        output_stream=output_stream,
-        payload=payload,
-        store=store,
-    )
-    if result is not None:
-        return result
-    if _canonical_harness_name(args.harness) == "claude-code" and _hook_event_name(payload) == "Stop":
-        discarded = _discard_claude_pending_permissions(store, payload)
-        store.add_event(
-            "claude/turn_stop",
-            {
-                "session_id": payload.get("session_id"),
-                "discarded_pending_permissions": discarded,
-            },
-            _now(),
-        )
-        return 0
-    if runtime_artifact is not None:
-        return _run_native_artifact_hook_flow(
-            args,
-            action_envelope=action_envelope,
+    return run_route_plan(
+        NativeHookRun(
+            args=args,
             config=config,
             context=context,
-            data_flow_signals=data_flow_signals,
             payload=payload,
-            runtime_artifact=runtime_artifact,
             runtime_workspace=runtime_workspace,
             store=store,
+            worker=worker,
+            output_stream=output_stream,
             managed_install=managed_install,
-            output_stream=output_stream,
-            workspace=runtime_workspace,
-            native_edge_result=edge_result if isinstance(edge_result, Mapping) else None,
-            native_edge_receipt=edge_receipt if isinstance(edge_receipt, Mapping) else None,
-            native_recording_only=bool(edge.get("recording_only")) if isinstance(edge, Mapping) else False,
-            _claimed_saved_allow_hash=_claimed_saved_allow_hash,
-            _claimed_trusted_request_override=_claimed_trusted_request_override,
-            _claimed_approval_request_id=_claimed_approval_request_id,
-            _claim_saved_approval=_claim_saved_approval,
-        )
-
-    def run_native_generic_payload(*generic_args, **generic_kwargs) -> int:
-        # No resident decision means no verdict: answer with the host outage shape.
-        try:
-            return _run_native_generic_payload(*generic_args, **generic_kwargs)
-        except NativeHookDecisionError as error:
-            return _emit_native_unavailable(
-                args,
-                payload=payload,
-                workspace=runtime_workspace,
-                context=context,
-                event_name=event_name,
-                reason_code=error.code,
-                worker=worker,
-                recording_only=bool(edge.get("recording_only")) if isinstance(edge, Mapping) else False,
-            )
-
-    def revalidate_generic_after_claim(claimed_artifact_hash: str, claimed_approval: Mapping[str, object]) -> int:
-        fresh_config = overlay_synced_guard_policy(
-            load_guard_config(context.guard_home, workspace=runtime_workspace),
-            _synced_policy_payload(store),
-        )
-        fresh_action_envelope = _hook_action_envelope(
-            harness=args.harness,
-            payload=payload,
-            home_dir=context.home_dir,
-            workspace=runtime_workspace,
-            guard_home=context.guard_home,
-        )
-        return run_native_generic_payload(
-            args,
-            action_envelope=fresh_action_envelope,
-            config=fresh_config,
-            home_dir=context.home_dir,
-            output_stream=output_stream,
-            payload=payload,
-            runtime_artifact_checked=True,
-            runtime_workspace=runtime_workspace,
-            store=store,
-            native_edge_result=edge_result if isinstance(edge_result, Mapping) else None,
-            native_edge_receipt=edge_receipt if isinstance(edge_receipt, Mapping) else None,
-            _claimed_saved_allow_hash=claimed_artifact_hash,
-            _claimed_saved_approval=claimed_approval,
-            _claim_saved_approval=False,
-        )
-
-    return run_native_generic_payload(
-        args,
-        action_envelope=action_envelope,
-        config=config,
-        home_dir=context.home_dir,
-        output_stream=output_stream,
-        payload=payload,
-        runtime_artifact_checked=True,
-        runtime_workspace=runtime_workspace,
-        store=store,
-        post_claim_revalidator=revalidate_generic_after_claim,
-        native_edge_result=edge_result if isinstance(edge_result, Mapping) else None,
-        native_edge_receipt=edge_receipt if isinstance(edge_receipt, Mapping) else None,
-        _claimed_saved_allow_hash=_claimed_saved_allow_hash,
-        _claim_saved_approval=_claim_saved_approval,
+            workspace_was_explicit=workspace_was_explicit,
+            action_envelope=action_envelope,
+            copilot_runtime_tool_call=copilot_runtime_tool_call,
+            edge_timing=edge_timing,
+            claim_saved_approval=_claim_saved_approval,
+            claimed_saved_allow_hash=_claimed_saved_allow_hash,
+            claimed_trusted_request_override=_claimed_trusted_request_override,
+            claimed_approval_request_id=_claimed_approval_request_id,
+            event_name=route.event_name,
+        ),
+        route.plan,
+        _HANDLERS,
     )
 
 
@@ -406,8 +234,17 @@ def _fresh_native_artifact_evaluation(
         workspace=runtime_workspace,
         guard_home=context.guard_home,
     )
-    fresh_data_flow_signals = _runtime_action_data_flow_signals(
-        fresh_action_envelope, workspace=runtime_workspace, guard_home=context.guard_home
+    fresh_data_flow_signals, fresh_data_flow_artifact = _runtime_action_data_flow_signals(
+        fresh_action_envelope,
+        workspace=runtime_workspace,
+        guard_home=context.guard_home,
+        naming=_runtime_data_flow_naming(
+            harness=args.harness,
+            payload=payload,
+            action_envelope=fresh_action_envelope,
+            home_dir=context.home_dir,
+            workspace=runtime_workspace,
+        ),
     )
     fresh_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
@@ -418,6 +255,7 @@ def _fresh_native_artifact_evaluation(
             payload=payload,
             action_envelope=fresh_action_envelope,
             data_flow_signals=fresh_data_flow_signals,
+            data_flow_artifact=fresh_data_flow_artifact,
             home_dir=context.home_dir,
             guard_home=context.guard_home,
             workspace=runtime_workspace,

@@ -288,17 +288,20 @@ def test_explicit_inspection_home_identity_outage_returns_blocked_diagnostic(mon
 @pytest.mark.parametrize("harness", ["codex", "codex-alias"])
 @pytest.mark.parametrize(
     "error_type",
-    ["command-model", "sensitive-request"],
+    ["command-model", "sensitive-request", "artifact-identity"],
 )
 def test_runtime_artifact_native_outage_does_not_reparse_or_fabricate_identity(
     monkeypatch, tmp_path, harness, error_type
 ):
     from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts as artifacts
+    from codex_plugin_scanner.guard.native_runtime_artifact_identity import NativeRuntimeArtifactIdentityError
     from codex_plugin_scanner.guard.native_sensitive_request import NativeSensitiveRequestError
 
     monkeypatch.setattr(artifacts, "_canonical_harness_name", lambda _: "codex")
 
     def forbidden(*args, **kwargs):
+        if error_type == "artifact-identity":
+            raise NativeRuntimeArtifactIdentityError("native_runtime_artifact_identity_unavailable")
         if error_type == "sensitive-request":
             raise NativeSensitiveRequestError("native_sensitive_request_unavailable")
         raise client.NativeCommandModelError("native_rich_command_model_unavailable")

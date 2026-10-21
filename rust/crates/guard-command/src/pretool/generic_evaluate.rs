@@ -223,13 +223,13 @@ pub(super) fn evaluate_signals(
     }
     if action_type == PreToolActionTypeV1::FileRead
         && event == "PreToolUse"
-        && harness == "omp"
-        && signals.tool_name.as_deref() == Some("read")
         && !signals.sensitive_target
         && signals.url_values.is_empty()
         && signals.command.is_none()
         && signals.path_values.len() == 1
-        && super::super::safe_reads::bounded_omp_directory_read_target(
+        && super::super::read_paths::omp_targets::bounded_directory_read_tool_target(
+            harness,
+            signals.tool_name.as_deref(),
             &signals.path_values[0],
             home_dir,
             cwd,
@@ -299,6 +299,29 @@ pub(super) fn evaluate_signals(
             "review",
             "native_unsupported_omp_read_selector",
             "This Oh My Pi read selector is outside the bounded native proof and requires review.",
+        );
+    }
+    // A read that names its targets and names none of them opens no file, so
+    // there is nothing to prove safe and nothing to protect. Cline's install
+    // canary sends exactly this shape, and reviewing it asks the user to
+    // approve a call that reads nothing. Only a tool that opens the files it
+    // is handed qualifies: a search or listing tool reads a default location
+    // when it is handed no target, so naming none of them is not reading none.
+    if action_type == PreToolActionTypeV1::FileRead
+        && signals.empty_read_request
+        && signals
+            .tool_name
+            .as_deref()
+            .is_some_and(opens_only_named_files)
+        && !signals.sensitive_target
+        && signals.url_values.is_empty()
+        && signals.command.is_none()
+    {
+        return generic_result(
+            action,
+            "allow",
+            "native_empty_file_read_request",
+            "This read names no file to open, so it reads nothing.",
         );
     }
     if action_type == PreToolActionTypeV1::FileRead
@@ -413,6 +436,21 @@ pub(super) fn evaluate_signals(
             harness == "omp",
         )
     {
+        if super::super::git_routes::missing_path_in_registered_worktree(
+            &signals.path_values[0],
+            home_dir,
+            cwd,
+        ) {
+            // The agent was sent to work in this linked worktree and named the
+            // file before creating it. Nothing is there to read, so the read
+            // discloses nothing and the tool reports the missing path itself.
+            return generic_result(
+                action,
+                "allow",
+                "native_missing_worktree_read",
+                "The Rust authority proved this read names a path with nothing behind it inside a linked worktree this repository registers, so it reads nothing and the tool reports the missing path itself.",
+            );
+        }
         // Nothing exists to read, so stopping the call costs nothing. Saying
         // why lets the agent fix the path instead of waiting on an approval.
         let mut result = generic_result(action, "block", MISSING_PATH, "");
@@ -468,4 +506,16 @@ pub(super) fn missing_path_reason(fallback: &str, action: &str, path: Option<&st
             " A relative path is read from the session folder, not from the folder of an earlier command."
         }
     )
+}
+
+/// Whether the tool opens the files it is handed and nothing else. `grep`,
+/// `glob` and the listing tools are file reads too, but they fall back to a
+/// default location, and their real target can sit under a key the generic
+/// extractor does not read.
+fn opens_only_named_files(tool: &str) -> bool {
+    tool_matches(tool, &["read", "view", "open_file", "cat"])
+        && !tool_matches(
+            tool,
+            &["grep", "rg", "glob", "search", "list_dir", "find", "ls"],
+        )
 }

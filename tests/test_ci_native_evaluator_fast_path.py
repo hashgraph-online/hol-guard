@@ -34,10 +34,8 @@ def test_native_evaluator_produces_verified_artifacts_before_python_gates() -> N
     uploaded = names.index("Upload matching native command projections")
     assert names.index("Verify generated native command catalogs before pytest fan-out") < generation < uploaded
     generated = producer[generation]["run"]
-    assert "export_extension_directory.py" in generated
-    assert "render_command_extension_directory.py" in generated
-    assert "export_extension_directory.py --check" in generated
-    assert "render_command_extension_directory.py --check" in generated
+    assert "prepare_extension_directory.py" in generated
+    assert "--compiler rust/target/release/guard-command-source --check" in generated
 
     # Native contract checks and replay cases do not delay the artifact producer.
     assert not any("uv run --no-sync pytest" in step.get("run", "") for step in producer)
@@ -63,17 +61,16 @@ def test_native_replay_shards_are_complete_and_required() -> None:
     assert any(step.get("uses") == "./.github/actions/restore-command-projections" for step in steps)
 
     contracts = next(
-        step for step in steps
-        if step.get("name") == "Check native contract groups after artifact fan-out"
+        step for step in steps if step.get("name") == "Check native contract groups after artifact fan-out"
     )
     assert contracts["if"] == "matrix.shard-index == 0"
-    assert "ci/package_size" in contracts["run"]
     assert "test_native_contract_validates_every_authored_signature" in contracts["run"]
     assert "test_install_writes_managed_extension_that_denies_on_hook_errors" in contracts["run"]
     assert "test_managed_extension_fails_safe_on_ambiguous_success_payloads" in contracts["run"]
 
     replay = next(
-        step for step in steps
+        step
+        for step in steps
         if step.get("name") == "Benign false-positive and Gauntlet replay gates (model-free, native path)"
     )
     assert replay["env"]["SHARD_COUNT"] == 8

@@ -131,3 +131,50 @@ fn only_a_bare_pnpm_exec_reads_as_vitest() {
         assert!(result.get("value").is_none(), "{command} {result}");
     }
 }
+
+/// The sink plans the call again from its own snapshot, so it has to be able
+/// to ask for the same reading the pre-tool pass made of an activation.
+#[test]
+fn venv_activation_target_answers_the_sink() {
+    let root = std::env::temp_dir().join(format!("contained-argv-venv-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let venv = root.join("project/.venv");
+    std::fs::create_dir_all(venv.join("bin")).unwrap();
+    std::fs::write(
+        venv.join("pyvenv.cfg"),
+        "home = /usr/bin\nversion = 3.12.0\n",
+    )
+    .unwrap();
+    std::fs::write(
+        venv.join("bin/activate"),
+        format!(
+            "VIRTUAL_ENV='{environment}'\nexport VIRTUAL_ENV\n_OLD_VIRTUAL_PATH=\"$PATH\"\nPATH=\"$VIRTUAL_ENV/bin:$PATH\"\nexport PATH\n",
+            environment = venv.display()
+        ),
+    )
+    .unwrap();
+    std::fs::write(venv.join("bin/pytest"), "#!/bin/sh\nexit 0\n").unwrap();
+    let project = root.join("project");
+    let input = json!({
+        "text": "source .venv/bin/activate && pytest -q",
+        "cwd": project.to_str().unwrap(),
+        "home": root.to_str().unwrap(),
+    });
+    let projected = evaluate("venv_activation_target", &input).unwrap();
+    assert_eq!(
+        projected["value"],
+        json!(".venv/bin/pytest -q"),
+        "{projected}"
+    );
+    // An activation the scan cannot read through leaves the command whole.
+    let unread = json!({
+        "text": "source /nowhere/bin/activate && pytest -q",
+        "cwd": project.to_str().unwrap(),
+        "home": root.to_str().unwrap(),
+    });
+    assert_eq!(
+        evaluate("venv_activation_target", &unread).unwrap()["value"],
+        Value::Null
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}

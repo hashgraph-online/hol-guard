@@ -10,7 +10,8 @@ import pytest
 
 from codex_plugin_scanner.guard import native_restricted_pytest as transport
 from codex_plugin_scanner.guard import windows_paths
-from codex_plugin_scanner.guard.adapters.zcode_contained_tests import contained_zcode_response, platform_contains
+from codex_plugin_scanner.guard.adapters.zcode_contained_tests import contained_zcode_response
+from codex_plugin_scanner.guard.native_hook_containment_route import native_containment_sink
 from codex_plugin_scanner.guard.runtime import contained_test_hook, restricted_inline_eval
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
 
@@ -35,6 +36,7 @@ def _plan(tmp_path: Path, *, backend: str = "windows-appcontainer", profile: str
 def _receipt(profile: str = "python-eval-readonly-v1") -> dict[str, object]:
     reasons = {
         "python-eval-readonly-v1": "native_python_eval_readonly_containment_required",
+        "node-eval-readonly-v1": "native_node_eval_readonly_containment_required",
         "pytest-readonly-v2": "native_pytest_readonly_containment_required",
         "workspace-contained-v1": "native_workspace_containment_required",
     }
@@ -46,14 +48,19 @@ def _receipt(profile: str = "python-eval-readonly-v1") -> dict[str, object]:
     }
 
 
-def test_windows_backend_decodes_only_for_eval_profiles_on_windows(monkeypatch, tmp_path):
+def test_windows_backend_decodes_only_for_contained_profiles_on_windows(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "platform", "win32")
     plan = transport.decode_native_plan(_plan(tmp_path), ("python-eval-readonly-v1",))
     assert plan.backend == "windows-appcontainer"
     node = transport.decode_native_plan(_plan(tmp_path, profile="node-eval-readonly-v1"), ("node-eval-readonly-v1",))
     assert node.backend == "windows-appcontainer"
+    # The read-only pytest profile has a Windows runner of its own.
+    tests = transport.decode_native_plan(_plan(tmp_path, profile="pytest-readonly-v2"), ("pytest-readonly-v2",))
+    assert tests.backend == "windows-appcontainer"
+    # The workspace sandbox does not: it has no Windows backend, so a plan
+    # naming it is refused however it reaches this decode.
     with pytest.raises(RestrictedPytestError):
-        transport.decode_native_plan(_plan(tmp_path, profile="pytest-readonly-v2"), ("pytest-readonly-v2",))
+        transport.decode_native_plan(_plan(tmp_path, profile="workspace-contained-v1"), ("workspace-contained-v1",))
     monkeypatch.setattr(sys, "platform", "darwin")
     with pytest.raises(RestrictedPytestError):
         transport.decode_native_plan(_plan(tmp_path), ("python-eval-readonly-v1",))
@@ -108,16 +115,27 @@ def test_windows_backend_never_reaches_posix_sandboxes(monkeypatch, tmp_path):
         _backend_argv(plan, private_root=tmp_path)
 
 
-def test_windows_contains_eval_profiles_only(monkeypatch):
+def _windows_sink(home: Path, receipt: dict[str, object]) -> tuple[str | None, str | None]:
+    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "python3 x.py"}}
+    return native_containment_sink(receipt, harness="claude-code", bridge=False, payload=payload, guard_home=home)
+
+
+def test_windows_contains_the_profiles_it_has_a_runner_for(containment_resident, monkeypatch):
+    home = containment_resident
     monkeypatch.setattr(sys, "platform", "win32")
-    assert platform_contains(_receipt())
-    assert platform_contains({"required_execution_profile": "node-eval-readonly-v1"})
-    assert not platform_contains(_receipt("pytest-readonly-v2"))
-    assert not platform_contains(_receipt("workspace-contained-v1"))
+    assert _windows_sink(home, _receipt()) == ("python-eval-readonly-v1", None)
+    assert _windows_sink(home, _receipt("node-eval-readonly-v1")) == ("node-eval-readonly-v1", None)
+    # The read-only pytest profile has a Windows planner and runner, so a
+    # receipt naming it is rewritten into the sink rather than left as a deny.
+    assert _windows_sink(home, _receipt("pytest-readonly-v2")) == ("pytest-readonly-v2", None)
+    # The workspace sandbox has no Windows backend: the deny stands and says why.
+    assert _windows_sink(home, _receipt("workspace-contained-v1")) == (None, "platform_has_no_sink")
 
 
 @pytest.mark.parametrize(("harness", "routed"), [("claude-code", True), ("codex", True), ("zcode", False)])
-def test_windows_routes_only_harnesses_with_a_sink_command(monkeypatch, tmp_path, harness, routed):
+def test_windows_routes_only_harnesses_with_a_sink_command(
+    containment_resident, monkeypatch, tmp_path, harness, routed
+):
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(windows_paths, "trusted_windows_local_temp", lambda: tmp_path)
     payload = {
@@ -140,7 +158,7 @@ def test_windows_routes_only_harnesses_with_a_sink_command(monkeypatch, tmp_path
         assert "execute-contained-test" in command
 
 
-def test_windows_sink_finds_the_request_when_temp_differs(monkeypatch, tmp_path):
+def test_windows_sink_finds_the_request_when_temp_differs(containment_resident, monkeypatch, tmp_path):
     """The hook and the harness shell can set TEMP differently; both use the profile's."""
     import shlex
     import tempfile

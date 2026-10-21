@@ -319,6 +319,8 @@ def _resolve_legacy_args(
         "preflight",
         "pytest-contained",
         "execute-contained-test",
+        "execute-bound-bash",
+        "ack-bound-bash",
         "diff",
         "test-eval",
         "command",
@@ -376,7 +378,7 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
 
         return run_frozen_cursor_hook(requested_argv[1:])
     if requested_argv[:1] == ["__guard-claude-hook"]:
-        from .guard.adapters.claude_frozen_hook import run_frozen_claude_hook
+        from .guard.adapters._modules.claude.claude_frozen_hook import run_frozen_claude_hook
 
         return run_frozen_claude_hook(requested_argv[1:])
     from .guard.shims import resolve_frozen_package_shim_path, run_frozen_package_shim

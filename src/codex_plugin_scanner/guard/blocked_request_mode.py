@@ -118,6 +118,10 @@ _REASON_CODE_HINTS = {
 # the install advice above does not apply to it.
 _BUILD_REVIEW_PREFIX = "HOL Guard requires review before this build or test command"
 
+# A review of a direct read of one path says why in its own text; the advice for
+# narrowing a search does not apply to it.
+_READ_REVIEW_PREFIX = "HOL Guard requires review before this file read"
+
 
 # The native review text offers inbox approval. When no approval can let the
 # action run, that offer contradicts the note that follows, so it is dropped.
@@ -143,7 +147,8 @@ def safe_alternative_reason(
     """
     if reason_code is None and approval_queued is None:
         return f"{reason.strip()} {SAFE_ALTERNATIVE_GUIDANCE}".strip()
-    hint = "" if reason.lstrip().startswith(_BUILD_REVIEW_PREFIX) else _REASON_CODE_HINTS.get(reason_code or "", "")
+    own_text = reason.lstrip().startswith((_BUILD_REVIEW_PREFIX, _READ_REVIEW_PREFIX))
+    hint = "" if own_text else _REASON_CODE_HINTS.get(reason_code or "", "")
     if not approval_queued:
         wait = _NOT_QUEUED
     elif retry_reuses_approval:

@@ -86,6 +86,21 @@ def test_seeding_makes_a_private_session_folder_and_stage(tmp_path: Path) -> Non
     assert {path.name: path.read_text(encoding="utf-8") for path in stage.iterdir()} == STAGED_FILES
 
 
+def test_stage_keeps_one_name_while_the_fixture_root_gains_children(tmp_path: Path) -> None:
+    """A case seeds, renders, redacts and removes the stage directory at four moments.
+
+    Each of those follows another directory being created in the fixture root, so a
+    name derived from the root's changing metadata would point somewhere new every
+    time: the prompt would name a directory nothing had seeded.
+    """
+    seeded = stage_directory(tmp_path)
+    (tmp_path / "private-evidence").mkdir()
+    rendered = stage_directory(tmp_path)
+    (tmp_path / "guard-home").mkdir()
+    assert seeded == rendered == stage_directory(tmp_path)
+    assert scratch_checkout(tmp_path) == scratch_checkout(tmp_path)
+
+
 def test_stage_is_removed_with_the_scratch_checkout(tmp_path: Path) -> None:
     scratch, stage = scratch_checkout(tmp_path), stage_directory(tmp_path)
     assert scratch != stage and not stage.name.startswith(scratch.name)

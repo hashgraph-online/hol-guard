@@ -21,7 +21,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, TypeGuard
+from typing import Any, TypeGuard, cast
 
 from .directory_path_authority import canonical_guard_home_path
 from .fork_safety import forget_in_child
@@ -60,12 +60,14 @@ _RESULT_OPTIONAL_KEYS = {
     "token",
     "digest",
     "validation_reason",
+    "approval_context_token_well_formed",
     "package_context",
     "mcp_server_identity",
     "mcp_tool_identity",
     "browser_mcp",
     "mcp_launch_environment",
     "mcp_redacted_value",
+    "native_bash_reply_valid",
     "runtime_identity",
     "runtime_identity_match",
     "runtime_identity_reusable",
@@ -80,6 +82,7 @@ _RESULT_OPTIONAL_KEYS = {
     "managed_controls_policy_fields",
     "claude_guard_question",
     "memory_pattern",
+    "guard_run_launch",
 }
 _RESULT_CODES = {
     "ok",
@@ -108,6 +111,11 @@ _RESULT_CODES = {
 _UNCACHEABLE_DIGEST_KINDS = frozenset(
     {
         "generic_hook_approval_context",
+        # Builds a launch identity per previewed argv, so it reads the
+        # executable's bytes, and it carries the prepared launch
+        # environment: a cached reply would both hide an executable that
+        # changed between two calls and retain granted credentials.
+        "guard_run_launch_plans",
         "mcp_launch_environment",
         "runtime_executable_identity",
         "runtime_hook_approval_context",
@@ -626,52 +634,22 @@ _UNBOUND_PREFIX = "guard-context-unbound:"
 
 
 def is_unbound_context_digest(value: object) -> bool:
-    """``True`` for degraded digests emitted when the resident is unavailable."""
-    return isinstance(value, str) and value.startswith(_UNBOUND_PREFIX)
+    """``True`` for a digest that names material nothing has bound.
 
+    The runtime emits these for a component it could not digest, and a few
+    Python paths emit one deliberately for material there is no resident
+    question for: the unbound approval-context sentinel, a configured
+    environment with nothing configured, and a shell context the caller
+    could not observe. A sentinel never parses as a token and never
+    authorizes reuse, so recognizing one is how a caller tells an unbound
+    component from a bound digest.
 
-def _unbound_material_digest(material: object) -> str:
-    # Integrity digest over guard material (env values / launch identity / PATH), not a
-    # password hash — parity-pinned to the pre-migration hashlib baseline for byte-identical
-    # persisted approval rows. codeql[py/weak-sensitive-data-hashing] false positive.
-    return hashlib.sha256(_canonical_material_bytes(material)).hexdigest()  # codeql[py/weak-sensitive-data-hashing]
-
-
-def _canonical_material_bytes(material: object) -> bytes:
-    return json.dumps(
-        material,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-        default=str,
-    ).encode("utf-8")
-
-
-def context_sha256_digest(
-    material: object,
-    *,
-    prefix: str | None = None,
-    guard_home: Path | None = None,
-    unbound_label: str = "canonical-sha256",
-) -> str:
-    """Canonical-JSON SHA-256 via the resident op.
-
-    The resident owns the digest.  Without one, this returns a
-    ``guard-context-unbound:`` value that fails every equality and validation
-    check against a worker-issued digest, so an absent resident can never pass
-    for a bound one.
+    What no Python path does is hand back a *bound*-looking digest when the
+    resident is unreachable: `native_context_digest` either answers from the
+    resident or raises.
     """
 
-    home = _resolve_digest_home(guard_home)
-    result = native_context_digest(
-        "canonical_sha256",
-        {"material": material, "prefix": prefix},
-        guard_home=home,
-    )
-    digest = result.get("digest") if isinstance(result, dict) else None
-    if isinstance(digest, str) and digest:
-        return digest
-    return f"{_UNBOUND_PREFIX}{unbound_label}:{_unbound_material_digest(material)}"
+    return isinstance(value, str) and value.startswith(_UNBOUND_PREFIX)
 
 
 def context_mcp_launch_environment(
@@ -734,6 +712,77 @@ def context_runtime_executable_identity(
     if not isinstance(result, dict) or result.get("status") != "ok" or not isinstance(identity, dict):
         raise _unavailable("native_runtime_executable_identity_unavailable")
     return identity
+
+
+def context_guard_run_launch_plans(
+    adapter_commands: Sequence[Sequence[str]],
+    *,
+    environment: Mapping[str, str],
+    launch_cwd: Path,
+    guard_home: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Content-bind every previewed guard-run launch argv in one native call.
+
+    The native kind resolves each launch identity against the prepared
+    environment and cwd, hashes that environment once, stamps reusability and
+    drops duplicate adapter commands, so Python transports the preview rather
+    than rebuilding launch authority per command.
+    """
+
+    result = native_context_digest(
+        "guard_run_launch_plans",
+        {
+            "adapter_commands": [list(command) for command in adapter_commands],
+            "environment": dict(environment),
+            "launch_cwd": str(launch_cwd),
+        },
+        guard_home=_resolve_digest_home(guard_home),
+    )
+    payload = result.get("guard_run_launch") if isinstance(result, dict) else None
+    plans = payload.get("plans") if isinstance(payload, dict) else None
+    if not isinstance(result, dict) or result.get("status") != "ok" or not isinstance(plans, list):
+        raise _unavailable("native_guard_run_launch_plans_unavailable")
+    if any(not isinstance(plan, dict) for plan in plans):
+        raise _unavailable("native_guard_run_launch_plans_unavailable")
+    return cast("list[dict[str, Any]]", plans)
+
+
+def context_guard_run_authorized_prefixes(
+    plans: Sequence[Mapping[str, Any]],
+    *,
+    guard_home: Path | None = None,
+) -> tuple[tuple[str, ...], ...] | None:
+    """Recover the authorized executable prefixes for previously bound plans.
+
+    ``None`` is the native verdict that the authorized set does not bind — a
+    non-reusable plan, plans spanning more than one prepared environment, or a
+    plan whose execution command does not extend its adapter command.
+    """
+
+    result = native_context_digest(
+        "guard_run_authorized_prefixes",
+        {
+            "plans": [
+                {
+                    "adapter_command": list(plan["adapter_command"]),
+                    "execution_command": list(plan["execution_command"]),
+                    "environment_sha256": str(plan["environment_sha256"]),
+                    "reusable": bool(plan["reusable"]),
+                }
+                for plan in plans
+            ]
+        },
+        guard_home=_resolve_digest_home(guard_home),
+    )
+    if not isinstance(result, dict) or result.get("status") != "ok" or "guard_run_launch" not in result:
+        raise _unavailable("native_guard_run_authorized_prefixes_unavailable")
+    payload = result.get("guard_run_launch")
+    if payload is None:
+        return None
+    prefixes = payload.get("prefixes") if isinstance(payload, dict) else None
+    if not isinstance(prefixes, list):
+        raise _unavailable("native_guard_run_authorized_prefixes_unavailable")
+    return tuple(tuple(str(part) for part in prefix) for prefix in prefixes)
 
 
 def context_runtime_launch_identity(
@@ -978,7 +1027,6 @@ __all__ = [
     "context_runtime_launch_identity",
     "context_runtime_launch_identity_matches",
     "context_runtime_launch_identity_projection",
-    "context_sha256_digest",
     "is_unbound_context_digest",
     "native_context_digest",
     "reset_context_digest_budget",

@@ -171,6 +171,18 @@ pub struct McpToolApprovalHashRequestV1 {
     pub extension_control_digest: Option<String>,
 }
 
+/// One previously authorized guard-run launch plan, as the caller holds it.
+/// Only the fields the prefix prelude reads cross the boundary — the launch
+/// identity and cwd stay with the caller.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct GuardRunLaunchPlanV1 {
+    pub adapter_command: Vec<String>,
+    pub execution_command: Vec<String>,
+    pub environment_sha256: String,
+    pub reusable: bool,
+}
+
 /// Sub-operation carried by a single context-digest request.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -184,6 +196,15 @@ pub enum ContextDigestKindV1 {
     ValidateApprovalContextTokens {
         saved_token: Value,
         current_token: Value,
+    },
+    /// Whether an opaque value is a well-formed v1 approval-context token.
+    ///
+    /// Callers that only need to tell a context token apart from a legacy
+    /// artifact hash ask this instead of decoding the token themselves: the
+    /// token's grammar has exactly one owner, and a second decoder could
+    /// disagree with it about what counts as a token.
+    ApprovalContextTokenWellFormed {
+        token: Value,
     },
     /// Domain-separated digest over a configured environment subset.
     ///
@@ -226,6 +247,13 @@ pub enum ContextDigestKindV1 {
     /// stdio `_redact_json` parity for remote/stdio traffic recording.
     McpRedactJson {
         material: Value,
+    },
+    /// Validate a Bash owner reply without moving its contract into adapters.
+    NativeBashReplyValidation {
+        reply_kind: String,
+        material: Value,
+        #[serde(default)]
+        request: Value,
     },
     McpLaunchEnvironment {
         inherited: BTreeMap<String, String>,
@@ -354,6 +382,24 @@ pub enum ContextDigestKindV1 {
         #[serde(default)]
         launch_env: Option<BTreeMap<String, String>>,
     },
+    /// `guard_run_launch_plans` — content-bind every previewed adapter launch
+    /// argv in one call. Replaces the Python per-command loop in
+    /// `runtime/guard_run_launch.py`: resolve each launch identity against the
+    /// prepared environment and cwd, stamp reusability, hash the environment
+    /// once, and drop duplicate adapter commands in first-seen order.
+    GuardRunLaunchPlans {
+        adapter_commands: Vec<Vec<String>>,
+        environment: BTreeMap<String, String>,
+        launch_cwd: String,
+    },
+    /// `guard_run_authorized_prefixes` — the pure prelude of
+    /// `_guard_run_finalize_authorized_launch_plan`: require every authorized
+    /// plan reusable and bound to one environment, then recover the
+    /// executable-resolved argv prefixes in first-seen order. Null when no
+    /// prefix set binds; the adapter rebuild itself stays with the caller.
+    GuardRunAuthorizedPrefixes {
+        plans: Vec<GuardRunLaunchPlanV1>,
+    },
     /// Identity post-processors — `runtime_launch_identity_is_reusable`,
     /// `resolved_runtime_launch_executable`, `resolved_runtime_launch_argv`.
     /// `resolved_argv` re-probes shebang bytes, so it runs here where fs is
@@ -451,11 +497,21 @@ pub struct ContextDigestResultV1 {
     /// stdio `_redact_json` output for traffic recording.
     #[serde(default)]
     pub mcp_redacted_value: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_bash_reply_valid: Option<bool>,
     /// `build_runtime_executable_identity` / `build_runtime_launch_identity`
     /// output — the full launch-identity object, verbatim Python dict shape.
     /// These kinds always produce it; `Option` keeps it absent on other kinds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_identity: Option<Value>,
+    /// `guard_run_launch_plans` / `guard_run_authorized_prefixes` output.
+    /// Plans kind: `{"plans": [...]}`. Prefixes kind: `{"prefixes": [[...]]}`
+    /// or explicit `null` when the authorized plans do not bind.
+    #[serde(default)]
+    pub guard_run_launch: Option<Value>,
+    /// `approval_context_token_well_formed` verdict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_context_token_well_formed: Option<bool>,
     /// `runtime_launch_identity_matches` verdict.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_identity_match: Option<bool>,

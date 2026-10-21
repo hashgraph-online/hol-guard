@@ -8,7 +8,13 @@ import importlib
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from ..native_hook_authority_state import flag_field, hook_authority_state, keys_field, object_field
+from ..native_hook_authority_state import (
+    flag_field,
+    hook_authority_state,
+    keys_field,
+    object_field,
+    text_field,
+)
 
 if TYPE_CHECKING:
     from ._commands_shared import (
@@ -66,23 +72,6 @@ def _update_codex_browser_operation_status(
         update_operation_status(operation_id=operation_id, status=status)
 
 
-def _should_emit_prequeue_native_hook_response(
-    args: argparse.Namespace,
-    *,
-    output_stream: TextIO | None,
-    event_name: str | None = None,
-) -> bool:
-    if _canonical_harness_name(args.harness) != "claude-code":
-        return False
-    if not getattr(args, "json", False):
-        return True
-    if event_name == "UserPromptSubmit":
-        # Prompt submits keep the composed envelope surface under --json so
-        # approval state, risk detail, and the decision copy stay together.
-        return False
-    return output_stream is not None
-
-
 def _emit_claude_permission_request_passthrough(*, output_stream: TextIO | None = None) -> None:
     if output_stream is not None:
         output_stream.write("")
@@ -90,11 +79,6 @@ def _emit_claude_permission_request_passthrough(*, output_stream: TextIO | None 
 
 def _claude_pending_permission_index_key(session_id: str) -> str:
     return f"claude_pending_permissions:{session_id}"
-
-
-def _claude_pending_permission_state_key(session_id: str, artifact_id: str) -> str:
-    fingerprint = hashlib.sha256(artifact_id.encode("utf-8")).hexdigest()[:24]
-    return f"claude_pending_permission:{session_id}:{fingerprint}"
 
 
 def _state_now(now: str | None) -> str:
@@ -128,19 +112,24 @@ def _load_verified_claude_pending_permission(
     store: GuardStore,
     *,
     session_id: str,
-    pending_key: str,
-    expected_artifact_id: str | None = None,
+    artifact_id: str,
     expected_artifact_hash: str | None = None,
     expected_command: str | None = None,
     now: str | None = None,
 ) -> dict[str, object] | None:
+    """The pending permission the resident holds for this session's artifact.
+
+    The artifact id names the row: the resident derives its state key, so the
+    key the row is stored under and the key it is looked up under come from one
+    implementation.
+    """
+
     reply = hook_authority_state(
         store,
         "claude_load_pending",
         now=_state_now(now),
         session_id=session_id,
-        pending_key=pending_key,
-        expected_artifact_id=expected_artifact_id,
+        artifact_id=artifact_id,
         expected_artifact_hash=expected_artifact_hash,
         expected_command=expected_command,
     )
@@ -271,12 +260,10 @@ def _load_claude_pending_permission(
     session_id = _optional_string(payload.get("session_id"))
     if session_id is None:
         return None
-    pending_key = _claude_pending_permission_state_key(session_id, artifact.artifact_id)
     return _load_verified_claude_pending_permission(
         store,
         session_id=session_id,
-        pending_key=pending_key,
-        expected_artifact_id=artifact.artifact_id,
+        artifact_id=artifact.artifact_id,
         expected_artifact_hash=artifact_hash,
         expected_command=_claude_artifact_command_binding(artifact),
     )
@@ -286,14 +273,14 @@ def _remove_claude_pending_permission(
     store: GuardStore,
     *,
     session_id: str,
-    pending_key: str,
+    artifact_id: str,
 ) -> None:
     hook_authority_state(
         store,
         "claude_remove_pending",
         now=_now(),
         session_id=session_id,
-        pending_key=pending_key,
+        artifact_id=artifact_id,
     )
 
 
@@ -329,16 +316,6 @@ def _cursor_shell_command_from_payload(payload: Mapping[str, object]) -> str | N
     if top_level is not None:
         return normalize_cursor_shell_command(top_level)
     return None
-
-
-def _cursor_shell_command_fingerprint(command: str) -> str:
-    from ..adapters.cursor_native_approval import normalize_cursor_shell_command
-
-    return hashlib.sha256(normalize_cursor_shell_command(command).encode("utf-8")).hexdigest()[:24]
-
-
-def _cursor_pending_shell_state_key(conversation_id: str, command: str) -> str:
-    return f"cursor_pending_shell:{conversation_id}:{_cursor_shell_command_fingerprint(command)}"
 
 
 def _append_cursor_pending_shell_key(
@@ -399,17 +376,26 @@ def _store_cursor_pending_shell_state(
     command: str,
     payload: Mapping[str, object],
     now: str,
-) -> bool:
+) -> str | None:
+    """Stores the pending shell state and returns the key it was stored under.
+
+    The conversation and the command name the row: the resident derives its
+    state key and reports it back, so the caller indexes and rolls back the row
+    the resident actually wrote.
+    """
+
     reply = hook_authority_state(
         store,
         "cursor_store_pending_state",
         now=now,
         create_key=True,
         conversation_id=conversation_id,
-        state_key=_cursor_pending_shell_state_key(conversation_id, command),
+        command=command,
         payload=dict(payload),
     )
-    return flag_field(reply, "stored")
+    if not flag_field(reply, "stored"):
+        return None
+    return text_field(reply, "state_key")
 
 
 def _load_verified_cursor_pending_shell_state(
@@ -422,22 +408,15 @@ def _load_verified_cursor_pending_shell_state(
 ) -> dict[str, object] | None:
     from ..adapters.cursor_native_approval import normalize_cursor_shell_command
 
-    normalized_command = normalize_cursor_shell_command(command)
-    expected_key = _cursor_pending_shell_state_key(conversation_id, normalized_command)
     reply = hook_authority_state(
         store,
         "cursor_load_pending_state",
         now=_state_now(now),
         conversation_id=conversation_id,
-        command=normalized_command,
-        state_key=state_key or expected_key,
-        expected_key=expected_key,
+        command=normalize_cursor_shell_command(command),
+        state_key=state_key,
     )
     return object_field(reply, "pending")
-
-
-def _cursor_native_shell_allow_state_key(conversation_id: str, command: str) -> str:
-    return f"cursor_native_shell_allow:{conversation_id}:{_cursor_shell_command_fingerprint(command)}"
 
 
 def _record_cursor_native_shell_allow_state(
@@ -458,7 +437,6 @@ def _record_cursor_native_shell_allow_state(
         now=now,
         create_key=True,
         conversation_id=conversation_id,
-        state_key=_cursor_native_shell_allow_state_key(conversation_id, normalized_command),
         command=normalized_command,
         artifact_id=artifact.artifact_id,
         artifact_hash=artifact_hash,
@@ -481,7 +459,6 @@ def _load_cursor_native_shell_allowance(
         now=_now(),
         conversation_id=conversation_id,
         command=command,
-        state_key=_cursor_native_shell_allow_state_key(conversation_id, command),
     )
     return object_field(reply, "allowance")
 
@@ -497,12 +474,8 @@ __all__ = [
     "_append_cursor_pending_shell_key",
     "_claude_guard_approval_question_text",
     "_claude_pending_permission_index_key",
-    "_claude_pending_permission_state_key",
     "_cursor_conversation_id",
-    "_cursor_native_shell_allow_state_key",
     "_cursor_native_shell_is_approved",
-    "_cursor_pending_shell_state_key",
-    "_cursor_shell_command_fingerprint",
     "_cursor_shell_command_from_payload",
     "_emit_claude_permission_request_passthrough",
     "_load_claude_pending_permission",
@@ -518,7 +491,6 @@ __all__ = [
     "_record_claude_permission_notice",
     "_record_cursor_native_shell_allow_state",
     "_remove_claude_pending_permission",
-    "_should_emit_prequeue_native_hook_response",
     "_store_cursor_pending_shell_index",
     "_store_cursor_pending_shell_state",
     "_update_codex_browser_operation_status",

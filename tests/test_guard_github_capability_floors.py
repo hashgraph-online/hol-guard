@@ -10,12 +10,12 @@ from codex_plugin_scanner.guard.runtime.github_capability_contract import (
     GitHubCommandCapability,
     github_assessment,
 )
-from codex_plugin_scanner.guard.runtime.github_command_capabilities import classify_github_cli
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     classify_github_shell_capabilities,
     extract_sensitive_tool_action_request,
 )
 from tests.native_command_test_support import extract_sensitive_tool_action_request_native_test
+from tests.native_github_capability_support import github_cli_assessment
 
 _EXPECTED_FLOORS = {
     "read_local": "allow",
@@ -102,7 +102,7 @@ def test_capability_sets_preserve_every_effect(
     capabilities: tuple[GitHubCommandCapability, ...],
     workflow_authorizable: bool,
 ) -> None:
-    assessment = classify_github_cli(args)
+    assessment = github_cli_assessment(args)
 
     assert assessment.capabilities == capabilities
     assert assessment.action_floor == _EXPECTED_FLOORS[assessment.capability]

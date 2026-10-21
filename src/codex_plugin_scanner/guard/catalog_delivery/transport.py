@@ -10,6 +10,7 @@ import hashlib
 import os
 import re
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -57,7 +58,34 @@ def _check_url(url):
         raise ValueError("release transport destination is not permitted")
 
 
+# A publication that momentarily refuses the request fails an operator's save
+# outright, and the operator has nothing to do about it but try again later.
+# Retry the refusals that are transient by definition: a rate limit, a
+# server-side error, and a connection that never completed. Every byte is still
+# authenticated afterwards, so a retry can admit nothing a first attempt could
+# not, and no other failure is repeated.
+_RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
+_RETRY_DELAYS = (0.5, 2.0)
+
+
+def _retriable(error):
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code in _RETRY_STATUS
+    return isinstance(error, (urllib.error.URLError, ConnectionError, TimeoutError))
+
+
 def download(url, maximum):
+    for delay in _RETRY_DELAYS:
+        try:
+            return _download(url, maximum)
+        except OSError as error:
+            if not _retriable(error):
+                raise
+        time.sleep(delay)
+    return _download(url, maximum)
+
+
+def _download(url, maximum):
     if type(maximum) is not int or not 0 < maximum <= 32 * 1024 * 1024:
         raise ValueError("release transport byte limit invalid")
     for redirects in range(5):
@@ -129,7 +157,7 @@ def root_assets(source, publication):
     return download(base + ROOT_ASSET, 65536), download(base + PROVENANCE_ASSET, MAX_PROVENANCE_BYTES)
 
 
-def fetch_root(*, now, selection=None, offline=False):
+def fetch_root(*, now, selection=None, offline=False, verified_io=None):
     selection = selected() if selection is None else validate(selection)
     data, provenance = root_assets(selection["source_sha"], selection["publication_id"])
     if hashlib.sha256(data).hexdigest() != selection["root_sha256"]:
@@ -139,6 +167,8 @@ def fetch_root(*, now, selection=None, offline=False):
     )
     if result.manifest()["publication_id"] != selection["publication_id"]:
         raise ValueError("release root publication identity differs from selector")
+    if verified_io is not None:
+        verified_io(result, provenance)
     return result
 
 
@@ -147,9 +177,16 @@ def fetch_object(target, maximum):
 
 
 def cached_fetcher(directory):
+    from .cache_io import Lease
+
     directory = checked_path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    return lambda target, maximum: _fetch(target, maximum, directory)
+
+    def fetch(target, maximum):
+        with Lease(directory.parent):
+            return _fetch(target, maximum, directory)
+
+    return fetch
 
 
 def _fetch(target, maximum, cache=None):

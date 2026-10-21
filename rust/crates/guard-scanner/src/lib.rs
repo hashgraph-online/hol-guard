@@ -14,6 +14,7 @@ mod field_copy;
 mod guard_link;
 mod masked_value;
 mod match_spans;
+mod prose_answer_value;
 mod reference_value;
 mod self_named_value;
 
@@ -271,6 +272,7 @@ fn is_sample(
         && (field_copy::is_field_copy(matched, rest_of_line)
             || guard_link::is_guard_link(matched, preceding)
             || self_named_value::is_self_named(matched, rest_of_line)
+            || prose_answer_value::is_prose_answer(matched, rest_of_line, preceding)
             || assignment_value(matched).is_some_and(|value| {
                 inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)
             })

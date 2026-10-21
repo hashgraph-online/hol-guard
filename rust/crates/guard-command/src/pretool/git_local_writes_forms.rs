@@ -136,24 +136,10 @@ pub(super) fn branch_rename(rest: &[&str]) -> bool {
     moved && matches!(names.len(), 1 | 2)
 }
 
-/// `stash list` with at most a count limit. Git runs it as `git log -g
-/// refs/stash`; other log options can ask for patches whose diff drivers the
-/// proof below does not clear.
-pub(super) fn stash_list(rest: &[&str]) -> bool {
-    match rest {
-        [] => true,
-        ["-n" | "--max-count", value] => count(value),
-        [flag] => flag
-            .strip_prefix("--max-count=")
-            .or_else(|| flag.strip_prefix('-').filter(|_| !flag.starts_with("--")))
-            .is_some_and(count),
-        _ => false,
-    }
-}
-
-fn count(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
-}
+/// The two `git stash` spellings that only print are judged by the read
+/// grammar, so a listing proved here and a listing proved as an ordinary
+/// read can never drift apart.
+pub(super) use crate::pretool::git_stash_reads::{list as stash_list, show as stash_show};
 
 /// `stash apply` or `stash pop` with `-q`, `--index` and at most one entry
 /// (`stash@{N}` or `N`). Git refuses to apply an entry over a modified file,
@@ -162,38 +148,7 @@ pub(super) fn stash_restore(rest: &[&str]) -> bool {
     let mut entries = 0;
     rest.iter().all(|option| match *option {
         "-q" | "--quiet" | "--index" => true,
-        entry if stash_entry(entry) => {
-            entries += 1;
-            entries == 1
-        }
-        _ => false,
-    })
-}
-
-/// `stash show` with the diff options that only choose how the entry's diff
-/// is printed, and at most one entry. The options an external or textconv
-/// driver needs (`--ext-diff`, `--textconv`) are refused, so the read runs
-/// only Git's own diff.
-pub(super) fn stash_show(rest: &[&str]) -> bool {
-    let mut entries = 0;
-    rest.iter().all(|option| match *option {
-        "-p"
-        | "-u"
-        | "--patch"
-        | "--include-untracked"
-        | "--only-untracked"
-        | "--stat"
-        | "--numstat"
-        | "--shortstat"
-        | "--name-only"
-        | "--name-status"
-        | "--summary"
-        | "--no-color"
-        | "--no-ext-diff"
-        | "--no-textconv"
-        | "-q"
-        | "--quiet" => true,
-        entry if stash_entry(entry) => {
+        entry if crate::pretool::git_stash_reads::entry_name(entry) => {
             entries += 1;
             entries == 1
         }
@@ -227,14 +182,6 @@ pub(super) fn show_diff_drivers_disarmed(segment: &CommandSegmentV1) -> Option<(
         }
     }
     Some((external, textconv_flag.unwrap_or(!patch)))
-}
-
-fn stash_entry(value: &str) -> bool {
-    let index = value
-        .strip_prefix("stash@{")
-        .and_then(|rest| rest.strip_suffix('}'))
-        .unwrap_or(value);
-    !index.is_empty() && index.len() <= 4 && index.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 /// Whether the `git stash` at `index` starts no program its hooks do not

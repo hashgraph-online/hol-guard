@@ -11,7 +11,8 @@ use super::super::read_paths::{bounded_file_read_target, expand_home_read_path};
 use super::super::safe_reads::glob_file_matches;
 use super::super::PathContext;
 use super::{
-    bounded_native_file_write_target, bounded_temporary_copy_target, single_link_write_target,
+    autostart_write_target, bounded_native_file_write_target, bounded_temporary_copy_target,
+    hooks_path, single_link_write_target,
 };
 use std::path::{Path, PathBuf};
 
@@ -23,6 +24,18 @@ const MAX_EXPANDED_SOURCES: usize = 64;
 pub(in crate::pretool) fn safe_copy_arguments(
     arguments: &[String],
     context: PathContext<'_>,
+) -> bool {
+    safe_copy_arguments_into(arguments, context, &[])
+}
+
+/// Like [`safe_copy_arguments`], for a chain whose earlier `mkdir` segments
+/// create the scratch directories in `created`. A file placed directly inside
+/// one has a parent that does not exist yet, so the ordinary temporary
+/// destination screen cannot see it.
+pub(in crate::pretool) fn safe_copy_arguments_into(
+    arguments: &[String],
+    context: PathContext<'_>,
+    created: &[PathBuf],
 ) -> bool {
     let operands = match arguments {
         [separator, rest @ ..] if separator == "--" => rest,
@@ -63,7 +76,7 @@ pub(in crate::pretool) fn safe_copy_arguments(
         } else {
             resolved.clone()
         };
-        source_allowed(source, context) && target_allowed(&target, absolute, context)
+        source_allowed(source, context) && target_allowed(&target, absolute, created, context)
     })
 }
 
@@ -99,7 +112,12 @@ fn source_allowed(source: &str, context: PathContext<'_>) -> bool {
 
 /// cp follows a destination link, so the resulting path must not be one and
 /// must not alias a protected inode through a hard link.
-fn target_allowed(target: &Path, absolute: bool, context: PathContext<'_>) -> bool {
+fn target_allowed(
+    target: &Path,
+    absolute: bool,
+    created: &[PathBuf],
+    context: PathContext<'_>,
+) -> bool {
     let Some(text) = target.to_str() else {
         return false;
     };
@@ -111,5 +129,32 @@ fn target_allowed(target: &Path, absolute: bool, context: PathContext<'_>) -> bo
             // The temporary carve-out is only for destinations the user
             // spelled absolutely. A relative destination joined onto a /tmp
             // workspace must not sidestep the workspace boundary check above.
-            || (absolute && bounded_temporary_copy_target(text, context)))
+            || (absolute
+                && (bounded_temporary_copy_target(text, context)
+                    || created_scratch_child(target, text, created, context))))
+}
+
+/// A new file directly inside a scratch directory the chain creates. The
+/// directory itself passed the temporary-target screens, so only the name
+/// and the write-target floors of the file remain.
+fn created_scratch_child(
+    target: &Path,
+    text: &str,
+    created: &[PathBuf],
+    context: PathContext<'_>,
+) -> bool {
+    let (Some(parent), Some(name)) = (target.parent(), target.file_name().and_then(|n| n.to_str()))
+    else {
+        return false;
+    };
+    created
+        .iter()
+        .any(|directory| directory.as_path() == parent)
+        && !name.starts_with('.')
+        && !text.contains([
+            '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
+        ])
+        && !super::super::sensitive_read_path_argument(text)
+        && !autostart_write_target(target)
+        && !hooks_path::configured_hooks_write(target, context.home_dir, context.cwd)
 }

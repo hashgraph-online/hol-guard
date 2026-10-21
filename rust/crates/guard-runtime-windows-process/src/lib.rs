@@ -18,6 +18,8 @@ mod drives;
 #[cfg(windows)]
 mod known_folders;
 #[cfg(windows)]
+mod owner;
+#[cfg(windows)]
 mod registry;
 #[cfg(windows)]
 mod secure_storage;
@@ -50,6 +52,9 @@ pub use drives::local_drive_letters;
 
 #[cfg(windows)]
 pub use known_folders::{trusted_install_roots, windows_directory};
+
+#[cfg(windows)]
+pub use owner::owned_by_current_user;
 
 #[cfg(windows)]
 pub use registry::{read_machine_registry_string, MachineRegistryString};
@@ -88,6 +93,12 @@ pub fn wait_for_process_exit(_process_id: u32, _timeout: std::time::Duration) ->
 #[cfg(not(windows))]
 pub fn local_drive_letters() -> Option<Vec<char>> {
     None
+}
+
+/// Only Windows has owner SIDs.
+#[cfg(not(windows))]
+pub fn owned_by_current_user(_path: &Path) -> bool {
+    false
 }
 
 #[cfg(not(windows))]

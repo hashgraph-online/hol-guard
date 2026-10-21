@@ -152,6 +152,10 @@ pub(in crate::pretool) fn bounded_omp_directory_read_target(
     bounded_omp_directory_read_target_without_selector(value, home_dir, cwd)
 }
 
+#[path = "directory_read_tools.rs"]
+mod tools;
+pub(in crate::pretool) use tools::bounded_directory_read_tool_target;
+
 fn bounded_omp_directory_read_target_without_selector(
     value: &str,
     home_dir: Option<&str>,

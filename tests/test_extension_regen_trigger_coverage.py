@@ -66,6 +66,8 @@ def test_regen_trigger_covers_product_inputs_not_per_run_evidence() -> None:
         "contracts/mcp-servers/contribution.v1.schema.json",
         "scripts/build_native_command_program.py",
         "scripts/export_extension_directory.py",
+        "scripts/native_directory_inventory.py",
+        "scripts/prepare_extension_directory.py",
         "scripts/render_command_extension_directory.py",
         "scripts/prepare_extension_contribution.py",
     }

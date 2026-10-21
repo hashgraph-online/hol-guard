@@ -56,6 +56,14 @@ runs:
         $env:SHIM_VECTOR_ROOT_BASE = Join-Path $env:RUNNER_TEMP 'shim-vectors'
         New-Item -ItemType Directory -Force $env:SHIM_VECTOR_ROOT_BASE | Out-Null
         cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test shim_admin_vectors
+    - name: Evaluate shell writes spelled as Windows drive paths
+      if: inputs.shim-gate == 'vectors'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test pretool_windows_drive_path_writes
+        cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test pretool_windows_sibling_repository_writes
     - name: Install and report shims through the native op on Windows
       if: inputs.shim-gate == 'native-op'
       shell: pwsh
@@ -74,6 +82,14 @@ runs:
         cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime daemon_storage_hold
         cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime windows_expanded_home
         cargo test --manifest-path rust/Cargo.toml --locked -p guard-runtime-windows-process --test process_liveness
+    - name: Wait out an exiting resident owner on Windows
+      if: inputs.shim-gate == 'native-op'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime managed_owner_lock
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime owner_release
     - name: Contain MCP server process trees in a JobObject on Windows
       if: inputs.shim-gate == 'mcp'
       shell: pwsh
