@@ -537,6 +537,20 @@ class StoreConnectionSchemaMixin:
             yield
 
     @contextmanager
+    def hold_aibom_items_lock(
+        self,
+        *,
+        timeout_seconds: float = _CLOUD_SYNC_LOCK_TIMEOUT_SECONDS,
+    ) -> Iterator[None]:
+        with self._hold_advisory_file_lock(
+            path=self.guard_home / "aibom-items.lock",
+            timeout_seconds=timeout_seconds,
+            poll_seconds=_CLOUD_SYNC_LOCK_POLL_SECONDS,
+            timeout_message="Timed out waiting for Guard AIBOM items lock.",
+        ):
+            yield
+
+    @contextmanager
     def hold_oauth_credential_lock(
         self,
         *,

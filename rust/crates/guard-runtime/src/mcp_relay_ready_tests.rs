@@ -8,7 +8,7 @@ use std::fs;
 
 fn view() -> Value {
     json!({
-        "schema": "guard-mcp-relay-view.v1",
+        "schema": "guard-mcp-relay-view.v2",
         "harnesses": {"codex": {
             "config": {"mode": "enforce"},
             "hash_config": {},

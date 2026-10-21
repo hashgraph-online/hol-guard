@@ -428,6 +428,7 @@ mod hook_artifact_compose_op;
 mod hook_artifact_compose_package_firewall;
 mod hook_artifact_compose_package_firewall_entitlement;
 mod hook_artifact_compose_policy_lookup;
+mod hook_artifact_compose_policy_tail;
 mod hook_artifact_compose_prompt;
 mod hook_artifact_compose_reuse;
 mod hook_artifact_facts_op;
@@ -437,14 +438,19 @@ mod hook_bridge_fallback;
 mod hook_cli_claude_text;
 #[cfg(test)]
 mod hook_decision_apply_patch_gate_tests;
+mod hook_decision_artifact_directive;
+mod hook_decision_artifact_reuse_step;
+mod hook_decision_artifact_review_route;
 #[cfg(all(test, unix))]
 mod hook_decision_benign_tool_action_tests;
 mod hook_decision_compose;
 mod hook_decision_directive;
 mod hook_decision_finalize;
+mod hook_decision_hook_route;
 mod hook_decision_native_facts;
 #[cfg(all(test, unix))]
 mod hook_decision_native_facts_tests;
+mod hook_decision_native_permission_persist;
 mod hook_decision_op;
 mod hook_decision_settle;
 mod hook_direct;
@@ -719,9 +725,12 @@ mod supply_chain_eval_seams;
 mod supply_chain_eval_transport;
 mod tool_action_identity_op;
 mod totp;
+mod verified_npm_op;
 mod verified_read_decision_op;
 #[cfg(windows)]
 mod windows_node_build;
+#[cfg(windows)]
+mod windows_pytest;
 #[cfg(windows)]
 mod windows_readonly;
 mod workspace_inventory_files;

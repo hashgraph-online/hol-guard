@@ -41,11 +41,16 @@ def test_facts_projection_reproduces_recorded_queries(native_approval_reuse_runt
     for vector in vectors:
         config = recorder.build_config(vector["spec"]["config"], native_approval_reuse_runtime)
         artifact = recorder.build_artifact(vector["spec"]["artifact"])
+        facts = runtime_policy_artifact_facts(
+            config, artifact, recorder.HARNESS, guard_home=native_approval_reuse_runtime
+        )
+        # ``skip_native_floor`` is the resident's own answer for the hook, not
+        # an input to the configured action these queries were recorded for.
+        # The policy-stack tail vectors pin it against the Python rule.
+        assert isinstance(facts.pop("skip_native_floor"), bool), vector["name"]
         assert {
             "policy_config": runtime_policy_config_facts(config, recorder.HARNESS),
-            "artifact": runtime_policy_artifact_facts(
-                config, artifact, recorder.HARNESS, guard_home=native_approval_reuse_runtime
-            ),
+            "artifact": facts,
         } == vector["query"], vector["name"]
 
 

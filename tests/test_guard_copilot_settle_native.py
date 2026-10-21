@@ -281,9 +281,7 @@ def test_transport_runs_recorded_effects_in_order(monkeypatch: pytest.MonkeyPatc
         args = SimpleNamespace(harness="copilot", json=vector["json_requested"])
         tool_call = (artifact, facts["artifact_hash"], None)
         if vector["inputs"]["stage"] == "pre_tool_use":
-            exit_code = copilot.run_native_copilot_pretool(
-                args, copilot_hook_stage="pretooluse", copilot_runtime_tool_call=tool_call, **common
-            )
+            exit_code = copilot.run_native_copilot_pretool(args, copilot_runtime_tool_call=tool_call, **common)
             documents = [json.loads(line) for line in stream.getvalue().splitlines()]
             assert documents == vector["pretool_documents"], vector["name"]
         else:
@@ -332,7 +330,6 @@ def test_unknown_effect_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
             action_envelope=None,
             config=SimpleNamespace(receipt_redaction_level="standard"),
             context=SimpleNamespace(guard_home=Path("/tmp/copilot-home"), home_dir=None),
-            copilot_hook_stage="pretooluse",
             copilot_runtime_tool_call=(artifact, "sha256:a", None),
             payload={},
             runtime_workspace=None,

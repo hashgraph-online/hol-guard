@@ -41,7 +41,10 @@ pub use profile::{
     ensure_package_shim_path_in_shell_profile, remove_guard_profile_blocks,
     strip_managed_marker_blocks,
 };
-pub use status::{package_shim_cloud_coverage, package_shim_dashboard_status, package_shim_status};
+pub use status::{
+    package_shim_cloud_coverage, package_shim_dashboard_status, package_shim_protection,
+    package_shim_protection_from_status, package_shim_status,
+};
 
 /// Sentinel assignment the generated shims carry (`<name> = True`).
 pub const FROZEN_PACKAGE_SHIM_SENTINEL: &str = "HOL_GUARD_PACKAGE_SHIM_SENTINEL";

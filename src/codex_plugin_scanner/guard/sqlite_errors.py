@@ -19,6 +19,9 @@ _SQLITE_LOCKED: Final = 6
 _SQLITE_IOERR: Final = 10
 _SQLITE_CORRUPT: Final = 11
 _SQLITE_FULL: Final = 13
+# WAL readers that keep losing the wal-index race give up with PROTOCOL after
+# a few seconds. SQLite documents it as transient contention, not damage.
+_SQLITE_PROTOCOL: Final = 15
 _SQLITE_NOTADB: Final = 26
 
 
@@ -30,7 +33,7 @@ def sqlite_failure_kind(error: BaseException) -> SQLiteFailureKind:
         # Extended codes retain the primary code in their low byte. Keep the
         # original error intact for diagnostics; routing alone uses that byte.
         primary = code & 0xFF
-        if primary == _SQLITE_BUSY:
+        if primary in {_SQLITE_BUSY, _SQLITE_PROTOCOL}:
             return "busy"
         if primary == _SQLITE_LOCKED:
             return "locked"
@@ -51,7 +54,7 @@ def sqlite_failure_kind(error: BaseException) -> SQLiteFailureKind:
     if isinstance(error, sqlite3.OperationalError):
         if "locked" in message:
             return "locked"
-        if "busy" in message:
+        if "busy" in message or "locking protocol" in message:
             return "busy"
     return "other"
 

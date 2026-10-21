@@ -21,7 +21,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, TypeGuard
+from typing import Any, TypeGuard, cast
 
 from .directory_path_authority import canonical_guard_home_path
 from .fork_safety import forget_in_child
@@ -82,6 +82,7 @@ _RESULT_OPTIONAL_KEYS = {
     "managed_controls_policy_fields",
     "claude_guard_question",
     "memory_pattern",
+    "guard_run_launch",
 }
 _RESULT_CODES = {
     "ok",
@@ -110,6 +111,11 @@ _RESULT_CODES = {
 _UNCACHEABLE_DIGEST_KINDS = frozenset(
     {
         "generic_hook_approval_context",
+        # Builds a launch identity per previewed argv, so it reads the
+        # executable's bytes, and it carries the prepared launch
+        # environment: a cached reply would both hide an executable that
+        # changed between two calls and retain granted credentials.
+        "guard_run_launch_plans",
         "mcp_launch_environment",
         "runtime_executable_identity",
         "runtime_hook_approval_context",
@@ -706,6 +712,77 @@ def context_runtime_executable_identity(
     if not isinstance(result, dict) or result.get("status") != "ok" or not isinstance(identity, dict):
         raise _unavailable("native_runtime_executable_identity_unavailable")
     return identity
+
+
+def context_guard_run_launch_plans(
+    adapter_commands: Sequence[Sequence[str]],
+    *,
+    environment: Mapping[str, str],
+    launch_cwd: Path,
+    guard_home: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Content-bind every previewed guard-run launch argv in one native call.
+
+    The native kind resolves each launch identity against the prepared
+    environment and cwd, hashes that environment once, stamps reusability and
+    drops duplicate adapter commands, so Python transports the preview rather
+    than rebuilding launch authority per command.
+    """
+
+    result = native_context_digest(
+        "guard_run_launch_plans",
+        {
+            "adapter_commands": [list(command) for command in adapter_commands],
+            "environment": dict(environment),
+            "launch_cwd": str(launch_cwd),
+        },
+        guard_home=_resolve_digest_home(guard_home),
+    )
+    payload = result.get("guard_run_launch") if isinstance(result, dict) else None
+    plans = payload.get("plans") if isinstance(payload, dict) else None
+    if not isinstance(result, dict) or result.get("status") != "ok" or not isinstance(plans, list):
+        raise _unavailable("native_guard_run_launch_plans_unavailable")
+    if any(not isinstance(plan, dict) for plan in plans):
+        raise _unavailable("native_guard_run_launch_plans_unavailable")
+    return cast("list[dict[str, Any]]", plans)
+
+
+def context_guard_run_authorized_prefixes(
+    plans: Sequence[Mapping[str, Any]],
+    *,
+    guard_home: Path | None = None,
+) -> tuple[tuple[str, ...], ...] | None:
+    """Recover the authorized executable prefixes for previously bound plans.
+
+    ``None`` is the native verdict that the authorized set does not bind — a
+    non-reusable plan, plans spanning more than one prepared environment, or a
+    plan whose execution command does not extend its adapter command.
+    """
+
+    result = native_context_digest(
+        "guard_run_authorized_prefixes",
+        {
+            "plans": [
+                {
+                    "adapter_command": list(plan["adapter_command"]),
+                    "execution_command": list(plan["execution_command"]),
+                    "environment_sha256": str(plan["environment_sha256"]),
+                    "reusable": bool(plan["reusable"]),
+                }
+                for plan in plans
+            ]
+        },
+        guard_home=_resolve_digest_home(guard_home),
+    )
+    if not isinstance(result, dict) or result.get("status") != "ok" or "guard_run_launch" not in result:
+        raise _unavailable("native_guard_run_authorized_prefixes_unavailable")
+    payload = result.get("guard_run_launch")
+    if payload is None:
+        return None
+    prefixes = payload.get("prefixes") if isinstance(payload, dict) else None
+    if not isinstance(prefixes, list):
+        raise _unavailable("native_guard_run_authorized_prefixes_unavailable")
+    return tuple(tuple(str(part) for part in prefix) for prefix in prefixes)
 
 
 def context_runtime_launch_identity(

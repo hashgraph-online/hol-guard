@@ -65,11 +65,30 @@ pub(in crate::pretool) fn scratch_output_target(
 /// which the agent's environment controls. `.js` and `.psm1` are left out:
 /// in a workspace they are source a tool loads, like a `.py` file, not a
 /// program run by name, and POSIX hosts treat them the same way.
-#[cfg(windows)]
-const WINDOWS_PROGRAM_EXTENSIONS: &[&str] = &[
+///
+/// Shared so every route that asks "would Windows run this file?" reads the
+/// same answer. A route whose own risk is wider adds to this list rather than
+/// keeping a second copy of it.
+#[cfg(any(not(unix), test))]
+pub(in crate::pretool) const WINDOWS_PROGRAM_EXTENSIONS: &[&str] = &[
     "bat", "cmd", "com", "cpl", "exe", "jse", "msc", "msi", "ps1", "scr", "vbe", "vbs", "wsf",
     "wsh",
 ];
+
+/// The extension Windows opens a name by, lowercased.
+///
+/// Win32 drops trailing dots and spaces from each name component, so
+/// `tool.exe.` and `tool.exe ` both open `tool.exe`. Reading `Path::extension`
+/// off the spelling instead returns nothing for them, which is how a runnable
+/// file slips past an extension check.
+#[cfg(any(not(unix), test))]
+pub(in crate::pretool) fn windows_spelled_extension(path: &Path) -> Option<String> {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.trim_end_matches(['.', ' ']))
+        .and_then(|name| name.rsplit_once('.'))
+        .map(|(_, extension)| extension.to_ascii_lowercase())
+}
 
 /// An existing regular file with an execute bit, or on Windows a program
 /// extension. Truncating it replaces a program that a later step may run.
@@ -88,15 +107,8 @@ pub(in crate::pretool) fn existing_executable(target: &str, cwd: Option<&str>) -
     }
     #[cfg(windows)]
     {
-        // Windows drops trailing dots and spaces when it opens a name, so
-        // `tool.exe.` is `tool.exe`.
-        let extension = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .map(|name| name.trim_end_matches(['.', ' ']))
-            .and_then(|name| name.rsplit_once('.'))
-            .map(|(_, extension)| extension.to_ascii_lowercase());
-        extension.is_some_and(|extension| WINDOWS_PROGRAM_EXTENSIONS.contains(&extension.as_str()))
+        windows_spelled_extension(&path)
+            .is_some_and(|extension| WINDOWS_PROGRAM_EXTENSIONS.contains(&extension.as_str()))
             && std::fs::metadata(&path).is_ok_and(|metadata| metadata.is_file())
     }
     #[cfg(all(not(unix), not(windows)))]

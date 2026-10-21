@@ -40,6 +40,12 @@ export const CATALOG_SNAPSHOT_EXPIRED = "catalog_snapshot_expired";
 // it starts) or while the resident is busy. Both pass in seconds, so a 503 is
 // retried on this schedule before the page reports the catalog unavailable.
 const UNAVAILABLE_RETRY_DELAYS_MS = [250, 500, 1_000, 2_000, 4_000, 4_000];
+// The one 503 that waiting cannot clear: the daemon has failed to prepare a
+// verified catalog on every recent attempt. It is reported at once instead of
+// after the schedule above, and it is still not a v1 fallback signal, because
+// the runtime is present and its fault belongs on the page rather than hidden
+// behind a legacy read. The daemon logs the cause to its daemon.log.
+export const CATALOG_PREPARATION_FAILED = "catalog_read_preparation_failed";
 
 export class CatalogV2UnsupportedError extends ExtensionControlApiError {}
 
@@ -127,6 +133,7 @@ async function readAvailable(path: string, ifNoneMatch: string | null, signal?: 
       return await readOnce(path, ifNoneMatch, signal);
     } catch (error) {
       if (!(error instanceof ExtensionControlApiError) || error.status !== 503) throw error;
+      if (error.code === CATALOG_PREPARATION_FAILED) throw error;
     }
     await waitBeforeRetry(delayMs, signal);
   }

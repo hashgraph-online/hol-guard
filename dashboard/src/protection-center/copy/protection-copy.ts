@@ -92,6 +92,10 @@ const LOAD_ERROR_COPY: Record<string, { title: string; detail: string }> = {
     title: "The extension list changed while it loaded",
     detail: "Guard rebuilt the extension list while this page was reading it, so this page never finished loading. Load it again to read the rebuilt list.",
   },
+  catalog_read_preparation_failed: {
+    title: "Guard cannot rebuild your extension list",
+    detail: "Guard on this device has failed to rebuild its extension list on every recent attempt, so waiting or loading the page again will not clear it. Install the latest version of HOL Guard. Guard writes the reason to its log file at ~/.hol-guard/logs/daemon.log.",
+  },
   catalog_snapshot_mismatch: {
     title: "Guard's parts are on different versions",
     detail: "The background service and the protection runtime on this device come from different versions of Guard, so neither can answer for the other's extension list. Install the latest version of HOL Guard to put them back in step.",

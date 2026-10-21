@@ -9,12 +9,12 @@ import pytest
 
 import codex_plugin_scanner.guard.native_execution as native_execution
 import codex_plugin_scanner.guard.runtime.containment_health as containment_health_module
+from codex_plugin_scanner.guard.runtime.contained_execution_common import file_sha256
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentBackend,
     ContainmentPolicy,
     ContainmentRequest,
 )
-from codex_plugin_scanner.guard.runtime.containment_executor import file_sha256
 from codex_plugin_scanner.guard.runtime.containment_health import (
     CONTAINMENT_POLICY_CONTRACT_DIGEST,
     ContainmentHealthEvidence,

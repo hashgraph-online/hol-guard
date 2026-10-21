@@ -199,7 +199,7 @@ fn route_defers_everything_else() {
 #[test]
 fn view_binds_one_harness_with_layers() {
     let view = json!({
-        "schema": "guard-mcp-relay-view.v1",
+        "schema": "guard-mcp-relay-view.v2",
         "harnesses": {
             "codex": {
                 "config": {"mode": "enforce"},
@@ -223,7 +223,7 @@ fn view_binds_one_harness_with_layers() {
         Err("mcp_relay_layers_unavailable")
     );
     let mut renamed = view.clone();
-    renamed["schema"] = json!("guard-mcp-relay-view.v2");
+    renamed["schema"] = json!("guard-mcp-relay-view.v3");
     assert_eq!(
         harness_view(Some(&renamed), "codex"),
         Err("mcp_relay_view_invalid")

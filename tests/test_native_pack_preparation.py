@@ -477,6 +477,7 @@ def test_prepared_dataclass_through_real_daemon_control_commit(delivery, tmp_pat
         SimpleNamespace(
             store=store,
             extension_control_runtime=service._runtime,
+            extension_control_api=service,
             _installed_authority_pending=False,
             _extension_control_on_core_registry=False,
         )
@@ -494,6 +495,7 @@ def test_prepared_dataclass_through_real_daemon_control_commit(delivery, tmp_pat
                 SimpleNamespace(
                     store=store,
                     extension_control_runtime=service._runtime,
+                    extension_control_api=service,
                     _installed_authority_pending=False,
                     _extension_control_on_core_registry=False,
                 )

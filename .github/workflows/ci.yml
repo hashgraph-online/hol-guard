@@ -1198,3 +1198,49 @@ jobs:
           # residue would fail every valid fast lane.
           print("required aggregate: all planned required results green")
           PY
+      # Merge freeze: while the repository variable MERGE_FREEZE is true, this
+      # aggregate (a required check in the main-status-checks ruleset) fails for
+      # every pull request except MERGE_FREEZE_ALLOW entries, and for a dispatched
+      # run outside the default branch, so neither a direct merge nor an armed
+      # auto-merge can land. It runs after the
+      # evaluation step, which must stay first, and even when that step failed,
+      # so a frozen PR always shows why. merge-freeze.yml re-evaluates PRs whose
+      # CI already finished when the variable changes.
+      #
+      # The policy comes from the PR's base revision, the way the change planner
+      # does, so a PR cannot edit the script that decides whether it may merge.
+      # Any other run reads it from the default branch, so a dispatched run on a
+      # PR branch is held by the same policy.
+      - name: Check out the merge freeze policy from the base revision
+        if: ${{ !cancelled() }}
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.repository.default_branch || github.sha }}
+          path: .merge-freeze-policy
+          persist-credentials: false
+          sparse-checkout: scripts/ci/merge_freeze.py
+          sparse-checkout-cone-mode: false
+      - name: Merge freeze gate
+        if: ${{ !cancelled() }}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MERGE_FREEZE: ${{ vars.MERGE_FREEZE }}
+          MERGE_FREEZE_ALLOW: ${{ vars.MERGE_FREEZE_ALLOW }}
+        run: |
+          policy=.merge-freeze-policy/scripts/ci/merge_freeze.py
+          if [ -f "$policy" ]; then
+            exec python3 "$policy" gate
+          fi
+          # A base revision older than the policy has no script to run. Only an
+          # unset or false flag passes; anything else holds the PR.
+          case "$MERGE_FREEZE" in
+            "" | false | False | FALSE)
+              echo "The base revision has no merge freeze policy and MERGE_FREEZE is not set."
+              ;;
+            *)
+              echo "::error title=Merge freeze active::The base revision has no merge freeze policy and MERGE_FREEZE is set."
+              exit 1
+              ;;
+          esac

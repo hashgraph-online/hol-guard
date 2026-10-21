@@ -25,7 +25,7 @@ fn test_containment_requirement_cannot_override_lockdown() {
     binding.effective_digest = binding.compute_effective_digest().unwrap();
     assert_eq!(
         evaluate(&binding, "python3 -m pytest -q").minimum_action,
-        if cfg!(target_os = "macos") {
+        if cfg!(any(target_os = "macos", windows)) {
             "sandbox-required"
         } else {
             "review"

@@ -119,6 +119,15 @@ assert.doesNotMatch(mismatch.detail, /open it again|[Tt]ry again/);
 assert.match(mismatch.detail, /Install the latest version/);
 assert.equal(mismatch.reference, "catalog_snapshot_mismatch");
 
+// A preparation that has failed on every recent attempt is deterministic, so
+// restarting the same install reproduces it. This card must not offer a retry.
+const preparationFailed = protectionCenterLoadError("catalog_read_preparation_failed");
+assert.doesNotMatch(preparationFailed.detail, /catalog_read_preparation_failed/);
+assert.doesNotMatch(preparationFailed.detail, /open it again|[Tt]ry again/);
+assert.match(preparationFailed.detail, /Install the latest version/);
+assert.match(preparationFailed.detail, /daemon\.log/);
+assert.equal(preparationFailed.reference, "catalog_read_preparation_failed");
+
 const expired = protectionCenterLoadError("catalog_snapshot_expired");
 assert.doesNotMatch(expired.detail, /partial/);
 assert.match(expired.detail, /Load it again/);
@@ -131,7 +140,7 @@ assert.equal(protectionCenterLoadError("catalog mismatch").reference, undefined)
 
 // The card already states that local protection continues, so the detail must
 // not repeat it.
-for (const message of ["unauthorized", "catalog_read_model_unavailable", "catalog_read_transport_failed", "catalog_snapshot_expired", "catalog_snapshot_mismatch", "catalog mismatch"]) {
+for (const message of ["unauthorized", "catalog_read_model_unavailable", "catalog_read_transport_failed", "catalog_snapshot_expired", "catalog_snapshot_mismatch", "catalog_read_preparation_failed", "catalog mismatch"]) {
   assert.doesNotMatch(protectionCenterLoadError(message).detail, /[Ll]ocal protection/);
 }
 

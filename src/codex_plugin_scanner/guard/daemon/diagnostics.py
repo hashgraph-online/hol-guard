@@ -123,6 +123,16 @@ class DaemonDiagnostics:
 
         return self.record(event, detail=detail)
 
+    def record_background(self, event: str, detail: str) -> bool:
+        """Positional error adapter for background workers with no daemon handle.
+
+        The caller passes an already-bounded, path-free detail line, so this
+        records no ``exc_info``: a traceback would carry the absolute paths of
+        the install, which these records must not disclose.
+        """
+
+        return self._enqueue(self._record(logging.ERROR, event, detail=detail))
+
     def record_exception(
         self,
         event: str,
@@ -137,9 +147,11 @@ class DaemonDiagnostics:
         return self._enqueue(self._record(logging.ERROR, event, detail=detail, exc_info=exc_info))
 
     def close(self, *, timeout_seconds: float = 1.0) -> bool:
+        from .background_diagnostics import release_sink
         from .startup_phase import release_default_sink
 
         release_default_sink(self.record_phase)
+        release_sink(self.record_background)
         with self._close_lock:
             if self._handler is None:
                 return True

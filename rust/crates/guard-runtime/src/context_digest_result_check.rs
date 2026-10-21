@@ -58,6 +58,8 @@ pub(crate) fn kind_name(kind: &Kind) -> &'static str {
         Kind::RuntimeLaunchIdentity { .. } => "runtime_launch_identity",
         Kind::RuntimeLaunchIdentityMatches { .. } => "runtime_launch_identity_matches",
         Kind::RuntimeLaunchIdentityProjection { .. } => "runtime_launch_identity_projection",
+        Kind::GuardRunLaunchPlans { .. } => "guard_run_launch_plans",
+        Kind::GuardRunAuthorizedPrefixes { .. } => "guard_run_authorized_prefixes",
         Kind::McpToolCatalogFingerprint { .. } => "mcp_tool_catalog_fingerprint",
         Kind::RuntimeHookApprovalContext { .. } => "runtime_hook_approval_context",
         Kind::GenericHookApprovalContext { .. } => "generic_hook_approval_context",
@@ -86,6 +88,7 @@ fn required_output(kind: &str) -> Option<&'static str> {
 fn nullable_output(kind: &str) -> Option<&'static str> {
     Some(match kind {
         "custom_extension_continuity" => "custom_extension_continuity",
+        "guard_run_launch_plans" | "guard_run_authorized_prefixes" => "guard_run_launch",
         "managed_controls_policy_fields" => "managed_controls_policy_fields",
         "validate_approval_context_tokens" => "validation_reason",
         "approval_context_token_well_formed" => "approval_context_token_well_formed",

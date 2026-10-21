@@ -87,6 +87,7 @@ fn worktree_add_admits_fresh_temporary_siblings_only() {
     for (index, destination) in [
         organization.join("app-next").display().to_string(),
         "../app-relative".to_owned(),
+        organization.join("missing/next").display().to_string(),
         format!("/tmp/guard-worktree-direct-{unique}"),
     ]
     .iter()
@@ -99,6 +100,22 @@ fn worktree_add_admits_fresh_temporary_siblings_only() {
             "{command}: {}",
             result.reason_code
         );
+        if index == 2 {
+            git(
+                &home,
+                &repository,
+                &[
+                    "worktree",
+                    "add",
+                    "--quiet",
+                    destination,
+                    "-b",
+                    "sibling-2",
+                    "HEAD",
+                ],
+            );
+            assert!(organization.join("missing/next/tracked.txt").is_file());
+        }
     }
 
     directory(&root.join("shared"), 0o777);
@@ -107,6 +124,7 @@ fn worktree_add_admits_fresh_temporary_siblings_only() {
     directory(&organization.join("existing"), 0o755);
     directory(&organization.join(".github"), 0o755);
     directory(&home.join("Library/LaunchAgents"), 0o755);
+    let redirected = link(&organization, "redirected", &root.join("shared"));
     for destination in [
         root.join("shared/next"),
         root.join("group/next"),
@@ -114,7 +132,13 @@ fn worktree_add_admits_fresh_temporary_siblings_only() {
         organization.join(".next"),
         organization.join("existing"),
         organization.join(".github/workflows"),
-        organization.join("missing/next"),
+        root.join("shared/missing/next"),
+        root.join("group/missing/next"),
+        root.join(".hidden/missing/next"),
+        organization.join(".git/missing/next"),
+        organization.join(".github/workflows/missing/next"),
+        redirected.join("missing/next"),
+        std::path::PathBuf::from(format!("/tmp/guard-uncreated-{unique}/parent/next")),
         // An autostart location stays reviewed below an owned temporary root.
         home.join("Library/LaunchAgents/next"),
         // Directly in the shared root, a directory that already exists.

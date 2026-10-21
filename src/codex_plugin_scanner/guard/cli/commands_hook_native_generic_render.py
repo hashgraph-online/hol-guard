@@ -1,7 +1,9 @@
-"""Render the generic hook response the resident directive selected.
+"""Render the hook response the resident directive selected.
 
 Every routing choice (route, emitter, exit code, reason policy, system
-message) is in the directive; this module only executes it.
+message) is in the directive; this module only executes it. The generic hook
+and the artifact hook share it: the artifact hook passes ``artifact_reason``,
+its reason composed on first use, and its response payload as the envelope.
 """
 
 from __future__ import annotations
@@ -21,7 +23,11 @@ from .commands_support_hook_payload import (
     _native_hook_json_document,
 )
 from .commands_support_interaction import _emit
-from .commands_support_prompts import _codex_prompt_block_system_message
+from .commands_support_prompts import (
+    _claude_prompt_intercept_message,
+    _codex_prompt_block_system_message,
+    _copilot_hook_reason,
+)
 from .commands_support_runtime_policy import (
     _ensure_terminal_punctuation,
     _native_hook_reason,
@@ -49,6 +55,7 @@ def _emit_adapter(
     event_name: str,
     payload: dict[str, object],
     output_stream: TextIO | None,
+    approval_payload: dict[str, object] | None,
     system_message: str | None = None,
 ) -> None:
     emitter = directive["emitter"]
@@ -56,13 +63,20 @@ def _emit_adapter(
         from ..adapters.grok_hooks import emit_grok_hook_response
 
         emit_grok_hook_response(
-            policy_action=policy_action, reason=reason, event_name=event_name, output_stream=output_stream
+            policy_action=policy_action,
+            reason=reason,
+            event_name=event_name,
+            approval_payload=approval_payload,
+            output_stream=output_stream,
         )
     elif emitter == "pi":
         from ..adapters._modules.pi.pi_hooks import emit_pi_hook_response
 
         emit_pi_hook_response(
-            policy_action=policy_action, reason=reason, approval_payload=payload, output_stream=output_stream
+            policy_action=policy_action,
+            reason=reason,
+            approval_payload=payload if approval_payload is None else approval_payload,
+            output_stream=output_stream,
         )
     elif emitter == "zcode":
         from ..adapters._modules.zcode.zcode_hooks import emit_zcode_hook_response
@@ -99,15 +113,43 @@ def _reason(
     directive: Mapping[str, object],
     *,
     approval_context: object,
+    envelope: Mapping[str, object],
     harness: str,
     incoming_reason: object,
     remediation: Callable[[], str | None],
 ) -> str:
     guidance = remediation() if directive["include_remediation"] else None
     mode = directive["codex_native_reason"]
+    if mode == "artifact_codex":
+        return _native_hook_reason(incoming_reason, approval_context or envelope.get("review_hint"), guidance)
     if mode == "always" or (mode == "with_approval_context" and approval_context is not None):
         return _native_hook_reason(incoming_reason, approval_context, guidance)
     return _native_hook_reason_for_harness(harness, incoming_reason, approval_context, guidance)
+
+
+def directive_system_message(
+    directive: Mapping[str, object],
+    *,
+    policy_action: str,
+    reason: Callable[[], str],
+) -> str | None:
+    """The system message a directive or review route names, or ``None``."""
+
+    message = directive["system_message"]
+    if message == "claude_punctuated":
+        return _ensure_terminal_punctuation(reason())
+    if message == "codex_prompt":
+        return _codex_prompt_block_system_message(policy_action=policy_action, native_reason=reason)
+    if message in {"claude_prompt_secret", "claude_prompt_sensitive"}:
+        return _claude_prompt_intercept_message(secret=message == "claude_prompt_secret")
+    return None
+
+
+def _exit_block_stderr(directive: Mapping[str, object], code: int) -> bool:
+    explicit = directive.get("exit_block_stderr")
+    if isinstance(explicit, bool):
+        return explicit
+    return code != 0 or not directive["stderr_only_on_nonzero_exit"]
 
 
 def render_generic_hook(
@@ -128,51 +170,78 @@ def render_generic_hook(
     remediation: Callable[[], str | None],
     verified_benign: Callable[[], bool],
     coalesce: Callable[..., str],
+    artifact_reason: Callable[[], str] | None = None,
 ) -> int:
-    """Execute the directive's exit-block / native / envelope branch."""
+    """Execute the directive's exit-block / native / envelope branch.
+
+    The reason is composed on first use: a branch that shows none never pays
+    for it. ``artifact_reason`` marks the artifact hook, whose incoming reason
+    is the resident's and whose grok and pi responses read their approval
+    links from the response payload (``envelope``).
+    """
 
     harness = str(args.harness)
     as_json = bool(getattr(args, "json", False))
+    artifact = artifact_reason is not None
+    approval_payload = envelope if artifact else None
+    composed: dict[str, str] = {}
 
     def exit_code() -> int:
         return directive_exit_code(directive, policy_action)
 
-    reason = _reason(
-        directive,
-        approval_context=approval_context,
-        harness=harness,
-        incoming_reason=incoming_reason,
-        remediation=remediation,
-    )
+    def reason() -> str:
+        if "reason" not in composed:
+            composed["reason"] = _reason(
+                directive,
+                approval_context=approval_context,
+                envelope=envelope,
+                harness=harness,
+                incoming_reason=artifact_reason() if artifact_reason is not None else incoming_reason,
+                remediation=remediation,
+            )
+        return composed["reason"]
+
     if directive["route"] == "exit_block":
         _emit_adapter(
             directive,
             harness=harness,
             policy_action=policy_action,
-            reason=reason,
+            reason=reason(),
             event_name=event_name,
             payload=payload,
             output_stream=output_stream,
+            approval_payload=approval_payload,
         )
         code = exit_code()
-        if code != 0 or not directive["stderr_only_on_nonzero_exit"]:
+        if _exit_block_stderr(directive, code):
             # Kimi surfaces stderr to the user as the blocking explanation.
-            _emit_native_hook_block_stderr(reason)
+            _emit_native_hook_block_stderr(reason())
         return code
     if directive["terminal_notice"]:
-        _emit_native_hook_notification_stderr(_claude_native_pretooluse_terminal_notice(payload=payload, reason=reason))
+        _emit_native_hook_notification_stderr(
+            _claude_native_pretooluse_terminal_notice(payload=dict(payload), reason=reason())
+        )
     if directive["try_json_document"]:
+        if directive.get("json_reason") == "copilot":
+            json_reason = _copilot_hook_reason(
+                envelope.get("why_now"), envelope.get("review_hint"), envelope.get("risk_headline")
+            )
+        else:
+            json_reason = reason()
         json_result = _native_hook_json_document(
             args,
             event_name=event_name,
             policy_action=policy_action,
-            reason=reason,
+            reason=json_reason,
             envelope=envelope,
-            generic_path=True,
+            system_message=(
+                directive_system_message(directive, policy_action=policy_action, reason=reason) if artifact else None
+            ),
+            generic_path=not artifact,
             native_protocol_payload="hook_event_name" in payload or "event" not in payload,
             command_text=command_text,
             command_surface=getattr(action_envelope, "action_type", None) == "shell_command",
-            verified_benign=verified_benign(),
+            verified_benign=False if artifact else verified_benign(),
         )
         if json_result is not None:
             json_doc, json_rc = json_result
@@ -185,33 +254,29 @@ def render_generic_hook(
             return json_rc
     after = directive["after_json"]
     if after == "native_response":
-        message = directive["system_message"]
-        system_message: str | None
-        if message == "claude_punctuated":
-            system_message = _ensure_terminal_punctuation(reason)
-        elif message == "codex_prompt":
-            system_message = _codex_prompt_block_system_message(
-                policy_action=policy_action, native_reason=lambda: reason
-            )
-        else:
-            system_message = None
         _emit_adapter(
             directive,
             harness=harness,
             policy_action=policy_action,
-            reason=reason,
+            reason=reason(),
             event_name=event_name,
             payload=payload,
             output_stream=output_stream,
-            system_message=system_message,
+            approval_payload=approval_payload,
+            system_message=(
+                directive_system_message(directive, policy_action=policy_action, reason=reason)
+                if directive["emitter"] == "default"
+                else None
+            ),
         )
         return exit_code()
     if after == "post_tool_envelope":
-        _apply_native_edge_envelope_fields(envelope, native_edge_result)
+        if not artifact:
+            _apply_native_edge_envelope_fields(envelope, native_edge_result)
         _emit_native_post_tool_envelope(
             harness,
             policy_action=policy_action,
-            reason=coalesce(incoming_reason, reason) or reason,
+            reason=reason() if artifact else coalesce(incoming_reason, reason()) or reason(),
             response_payload=envelope,
             output_stream=output_stream,
             as_json=as_json,
@@ -223,4 +288,4 @@ def render_generic_hook(
     return exit_code()
 
 
-__all__ = ["directive_exit_code", "render_generic_hook"]
+__all__ = ["directive_exit_code", "directive_system_message", "render_generic_hook"]

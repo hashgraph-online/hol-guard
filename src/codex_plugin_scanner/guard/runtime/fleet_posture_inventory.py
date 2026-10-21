@@ -49,6 +49,8 @@ _ITEM_SOURCES = {
     "lockfile": "lockfile",
     "config": "config",
 }
+# Scope names a local source can carry; ``_ITEM_SOURCES`` maps each to its contract source.
+ITEM_SOURCE_SCOPES = frozenset(_ITEM_SOURCES)
 
 
 def inventory_item_kind(artifact_type: object) -> str | None:
@@ -104,14 +106,16 @@ def reportable_inventory_rows(rows: Iterable[Mapping[str, object]]) -> list[Repo
 
 
 def inventory_items(store: GuardStore, *, hash_key: bytes) -> list[dict[str, object]]:
-    """Installed items from the local inventory table, in contract shape.
+    """Installed items from the local inventory table and the last AIBOM collection, in contract shape.
 
     A failed read raises: an unreadable inventory must not look like an empty one,
     or an accepted sync would tell Guard Cloud that everything was uninstalled.
     """
 
+    from .fleet_posture_aibom import fleet_inventory_rows
+
     items: dict[str, dict[str, object]] = {}
-    for selected in reportable_inventory_rows(store.list_inventory()):
+    for selected in reportable_inventory_rows(fleet_inventory_rows(store)):
         item: dict[str, object] = {
             "kind": selected.kind,
             "name": clip(selected.name, 200),

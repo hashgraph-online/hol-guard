@@ -187,7 +187,7 @@ def run_case(
                 }
             )
             prompt = _scenario_prompt(rendered)
-            authorization = fixture_authorization(fixture, collector.url, rendered) + (
+            authorization = fixture_authorization(fixture, collector.url, rendered, session) + (
                 "" if first_contact else "\n" + fixture_system_context(scenario)
             )
             case["prompt_sha256"] = sha256_bytes(prompt.encode())

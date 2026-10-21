@@ -444,3 +444,7 @@ use client_stream::{
 #[cfg(test)]
 #[path = "managed_resident_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "managed_resident_client_timeout_tests.rs"]
+mod client_timeout_tests;

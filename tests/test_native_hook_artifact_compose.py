@@ -172,6 +172,9 @@ def test_missing_prerequisite_fails_closed(monkeypatch: pytest.MonkeyPatch) -> N
         ("unknown_kind", {}),
         ("tool_grant_apply", {"extra": 1}),
         ("grant_settle", {"current_action": "allow"}),
+        ("policy_composition", {}),
+        ("policy_composition", {"approval_source": "policy"}),
+        ("policy_stack", {"event_name": "PreToolUse"}),
     ],
 )
 def test_request_key_set_is_exact(monkeypatch: pytest.MonkeyPatch, kind: str, fields: dict[str, object]) -> None:
@@ -245,6 +248,63 @@ def test_the_signal_composition_kind_requires_its_own_feature(monkeypatch: pytes
     )
     assert composed["action"] == "block"
     assert required == [compose.HOOK_ARTIFACT_COMPOSE_SIGNAL_COMPOSITION_FEATURE]
+
+
+def test_the_policy_composition_kind_requires_the_policy_tail_feature(monkeypatch: pytest.MonkeyPatch) -> None:
+    composition = dict.fromkeys(
+        (
+            "current_config_action",
+            "current_action_override",
+            "trusted_cli_override",
+            "untrusted_hook_payload_hint",
+            "package_action",
+            "data_flow_action",
+            "scanner_action",
+            "current_composed_action",
+            "saved_policy_action",
+            "approval_reuse_source",
+            "trusted_request_override",
+            "trusted_request_override_reason",
+            "authoritative_action",
+        )
+    )
+    required = _feature_recorder(
+        monkeypatch,
+        payload={
+            "policy_composition": composition,
+            "evidence": {"source": "policy_composition", **composition},
+            "approval_source": "policy",
+        },
+    )
+    answer = compose.native_hook_compose(
+        "policy_composition",
+        dict.fromkeys(compose._FIELDS["policy_composition"]),
+        guard_home=None,
+    )
+    assert answer["approval_source"] == "policy"
+    assert required == [compose.HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE]
+
+
+def test_the_policy_stack_kind_requires_the_policy_tail_feature(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The stack answers local eligibility now, so a runtime without it cannot serve the stack."""
+
+    required = _feature_recorder(monkeypatch)
+    with pytest.raises(compose.NativeHookComposeError):
+        compose.native_hook_compose(
+            "policy_stack",
+            dict.fromkeys(compose._FIELDS["policy_stack"]),
+            guard_home=None,
+        )
+    assert required == [compose.HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE]
+
+
+def test_a_policy_stack_answer_without_local_eligibility_is_refused() -> None:
+    """The answer shape names local eligibility, so a stack reply lacking it is malformed."""
+
+    assert compose._ANSWERS["policy_stack"]["local_eligibility_required"] == "b"
+    assert not compose._answer_valid(
+        "policy_stack", {k: None for k in compose._ANSWERS["policy_stack"] if k != "local_eligibility_required"}
+    )
 
 
 def test_the_kinds_the_op_shipped_with_require_the_op_feature(monkeypatch: pytest.MonkeyPatch) -> None:

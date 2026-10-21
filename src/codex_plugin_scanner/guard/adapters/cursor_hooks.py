@@ -16,7 +16,6 @@ from ._modules.cursor.cursor_hook_events import unsupported_cursor_hook_events
 from ._modules.cursor.cursor_hook_guard_cli import HOOK_SCRIPT_TEMPLATE_RESOLVER
 from ._modules.cursor.cursor_hook_payload import (
     _validated_hol_guard_src_path,
-    cursor_hook_requires_approval_center_queue,
     cursor_hook_response_from_guard,
     cursor_hook_should_block,
     cursor_hook_would_prompt_user,
@@ -632,7 +631,6 @@ __all__ = [
     "_resolve_guard_cli_command",
     "_strip_managed_hook_entries",
     "_validated_hol_guard_src_path",
-    "cursor_hook_requires_approval_center_queue",
     "cursor_hook_response_from_guard",
     "cursor_hook_script_source",
     "cursor_hook_should_block",

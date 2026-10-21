@@ -73,6 +73,7 @@ fn dispatch(request: &ShimAdminRequestV2) -> Result<Value, Failure> {
     let value = match request.subop.as_str() {
         "status" => shims::package_shim_status(&context, path_env).map(object),
         "dashboard_status" => shims::package_shim_dashboard_status(&context).map(object),
+        "protection_projection" => shims::package_shim_protection(&context).map(object),
         "cloud_coverage" => {
             shims::package_shim_cloud_coverage(&context, request.generated_at.as_deref())
         }

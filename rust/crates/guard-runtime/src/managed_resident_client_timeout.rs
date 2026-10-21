@@ -21,8 +21,15 @@ const SKILL_SCAN_TIMEOUT_CEILING_MS: u64 = 60_000;
 /// their budget must not be clamped to the nine-second ceiling that would
 /// abort a legitimate test run mid-flight. The
 /// package-shim admin op shares it: a probe runs each installed shim under its
-/// own per-shim timeout.
+/// own per-shim timeout. So does the contained workspace write, whose caller
+/// allows the write two minutes.
 const CONTAINED_RUNNER_TIMEOUT_CEILING_MS: u64 = 670_000;
+/// A contained execute request carries its own process timeout, which the
+/// containment contract bounds at one hour. The client adds thirty seconds of
+/// transport slack so the resident, not the caller, reports a timed-out child,
+/// and clamping that budget to nine seconds would discard the reply of a
+/// healthy contained run that was permitted to take longer.
+const CONTAINED_EXECUTE_TIMEOUT_CEILING_MS: u64 = 3_630_000;
 /// The containment self-probe runs a real contained process under a five
 /// second timeout and may spend another five seconds reaping it, so the
 /// nine-second default would abort a probe that is still finishing and report
@@ -47,8 +54,10 @@ pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
             "contained_node_execute"
             | "contained_typescript_execute"
             | "contained_package_script_execute"
+            | "contained_workspace_write_execute"
             | "shim_admin",
         ) => CONTAINED_RUNNER_TIMEOUT_CEILING_MS,
+        Some("contained_execute") => CONTAINED_EXECUTE_TIMEOUT_CEILING_MS,
         Some("containment_health_probe") => CONTAINMENT_HEALTH_PROBE_TIMEOUT_CEILING_MS,
         Some("codex_request_resume") => CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS,
         Some("native_bash_execute") => guard_contracts::NATIVE_BASH_EXECUTE_MAX_TIMEOUT_MS + 1_000,

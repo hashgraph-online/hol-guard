@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime import containment_outputs as outputs_module
+from codex_plugin_scanner.guard.runtime.contained_execution_common import file_sha256
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentPolicy,
     ContainmentRequest,
 )
-from codex_plugin_scanner.guard.runtime.containment_executor import file_sha256
 from codex_plugin_scanner.guard.runtime.containment_outputs import (
     OutputBoundaryError,
     capture_declared_outputs,

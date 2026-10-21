@@ -297,8 +297,6 @@ def _dto_shape(query: str, value: Any) -> bool:
             )
             and value["sensitivity"] in {"high", "critical"}
         )
-    if query == "path_batch":
-        return isinstance(value, list) and len(value) <= 128 and all(_dto_shape("path", item) for item in value)
     if query == "legacy":
         return isinstance(value, list) and len(value) <= 9 and all(isinstance(item, str) for item in value)
     if query == "content":

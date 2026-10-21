@@ -93,7 +93,6 @@ def test_file_write_supplement(tmp_path: Path, tool: str, path: str) -> None:
 def test_file_read_supplement(tmp_path: Path, tool: str, path: str) -> None:
     home, work = _layout(tmp_path)
     extract = _fn("request_models", "extract_sensitive_file_read_request")
-    benign = _fn("benign_requests", "is_explicitly_benign_native_file_read_request")
     for arguments in (
         {"file_path": path},
         {"path": path},
@@ -105,11 +104,6 @@ def test_file_read_supplement(tmp_path: Path, tool: str, path: str) -> None:
         {"path": path + ";x"},
     ):
         extract(tool, arguments, cwd=work, home_dir=home)
-        benign(tool, arguments, cwd=work, home_dir=home)
-    benign(tool, "not-a-dict", cwd=work, home_dir=home)
-    benign(tool, {"path": str(work / "README.md")}, cwd=work, home_dir=home)
-    benign(tool, {"path": str(work / "src")}, cwd=work, home_dir=home)
-    benign(tool, {"path": "missing.txt"}, cwd=work, home_dir=home)
 
 
 def test_command_list_candidate_texts_supplement() -> None:

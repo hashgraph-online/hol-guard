@@ -134,6 +134,7 @@ def test_workflow_approval_identity_accepts_exact_bytes_restored_after_drift(
             data_flow_action=None,
             scanner_action=None,
             current_action="require-reapproval",
+            risk_classes=(),
             data_flow_signals=(),
             scanner_evidence=(),
             workflow_approval_record=record(),

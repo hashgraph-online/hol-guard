@@ -340,6 +340,7 @@ export class ExtensionControlApiError extends Error {
     readonly status: number,
     readonly code?: string,
     readonly recoveryAction?: string,
+    readonly cause?: string,
   ) {
     super(message);
   }
@@ -364,6 +365,7 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
         typeof (error.recovery as Record<string, unknown>).action === "string"
         ? (error.recovery as Record<string, unknown>).action as string
         : undefined,
+      typeof error.cause === "string" ? error.cause : undefined,
     );
   }
   return payload;

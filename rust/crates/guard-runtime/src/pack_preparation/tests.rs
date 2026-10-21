@@ -138,9 +138,11 @@ fn unavailable_policy_is_a_typed_response_and_offline_never_requests_transfers()
         Failure::Batch(vec![json!({"need":reference("data", 3, 3)})]),
         Failure::Archives(json!([{"length":3}])),
     ] {
+        // The subset itself still never fetches; it reports the typed reason
+        // so the caller can prepare again from the published root.
         assert_eq!(
-            respond(&offline, Err(failure)).unwrap_err(),
-            "offline subset cannot fetch uncached policy"
+            respond(&offline, Err(failure)).unwrap(),
+            json!({"unavailable":UNAVAILABLE})
         );
     }
     // Unavailability is reported, not fetched, even for a committed subset.

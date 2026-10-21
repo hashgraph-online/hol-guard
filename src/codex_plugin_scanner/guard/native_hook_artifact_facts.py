@@ -23,9 +23,13 @@ from uuid import uuid4
 
 from .native_context import _resolve_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
+from .native_hook_artifact_compose import HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE
 from .native_store_policy import _payload
 
-HOOK_ARTIFACT_FACTS_FEATURE = "hook-artifact-facts-v1"
+# The facts answer ``skip_native_floor`` only once the policy-stack tail is
+# served, so the facts are asked for under that feature: a runtime without it
+# omits the fact the hook now reads. It ships with ``hook-artifact-facts-v1``.
+HOOK_ARTIFACT_FACTS_FEATURE = HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE
 _REQUEST_SCHEMA = "guard-hook-artifact-facts-request.v1"
 _RESULT_SCHEMA = "guard-hook-artifact-facts-result.v1"
 _TIMEOUT_SECONDS = 10.0

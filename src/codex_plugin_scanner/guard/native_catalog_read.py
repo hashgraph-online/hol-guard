@@ -49,6 +49,14 @@ _ERROR_STATUS = {
 # A resident that is busy or timed out is a temporary fault, not protocol absence:
 # answering 501 would send every client to the whole v1 catalog under load.
 CATALOG_READ_TRANSPORT_FAILED = "catalog_read_transport_failed"
+# Discovery preparation has failed on every recent attempt, so a client's retry
+# schedule cannot clear it. This is still not protocol absence: the runtime is
+# present and advertises the capability, and a 501 here would silently serve the
+# v1 catalog while an installed runtime stayed broken. See ADR 0014.
+CATALOG_READ_PREPARATION_FAILED = "catalog_read_preparation_failed"
+# `catalog_delivery.discovery.PREPARATION_FAILING`, matched by value so a test
+# that stubs the discovery module keeps the behaviour it has today.
+DISCOVERY_PREPARATION_FAILING = "native discovery preparation failing"
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,7 +163,9 @@ def native_catalog_read(
                 type(handle) is not DiscoveryHandle or handle.guard_home != guard_home.absolute()
             ):
                 raise ValueError("discovery handle is unverified")
-        except (ImportError, OSError, ValueError, KeyError, TypeError):
+        except (ImportError, OSError, ValueError, KeyError, TypeError) as error:
+            if isinstance(error, ValueError) and str(error) == DISCOVERY_PREPARATION_FAILING:
+                return NativeCatalogReadResult(status=503, error_code=CATALOG_READ_PREPARATION_FAILED)
             return NativeCatalogReadResult(status=503, error_code="catalog_read_model_unavailable")
         envelope["operation"] = "catalog_read_v2"
         envelope["request"] = {
@@ -209,6 +219,7 @@ def native_catalog_read(
 
 __all__ = [
     "CATALOG_READ_FEATURE",
+    "CATALOG_READ_PREPARATION_FAILED",
     "CATALOG_READ_TRANSPORT_FAILED",
     "MAX_CATALOG_V2_BODY_BYTES",
     "NativeCatalogReadResult",

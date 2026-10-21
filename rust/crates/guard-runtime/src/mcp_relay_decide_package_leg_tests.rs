@@ -60,6 +60,7 @@ fn view() -> HarnessView {
         "harness_actions": Value::Null,
         "risk_actions": {},
         "harness_risk_actions": {},
+        "harness_postures": {},
         "security_level": "balanced",
         "protection_posture": "balanced",
         "protection_posture_explicit": false,

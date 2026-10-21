@@ -307,64 +307,6 @@ def _emit(command: str, payload: dict[str, object], as_json: bool) -> None:
 def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
     return args.harness == "copilot" and not getattr(args, "json", False)
 
-def _should_emit_native_hook_response(args: argparse.Namespace) -> bool:
-    harness = _canonical_harness_name(args.harness)
-    natives = {"claude-code", "codex", "kimi", "grok", "pi", "omp", "zcode", "devin"}
-    return harness == "hermes" or (harness in natives and not getattr(args, "json", False))
-
-def _should_emit_claude_native_pretooluse_notice(
-    args: argparse.Namespace,
-    *,
-    event_name: str,
-    policy_action: str,
-) -> bool:
-    return (
-        _canonical_harness_name(args.harness) == "claude-code"
-        and event_name == "PreToolUse"
-        and policy_action in {"review", "require-reapproval"}
-    )
-
-def _should_emit_native_hook_json_response(
-    args: argparse.Namespace,
-    *,
-    event_name: str,
-    output_stream: TextIO | None,
-) -> bool:
-    harness = _canonical_harness_name(args.harness)
-    if harness == "grok" and getattr(args, "json", False):
-        return True
-    if harness == "zcode" and getattr(args, "json", False):
-        return True
-    if harness == "codex" and getattr(args, "json", False) and event_name == "UserPromptSubmit":
-        return True
-    return (
-        harness in {"claude-code", "codex"}
-        and getattr(args, "json", False)
-        and output_stream is not None
-        and (
-            event_name in {"PreToolUse", "Notification"}
-            or (harness == "claude-code" and event_name == "UserPromptSubmit")
-        )
-    )
-
-def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
-    canonical = _canonical_harness_name(args.harness)
-    compact_event = event_name.replace("_", "").replace("-", "").lower()
-    blocking = compact_event in {"pretooluse", "userpromptsubmit", "pretoolcall"}
-    if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode", "devin"} and blocking:
-        if canonical == "zcode":
-            from ..adapters._modules.zcode.zcode_hooks import zcode_hook_process_exit
-
-            # ZCode turns exit code 2 into an unconditional deny and never
-            # parses the stdout JSON, so review-tier PreToolUse actions fall
-            # through to the JSON response path where
-            # ``permissionDecision: "ask"`` can reach ZCode's native
-            # permission prompt (and the process exits 0).
-            return zcode_hook_process_exit(policy_action=policy_action, event_name=event_name) == 2
-        return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
-    return False
-
-
 def _codex_browser_approval_decision(
     *,
     args: argparse.Namespace,
@@ -817,7 +759,5 @@ __all__ = [
     "_open_guard_cloud_app", "_policy_write_needs_approval_gate", "_policy_write_requires_approval_gate",
     "_preferred_approval_review_url", "_primary_approval_lookup_kwargs", "_record_harness_usage_for_hook",
     "_resolve_cisco_scan_options", "_run_apps_command", "_run_consumer_scan_with_mode",
-    "_should_emit_claude_native_pretooluse_notice", "_should_emit_copilot_hook_response",
-    "_should_emit_native_hook_exit_block", "_should_emit_native_hook_json_response",
-    "_should_emit_native_hook_response",
+    "_should_emit_copilot_hook_response",
 ]

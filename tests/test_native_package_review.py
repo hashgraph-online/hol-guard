@@ -27,170 +27,13 @@ ZOD_METADATA = {
 }
 
 
-def _install_npm(prefix: Path, version: str) -> None:
-    package = prefix / "lib" / "node_modules" / "npm"
-    (package / "bin").mkdir(parents=True)
-    (package / "bin" / "npm-cli.js").write_text("#!/usr/bin/env node\n", encoding="utf-8")
-    (package / "bin" / "npm-cli.js").chmod(0o755)
-    (package / "package.json").write_text(json.dumps({"name": "npm", "version": version}), encoding="utf-8")
-    (prefix / "bin").mkdir()
-    (prefix / "bin" / "npm").symlink_to(Path("..") / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js")
-    (prefix / "bin" / "node").write_text("#!/bin/sh\n", encoding="utf-8")
-    (prefix / "bin" / "node").chmod(0o755)
-
-
-def _environment(prefix: Path, home: Path, *names: str, path: str | None = None) -> dict[str, object]:
-    return {
-        "path": path if path is not None else f"{prefix / 'bin'}{os.pathsep}/usr/bin",
-        "home": str(home),
-        "environment_names": sorted({"HOME", "PATH", *names}),
-        "library_search_paths": {},
-    }
-
-
-@pytest.fixture
-def npm_layout(tmp_path: Path) -> tuple[Path, Path, Path]:
-    prefix, home, workspace = tmp_path / "prefix", tmp_path / "home", tmp_path / "workspace"
-    home.mkdir()
-    workspace.mkdir()
-    _install_npm(prefix, "11.9.0")
-    return prefix, home, workspace
-
-
 pytestmark_posix = pytest.mark.skipif(os.name == "nt", reason="npm layout proof is POSIX-only")
 
 
-@pytestmark_posix
-def test_standard_npm_install_reports_its_version(npm_layout: tuple[Path, Path, Path]) -> None:
-    prefix, home, workspace = npm_layout
-    (home / ".npmrc").write_text("prefix=/tmp/npm-global\n//registry.npmjs.org/:_authToken=x\n", encoding="utf-8")
+def _proof(version: str | None = "11.9.0", *, filters_outside: bool = True):
+    """A stand-in for the resident's npm proof, which the Rust tests cover."""
 
-    assert package_review.verified_npm_version(_environment(prefix, home), workspace=workspace) == "11.9.0"
-
-
-@pytestmark_posix
-def test_an_added_ca_keeps_the_npm_proof(npm_layout: tuple[Path, Path, Path]) -> None:
-    prefix, home, workspace = npm_layout
-
-    environment = _environment(prefix, home, "NODE_EXTRA_CA_CERTS")
-    assert package_review.verified_npm_version(environment, workspace=workspace) == "11.9.0"
-
-
-@pytestmark_posix
-@pytest.mark.parametrize("name", ["npm_config_cache", "NPM_CONFIG_UPDATE_NOTIFIER", "npm_config_fund"])
-def test_cache_and_reporting_settings_keep_the_npm_proof(npm_layout: tuple[Path, Path, Path], name: str) -> None:
-    prefix, home, workspace = npm_layout
-
-    assert package_review.verified_npm_version(_environment(prefix, home, name), workspace=workspace) == "11.9.0"
-
-
-@pytestmark_posix
-def test_a_loader_path_outside_the_workspace_keeps_the_npm_proof(npm_layout: tuple[Path, Path, Path]) -> None:
-    prefix, home, workspace = npm_layout
-    libraries = home / ".local" / "lib"
-    libraries.mkdir(parents=True)
-    environment = _environment(prefix, home, "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH")
-    environment["library_search_paths"] = {"LD_LIBRARY_PATH": str(libraries), "DYLD_LIBRARY_PATH": str(libraries)}
-
-    assert package_review.verified_npm_version(environment, workspace=workspace) == "11.9.0"
-
-
-@pytestmark_posix
-@pytest.mark.parametrize("entry", ["", "lib", ".", "{workspace}/lib", "{home}/lib:{workspace}", "{home}/link/lib"])
-def test_a_loader_path_reaching_the_workspace_fails_closed(npm_layout: tuple[Path, Path, Path], entry: str) -> None:
-    prefix, home, workspace = npm_layout
-    (home / "link").symlink_to(workspace)
-    environment = _environment(prefix, home, "LD_LIBRARY_PATH")
-    environment["library_search_paths"] = {"LD_LIBRARY_PATH": entry.format(home=home, workspace=workspace)}
-
-    assert package_review.verified_npm_version(environment, workspace=workspace) is None
-
-
-@pytestmark_posix
-def test_a_loader_path_without_its_stamped_value_fails_closed(npm_layout: tuple[Path, Path, Path]) -> None:
-    prefix, home, workspace = npm_layout
-
-    environment = _environment(prefix, home, "LD_LIBRARY_PATH")
-    assert package_review.verified_npm_version(environment, workspace=workspace) is None
-
-
-@pytestmark_posix
-@pytest.mark.parametrize(
-    "name",
-    [
-        "npm_config_registry",
-        "NPM_CONFIG_ALLOW_GIT",
-        "npm_config__cache",
-        "npm_config_cafile",
-        "NODE_OPTIONS",
-        "NODE_PATH",
-        "PREFIX",
-        "DESTDIR",
-        "NODE_TLS_REJECT_UNAUTHORIZED",
-    ],
-)
-def test_settings_that_change_npm_fail_closed(npm_layout: tuple[Path, Path, Path], name: str) -> None:
-    prefix, home, workspace = npm_layout
-
-    assert package_review.verified_npm_version(_environment(prefix, home, name), workspace=workspace) is None
-
-
-@pytestmark_posix
-@pytest.mark.parametrize(
-    "npmrc",
-    ["registry=https://example.test/\n", "@acme:registry=https://example.test/\n", "strict-ssl=false\n"],
-)
-def test_user_config_that_moves_the_fetch_fails_closed(npm_layout: tuple[Path, Path, Path], npmrc: str) -> None:
-    prefix, home, workspace = npm_layout
-    (home / ".npmrc").write_text(npmrc, encoding="utf-8")
-
-    assert package_review.verified_npm_version(_environment(prefix, home), workspace=workspace) is None
-
-
-@pytestmark_posix
-@pytest.mark.parametrize("home", [None, "", "relative/home"])
-def test_unlocatable_user_config_fails_closed(npm_layout: tuple[Path, Path, Path], home: str | None) -> None:
-    prefix, _home, workspace = npm_layout
-    environment = _environment(prefix, _home)
-    environment["home"] = home
-
-    assert package_review.verified_npm_version(environment, workspace=workspace) is None
-
-
-@pytestmark_posix
-def test_relative_path_entry_before_npm_fails_closed(npm_layout: tuple[Path, Path, Path]) -> None:
-    prefix, home, workspace = npm_layout
-    environment = _environment(prefix, home, path=f"node_modules/.bin{os.pathsep}{prefix / 'bin'}")
-
-    assert package_review.verified_npm_version(environment, workspace=workspace) is None
-
-
-@pytestmark_posix
-def test_npm_or_node_from_the_workspace_fails_closed(npm_layout: tuple[Path, Path, Path]) -> None:
-    prefix, home, workspace = npm_layout
-    local = workspace / "tools"
-    _install_npm(local, "11.9.0")
-
-    assert package_review.verified_npm_version(_environment(local, home), workspace=workspace) is None
-    shadow = workspace / "bin"
-    shadow.mkdir()
-    (shadow / "node").write_text("#!/bin/sh\n", encoding="utf-8")
-    (shadow / "node").chmod(0o755)
-    environment = _environment(prefix, home, path=f"{shadow}{os.pathsep}{prefix / 'bin'}")
-    assert package_review.verified_npm_version(environment, workspace=workspace) is None
-
-
-@pytestmark_posix
-def test_npm_shim_without_a_readable_version_fails_closed(npm_layout: tuple[Path, Path, Path]) -> None:
-    _prefix, home, workspace = npm_layout
-    shim = home / "shim"
-    shim.mkdir()
-    for name in ("npm", "node"):
-        (shim / name).write_text("#!/bin/sh\n", encoding="utf-8")
-        (shim / name).chmod(0o755)
-
-    environment = _environment(shim.parent, home, path=str(shim))
-    assert package_review.verified_npm_version(environment, workspace=workspace) is None
+    return lambda *_args, **_kwargs: (version, filters_outside)
 
 
 @pytest.mark.parametrize(
@@ -216,14 +59,21 @@ def test_only_a_plain_npm_package_review_is_settled(tmp_path: Path, command: str
     assert response is None
 
 
-def _settle_piped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str, path: str) -> list[list[str]]:
+def _settle_piped(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    command: str,
+    path: str,
+    *,
+    filters_outside: bool = True,
+) -> list[list[str]]:
     """The npm tokens the evaluator saw for ``command``."""
 
     workspace = tmp_path / "workspace"
     workspace.mkdir(exist_ok=True)
     seen: list[list[str]] = []
     monkeypatch.setattr(package_review.os, "name", "posix")
-    monkeypatch.setattr(package_review, "verified_npm_version", lambda *_args, **_kwargs: "11.9.0")
+    monkeypatch.setattr(package_review, "npm_install_proof", _proof(filters_outside=filters_outside))
     monkeypatch.setattr(
         package_review,
         "_evaluate",
@@ -273,15 +123,26 @@ def test_other_trailing_commands_keep_review(tmp_path: Path, monkeypatch: pytest
 
 
 @pytestmark_posix
-def test_a_filter_from_the_workspace_keeps_review(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    tools = tmp_path / "workspace" / "bin"
-    tools.mkdir(parents=True)
-    (tools / "tail").write_text("#!/bin/sh\n", encoding="utf-8")
-    (tools / "tail").chmod(0o755)
+def test_a_filter_the_resident_cannot_place_outside_keeps_review(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     command = f"npm install zod {SAFE_FLAGS} 2>&1 | tail -3"
 
-    assert _settle_piped(tmp_path, monkeypatch, command, f"{tools}:/usr/bin:/bin") == []
-    assert _settle_piped(tmp_path, monkeypatch, command, "") == []
+    assert _settle_piped(tmp_path, monkeypatch, command, "/usr/bin:/bin", filters_outside=False) == []
+
+
+@pytest.mark.parametrize(
+    ("filters", "programs"),
+    [
+        ("", []),
+        ("| tail -3", ["tail"]),
+        (" | tail -3", ["tail"]),
+        ("| head -20 | tail -n3", ["head", "tail"]),
+        ("| tail -3 | tail -1", ["tail"]),
+    ],
+)
+def test_the_filter_programs_are_named_once_in_order(filters: str, programs: list[str]) -> None:
+    assert package_review._filter_programs(filters) == programs
 
 
 SCRIPT_FREE = {"name": "zod", "scriptFreeRegistryInstall": True}
@@ -319,7 +180,7 @@ def test_evaluator_verdict_settles_the_review(
     expected: dict | None,
 ) -> None:
     monkeypatch.setattr(package_review.os, "name", "posix")
-    monkeypatch.setattr(package_review, "verified_npm_version", lambda *_args, **_kwargs: "11.9.0")
+    monkeypatch.setattr(package_review, "npm_install_proof", _proof())
     monkeypatch.setattr(
         package_review,
         "_evaluate",
@@ -482,7 +343,7 @@ def test_the_safety_guide_install_reaches_the_evaluator_and_settles(
         assert f"`{named}`" in " ".join(guide.split())
     seen: list[list[str]] = []
     monkeypatch.setattr(package_review.os, "name", "posix")
-    monkeypatch.setattr(package_review, "verified_npm_version", lambda *_args, **_kwargs: "11.6.2")
+    monkeypatch.setattr(package_review, "npm_install_proof", _proof("11.6.2"))
     monkeypatch.setattr(
         package_review,
         "_evaluate",

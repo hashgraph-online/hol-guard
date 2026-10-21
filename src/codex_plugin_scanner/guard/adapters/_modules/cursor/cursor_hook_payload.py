@@ -44,23 +44,6 @@ def cursor_hook_would_prompt_user(
     return policy_action in {"require-reapproval", "review"}
 
 
-def cursor_hook_requires_approval_center_queue(
-    *,
-    policy_action: str,
-    guard_payload: Mapping[str, object] | None = None,
-) -> bool:
-    """Return True when Cursor native prompts should also appear in the approval center.
-
-    Currently equivalent to ``cursor_hook_would_prompt_user``; kept separate so the
-    two concepts can diverge without touching call sites.
-    """
-
-    return cursor_hook_would_prompt_user(
-        policy_action=policy_action,
-        guard_payload=guard_payload,
-    )
-
-
 def cursor_hook_response_from_guard(
     *,
     policy_action: str,

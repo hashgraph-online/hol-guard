@@ -10,6 +10,7 @@ import hashlib
 import os
 import re
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -57,7 +58,34 @@ def _check_url(url):
         raise ValueError("release transport destination is not permitted")
 
 
+# A publication that momentarily refuses the request fails an operator's save
+# outright, and the operator has nothing to do about it but try again later.
+# Retry the refusals that are transient by definition: a rate limit, a
+# server-side error, and a connection that never completed. Every byte is still
+# authenticated afterwards, so a retry can admit nothing a first attempt could
+# not, and no other failure is repeated.
+_RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
+_RETRY_DELAYS = (0.5, 2.0)
+
+
+def _retriable(error):
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code in _RETRY_STATUS
+    return isinstance(error, (urllib.error.URLError, ConnectionError, TimeoutError))
+
+
 def download(url, maximum):
+    for delay in _RETRY_DELAYS:
+        try:
+            return _download(url, maximum)
+        except OSError as error:
+            if not _retriable(error):
+                raise
+        time.sleep(delay)
+    return _download(url, maximum)
+
+
+def _download(url, maximum):
     if type(maximum) is not int or not 0 < maximum <= 32 * 1024 * 1024:
         raise ValueError("release transport byte limit invalid")
     for redirects in range(5):

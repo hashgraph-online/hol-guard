@@ -82,7 +82,10 @@
   "src/codex_plugin_scanner/guard/runtime/command_tui_runner_extensions.py",
   "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge_flow.py",
   "src/codex_plugin_scanner/guard/adapters/codex_daemon_bridge_failure_reason.py",
-  "src/codex_plugin_scanner/guard/adapters/codex_daemon_start_wait.py"
+  "src/codex_plugin_scanner/guard/adapters/codex_daemon_start_wait.py",
+  "src/codex_plugin_scanner/guard/runtime/npm_source_spec.py",
+  "src/codex_plugin_scanner/guard/runtime/github_pr_body_file.py",
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_body_safety.py"
  ],
  "retired_tests": [
   {
@@ -407,7 +410,7 @@
   {
    "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_start_lock_wait_stays_inside_request_deadline",
    "replacement_nodes": [
-    "rust/crates/guard-runtime/src/managed_resident_tests.rs::client_deadline_is_bounded",
+    "rust/crates/guard-runtime/src/managed_resident_client_timeout_tests.rs::client_deadline_is_bounded",
     "ci/native_runtime/test_native_hook_client_timeout.py::test_native_hook_client_start_timeout_contains_new_managed_processes"
    ],
    "status": "native_behavior_ported_requires_ci"
@@ -438,7 +441,7 @@
   {
    "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_request_shares_one_deadline_across_probe_start_and_retry",
    "replacement_nodes": [
-    "rust/crates/guard-runtime/src/managed_resident_tests.rs::client_deadline_is_bounded",
+    "rust/crates/guard-runtime/src/managed_resident_client_timeout_tests.rs::client_deadline_is_bounded",
     "ci/native_runtime/test_native_hook_client_timeout.py::test_native_hook_client_start_timeout_contains_new_managed_processes"
    ],
    "status": "native_behavior_ported_requires_ci"
@@ -6375,6 +6378,258 @@
    ],
    "status": "obsolete_implementation_assertion",
    "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. Python no longer decodes the hook body: the native child reads the bytes and forwards them."
+  },
+  {
+   "old_node": "tests/test_npm_source_spec.py::test_equivalent_github_source_forms_share_canonical_identity",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/npm_source_spec.rs::equivalent_github_source_forms_share_canonical_identity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_npm_source_spec.py::test_git_revision_state_is_classified_conservatively",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/npm_source_spec.rs::git_revision_state_is_classified_conservatively"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_npm_source_spec.py::test_hosted_git_archive_urls_remain_repository_sources",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/npm_source_spec.rs::hosted_git_archive_urls_remain_repository_sources"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_npm_source_spec.py::test_idna_and_nondefault_ports_are_canonicalized_without_collapsing_distinct_hosts",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/npm_source_spec.rs::idna_and_nondefault_ports_do_not_collapse_distinct_hosts"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_npm_source_spec.py::test_custom_git_hosts_support_root_level_repositories",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/npm_source_spec.rs::custom_git_hosts_support_root_level_repositories"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_npm_source_spec.py::test_ambiguous_or_malformed_sources_fail_with_stable_reasons",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/npm_source_spec.rs::ambiguous_or_malformed_sources_fail_with_stable_reasons"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_npm_source_spec.py::test_query_credentials_are_redacted_without_changing_git_identity",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/npm_source_spec.rs::query_credentials_are_redacted_without_changing_git_identity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_npm_source_spec.py::test_deeply_nested_npm_aliases_fail_without_recursion",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/npm_source_spec.rs::deeply_nested_npm_aliases_fail_without_recursion"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_package_review.py::test_standard_npm_install_reports_its_version",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/verified_npm_tests.rs::a_standard_npm_on_an_absolute_path_proves_its_version"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Proved the npm layout read that the resident now performs; the Rust test owns the same standard-prefix proof."
+  },
+  {
+   "old_node": "tests/test_native_package_review.py::test_an_added_ca_keeps_the_npm_proof",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/verified_npm_tests.rs::an_unrelated_setting_still_proves_the_version"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserted which exported names leave the fetch alone, a decision that moved into the native evaluator."
+  },
+  {
+   "old_node": "tests/test_native_package_review.py::test_cache_and_reporting_settings_keep_the_npm_proof",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/verified_npm_tests.rs::an_inert_npm_setting_still_proves_the_version"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserted the inert npm_config settings list, which is now a native constant."
+  },
+  {
+   "old_node": "tests/test_native_package_review.py::test_a_loader_path_outside_the_workspace_keeps_the_npm_proof",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/verified_npm_tests.rs::a_loader_path_outside_the_workspace_still_proves_the_version"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercised the retired Python loader-path walk; the resident resolves those paths now."
+  },
+  {
+   "old_node": "tests/test_native_package_review.py::test_a_loader_path_reaching_the_workspace_fails_closed",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/verified_npm_tests.rs::a_loader_path_inside_the_workspace_proves_nothing"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercised the retired Python loader-path walk, including its symlink resolution, which is native."
+  },
+  {
+   "old_node": "tests/test_native_package_review.py::test_a_loader_path_without_its_stamped_value_fails_closed",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/verified_npm_tests.rs::a_loader_variable_exported_without_its_value_proves_nothing"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserted the stamped-value requirement the native evaluator now enforces."
+  },
+  {
+   "old_node": "tests/test_native_package_review.py::test_settings_that_change_npm_fail_closed",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/verified_npm_tests.rs::an_environment_setting_that_moves_the_fetch_proves_nothing",
+    "rust/crates/guard-command/src/verified_npm_tests.rs::npm_config_names_are_read_the_way_npm_reads_them"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Pinned the npm_config name normalization that moved into the native evaluator."
+  },
+  {
+   "old_node": "tests/test_native_package_review.py::test_user_config_that_moves_the_fetch_fails_closed",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/verified_npm_tests.rs::an_npmrc_that_moves_the_registry_proves_nothing"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Read .npmrc in Python; the resident reads and classifies those keys now."
+  },
+  {
+   "old_node": "tests/test_native_package_review.py::test_unlocatable_user_config_fails_closed",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/verified_npm_tests.rs::an_unlocatable_home_proves_nothing"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserted the absolute-home requirement that the native evaluator enforces."
+  },
+  {
+   "old_node": "tests/test_native_package_review.py::test_relative_path_entry_before_npm_fails_closed",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/verified_npm_tests.rs::a_relative_path_entry_proves_nothing"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercised the retired Python PATH resolution, which the resident performs."
+  },
+  {
+   "old_node": "tests/test_native_package_review.py::test_npm_or_node_from_the_workspace_fails_closed",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/verified_npm_tests.rs::an_npm_inside_the_workspace_proves_nothing"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercised the retired Python PATH resolution and its workspace containment check."
+  },
+  {
+   "old_node": "tests/test_native_package_review.py::test_npm_shim_without_a_readable_version_fails_closed",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/verified_npm_tests.rs::a_shim_that_is_not_npm_cli_proves_nothing"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Read the npm manifest in Python; the resident reads it and applies the size bound now."
+  },
+  {
+   "old_node": "tests/test_native_package_review.py::test_a_filter_from_the_workspace_keeps_review",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/verified_npm_tests.rs::an_output_filter_inside_the_workspace_is_refused",
+    "rust/crates/guard-command/src/verified_npm_tests.rs::no_output_filter_needs_no_program"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Resolved the output filter programs in Python; the resident resolves them in the same op as the npm proof."
+  },
+  {
+   "old_node": "tests/test_guard_github_pr_body_file.py::test_github_pr_body_file_accepts_bounded_owner_controlled_markdown",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/sfrs_gh_body_file_check.rs::bounded_owner_controlled_markdown_is_accepted_for_both_line_endings"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_github_pr_body_file.py::test_github_pr_body_file_accepts_canonical_markdown_name",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/sfrs_gh_body_file_check.rs::canonical_pr_body_names_are_accepted_and_other_markdown_is_not"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_github_pr_body_file.py::test_github_pr_body_file_rejects_arbitrary_markdown_name",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/sfrs_gh_body_file_check.rs::canonical_pr_body_names_are_accepted_and_other_markdown_is_not"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_github_pr_body_file.py::test_github_pr_body_file_rejects_pr_body_marker_only_as_suffix",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/sfrs_gh_body_file_check.rs::canonical_pr_body_names_are_accepted_and_other_markdown_is_not"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_github_pr_body_file.py::test_github_pr_body_file_accepts_named_body_in_user_cascade_projects",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/sfrs_gh_body_file_check.rs::a_named_body_under_cascade_projects_is_authored_outside_the_working_tree"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_github_pr_body_file.py::test_github_pr_body_file_rejects_oversized_markdown",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/sfrs_gh_body_file_check.rs::oversized_empty_and_sensitive_bodies_are_refused"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_github_pr_body_file.py::test_github_pr_body_file_rejects_sensitive_path",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/sfrs_gh_body_file_check.rs::oversized_empty_and_sensitive_bodies_are_refused"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_github_pr_body_file.py::test_github_pr_body_file_rejects_padded_operand",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/sfrs_gh_body_file_check.rs::a_padded_or_symlinked_operand_never_resolves"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_github_pr_body_file.py::test_github_pr_body_file_rejects_group_or_world_writable_file",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/sfrs_gh_body_file_check.rs::a_shared_body_or_a_shared_parent_directory_is_refused"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_github_pr_body_file.py::test_github_pr_body_file_rejects_writable_intermediate_directory",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/sfrs_gh_body_file_check.rs::a_shared_body_or_a_shared_parent_directory_is_refused"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_github_pr_body_file.py::test_windows_body_file_reader_binds_locked_path_and_descriptor_identity",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/sfrs_gh_body_file_check.rs::existing_locked_service_preserves_static_body_files_and_rejects_aliases"
+   ],
+   "status": "native_behavior_ported_requires_ci"
   }
  ],
  "preserved_tests": [
@@ -6682,6 +6937,11 @@
    "old_node": "tests/test_codex_daemon_start_wait.py::test_unparseable_or_empty_markers_do_not_count",
    "new_node": "tests/test_codex_daemon_dead_fastpath.py::test_unparseable_or_empty_markers_do_not_count",
    "reason": "A pure unit of codex_daemon_dead_fastpath.daemon_start_in_progress, moved unchanged into that module's own test file when the start-wait file was retired."
+  },
+  {
+   "old_node": "tests/test_npm_source_spec.py::test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit",
+   "new_node": "tests/test_guard_package_intent.py::test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit",
+   "reason": "Approval-fingerprint equivalence exercises the native package-intent artifact path, not the retired Python source parser, so it moves to the package-intent suite unchanged."
   }
  ],
  "unchanged_regression_suites": [
@@ -7250,6 +7510,30 @@
    "base_commit": "68558a59d9e8b6d4a8a86ef9de9263de41248068",
    "remaining_role": "Public DTO facades and unchanged live Python AST helpers; all GitHub shell and PR expansion semantics run in the existing bound resident. Pure PR flags are reused by command/depth/runtime binary identity, never filesystem verdicts.",
    "parity_fixture": "rust/crates/guard-command/tests/fixtures/shell_request_authority.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "forbidden_symbols": [
+    "verified_npm_version",
+    "_changes_npm",
+    "_loader_paths_outside",
+    "_npmrc_redirects_fetch",
+    "_resolve_executable",
+    "_filters_outside_workspace",
+    "_FETCH_REDIRECTING_KEYS",
+    "_INERT_NPM_SETTINGS",
+    "_ENVIRONMENT_OVERRIDES",
+    "_ENVIRONMENT_NAMES",
+    "_MAX_PACKAGE_JSON_BYTES",
+    "_MAX_NPMRC_BYTES"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/verified_npm.rs",
+    "rust/crates/guard-runtime/src/verified_npm_op.rs"
+   ],
+   "base_commit": "e309ad05c1bad4069f8ab4aa0a056c73bad5052f",
+   "remaining_role": "Parses the install command shape and settles the review; the npm proof and the output-filter resolution run in the resident and are applied without being re-derived."
   }
  ],
  "retired_bodies": [

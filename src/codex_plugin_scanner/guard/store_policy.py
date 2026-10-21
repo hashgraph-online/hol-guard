@@ -265,7 +265,8 @@ class StorePolicyMixin:
             decisions = build_policy_bundle_decisions(
                 validated_bundle,
                 device_id=str(device_metadata["installation_id"]),
-                device_name=str(device_metadata["device_label"]),
+                # The same name policy sync matched against; see ``_guard_device_metadata``.
+                device_name=cast("GuardStore", self).device_display_name(str(device_metadata["device_label"])),
             )
         except (KeyError, OSError, RuntimeError, TypeError, ValueError):
             return frozenset()

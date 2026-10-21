@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
+use crate::hook_artifact_compose_policy_tail::PolicyCompositionQueryV1;
+
 /// Schema discriminator for the request.
 pub const HOOK_ARTIFACT_COMPOSE_REQUEST_SCHEMA: &str = "guard-hook-artifact-compose-request.v1";
 /// Schema discriminator for the result.
@@ -105,6 +107,9 @@ pub enum HookArtifactComposeQueryV1 {
     /// Calibrate a base policy action against a detector run's risk and
     /// false-positive signals.
     SignalComposition(Box<SignalCompositionQueryV1>),
+    /// The settled verdict's `policy_composition` trace and receipt
+    /// `approval_source`.
+    PolicyComposition(Box<PolicyCompositionQueryV1>),
 }
 
 /// The store rows the package-firewall entitlement is resolved from.
@@ -222,6 +227,13 @@ pub struct PolicyArtifactFactsV1 {
     #[serde(default)]
     pub action_class: Option<String>,
     pub skill_is_known_bad: bool,
+    /// The native command floor does not run for this artifact: a package
+    /// request is decided by the package evaluator, and a verified
+    /// explicit-permission allow was already adjudicated against the
+    /// published control layer. The artifact facts answer it so the caller
+    /// need not read the artifact to decide whether to ask for the floor.
+    #[serde(default)]
+    pub skip_native_floor: bool,
 }
 
 impl PolicyArtifactFactsV1 {
@@ -277,6 +289,12 @@ pub struct NativeEdgeFactsV1 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct PolicyStackQueryV1 {
+    /// The hook event this evaluation runs for.
+    pub event_name: String,
+    /// The runtime artifact's type.
+    pub artifact_type: String,
+    /// The request carries a raw shell command a local tool grant could name.
+    pub has_raw_command: bool,
     pub policy_config: PolicyConfigFactsV1,
     pub runtime: PolicyArtifactFactsV1,
     pub approval_context: PolicyArtifactFactsV1,

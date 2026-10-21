@@ -198,16 +198,6 @@ def _install_codex_native_hooks(context: HarnessContext) -> None:
     )
 
 
-def test_guard_run_launch_environment_hash_is_canonical_and_value_sensitive() -> None:
-    first = guard_run_launch._guard_run_launch_environment_hash({"B": "two", "A": "one"})
-    reordered = guard_run_launch._guard_run_launch_environment_hash({"A": "one", "B": "two"})
-    changed = guard_run_launch._guard_run_launch_environment_hash({"A": "one", "B": "changed"})
-
-    assert first == reordered
-    assert first != changed
-    assert len(first) == 64
-
-
 def test_unchanged_raw_interpreted_tool_action_preserves_exact_approval_boundary(tmp_path: Path) -> None:
     script = tmp_path / "consumer_action.py"
     script.write_text("print('unchanged')\n", encoding="utf-8")

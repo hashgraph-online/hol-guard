@@ -7,6 +7,7 @@ mod git_metadata;
 mod glob_class;
 pub(super) mod grep;
 mod hint;
+mod names_only;
 mod options;
 mod rg;
 mod rg_whitelist;
@@ -220,19 +221,23 @@ fn expand_brace_globs(pattern: &str) -> Option<Vec<String>> {
         let open = candidate.find('{')?;
         let close = candidate[open + 1..].find('}')? + open + 1;
         let choices: Vec<&str> = candidate[open + 1..close].split(',').collect();
-        // A brace with no comma and no `..`, such as Git's `HEAD^{commit}` or
-        // `@{u}`, is literal text to the shell and a single alternative to a
-        // glob, so it is checked as its inner text: `{.env}` still names
-        // `.env`. A `..` sequence such as `.en{v..v}` expands in bash, so it
-        // keeps failing closed.
-        if choices.len() == 1 && !choices[0].contains('{') && !choices[0].contains("..") {
-            expanded.push(format!(
-                "{}{}{}",
-                &candidate[..open],
-                choices[0],
-                &candidate[close + 1..]
-            ));
-            continue;
+        // A brace with no comma and no `..`, such as Git's `HEAD^{commit}`,
+        // `@{u}` or a Go template `{{.Server.Version}}`, is literal text to the
+        // shell and a single alternative to a glob, so it is checked as its
+        // inner text: `{.env}` and `{{.env}}` still name `.env`. A `..`
+        // sequence such as `.en{v..v}` expands in bash, so it keeps failing
+        // closed.
+        if choices.len() == 1 && !choices[0].contains("..") {
+            let trimmed = choices[0].trim_start_matches('{');
+            if !trimmed.contains('{') {
+                let nested_braces = choices[0].len() - trimmed.len();
+                let closing = "}".repeat(nested_braces);
+                let suffix = candidate[close + 1..]
+                    .strip_prefix(closing.as_str())
+                    .unwrap_or(&candidate[close + 1..]);
+                expanded.push(format!("{}{trimmed}{suffix}", &candidate[..open],));
+                continue;
+            }
         }
         if choices.len() < 2 || expanded.len() + choices.len() > 16 {
             return None;
@@ -411,8 +416,14 @@ mod tests {
 
     #[test]
     fn brace_sequences_still_select_sensitive_names() {
-        // Git's brace suffixes are one literal alternative.
-        for literal in ["head^{commit}", "4dc51cdaa1^{tree}", "head@{0}", "@{u}"] {
+        // Git's brace suffixes and Go template fields are one literal alternative.
+        for literal in [
+            "head^{commit}",
+            "4dc51cdaa1^{tree}",
+            "head@{0}",
+            "@{u}",
+            "{{.server.version}}",
+        ] {
             assert!(!glob_can_select_sensitive_path(literal), "{literal}");
         }
         // Bash expands a `..` sequence: `.en{v..v}` is `.env`.
@@ -422,6 +433,7 @@ mod tests {
             "config/.en{v..v}",
             ".en{v..v..1}",
             "{.env}",
+            "{{.env}}",
             "{.env,readme.md}",
         ] {
             assert!(glob_can_select_sensitive_path(selecting), "{selecting}");

@@ -313,8 +313,11 @@ fn respond(input: &Value, result: Result<Value>) -> std::result::Result<Value, S
     let offline = input["profile"] == "committed-subset";
     let response = match result {
         Ok(value) => value,
+        // An offline subset cannot fetch, but the caller can: answering with
+        // the typed unavailable reason lets preparation retry against the
+        // published root instead of failing the operator's save outright.
         Err(Failure::Batch(_) | Failure::Need(_) | Failure::Archives(_)) if offline => {
-            return Err("offline subset cannot fetch uncached policy".into())
+            json!({"unavailable": UNAVAILABLE})
         }
         Err(Failure::Batch(needs)) => json!({"needs":needs}),
         Err(Failure::Need(reference)) => json!({"need":reference}),

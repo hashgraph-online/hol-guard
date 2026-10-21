@@ -152,14 +152,16 @@ _WINDOWS_PROFILES = frozenset(
         "node-eval-readonly-v1",
         "node-build-output-v1",
         "node-tool-readonly-v1",
+        "pytest-readonly-v2",
     }
 )
 
 
 def platform_contains(response: Mapping[str, object]) -> bool:
     """macOS runs every contained profile; Linux runs the workspace sandbox;
-    Windows runs installed Python and Node scripts, Vite builds and local
-    lint, typecheck and format checks in an AppContainer."""
+    Windows runs installed Python and Node scripts, a project's own pytest,
+    Vite builds and local lint, typecheck and format checks in an
+    AppContainer."""
     profile = response.get("required_execution_profile")
     return (
         sys.platform == "darwin"

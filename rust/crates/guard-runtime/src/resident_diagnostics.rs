@@ -240,6 +240,8 @@ pub(crate) enum Phase {
     ContextRuntimeExecutableIdentity,
     ContextRuntimeLaunchIdentity,
     ContextRuntimeLaunchIdentityMatches,
+    ContextGuardRunLaunchPlans,
+    ContextGuardRunAuthorizedPrefixes,
 }
 
 impl Phase {
@@ -271,6 +273,8 @@ impl Phase {
             Self::ContextRuntimeExecutableIdentity => "context_runtime_executable_identity",
             Self::ContextRuntimeLaunchIdentity => "context_runtime_launch_identity",
             Self::ContextRuntimeLaunchIdentityMatches => "context_runtime_launch_identity_matches",
+            Self::ContextGuardRunLaunchPlans => "context_guard_run_launch_plans",
+            Self::ContextGuardRunAuthorizedPrefixes => "context_guard_run_authorized_prefixes",
         }
     }
 }

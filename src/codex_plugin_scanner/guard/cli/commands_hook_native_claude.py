@@ -20,8 +20,6 @@ if TYPE_CHECKING:
         _claude_permission_request_additional_context,
         _claude_permission_request_system_message,
         _claude_permission_request_terminal_notice,
-        _is_claude_permission_prompt_notification,
-        _is_claude_permission_request,
         _resolve_claude_permission_request_policy_action,
     )
     from .commands_support_hook_payload import _emit_native_hook_notification_stderr, _emit_native_hook_response
@@ -48,10 +46,8 @@ def run_native_claude_permission_request(
     runtime_artifact: GuardArtifact | None,
     runtime_workspace: Path | None,
     store: GuardStore,
-) -> int | None:
+) -> int:
     payload_map = dict(payload)
-    if not _is_claude_permission_request(args, payload_map):
-        return None
     notice = _peek_claude_permission_notice(store, payload_map)
     if notice is not None:
         _mark_claude_pending_permission_prompt_seen(store=store, payload=payload_map, notice=notice)
@@ -134,10 +130,8 @@ def run_native_claude_permission_prompt_notification(
     output_stream: TextIO | None = None,
     payload: Mapping[str, object],
     store: GuardStore,
-) -> int | None:
+) -> int:
     payload_map = dict(payload)
-    if not _is_claude_permission_prompt_notification(args, payload_map):
-        return None
     notice = _load_claude_permission_notice(store, payload_map)
     _mark_claude_pending_permission_prompt_seen(store=store, payload=payload_map, notice=notice)
     store.add_event(

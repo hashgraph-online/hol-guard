@@ -22,7 +22,7 @@ fn test_containment_never_overrides_installed_policy_denies() {
         Some("/home/tester"),
         Some("/home/tester/project"),
     );
-    let expected_floor = if cfg!(target_os = "macos") {
+    let expected_floor = if cfg!(any(target_os = "macos", windows)) {
         "sandbox-required"
     } else {
         "review"

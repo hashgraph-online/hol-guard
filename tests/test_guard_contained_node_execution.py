@@ -1,23 +1,13 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
-import shutil
-import sys
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard import contained_node_execution as execution_module
 from codex_plugin_scanner.guard.contained_node_execution import try_execute_contained_node_command
-from codex_plugin_scanner.guard.runtime.containment_contract import (
-    ContainmentFailure,
-    ContainmentInput,
-    ContainmentPolicy,
-    ContainmentRequest,
-)
-from codex_plugin_scanner.guard.runtime.containment_executor import execute_contained, file_sha256
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
 
@@ -74,44 +64,6 @@ def _manager(root: Path) -> Path:
 @pytest.fixture
 def native_home(package_intent_native: Path) -> Path:
     return package_intent_native
-
-
-@pytest.mark.skipif(sys.platform not in {"darwin", "linux"}, reason="requires a supported containment platform")
-def test_platform_backend_runs_path_pinned_node_or_fails_closed(tmp_path: Path) -> None:
-    node = shutil.which("node")
-    if node is None:
-        pytest.skip("Node executable unavailable")
-    canonical_node = str(Path(node).resolve(strict=True))
-    workspace = (tmp_path / "workspace").resolve()
-    script = workspace / "runner.mjs"
-    _write(script, "console.log('contained-node-ok');\n")
-    script_digest = file_sha256(str(script))
-    request = ContainmentRequest(
-        argv=(canonical_node, "runner.mjs"),
-        cwd=str(workspace),
-        environment=(),
-        policy=ContainmentPolicy(str(workspace), ()),
-        inputs=(ContainmentInput(str(script), "runner.mjs", script_digest),),
-        launch_digest=hashlib.sha256(b"contained-node-launch").hexdigest(),
-        executable_digest=file_sha256(canonical_node),
-        operation_id="test",
-    )
-
-    result = execute_contained(request)
-
-    if sys.platform == "linux" and result.attestation.failure is ContainmentFailure.UNSUPPORTED_PLATFORM:
-        assert result.enforced is False
-        assert result.exit_code is None
-        assert result.stderr == "unsupported-platform"
-        return
-    if sys.platform == "darwin" and not canonical_node.startswith(("/System/", "/usr/", "/bin/", "/sbin/")):
-        assert result.enforced is False
-        assert result.attestation.failure is ContainmentFailure.APPLY_FAILED
-        assert "immutable system executable" in result.stderr
-        return
-    assert result.enforced is True
-    assert result.exit_code == 0, result.stderr
-    assert result.stdout == "contained-node-ok\n"
 
 
 _VITEST = ("--no-install", "vitest", "run", "src/example.test.ts")

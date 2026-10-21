@@ -356,12 +356,16 @@ fn answer(
         return Err(HookDirectDefer::HarnessUnmanaged);
     }
     custom_rules |= store.local_cli_block_rules;
-    let postures = binding
+    // A per-harness override wins over the snapshot mode in both directions.
+    // The publisher leaves the map out when no harness carries an override
+    // (`binding_with_harness_postures`), so an absent map reads as no
+    // override rather than an incomplete binding, which is what
+    // `recording_only_for_binding` answers for the same input.
+    let posture = binding
         .harness_postures
         .as_ref()
-        .ok_or(HookDirectDefer::BindingIncomplete)?;
-    // A per-harness override wins over the snapshot mode in both directions.
-    let recording_only = match postures.get(&request.harness) {
+        .and_then(|postures| postures.get(&request.harness));
+    let recording_only = match posture {
         Some(posture) => posture == "watch",
         None => snapshot.mode == "observe",
     };

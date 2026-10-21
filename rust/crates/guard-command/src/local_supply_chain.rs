@@ -643,6 +643,9 @@ pub struct GuardConfig {
     /// `harness_risk_actions` (config.py :419).
     pub harness_risk_actions:
         Option<std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>>>,
+    /// `harness_postures` (config.py :421), canonically keyed as
+    /// `coerce_loaded_harness_postures` leaves them.
+    pub harness_postures: Option<std::collections::BTreeMap<String, String>>,
     /// `managed_policy_status` (config.py :426).
     pub managed_policy_status: String,
     /// `managed_policy_hash` (config.py :427).
@@ -1662,6 +1665,24 @@ pub fn resolve_risk_action(
     if !VALID_RISK_ACTION_KEYS.contains(&risk_class) {
         return None;
     }
+    let resolved = resolve_configured_risk_action(config, risk_class, harness);
+    if harness_posture_override(config, harness) == Some("extra_careful") {
+        // A per-harness Extra careful override only ever strengthens.
+        return stricter_risk_action(
+            resolved,
+            posture_risk_actions("extra_careful").and_then(|rows| rows.get(risk_class).cloned()),
+        );
+    }
+    resolved
+}
+
+/// The explicit-then-default half of `resolve_risk_action`, before the
+/// per-harness Extra careful floor.
+fn resolve_configured_risk_action(
+    config: &GuardConfig,
+    risk_class: &str,
+    harness: Option<&str>,
+) -> Option<String> {
     if let Some(h) = harness {
         if let Some(harness_map) = config.harness_risk_actions.as_ref() {
             if let Some(inner) = harness_map.get(h) {
@@ -1677,6 +1698,38 @@ pub fn resolve_risk_action(
         }
     }
     posture_or_level_defaults(config).get(risk_class).cloned()
+}
+
+/// `harness_posture.harness_posture_override` (:120-126) against the mirror.
+/// `runtime_harness_key` resolves a registered id or alias and otherwise falls
+/// back to the normalized name, so an unregistered harness simply matches no
+/// override.
+fn harness_posture_override<'a>(config: &'a GuardConfig, harness: Option<&str>) -> Option<&'a str> {
+    let raw = harness?;
+    let postures = config.harness_postures.as_ref()?;
+    let normalized = raw.trim().to_lowercase().replace('_', "-");
+    if normalized.is_empty() {
+        return None;
+    }
+    let key =
+        crate::harness_identity::canonical_harness_id(&normalized).unwrap_or(normalized.as_str());
+    postures.get(key).map(String::as_str)
+}
+
+/// `harness_posture.stricter_risk_action` (:209-214).
+fn stricter_risk_action(base: Option<String>, floor: Option<String>) -> Option<String> {
+    match (base, floor) {
+        (None, floor) => floor,
+        (base, None) => base,
+        (Some(base), Some(floor)) => Some(
+            crate::action_lattice::most_restrictive_guard_action(
+                &[Value::String(base), Value::String(floor)],
+                crate::effect_decision::GuardAction::Block,
+            )
+            .as_str()
+            .to_owned(),
+        ),
+    }
 }
 
 /// `_posture_or_level_defaults` (config.py :1053-1058).
@@ -2112,33 +2165,23 @@ pub fn build_supply_chain_status_payload(
     payload
 }
 
-/// `_build_package_manager_protection` (:3171-3190).
+/// `_build_package_manager_protection`: the resident's protection projection.
+///
+/// The shape and the "which detected managers are unprotected" rule live in
+/// [`crate::shims::package_shim_protection_from_status`]; this only supplies
+/// the dashboard status and the default shim directory.
 pub fn build_package_manager_protection(
     store: &dyn SupplyChainStore,
     shims: &dyn ShimsApi,
 ) -> Map<String, Value> {
     let home_dir = expand_tilde_inner(Path::new("~"));
-    let status = dict_payload(Some(&shims.package_shim_dashboard_status(
-        &home_dir,
-        None,
-        store.guard_home(),
-    )))
+    let guard_home = store.guard_home();
+    let status = dict_payload(Some(
+        &shims.package_shim_dashboard_status(&home_dir, None, guard_home),
+    ))
     .unwrap_or_default();
-    let managed = status
-        .get("managed")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let supported_managers = shims.package_shim_supported_managers();
-    let mut protection = Map::new();
-    protection.insert("managed".into(), json!(managed));
-    protection.insert("supported_managers".into(), json!(supported_managers));
-    if let Some(s) = status.get("state") {
-        protection.insert("state".into(), s.clone());
-    }
-    if let Some(s) = status.get("detail") {
-        protection.insert("detail".into(), s.clone());
-    }
-    protection
+    let default_shim_dir = guard_home.join("package-shims").join("bin");
+    crate::shims::package_shim_protection_from_status(&status, &default_shim_dir.to_string_lossy())
 }
 
 /// `_call_sync_with_optional_auth_context` — retries with refreshed auth when
