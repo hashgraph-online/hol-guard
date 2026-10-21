@@ -70,7 +70,7 @@ const ACTION_TYPES: [&str; 10] = [
 const ORDERED_SERVER_FIELDS: [&str; 3] = ["mcp_servers", "mcpServers", "servers"];
 /// Tool-input keys that carry nothing but the shell command
 /// (`_COMMAND_ONLY_INPUT_KEYS`).
-const COMMAND_ONLY_INPUT_KEYS: [&str; 12] = [
+const COMMAND_ONLY_INPUT_KEYS: [&str; 14] = [
     "command",
     "cmd",
     "shell_command",
@@ -83,6 +83,8 @@ const COMMAND_ONLY_INPUT_KEYS: [&str; 12] = [
     "runInBackground",
     "workdir",
     "cwd",
+    "working_directory",
+    "workingDirectory",
 ];
 /// Far under the adapter's 1 MiB string slot and 4 MiB request cap, so the
 /// daemon's adapter call cannot fail on a size the resident accepted.

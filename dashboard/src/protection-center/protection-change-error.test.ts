@@ -51,6 +51,7 @@ const CAUSES = [
   "installed_runtime_unresponsive",
   "internal",
   "local_storage",
+  "native_request_too_large",
   "offline",
   "pack_authority_unavailable",
   "release_unavailable",
@@ -72,10 +73,15 @@ for (const code of CODES) {
 
 // Preparation runs before the daemon commits anything, so every one of its
 // causes can say the existing protection survived, and each says what to do.
+// A request the runtime will not read is the one cause a retry cannot clear,
+// so it is the one that must not end in "try again"; it still has to say what
+// the operator can look at, which the assertions further down pin down.
 for (const cause of CAUSES) {
   const message = protectionChangeErrorMessage(apiError("pack_preparation_unavailable", cause));
   assert.match(message, /current protection is unchanged/);
-  assert.match(message, /try again/i);
+  if (cause !== "native_request_too_large") {
+    assert.match(message, /try again/i);
+  }
 }
 
 assert.match(
@@ -94,6 +100,22 @@ assert.match(
   protectionChangeErrorMessage(apiError("pack_preparation_unavailable", "installed_runtime_incomplete")),
   /Reinstall or update Guard/,
 );
+// A request the runtime will not read is not a broken install either, and it
+// is the one preparation failure a retry cannot clear, so the sentence has to
+// rule both of those out rather than leave the operator guessing.
+const tooLarge = protectionChangeErrorMessage(
+  apiError("pack_preparation_unavailable", "native_request_too_large"),
+);
+assert.match(tooLarge, /grown past/);
+assert.match(tooLarge, /reinstalling Guard will not change it/);
+assert.match(tooLarge, /Retrying sends the same request again/);
+assert.match(tooLarge, /daemon log records the request that grew and how far past the bound it got/);
+assert.doesNotMatch(tooLarge, /Reinstall or update Guard/);
+// No local command prunes the state this request is built from, so naming one
+// would swap a reinstall dead end for a recover-authority dead end.
+assert.doesNotMatch(tooLarge, /hol-guard command controls/);
+assert.doesNotMatch(tooLarge, /try again/);
+
 // A compiler that would not start or ran out of time is not a broken install,
 // so it must not ask for a reinstall.
 const unresponsive = protectionChangeErrorMessage(
@@ -163,7 +185,14 @@ for (const cause of ["offline", "release_unavailable", "local_storage", "install
 }
 // A withdrawn pack, a broken install and a protected authority never clear by
 // themselves, so retrying them would only hide the real next step.
-for (const cause of [undefined, "pack_revoked", "installed_runtime_incomplete", "pack_authority_unavailable", "internal"]) {
+for (const cause of [
+  undefined,
+  "pack_revoked",
+  "installed_runtime_incomplete",
+  "native_request_too_large",
+  "pack_authority_unavailable",
+  "internal",
+]) {
   assert.ok(!isRetryableProtectionChangeError(apiError("pack_preparation_unavailable", cause)), String(cause));
 }
 // A conflict is a different save, not the same one, so it is never retried.

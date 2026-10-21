@@ -81,13 +81,22 @@ def _named_cause(exc: BaseException) -> str | None:
     from ..catalog_delivery.preparation import UnavailablePackError
     from ..catalog_delivery.revocations import RevokedPackError
     from ..catalog_delivery.transport import MissingReleaseError
-    from ..extension_builder.native_source_compiler import NativeSourceCompilerError
+    from ..extension_builder.native_source_compiler import (
+        NativeRequestTooLargeError,
+        NativeSourceCompilerError,
+    )
 
     for error in _causes(exc):
         if isinstance(error, RevokedPackError):
             return "pack_revoked"
         if isinstance(error, (MissingReleaseError, ExpiredDistributionError, UnavailablePackError)):
             return "release_unavailable"
+        if isinstance(error, NativeRequestTooLargeError):
+            # The runtime reads one bounded request. A request past that bound
+            # is built from local Guard state, so the installed files are
+            # intact and reinstalling cannot shrink it; a retry rebuilds the
+            # identical request. Both of those answers used to be given here.
+            return "native_request_too_large"
         if isinstance(error, NativeSourceCompilerError):
             if any(marker in str(error) for marker in _COMPILER_EXECUTION_MARKERS):
                 return "installed_runtime_unresponsive"

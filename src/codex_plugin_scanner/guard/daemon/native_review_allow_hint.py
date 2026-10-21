@@ -51,6 +51,8 @@ _COMMAND_ONLY_INPUT_KEYS = frozenset(
         "runInBackground",
         "workdir",
         "cwd",
+        "working_directory",
+        "workingDirectory",
     }
 )
 
@@ -62,6 +64,27 @@ def _command_only_payload(payload: Mapping[str, object]) -> bool:
     if tool_input is None:
         return False
     return all(isinstance(key, str) and key in _COMMAND_ONLY_INPUT_KEYS for key in tool_input)
+
+
+def _names_launch_directory(raw_payload: Mapping[str, object]) -> bool:
+    value = raw_payload.get("cwd")
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _stored_launch_cwd(raw_payload: Mapping[str, object], workspace: Path | None) -> Path | None:
+    """The launch directory of a stored approval, whose payload keeps only a redacted ``cwd``.
+
+    The envelope labels directories under the home as ``~/...`` and anything else
+    as ``.../name``. A ``~`` label expands against the daemon's own home; a label
+    that cannot be traced back to an existing absolute directory yields None, so
+    the caller declines a hint it would otherwise derive under the wrong cwd.
+    """
+
+    raw = raw_payload.get("cwd")
+    if isinstance(raw, str) and (raw.strip() == "~" or raw.strip().startswith("~/")):
+        text = raw.strip()
+        return _launch_cwd({"cwd": str(Path.home() / text[2:])}, workspace)
+    return _launch_cwd(raw_payload, workspace)
 
 
 def _remaining_budget(deadline: float | None) -> float:
@@ -326,7 +349,9 @@ def live_approval_extension_allow_hint(
     if isinstance(raw_payload, Mapping) and pre_tool_input(raw_payload) is not None:
         if not _command_only_payload(raw_payload):
             return None
-        cwd = _launch_cwd(raw_payload, workspace_path)
+        cwd = _stored_launch_cwd(raw_payload, workspace_path)
+        if cwd is None and _names_launch_directory(raw_payload):
+            return None
     else:
         cwd = workspace_path
     try:

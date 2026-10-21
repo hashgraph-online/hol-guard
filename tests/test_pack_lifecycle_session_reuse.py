@@ -23,8 +23,9 @@ def native(monkeypatch, tmp_path):
         calls["copies"] += 1
         yield Path(tmp_path / "runtime")
 
-    def run_bounded(argv, request, timeout):
+    def run_bounded(argv, request, timeout, limit=None):
         calls["runs"] += 1
+        assert limit == transport._MAX_NATIVE_REQUEST_BYTES
         return 0, b"{}", b""
 
     monkeypatch.setattr(transport, "_verify_manifest", lambda path: {})
