@@ -24,6 +24,7 @@ AUTHORITY_INPUT_TABLES: Final[tuple[tuple[str, str | None], ...]] = (
     ("extension_control_authority_snapshot", None),
     ("extension_control_catalog_manifest", None),
     ("extension_control_authority_transition", None),
+    ("extension_control_authority_proof", None),
     ("guard_events", "{row}.event_name = 'extension_control_authority_catalog_migrated'"),
     ("sync_state", "{row}.state_key in ('managed_controls_active', 'managed_controls_revision')"),
 )

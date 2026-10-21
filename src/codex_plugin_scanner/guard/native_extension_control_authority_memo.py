@@ -12,8 +12,8 @@ the hook's own receipts and evidence leave it alone; a dropped or rewritten
 trigger reads as no epoch, and nothing is served. A replaced file has a new
 identity, and a connection held open for the purpose keeps the old inode from
 being reused. Only replies that settled (a view, a manifest, an anchor) are
-kept; a fault, a writer action, a request for the full manifest or recorded
-migration events always go back to the resident.
+kept; a fault, a writer action or plan, a request for the full manifest or
+recorded migration events always go back to the resident.
 
 Holding a connection open keeps Windows from deleting or replacing the
 database, so there nothing is kept and every read asks the resident.
@@ -33,7 +33,12 @@ from threading import Lock
 
 from .store_extension_control_authority_epoch import extension_control_authority_epoch
 
-_STORE_OPS = frozenset({"read", "read_composed", "sync_manifest", "compose_managed", "load_manifest", "validate_chain"})
+_STORE_OPS = frozenset(
+    {"read", "read_composed", "sync_manifest", "compose_managed", "load_manifest", "validate_chain", "history"}
+)
+# Ops that read nothing but their request. A writer's plan is never kept: it
+# answers one write, and the write it leads to changes what the next plan sees.
+_PURE_OPS = frozenset({"anchor", "managed_activation", "managed_revision"})
 # A reply settled with ``allow_migration`` needed no migration, so a caller
 # that may not migrate gets the same reply. The converse does not hold.
 _MIGRATING_OPS = frozenset({"read", "read_composed", "sync_manifest"})
@@ -74,7 +79,7 @@ def _store_token(store_path: str) -> tuple[int, int, int] | None:
 
 def _memo_key(wire: dict[str, object]) -> tuple[str, bool] | None:
     op = wire.get("op")
-    if sys.platform == "win32" or not isinstance(op, str):
+    if sys.platform == "win32" or op not in _STORE_OPS | _PURE_OPS:
         return None
     fields = {name: value for name, value in wire.items() if name != "request_id"}
     allow_migration = bool(fields.pop("allow_migration", False)) if op in _MIGRATING_OPS else False

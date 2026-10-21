@@ -100,23 +100,7 @@ class StoreExtensionControlAuthorityMixin(
                 ).fetchone()
                 if pending is not None:
                     try:
-                        resumed = self._resume_idempotent_transition(
-                            connection,
-                            pending,
-                            current=ExtensionControlAuthorityView(
-                                AuthorityHealth.RECOVERY_REQUIRED,
-                                current_revision,
-                                catalog_digest,
-                                (),
-                            ),
-                            catalog_digest=_row_str(pending, "catalog_digest"),
-                            layers_json=_row_str(pending, "layers_json"),
-                            actor_hash=_row_str(pending, "actor_id_hash"),
-                            idempotency_hash=_row_str(pending, "idempotency_key_hash"),
-                            nonce_hash=_row_str(pending, "nonce_hash"),
-                            expected_revision=_row_int(pending, "previous_revision"),
-                            key=key,
-                        )
+                        resumed = self._resume_transition(connection, _row_int(pending, "revision"), key=key)
                     except UnverifiablePackTransitionError:
                         # Only damaged pending authentication permits the existing
                         # explicit recovery reset; environmental failures propagate.

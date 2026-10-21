@@ -27,7 +27,6 @@ from .runtime.extension_control_authority import (
 )
 from .runtime.extension_control_contract import ExtensionControlLayer
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
-from .store_extension_control_authority_support import _row_int, _row_str
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -357,7 +356,6 @@ class ExtensionControlAuthorityReadsMixin:
                 self._roll_back_abandoned_transition(
                     int(cast(int, action["revision"])),
                     snapshot_digest=str(action["snapshot_digest"]),
-                    anchor=anchor_from_wire(action.get("anchor")),
                     key=key,
                 )
                 attempted["rollback_attempted"] = True
@@ -370,24 +368,5 @@ class ExtensionControlAuthorityReadsMixin:
     def _resume_pending_catalog_migration(
         self, action: Mapping[str, object], *, key: bytes
     ) -> ExtensionControlAuthorityView | None:
-        pending = self._pending_transition(int(cast(int, action["revision"])))
-        if pending is None:
-            return None
         with self._connect() as connection:
-            return self._resume_idempotent_transition(
-                connection,
-                pending,
-                current=ExtensionControlAuthorityView(
-                    AuthorityHealth.RECOVERY_REQUIRED,
-                    int(cast(int, action["current_revision"])),
-                    str(action["stored_catalog_digest"]),
-                    (),
-                ),
-                catalog_digest=_row_str(pending, "catalog_digest"),
-                layers_json=_row_str(pending, "layers_json"),
-                actor_hash=_row_str(pending, "actor_id_hash"),
-                idempotency_hash=_row_str(pending, "idempotency_key_hash"),
-                nonce_hash=_row_str(pending, "nonce_hash"),
-                expected_revision=_row_int(pending, "previous_revision"),
-                key=key,
-            )
+            return self._resume_transition(connection, int(cast(int, action["revision"])), key=key)
