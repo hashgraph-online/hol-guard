@@ -22,6 +22,7 @@ from ..approval_gate import (
 from ..catalog_delivery import lifecycle
 from ..json_transport import escape_json_for_html
 from ..native_command_control_authority_io import NativeCommandControlAuthorityUnavailableError
+from ..native_extension_control import NativeExtensionControlError, compose_control_layers
 from ..runtime import command_inspection
 from ..runtime.command_extensions import CommandSafetyExtensionRegistry
 from ..runtime.extension_control_authority import (
@@ -49,7 +50,6 @@ from ..runtime.extension_control_proof import (
     ExtensionControlProofError,
     issue_extension_control_proof,
 )
-from ..runtime.extension_control_resolver import compose_control_layers
 from ..runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
 from .extension_control_errors import ExtensionControlApiError
 from .extension_control_preparation_failure import preparation_unavailable
@@ -169,7 +169,14 @@ class ExtensionControlApiService:
         # lease a second time for an answer the caller already installed, and
         # that second wait is the one a dashboard repair pays for.
         snapshot = self._runtime.current() if not reread else self._live_snapshot(read_only=True)
-        return effective_controls_payload(self._registry, snapshot, self._store)
+        return self._effective_payload(snapshot)
+
+    def _effective_payload(self, snapshot: ExtensionControlRuntimeSnapshot) -> dict[str, object]:
+        # The native runtime resolves the controls; without an answer there is no payload to serve.
+        try:
+            return effective_controls_payload(self._registry, snapshot, self._store)
+        except NativeExtensionControlError as error:
+            raise ExtensionControlApiError(503, "native_runtime_unavailable") from error
 
     def _live_snapshot(self, *, read_only: bool = False, apply_locked: bool = False) -> ExtensionControlRuntimeSnapshot:
         """The snapshot a draft is built on, re-read from durable authority.
@@ -238,7 +245,7 @@ class ExtensionControlApiService:
             # A busy lease means this refresh read nothing, not that the route
             # failed. Serve the snapshot the runtime already holds rather than
             # retrying the read through effective(), which would wait again.
-            return effective_controls_payload(self._registry, self._runtime.current(), self._store)
+            return self._effective_payload(self._runtime.current())
         _ = self._runtime.refresh(view)
         return self.effective()
 
@@ -379,7 +386,10 @@ class ExtensionControlApiService:
 
     def preview(self, payload: dict[str, object]) -> dict[str, object]:
         with self._preview_lock, lifecycle.session():
-            return self._preview_locked(payload)
+            try:
+                return self._preview_locked(payload)
+            except NativeExtensionControlError as error:
+                raise ExtensionControlApiError(503, "native_runtime_unavailable") from error
 
     def _preview_locked(self, payload: dict[str, object]) -> dict[str, object]:
         from .extension_control_targets import request_metadata
@@ -423,7 +433,7 @@ class ExtensionControlApiService:
             self._validate_authority_mutability(proposed_layers, registry=registry)
             mutation = candidate.mutation
             proposed_layers = tuple(replace(layer, catalog_digest=registry.catalog_digest) for layer in proposed_layers)
-        composed = compose_control_layers(proposed_layers)
+        composed = compose_control_layers(proposed_layers, guard_home=self._store.guard_home)
         if composed.failures:
             raise ExtensionControlApiError(400, composed.failures[0].code.value.replace("_", "-"))
         response: dict[str, object] = {
@@ -438,6 +448,7 @@ class ExtensionControlApiService:
                 registry,
                 tuple(replace(layer, catalog_digest=registry.catalog_digest) for layer in current.layers),
                 proposed_layers,
+                guard_home=self._store.guard_home,
             ),
         }
         if request_needs_proof(payload):
@@ -502,6 +513,7 @@ class ExtensionControlApiService:
             registry,
             tuple(replace(layer, catalog_digest=registry.catalog_digest) for layer in current.layers),
             proposed_layers,
+            guard_home=self._store.guard_home,
         )
         try:
             _ = self._store.commit_extension_control_layers(

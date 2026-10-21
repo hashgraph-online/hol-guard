@@ -258,6 +258,7 @@ mod discovery_placement_op;
 mod edge;
 mod edge_git_push;
 mod encrypted_secret_store;
+mod extension_control_op;
 #[path = "adapters/detection/gemini_detect.rs"]
 mod gemini_detect;
 mod git_execution_safety_binary;

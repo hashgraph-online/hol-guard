@@ -110,7 +110,8 @@
   "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_expansion.py",
   "src/codex_plugin_scanner/guard/runtime/containment_outputs.py",
   "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py",
-  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/read_only_filters.py"
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/read_only_filters.py",
+  "src/codex_plugin_scanner/guard/runtime/extension_control_resolver.py"
  ],
  "retired_tests": [
   {

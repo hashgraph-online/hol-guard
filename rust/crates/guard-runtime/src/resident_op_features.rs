@@ -12,6 +12,7 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::COMMAND_EFFECT_BATCH_FEATURE,
     guard_contracts::APPROVAL_REUSE_FEATURE,
     guard_contracts::COMPOSIO_ROLE_FEATURE,
+    guard_contracts::EXTENSION_CONTROL_FEATURE,
     guard_contracts::GITHUB_CLI_CLASSIFY_FEATURE,
     guard_contracts::PROTECT_REQUEST_FEATURE,
     guard_contracts::CLAIM_APPROVAL_REUSE_FEATURE,

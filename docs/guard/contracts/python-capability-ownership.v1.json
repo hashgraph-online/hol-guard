@@ -1664,6 +1664,21 @@
     "rust/crates/guard-command/src/sfrs_read_only_filters.rs",
     "rust/crates/guard-command/src/sfrs_search_filters.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/extension_control_resolver.py",
+   "module": "codex_plugin_scanner.guard.runtime.extension_control_resolver",
+   "source_sha256": "9029cc540785062c666d6e6cf8737486ddf95619fee7b96939e2efc05040434d",
+   "forbidden_symbols": [
+    "_has_explicit_enabled_permission",
+    "_validate_layer_targets",
+    "_extension_closure",
+    "_permission_closure"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/extension_control.rs",
+    "rust/crates/guard-runtime/src/extension_control_op.rs"
+   ]
   }
  ],
  "retired_test_paths": [
@@ -1983,6 +1998,17 @@
    "native_replacements": [
     "rust/crates/guard-command/src/verified_npm.rs",
     "rust/crates/guard-runtime/src/verified_npm_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/extension_trust.py",
+   "source_sha256": "d2449a937ba3d7585994787c26ca452eaad05ef0fd714b6717120e78bc55278e",
+   "forbidden_symbols": [
+    "extension_is_active"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/extension_trust.rs",
+    "rust/crates/guard-runtime/src/extension_control_op.rs"
    ]
   }
  ]

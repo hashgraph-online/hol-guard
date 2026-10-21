@@ -38,10 +38,12 @@ class _DashboardRuntimeReadRoutes:
             self._write_json(catalog, extra_headers={"Cache-Control": "no-store"})
             return True
         if parsed.path == "/v1/extension-controls/effective":
-            self._write_json(
-                self._daemon_server().extension_control_api.effective(),
-                extra_headers={"Cache-Control": "no-store"},
-            )
+            try:
+                effective = self._daemon_server().extension_control_api.effective()
+            except ExtensionControlApiError as error:
+                self._write_json(error.to_payload(), status=error.status)
+                return True
+            self._write_json(effective, extra_headers={"Cache-Control": "no-store"})
             return True
         if parsed.path == "/v1/extension-controls/history":
             try:

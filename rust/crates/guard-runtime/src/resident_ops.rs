@@ -289,6 +289,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::ApprovalReuseDecide(request) => {
                 crate::approval_reuse::evaluate_approval_reuse_request(&request)
             }
+            ResidentOperationV1::ExtensionControl(request) => {
+                crate::extension_control_op::evaluate_extension_control_request(&request)
+            }
             ResidentOperationV1::ComposioRole(request) => {
                 crate::composio_role_op::evaluate_composio_role_request(&request)
             }

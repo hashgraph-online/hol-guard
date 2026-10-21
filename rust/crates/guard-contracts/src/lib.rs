@@ -11,6 +11,8 @@ mod approval_reuse;
 pub use approval_reuse::*;
 mod composio_role;
 pub use composio_role::*;
+mod extension_control;
+pub use extension_control::*;
 mod github_cli_classify;
 pub use github_cli_classify::*;
 mod github_workflow_prepare;

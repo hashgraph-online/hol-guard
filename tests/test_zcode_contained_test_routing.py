@@ -12,6 +12,7 @@ import pytest
 
 from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args
 from codex_plugin_scanner.guard.adapters.zcode_contained_tests import (
+    cleanup_stale_windows_requests,
     cleanup_stale_zcode_requests,
     contained_zcode_response,
     route_zcode_containment,
@@ -394,3 +395,25 @@ def test_windows_sink_bootstrap_has_no_escaped_backslashes(tmp_path, monkeypatch
     assert windows[:-1] == unchanged[:-1]
     assert "\\" not in windows[-1]
     assert repr(str(package_root.resolve()).replace("\\", "/")) in windows[-1]
+
+
+def test_windows_reclaims_only_day_old_snapshots(tmp_path):
+    old = time.time() - 2 * 86_400
+
+    def make(name: str, aged: bool) -> Path:
+        directory = tmp_path / name
+        directory.mkdir()
+        request = directory / "request.json"
+        request.write_text("{}")
+        if aged:
+            os.utime(request, (old, old))
+            os.utime(directory, (old, old))
+        return directory
+
+    stale = make("hol-guard-contained-test-stale", True)
+    fresh = make("hol-guard-contained-test-fresh", False)
+    other = make("unrelated-stale", True)
+    cleanup_stale_windows_requests(tmp_path, time.time() - 86_400)
+    assert not stale.exists()
+    assert (fresh / "request.json").exists()
+    assert (other / "request.json").exists()

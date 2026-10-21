@@ -11,6 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.client import GuardDaemonRequestError, GuardSurfaceDaemonClient
+from codex_plugin_scanner.guard.daemon.extension_control_errors import ExtensionControlApiError
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -132,5 +133,34 @@ def test_http_inspect_command_uses_authenticated_client_route(tmp_path: Path) ->
 
         assert client.inspect_command(payload) == inspected
         inspector.assert_called_once_with(payload)
+    finally:
+        daemon.stop()
+
+
+def test_http_effective_controls_report_an_unavailable_native_runtime_as_503(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+
+    def unavailable(**_kwargs: object) -> dict[str, object]:
+        raise ExtensionControlApiError(503, "native_runtime_unavailable")
+
+    monkeypatch.setattr(daemon._server.extension_control_api, "effective", unavailable)
+    daemon.start()
+    try:
+        auth_token = load_guard_daemon_auth_token(store.guard_home)
+        assert auth_token is not None
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/extension-controls/effective",
+            method="GET",
+            headers={"X-Guard-Dashboard-Session": _dashboard_token(auth_token)},
+        )
+        with pytest.raises(urllib.error.HTTPError) as unavailable_error:
+            urllib.request.urlopen(request, timeout=2)
+
+        assert unavailable_error.value.code == 503
+        assert json.loads(unavailable_error.value.read())["error"] == "native_runtime_unavailable"
     finally:
         daemon.stop()

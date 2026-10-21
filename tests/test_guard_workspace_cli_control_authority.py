@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_extension_control as bridge
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -25,7 +26,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControl,
     ExtensionControlLayer,
 )
-from codex_plugin_scanner.guard.runtime.extension_trust import extension_is_active
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_extension_control_authority_fixtures import MemorySecretStore, _proof, _store
 
@@ -38,6 +38,25 @@ def _allow_local_terminal_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
         "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
         lambda _enrollment: None,
     )
+
+
+@pytest.fixture
+def home(native_hook_force: Path, _native_context_home: Path) -> Path:
+    """A guard home whose resident answers the control questions."""
+
+    return _native_context_home
+
+
+def extension_is_active(home: Path, extension_id: str, layers: tuple[ExtensionControlLayer, ...]) -> bool:
+    """Ask the resident whether the extension is active under ``layers``."""
+
+    scenario = bridge.ControlScenario(layers, (bridge.ControlItem(active_extension_id=extension_id),))
+    [answered] = bridge.resolve_scenarios(
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY, (scenario,), guard_home=home, trust_classes=True
+    )
+    active = answered.items[0].active
+    assert active is not None
+    return active
 
 
 def _layer(kind: ControlLayerKind, extension_id: str, state: ControlState) -> ExtensionControlLayer:
@@ -79,27 +98,27 @@ def _authority_layers(store: GuardStore) -> tuple[ExtensionControlLayer, ...]:
 
 
 @pytest.mark.parametrize("extension_id", WORKSPACE_CLI_EXTENSIONS)
-def test_signed_cloud_enable_cannot_activate_workspace_cli_rules(extension_id: str) -> None:
+def test_signed_cloud_enable_cannot_activate_workspace_cli_rules(home: Path, extension_id: str) -> None:
     cloud_enable = _layer(ControlLayerKind.SIGNED_CLOUD, extension_id, ControlState.ENABLED)
 
-    assert extension_is_active(extension_id, (cloud_enable,)) is False
+    assert extension_is_active(home, extension_id, (cloud_enable,)) is False
 
 
 @pytest.mark.parametrize("extension_id", WORKSPACE_CLI_EXTENSIONS)
-def test_local_admin_enable_activates_and_cloud_disable_still_wins(extension_id: str) -> None:
+def test_local_admin_enable_activates_and_cloud_disable_still_wins(home: Path, extension_id: str) -> None:
     local_enable = _layer(ControlLayerKind.LOCAL_ADMIN, extension_id, ControlState.ENABLED)
     cloud_disable = _layer(ControlLayerKind.SIGNED_CLOUD, extension_id, ControlState.DISABLED)
 
-    assert extension_is_active(extension_id, (local_enable,)) is True
-    assert extension_is_active(extension_id, (local_enable, cloud_disable)) is False
+    assert extension_is_active(home, extension_id, (local_enable,)) is True
+    assert extension_is_active(home, extension_id, (local_enable, cloud_disable)) is False
 
 
 @pytest.mark.parametrize("extension_id", WORKSPACE_CLI_EXTENSIONS)
-def test_changed_rule_contract_retires_local_enable(tmp_path: Path, extension_id: str) -> None:
+def test_changed_rule_contract_retires_local_enable(home: Path, tmp_path: Path, extension_id: str) -> None:
     store = _store(tmp_path, MemorySecretStore())
     _ = _authority_layers(store)
     _commit_local(store, extension_id, ControlState.ENABLED, revision=0, key="enable")
-    assert extension_is_active(extension_id, _authority_layers(store)) is True
+    assert extension_is_active(home, extension_id, _authority_layers(store)) is True
 
     original = store._catalog_target_manifest
 
@@ -113,20 +132,20 @@ def test_changed_rule_contract_retires_local_enable(tmp_path: Path, extension_id
 
     store._catalog_target_manifest = changed_contract
 
-    assert extension_is_active(extension_id, _authority_layers(store)) is False
+    assert extension_is_active(home, extension_id, _authority_layers(store)) is False
 
 
 @pytest.mark.parametrize("extension_id", WORKSPACE_CLI_EXTENSIONS)
-def test_replaying_earlier_grant_cannot_undo_revocation(tmp_path: Path, extension_id: str) -> None:
+def test_replaying_earlier_grant_cannot_undo_revocation(home: Path, tmp_path: Path, extension_id: str) -> None:
     store = _store(tmp_path, MemorySecretStore())
     _ = _authority_layers(store)
     _commit_local(store, extension_id, ControlState.ENABLED, revision=0, key="enable")
     _commit_local(store, extension_id, ControlState.DISABLED, revision=1, key="revoke")
-    assert extension_is_active(extension_id, _authority_layers(store)) is False
+    assert extension_is_active(home, extension_id, _authority_layers(store)) is False
 
     with pytest.raises(ExtensionControlAuthorityError, match="revision mismatch"):
         _commit_local(store, extension_id, ControlState.ENABLED, revision=0, key="enable")
     with pytest.raises(ExtensionControlAuthorityError, match="revision conflict"):
         _commit_local(store, extension_id, ControlState.ENABLED, revision=0, key="enable-again")
 
-    assert extension_is_active(extension_id, _authority_layers(store)) is False
+    assert extension_is_active(home, extension_id, _authority_layers(store)) is False
