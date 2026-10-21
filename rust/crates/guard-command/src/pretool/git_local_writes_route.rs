@@ -12,9 +12,9 @@
 //! directories, or has a Git step without `-C`, a write behind `-C` keeps the
 //! review.
 //!
-//! A `;` after a verified `cd` chain runs what follows whether or not the
-//! `cd` succeeded, so the steps after it may run in either directory. Those
-//! steps must be reads proven in both.
+//! A `;` or `||` after a verified `cd` chain runs what follows whether or not
+//! the `cd` succeeded, so the steps after it may run in either directory.
+//! Those steps must be reads proven in both.
 
 use super::super::directory_targets;
 use super::super::worktree_add::{separator_between, verified_worktree_cwd_context};
@@ -64,6 +64,24 @@ impl Route {
     /// the one the `cd` entered.
     pub(super) fn either(&self, index: usize) -> bool {
         matches!(self, Route::Cd { either: Some(split), .. } if index >= *split)
+    }
+
+    /// Whether the step at `index` only removes links in the root of the
+    /// linked worktree the command's leading `cd` enters (see `sibling`).
+    pub(super) fn unlinks(
+        &self,
+        model: &CanonicalCommandV1,
+        index: usize,
+        shell: super::super::PathContext<'_>,
+    ) -> bool {
+        matches!(
+            self,
+            Route::Cd {
+                index: 0,
+                either: None,
+                ..
+            }
+        ) && directory_targets::sibling::entered_link_removal(model, index, shell)
     }
 
     /// Whether only the Git steps run in the route's directory.
@@ -119,15 +137,17 @@ fn cd_route(
         separator_between(model, right - 1, right).map(|separator| separator.trim().to_owned())
     };
     let count = model.segments.len();
-    let split = (index + 1..count).find(|right| separator(*right).as_deref() == Some(";"))?;
-    if !(split..count).all(|right| matches!(separator(right).as_deref(), Some("&&" | "|" | ";")))
+    let split = (index + 1..count)
+        .find(|right| matches!(separator(*right).as_deref(), Some(";" | "||")))?;
+    if !(split..count)
+        .all(|right| matches!(separator(right).as_deref(), Some("&&" | "|" | ";" | "||")))
         || model.segments[split..]
             .iter()
             .any(|segment| segment.executable.as_deref() == Some("cd"))
     {
         return None;
     }
-    // Up to the `;` every step runs only after the `cd` succeeded.
+    // Up to the `;` or `||` every step runs only after the `cd` succeeded.
     let mut before = model.clone();
     before.segments.truncate(split);
     let proof = verified_worktree_cwd_context(&before, index, context)?;

@@ -71,6 +71,10 @@ def pending_pull_requests(client: GitHubApi, directory: Path, source_sha: str) -
     numbers = planned_pull_requests(directory, source_sha)
     with zipfile.ZipFile(directory / ARCHIVE) as archive:
         entries = json.loads(archive.read(PLAN))["entries"]
+    return pending_entries(client, entries, numbers)
+
+
+def pending_entries(client: GitHubApi, entries: list[dict], numbers: list[int]) -> list[int]:
     expected = {number: {row["extensionId"] for row in entries if row["pullRequest"] == number} for number in numbers}
     pending = []
     comment_batches = batched_pull_comments(client, numbers)

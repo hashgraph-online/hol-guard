@@ -4,10 +4,17 @@ use std::time::Instant;
 
 #[path = "worktree_add_chain.rs"]
 pub(super) mod chain;
+pub(crate) use chain::new_checkout_route;
+#[path = "worktree_add_destination.rs"]
+mod destination;
 #[path = "worktree_add_names.rs"]
 mod names;
 
-pub(super) use names::valid_branch_name;
+pub(in crate::pretool) use destination::fresh_temporary_parent;
+use destination::resolve_chdir;
+pub(in crate::pretool) use destination::{fresh_destination, MissingParents};
+
+pub(in crate::pretool) use names::{valid_branch_name, valid_destination_text};
 use names::{valid_local_reference, valid_path_text};
 
 struct WorktreeAdd<'a> {
@@ -52,7 +59,10 @@ pub(super) fn exact_safe_command(
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
         npm_config_inert: context.npm_config_inert,
+        pip_config_inert: context.pip_config_inert,
         shell_home_matches: context.shell_home_matches,
+        ripgrep_config_absent: context.ripgrep_config_absent,
+        psql_environment: context.psql_environment,
         cwd: cwd_proof
             .as_ref()
             .map(|proof| proof.cwd.as_str())
@@ -140,8 +150,37 @@ pub(super) fn exact_safe_command(
     worktree_seen
 }
 
+/// Whether segment `index` is a `git worktree add` the single-command proof
+/// admits on its own. Such an add writes the new checkout, its
+/// administrative files, a branch and that branch's upstream; it never
+/// writes configuration or hooks a later Git read in the same command uses.
+pub(super) fn proven_alone(
+    model: &CanonicalCommandV1,
+    index: usize,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
+    let Some(segment) = model.segments.get(index) else {
+        return false;
+    };
+    if segment.pipeline_index != 0
+        || model
+            .segments
+            .get(index + 1)
+            .is_some_and(|next| next.pipeline_index != 0)
+        || parse(segment).is_none()
+    {
+        return false;
+    }
+    let mut alone = model.clone();
+    alone.segments = vec![segment.clone()];
+    exact_safe_command(&alone, context, deadline, execution_environment)
+}
+
 /// A review reason for a lone `git worktree add` whose new checkout would sit
-/// outside home, where the proof above never admits it. Agents told only that
+/// outside home and the temporary directories, where the proof above never
+/// admits it. Agents told only that
 /// the command "could not be confirmed read-only" tend to copy the repository
 /// by hand instead; naming the home-directory bound lets them pick a
 /// destination the proof accepts. `None` for every other command.
@@ -161,6 +200,10 @@ pub(super) fn outside_home_reason(
         return None;
     }
     let spec = parse(segment)?;
+    // `~/<path>` already names a checkout below home.
+    if spec.destination.starts_with('~') {
+        return None;
+    }
     let home = std::fs::canonicalize(Path::new(context.home_dir?)).ok()?;
     let supplied = Path::new(spec.destination);
     let target = if supplied.is_absolute() {
@@ -173,11 +216,11 @@ pub(super) fn outside_home_reason(
         Path::new(&base).join(supplied)
     };
     let parent = std::fs::canonicalize(target.parent()?).ok()?;
-    if parent.starts_with(&home) {
+    if parent.starts_with(&home) || fresh_temporary_parent(&parent, context) {
         return None;
     }
     Some(
-        "HOL Guard requires review because `git worktree add` runs without review only when the new checkout's parent directory is inside your home directory. Repeat it with a destination under your home directory, such as a sibling of the repository, or ask the user to approve it in the HOL Guard inbox.".to_owned(),
+        "HOL Guard requires review because `git worktree add` runs without review only when the new checkout's parent directory is inside your home directory or a temporary directory such as `/tmp`. Repeat it with a destination under one of those, such as a sibling of the repository or a new directory in `/tmp`, or ask the user to approve it in the HOL Guard inbox.".to_owned(),
     )
 }
 
@@ -260,19 +303,11 @@ fn proven_checkout(
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Option<(PathBuf, Option<String>)> {
-    if !segment.environment_names.is_empty() {
-        return None;
-    }
-    let spec = parse(segment)?;
-    let chdir_cwd = match spec.chdir {
-        Some(directory) => Some(resolve_chdir(directory, context)?),
-        None => None,
-    };
+    let (spec, destination, chdir_cwd) = planned_checkout(segment, context)?;
     let context = super::PathContext {
         cwd: chdir_cwd.as_deref().or(context.cwd),
         ..context
     };
-    let destination = fresh_destination(spec.destination, context)?;
     super::git_worktree::worktree_add_execution_free(
         segment.executable.as_deref().unwrap_or("git"),
         &spec.leading,
@@ -287,6 +322,31 @@ fn proven_checkout(
     )
     .unwrap_or(false)
     .then_some((destination, chdir_cwd))
+}
+
+/// The checkout `git worktree add` would create, with the directory its
+/// own `-C` enters, before any probe of the repository.
+fn planned_checkout<'a>(
+    segment: &'a CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> Option<(WorktreeAdd<'a>, PathBuf, Option<String>)> {
+    if !segment.environment_names.is_empty() {
+        return None;
+    }
+    let spec = parse(segment)?;
+    let chdir_cwd = match spec.chdir {
+        Some(directory) => Some(resolve_chdir(directory, context)?),
+        None => None,
+    };
+    let destination = fresh_destination(
+        spec.destination,
+        super::PathContext {
+            cwd: chdir_cwd.as_deref().or(context.cwd),
+            ..context
+        },
+        MissingParents::Created,
+    )?;
+    Some((spec, destination, chdir_cwd))
 }
 
 fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
@@ -365,7 +425,11 @@ fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
         None if !detach && reference.is_none() => return None,
         _ => {}
     }
-    let destination = destination.filter(|value| valid_path_text(value))?;
+    let destination = destination.filter(|value| valid_destination_text(value))?;
+    // A quoted or escaped `~` stays a literal directory name.
+    if destination.starts_with('~') && !super::directory_targets::home_targets_unquoted(segment) {
+        return None;
+    }
     // A bare name such as `main` or `feat/x` is accepted in every form.
     // Without `-b` and `--detach` Git checks out the existing branch of that
     // name (or detaches at what the name resolves to); with either flag it
@@ -383,88 +447,4 @@ fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
         reference,
         attach,
     })
-}
-
-/// The directory `git -C <dir>` enters: absolute or relative to the context
-/// cwd, an existing directory, canonical.
-fn resolve_chdir(value: &str, context: super::PathContext<'_>) -> Option<String> {
-    let cwd = std::fs::canonicalize(Path::new(context.cwd?)).ok()?;
-    let supplied = Path::new(value);
-    let target = if supplied.is_absolute() {
-        supplied.to_path_buf()
-    } else {
-        cwd.join(supplied)
-    };
-    let canonical = std::fs::canonicalize(target).ok()?;
-    canonical
-        .is_dir()
-        .then(|| canonical.to_str().map(str::to_owned))?
-}
-
-fn fresh_destination(value: &str, context: super::PathContext<'_>) -> Option<PathBuf> {
-    let home = std::fs::canonicalize(Path::new(context.home_dir?)).ok()?;
-    let cwd = std::fs::canonicalize(Path::new(context.cwd?)).ok()?;
-    if !home.is_dir() || !home.is_absolute() || !cwd.is_dir() || !cwd.is_absolute() {
-        return None;
-    }
-    let supplied = Path::new(value);
-    let target = if supplied.is_absolute() {
-        supplied.to_path_buf()
-    } else {
-        cwd.join(supplied)
-    };
-    let parent = target.parent()?;
-    match std::fs::symlink_metadata(&target) {
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        _ => return None,
-    }
-    let parent_metadata = std::fs::symlink_metadata(parent).ok()?;
-    let canonical_parent = std::fs::canonicalize(parent).ok()?;
-    // A checkout below the shared temporary directory, where the user owns
-    // every directory on the way, is as private as one below home. Directly
-    // in it, another user could have made the empty directory Git fills.
-    let temporary = super::git_routes::owned_temporary_directory(&canonical_parent, context);
-    if parent_metadata.file_type().is_symlink() || !canonical_parent.is_dir() {
-        return None;
-    }
-    if !canonical_parent.starts_with(&home) && !temporary {
-        return None;
-    }
-    let leaf = target.file_name()?.to_str()?;
-    if leaf.starts_with('.') || leaf == ".." {
-        return None;
-    }
-    let destination = canonical_parent.join(leaf);
-    if protected_worktree_destination(&destination)
-        || !(temporary
-            || super::safe_writes::bounded_native_file_write_target(
-                destination.to_str()?,
-                context.home_dir,
-                context.cwd,
-            ))
-    {
-        return None;
-    }
-    Some(destination)
-}
-
-/// A checkout in a workflow directory or an autostart location (a login
-/// item directory, a systemd unit tree) is reviewed whatever its parent, so
-/// the owned temporary carve-out above cannot place one there either.
-fn protected_worktree_destination(path: &Path) -> bool {
-    if super::safe_writes::autostart_write_target(path) {
-        return true;
-    }
-    let parts: Vec<String> = path
-        .components()
-        .filter_map(|component| match component {
-            std::path::Component::Normal(value) => {
-                Some(value.to_string_lossy().to_ascii_lowercase())
-            }
-            _ => None,
-        })
-        .collect();
-    parts
-        .windows(2)
-        .any(|pair| pair == [".github", "workflows"])
 }

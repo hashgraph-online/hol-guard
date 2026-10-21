@@ -1,0 +1,25 @@
+{
+  "schema_version": "hol-guard-harness-version-coverage.v1",
+  "revision": "2026-10-16.1",
+  "harnesses": [
+    {
+      "harness": "omp",
+      "version_source": "package-metadata",
+      "limitations": [
+        "Coverage records name exact Oh My Pi versions. A version between two tested versions is not covered.",
+        "A record applies only to the Guard release, platforms, and protection events it names."
+      ],
+      "remediation": [
+        {
+          "label": "Oh My Pi versions on npm",
+          "url": "https://www.npmjs.com/package/@oh-my-pi/pi-coding-agent?activeTab=versions"
+        },
+        {
+          "label": "Oh My Pi releases",
+          "url": "https://github.com/can1357/oh-my-pi/releases"
+        }
+      ],
+      "records": []
+    }
+  ]
+}

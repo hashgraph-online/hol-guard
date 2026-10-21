@@ -7,8 +7,12 @@ from __future__ import annotations
 
 import argparse
 
-from ._commands_shared import *
+from ...argparse_utils import FriendlyArgumentParser
+from ..models import GUARD_ACTION_VALUES
+from .commands_parser_approvals import add_approval_parser
+from .commands_parser_constants import DEFAULT_ALIAS_NAME, DEFAULT_GUARD_CONNECT_URL, DEFAULT_GUARD_SYNC_URL
 from .commands_parser_helpers import *
+from .extension_offline_commands import configure as configure_offline
 
 def _configure_run_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
@@ -46,10 +50,31 @@ def _configure_guard_local_parsers(
 
     contained_hook_parser = guard_subparsers.add_parser("execute-contained-test", help=argparse.SUPPRESS)
     _add_guard_common_args(contained_hook_parser)
-    contained_hook_parser.add_argument("--harness", choices=("omp", "zcode", "claude-code", "codex"), default="omp")
+    contained_hook_parser.add_argument(
+        "--harness",
+        choices=("omp", "pi", "zcode", "claude-code", "codex"),
+        default="omp",
+    )
     contained_hook_parser.add_argument("--request-file", required=True)
     contained_hook_parser.add_argument("--request-sha256", required=True)
     contained_hook_parser.add_argument("--timeout-seconds", type=int, default=30 * 60)
+
+    bound_bash_parser = guard_subparsers.add_parser("execute-bound-bash", help=argparse.SUPPRESS)
+    _add_guard_common_args(bound_bash_parser)
+    bound_bash_parser.add_argument("--harness", choices=("omp", "pi"), required=True)
+    bound_bash_parser.add_argument("--request-file", required=True)
+    bound_bash_parser.add_argument("--request-sha256", required=True)
+    bound_bash_parser.add_argument("--operation-id", required=True)
+    bound_bash_parser.add_argument("--host-owner-pid", type=int)
+    bound_bash_parser.add_argument("--tool-call-id")
+    bound_bash_parser.add_argument("--timeout-seconds", type=int, default=120)
+
+    ack_bash_parser = guard_subparsers.add_parser("ack-bound-bash", help=argparse.SUPPRESS)
+    _add_guard_common_args(ack_bash_parser)
+    ack_bash_parser.add_argument("--harness", choices=("omp", "pi"), required=True)
+    ack_bash_parser.add_argument("--operation-id", required=True)
+    ack_bash_parser.add_argument("--tool-call-id", required=True)
+    ack_bash_parser.add_argument("--exit-code", type=int, required=True)
 
     start_parser = guard_subparsers.add_parser("start", help="Show the first Guard steps for a local harness")
     _add_guard_common_args(start_parser)
@@ -75,6 +100,19 @@ def _configure_guard_local_parsers(
     )
     _add_guard_common_args(network_status_parser, suppress_defaults=True)
     network_status_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    network_sync_parser = network_subparsers.add_parser(
+        "sync",
+        help="Fetch the workspace's signed network rules and known-bad URL indicators",
+    )
+    _add_guard_common_args(network_sync_parser, suppress_defaults=True)
+    network_sync_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
+    network_check_parser = network_subparsers.add_parser(
+        "check",
+        help="Show what the saved network rules and known-bad URL indicators decide for a URL",
+    )
+    network_check_parser.add_argument("url", help="URL to check, for example https://example.com/path")
+    _add_guard_common_args(network_check_parser, suppress_defaults=True)
+    network_check_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
 
     dashboard_parser = guard_subparsers.add_parser(
         "dashboard",
@@ -311,19 +349,12 @@ def _configure_guard_local_parsers(
     # Do not overwrite a value supplied to the parent command parser.
     setup_parser.add_argument("--workspace", default=argparse.SUPPRESS)
     setup_parser.add_argument("--json", action="store_true")
-    controls_parser = command_subparsers.add_parser(
-        "controls",
-        help="Inspect or change extension controls",
-    )
-    controls_subparsers = controls_parser.add_subparsers(
-        dest="controls_command",
-        required=True,
-    )
+    controls_parser = command_subparsers.add_parser("controls", help="Inspect or change extension controls")
+    controls_subparsers = controls_parser.add_subparsers(dest="controls_command", required=True)
     controls_subparsers.add_parser("status", help="Show authority status")
+    configure_offline(controls_subparsers)
     controls_patterns = controls_subparsers.add_parser(
-        "patterns",
-        help="Search command patterns with their local state",
-    )
+        "patterns", help="Search command patterns with their local state")
     controls_patterns.add_argument("query", nargs="?")
     controls_patterns.add_argument("--tool", help="Limit results to one extension ID")
     controls_patterns.add_argument("--json", action="store_true")
@@ -429,6 +460,11 @@ def _configure_guard_local_parsers(
     _add_guard_common_args(inventory_parser)
     inventory_parser.add_argument("--json", action="store_true")
     _add_aibom_cli_args(inventory_parser)
+    inventory_parser.add_argument(
+        "--sync",
+        action="store_true",
+        help="Report the full inventory to Guard Cloud on the next sync instead of only changes.",
+    )
 
     abom_parser = guard_subparsers.add_parser("abom", help="Export a local Guard artifact bill of materials")
     _add_guard_common_args(abom_parser)

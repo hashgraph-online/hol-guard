@@ -1,28 +1,29 @@
-"""A native MCP relay session whose direct lane is not ready runs as the Python proxy.
+"""A native MCP relay session whose daemon is down stays native.
 
-The relay must decide before it reads any stdin byte or starts the MCP server,
-and then exec the exact Python proxy argv with its environment unchanged, so
-the proxy sees the host's untouched stdio stream.
+The relay decides how the session runs before it reads any stdin byte or
+starts the MCP server. A lane that is only not ready yet keeps the session in
+the relay, which starts one detached daemon ensure; the Python proxy is never
+launched for it.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.skipif(os.name != "posix", reason="the native MCP relay is Unix only")
+from tests.support.bounded_subprocess import run_bounded
 
-_STDIN = b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n\x00tail without newline \xff'
-_FAKE_PROXY = """#!{python}
-import json, os, sys
-record = {{"argv": sys.argv[1:], "env": dict(os.environ), "stdin": sys.stdin.buffer.read().hex()}}
-name = "ensure" if "daemon" in sys.argv[1:] else "proxy"
+_STDIN = b""
+_FAKE_PROXY = """import json, os, sys
+# Run as a module, the fake reports the interpreter arguments the relay passed.
+argv = sys.orig_argv[1:] if __spec__ is not None else sys.argv[1:]
+record = {{"argv": argv, "env": dict(os.environ), "stdin": sys.stdin.buffer.read().hex()}}
+name = "ensure" if "daemon" in argv else "proxy"
 with open(os.path.join({log!r}, name + ".json"), "w", encoding="utf-8") as handle:
     json.dump(record, handle)
 """
@@ -33,6 +34,38 @@ def _runtime() -> Path:
     if not binary or not Path(binary).is_file():
         pytest.skip("HOL_GUARD_NATIVE_BINARY does not name a compiled runtime")
     return Path(binary).resolve()
+
+
+def _fake_python(root: Path, source: str) -> tuple[Path, dict[str, str]]:
+    """The interpreter the proxy argv names, and the environment that fakes the proxy.
+
+    On Windows the relay starts the daemon ensure detached, where a ``.cmd``
+    launcher never runs, so the real interpreter imports a fake
+    ``codex_plugin_scanner.cli`` from ``PYTHONPATH`` instead.
+    """
+
+    if os.name == "nt":
+        package = root / "fake-proxy" / "codex_plugin_scanner"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text("", encoding="utf-8")
+        (package / "cli.py").write_text(source, encoding="utf-8")
+        return Path(sys.executable), {"PYTHONPATH": str(package.parent)}
+    launcher = root / "python"
+    launcher.write_text(f"#!{sys.executable}\n" + source, encoding="utf-8")
+    launcher.chmod(0o700)
+    return launcher, {}
+
+
+def _environment(home: Path) -> dict[str, str]:
+    env = {"HOME": str(home), "HOL_GUARD_TEST_MARK": "kept"}
+    if os.name == "nt":
+        keep = ("PATH", "PATHEXT", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP")
+        env.update({key: os.environ[key] for key in keep if key in os.environ})
+        env["USERPROFILE"] = str(home)
+        return env
+    # LC_ALL keeps the fake interpreter from coercing its own locale variables.
+    env.update(PATH="/usr/bin:/bin", LC_ALL="C.UTF-8")
+    return env
 
 
 def _wait_for(path: Path, seconds: float = 10.0) -> dict[str, object]:
@@ -47,14 +80,12 @@ def _wait_for(path: Path, seconds: float = 10.0) -> dict[str, object]:
     raise AssertionError(f"{path.name} was never written")
 
 
-def test_an_unready_lane_hands_the_untouched_session_to_the_python_proxy(tmp_path: Path) -> None:
+def test_a_down_daemon_keeps_the_session_native_and_starts_one_ensure(tmp_path: Path) -> None:
     runtime = _runtime()
     log, guard_home, workspace = tmp_path / "log", tmp_path / "guard-home", tmp_path / "workspace"
     for directory in (log, guard_home, workspace):
         directory.mkdir(mode=0o700)
-    fake = tmp_path / "python"
-    fake.write_text(_FAKE_PROXY.format(python=sys.executable, log=str(log)), encoding="utf-8")
-    fake.chmod(0o700)
+    fake, fake_env = _fake_python(tmp_path, _FAKE_PROXY.format(log=str(log)))
     proxy_args = [
         "-m",
         "codex_plugin_scanner.cli",
@@ -71,28 +102,22 @@ def test_an_unready_lane_hands_the_untouched_session_to_the_python_proxy(tmp_pat
         "--config-path",
         str(workspace / ".codex" / "config.toml"),
         "--command",
-        "/bin/cat",
+        # An interpreter reading an empty stdin exits at once, like cat.
+        sys.executable if os.name == "nt" else "/bin/cat",
     ]
-    # LC_ALL keeps the fake interpreter from coercing its own locale variables.
-    env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "LC_ALL": "C.UTF-8", "HOL_GUARD_TEST_MARK": "kept"}
-    completed = subprocess.run(
+    env = {**_environment(tmp_path), **fake_env}
+    completed = run_bounded(
         [str(runtime), "mcp-relay", str(fake), *proxy_args],
         input=_STDIN,
         env=env,
         cwd=workspace,
-        capture_output=True,
         timeout=60,
-        check=False,
     )
-    assert completed.returncode == 0, completed.stderr
-    proxy = _wait_for(log / "proxy.json")
-    assert proxy["argv"] == proxy_args
-    assert bytes.fromhex(str(proxy["stdin"])) == _STDIN
-    recorded = {key: value for key, value in dict(proxy["env"]).items() if not key.startswith("__")}
-    assert recorded == env
     stderr = completed.stderr.decode("utf-8", errors="replace")
-    assert "hol-guard mcp-relay: python proxy: mcp_relay_daemon_unreachable" in stderr
-    assert "no native decision" not in stderr
+    assert "hol-guard mcp-relay: lane not ready: mcp_relay_daemon_unreachable" in stderr
+    assert "python proxy" not in stderr
+    # The host closed at once, so the relay shut its MCP server down cleanly.
+    assert completed.returncode == 0, stderr
     # The daemon is down, so one detached ensure ran without the host's input.
     ensure = _wait_for(log / "ensure.json")
     assert ensure["argv"] == [
@@ -107,3 +132,4 @@ def test_an_unready_lane_hands_the_untouched_session_to_the_python_proxy(tmp_pat
         str(tmp_path),
     ]
     assert ensure["stdin"] == ""
+    assert not (log / "proxy.json").exists()

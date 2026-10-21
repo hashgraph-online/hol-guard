@@ -34,26 +34,88 @@ pub(crate) fn linked_root(value: &str, cwd: &Path) -> Option<PathBuf> {
 /// worktree of the session's repository, named by an absolute path or one
 /// that climbs out of the cwd. Only the link is removed, never its target.
 pub(crate) fn removable_link(value: &str, context: super::super::PathContext<'_>) -> bool {
-    let Some(cwd) = context.cwd.map(Path::new) else {
-        return false;
-    };
-    let Some(entry) = resolved(value, cwd) else {
-        return false;
-    };
-    let Some(root) = entry.parent() else {
+    context
+        .cwd
+        .and_then(|cwd| resolved(value, Path::new(cwd)))
+        .is_some_and(|entry| root_link(&entry, context))
+}
+
+/// Whether `entry` is a symbolic link directly in the root of a linked
+/// worktree of the session's repository that no harness reads.
+fn root_link(entry: &Path, context: super::super::PathContext<'_>) -> bool {
+    let (Some(cwd), Some(root)) = (context.cwd.map(Path::new), entry.parent()) else {
         return false;
     };
     entry
         .symlink_metadata()
         .is_ok_and(|metadata| metadata.file_type().is_symlink())
         && same_repository_root(root, cwd)
-        && !crate::harness_config_names::write_target_protected(&entry, &entry, root)
+        && !crate::harness_config_names::write_target_protected(entry, entry, root)
         && super::super::read_paths::resolved_location_allowed(
-            &entry,
+            entry,
             context.home_dir,
             context.cwd,
             false,
         )
+}
+
+/// `rm <name>` right after the command's leading `cd ../<worktree>`, as in
+/// `cd ../report-wt && rm node_modules && git add . && git commit -m x`.
+/// The `cd` enters the root of a linked worktree of the session's
+/// repository, every step up to `index` is a plain `rm` of one link directly
+/// in that root, and the whole command is joined by `&&`, so each removal
+/// runs there, only after the `cd` succeeded. The plain name rules out flags,
+/// nested paths and every dot name (`.git`, `.gitmodules`, `.gitattributes`):
+/// only a link Git reads nothing through goes, never its target, so the
+/// configuration and repository the later Git steps were proven against stay
+/// the same.
+pub(crate) fn entered_link_removal(
+    model: &crate::CanonicalCommandV1,
+    index: usize,
+    context: super::super::PathContext<'_>,
+) -> bool {
+    let (Some(cwd), Some(enter)) = (context.cwd.map(Path::new), model.segments.first()) else {
+        return false;
+    };
+    let root = match enter.arguments.as_slice() {
+        [value] if enter.executable.as_deref() == Some("cd") && plain_step(enter) => {
+            linked_root(value, cwd)
+        }
+        _ => None,
+    };
+    let Some(root) = root else {
+        return false;
+    };
+    let unlinks = |segment: &crate::CommandSegmentV1| {
+        segment.executable.as_deref() == Some("rm")
+            && plain_step(segment)
+            && matches!(
+                segment.arguments.as_slice(),
+                [name] if plain(name) && root_link(&root.join(name), context)
+            )
+    };
+    model.confidence == "exact"
+        && !model.path_overridden
+        && model.wrapper_chain.is_empty()
+        && (1..model.segments.len()).all(|right| {
+            super::super::worktree_add::separator_between(model, right - 1, right)
+                .is_some_and(|separator| separator.trim() == "&&")
+        })
+        && index > 0
+        && model
+            .segments
+            .get(1..=index)
+            .is_some_and(|steps| steps.iter().all(unlinks))
+}
+
+fn plain_step(segment: &crate::CommandSegmentV1) -> bool {
+    segment.pipeline_index == 0
+        && segment.environment_names.is_empty()
+        && segment.wrapper_chain.is_empty()
+        && !segment.path_overridden
+        && !segment
+            .text
+            .contains(['>', '<', '$', '`', '|', '&', ';', '\n', '\r'])
 }
 
 /// `rm [-f] [--] <link>...` removing only links at the root of linked

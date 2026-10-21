@@ -85,12 +85,25 @@ fn run(request: &WorkspaceInventoryRequestV1) -> Result<Value, String> {
         .map(|bytes| serde_json::from_slice::<Value>(&bytes).unwrap()["payload"].clone())
 }
 
+fn has_symlink(files: &Value) -> bool {
+    files
+        .as_object()
+        .is_some_and(|files| files.values().any(|spec| spec.get("symlink").is_some()))
+}
+
 #[test]
 fn recorded_python_vectors_match() {
     let vectors: Vec<Value> = serde_json::from_str(VECTORS).unwrap();
     assert!(vectors.len() >= 20);
     for vector in &vectors {
         let name = vector["name"].as_str().unwrap();
+        // Creating a symlink needs a privilege on Windows, so those vectors
+        // replay on unix only.
+        if cfg!(not(unix))
+            && (has_symlink(&vector["files"]) || has_symlink(&vector["before_files"]))
+        {
+            continue;
+        }
         let scratch = Scratch::new(name);
         let workspace = scratch.0.join("ws");
         fs::create_dir_all(&workspace).unwrap();

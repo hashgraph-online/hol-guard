@@ -14,6 +14,9 @@ from pathlib import Path, PurePosixPath
 MAX_ARCHIVE = 16 * 1024 * 1024
 MAX_EXTRACTED = 64 * 1024 * 1024
 CASE_PATH = re.compile(r"cases/[a-z][a-z0-9-]{0,79}\.json")
+# A case the runner re-ran banks its earlier attempts beside `cases/`; they are the
+# same bounded public case JSON, and without them a retried run cannot be exported.
+SUPERSEDED_PATH = re.compile(r"superseded/[a-z][a-z0-9-]{0,79}\.attempt-[1-9]\.json")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -23,8 +26,12 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def allowed_name(name: str) -> bool:
-    """Only the public summary and case JSON belong in a qualification bundle."""
-    return name in {"summary.json", "summary.md"} or CASE_PATH.fullmatch(name) is not None
+    """Only the public summary and case JSON, final or superseded, belong in a bundle."""
+    return (
+        name in {"summary.json", "summary.md"}
+        or CASE_PATH.fullmatch(name) is not None
+        or SUPERSEDED_PATH.fullmatch(name) is not None
+    )
 
 
 def pack(directory: Path, output: Path) -> str:

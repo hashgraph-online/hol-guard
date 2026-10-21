@@ -123,6 +123,8 @@ pub struct NativeCommandControlBindingV1 {
     pub layers: Vec<NativeExtensionControlLayerV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authority: Option<NativeCommandControlAuthorityV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_security_digest: Option<String>,
 }
 
 fn valid_digest(value: &str) -> bool {
@@ -172,6 +174,13 @@ impl NativeCommandControlBindingV1 {
         if let Some(authority) = &self.authority {
             authority.validate()?;
         }
+        if self
+            .active_security_digest
+            .as_ref()
+            .is_some_and(|v| !valid_digest(v))
+        {
+            return Err("native_command_control_binding_invalid");
+        }
         let mut kinds = BTreeSet::new();
         for layer in &self.layers {
             if layer.schema_version != "1.0.0"
@@ -212,7 +221,7 @@ impl NativeCommandControlBindingV1 {
                 (&left.target_kind, &left.target_id).cmp(&(&right.target_kind, &right.target_id))
             });
         }
-        let value = serde_json::json!({
+        let mut value = serde_json::json!({
             "catalog_digest": self.catalog_digest,
             "health": self.health,
             "layers": layers,
@@ -220,6 +229,9 @@ impl NativeCommandControlBindingV1 {
             "revision": self.revision,
             "schema_version": RUNTIME_SCHEMA,
         });
+        if let Some(security) = &self.active_security_digest {
+            value["active_security_digest"] = security.clone().into();
+        }
         let canonical =
             serde_json::to_vec(&value).map_err(|_| "native_command_control_encoding_failed")?;
         let mut digest = Sha256::new();

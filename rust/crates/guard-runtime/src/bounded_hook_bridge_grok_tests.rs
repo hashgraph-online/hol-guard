@@ -1,4 +1,4 @@
-//! The native answers for Grok's client: the ported-script check, the
+//! The native answers for Grok's client: the client constants, the
 //! invocation the hook command names, and routing against a scripted daemon.
 
 use std::io::{BufRead, BufReader, Read};
@@ -9,8 +9,10 @@ use serde_json::{json, Value};
 
 use super::*;
 use crate::bounded_hook_bridge_grok_script::{
-    invocation, normalize, ported_constants, python_home, python_path, Invocation, ScriptConstants,
+    invocation, normalize, python_home, python_path, read_client_constants, Invocation,
+    ScriptConstants,
 };
+use crate::bounded_hook_bridge_render::FAILURE_REASON;
 use crate::claude_hook_bridge_fixture::{write_private, write_response, GuardHome, Request};
 
 const TOKEN: &str = "grok-token-fixture";
@@ -63,8 +65,15 @@ fn clients_the_renderer_did_not_write_are_not_read() {
 }
 
 #[test]
-fn only_the_ported_client_is_answered() {
-    assert_eq!(ported_constants(&client_text("/g", "grok", "8")), None);
+fn a_client_an_older_guard_rendered_is_answered_natively() {
+    let dir = tempfile::tempdir().unwrap();
+    let script = dir.path().join("grok.py");
+    // Rendered from another template than the one the bridge was ported from.
+    std::fs::write(&script, client_text("/g", "grok", "8")).unwrap();
+    let constants = read_client_constants(&script).unwrap();
+    assert_eq!(constants.guard_home, "/g");
+    std::fs::write(&script, client_text("/g", "codex", "8")).unwrap();
+    assert_eq!(read_client_constants(&script), None);
 }
 
 #[test]
@@ -262,9 +271,7 @@ fn body(request: &Request) -> Value {
 }
 
 fn answer(route: &Route) -> (Value, i32) {
-    let Route::Respond { stdout, exit_code } = route else {
-        panic!("expected an answer, got {route:?}");
-    };
+    let Route::Respond { stdout, exit_code } = route;
     assert!(stdout.ends_with('\n'), "{stdout:?}");
     (serde_json::from_str(stdout).unwrap(), *exit_code)
 }
@@ -310,22 +317,41 @@ fn a_blocked_tool_call_exits_two() {
 }
 
 #[test]
-fn a_hook_the_bridge_cannot_read_runs_the_client_without_asking() {
-    for hook in [
-        &b"not json"[..],
-        b"[]",
-        b"\xff",
-        br#"{"hook_event_name":"PreToolUse","event":"SessionStart"}"#,
-        "{\"hook_event_name\":\"Pr\u{e9}ToolUse\"}".as_bytes(),
+fn a_hook_the_bridge_cannot_read_fails_closed_without_asking() {
+    let conflict = br#"{"hook_event_name":"PreToolUse","event":"SessionStart"}"#;
+    for (hook, reason) in [
+        (&b"not json"[..], FAILURE_REASON),
+        (b"[]", FAILURE_REASON),
+        (b"\xff", FAILURE_REASON),
+        (conflict, CONFLICT_REASON),
+        (
+            "{\"hook_event_name\":\"Pr\u{e9}ToolUse\"}".as_bytes(),
+            FAILURE_REASON,
+        ),
     ] {
-        let fixture = Fixture::new("grok-delegate", vec![]);
-        assert_eq!(fixture.client().route(hook), Route::Delegate);
+        let fixture = Fixture::new("grok-unreadable", vec![]);
+        let (stdout, exit_code) = answer(&fixture.client().route(hook));
+        assert_eq!(stdout["decision"], "deny", "{hook:?}");
+        assert_eq!(stdout["reason"], reason, "{hook:?}");
+        assert_eq!(exit_code, 0);
         assert!(fixture.requests().is_empty());
     }
 }
 
 #[test]
-fn a_home_without_a_daemon_runs_the_client() {
+fn an_oversized_hook_fails_closed_without_asking() {
+    let mut hook = PRE_TOOL.to_vec();
+    hook.resize(MAX_HOOK_INPUT_BYTES + 1, b' ');
+    let fixture = Fixture::new("grok-oversize", vec![]);
+    let (stdout, exit_code) = answer(&fixture.client().route(&hook));
+    assert_eq!(stdout["decision"], "deny");
+    assert_eq!(stdout["reason"], OVERSIZE_REASON);
+    assert_eq!(exit_code, 0);
+    assert!(fixture.requests().is_empty());
+}
+
+#[test]
+fn a_home_without_a_daemon_fails_closed() {
     let home = GuardHome::new("grok-no-daemon");
     let client = Client {
         guard_home: home.home.clone(),
@@ -336,7 +362,13 @@ fn a_home_without_a_daemon_runs_the_client() {
         },
         deadline: Instant::now() + Duration::from_secs(8),
     };
-    assert_eq!(client.route(PRE_TOOL), Route::Delegate);
+    assert_eq!(
+        client.route(PRE_TOOL),
+        Route::Respond {
+            stdout: failure_stdout(std::str::from_utf8(PRE_TOOL).unwrap()),
+            exit_code: 0,
+        }
+    );
 }
 
 #[test]

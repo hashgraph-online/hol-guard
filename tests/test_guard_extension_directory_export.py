@@ -10,10 +10,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.extension_trust import trust_class_for
 from tests.extension_builder_support import REPOSITORY
-from tests.support.extension_directory import copy_projected_contribution_sources
+from tests.support.extension_directory import bounded_extensions, copy_projected_contribution_sources
 
 spec = importlib.util.spec_from_file_location(
     "guard_directory_export", REPOSITORY / "scripts/export_extension_directory.py"
@@ -24,19 +22,27 @@ sys.modules[spec.name] = exporter
 spec.loader.exec_module(exporter)
 
 
-def test_export_is_deterministic() -> None:
-    first = exporter.render_directory()
-    assert first == exporter.render_directory()
+@pytest.fixture(autouse=True)
+def legacy_inventory(monkeypatch):
+    monkeypatch.setattr(exporter, "native_extensions", bounded_extensions)
+
+
+def test_export_is_deterministic(tmp_path: Path) -> None:
+    root = copy_sources(tmp_path)
+    first = exporter.render_directory(root)
+    assert first == exporter.render_directory(root)
     payload = json.loads(first)
     assert payload["schemaVersion"] == "guard.extension-directory.v1"
     ids = [row["id"] for row in payload["entries"]]
     assert ids == sorted(set(ids))
-    v2 = exporter.render_directory_v2()
-    assert v2 == exporter.render_directory_v2()
+    v2 = exporter.render_directory_v2(root)
+    assert v2 == exporter.render_directory_v2(root)
     assert json.loads(v2)["schemaVersion"] == "guard.extension-directory.v2"
 
 
-def test_paired_directory_render_uses_one_validated_source_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_paired_directory_render_uses_one_validated_source_snapshot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     source_calls = 0
     listing_calls = 0
     original_sources = exporter._sources
@@ -56,7 +62,7 @@ def test_paired_directory_render_uses_one_validated_source_snapshot(monkeypatch:
 
     monkeypatch.setattr(exporter, "_sources", sources)
     monkeypatch.setattr(exporter, "_listings", listings)
-    rendered = exporter.render_directories()
+    rendered = exporter.render_directories(copy_sources(tmp_path))
     assert (source_calls, listing_calls) == (1, 1)
     v1 = json.loads(rendered[exporter.OUTPUT_V1])
     v2 = json.loads(rendered[exporter.OUTPUT_V2])
@@ -67,12 +73,12 @@ def test_paired_directory_render_uses_one_validated_source_snapshot(monkeypatch:
 
 def test_every_native_extension_appears_once_with_unchanged_authority(tmp_path: Path) -> None:
     root = copy_sources(tmp_path)
-    native = {row.extension_id: row for row in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
+    native = {row.extension_id: row for row in exporter.native_extensions()}
     entries = exporter.export_directory(root)["entries"]
     assert {row["runtimeExtensionId"] for row in entries} == set(native)
     for row in entries:
         extension = native[row["runtimeExtensionId"]]
-        assert row["trustClass"] == trust_class_for(extension.extension_id)
+        assert row["trustClass"] == extension.trust_class
         assert row["ruleCount"] == len(extension.rules)
         assert row["permissionCount"] == len(extension.permissions)
         assert len(row["operations"]) == len(extension.rules)
@@ -143,6 +149,9 @@ def test_public_directory_matches_cross_repository_contract(tmp_path: Path) -> N
 
 
 def test_v2_listing_metadata_has_separate_credit_and_claim_authority(tmp_path: Path) -> None:
+    from jsonschema import Draft202012Validator
+
+    v2_schema = json.loads((REPOSITORY / "contracts/extensions/directory.v2.schema.json").read_text())
     root = copy_sources(tmp_path)
     listing_path = root / "contributions/extension-listings/command.blitcp.json"
     listing_path.write_text(
@@ -165,6 +174,30 @@ def test_v2_listing_metadata_has_separate_credit_and_claim_authority(tmp_path: P
     row = next(item for item in exporter.export_directory_v2(root)["entries"] if item["id"] == "command.blitcp")
     assert row["contributors"] == [{"githubId": "123", "githubLogin": "example-author", "roles": ["author"]}]
     assert row["maintainerGithubIds"] == []
+    profile = {
+        "description": "Writes bounded file-transfer coverage.",
+        "website": "https://example.com/blitcp",
+        "linkedin": "https://www.linkedin.com/in/example-author",
+    }
+    listing_path.write_text(
+        json.dumps(
+            {
+                **json.loads(listing_path.read_text()),
+                "contributors": [
+                    {
+                        "githubId": "123",
+                        "githubLogin": "example-author",
+                        "roles": ["author"],
+                        "profile": profile,
+                    }
+                ],
+            }
+        )
+    )
+    profiled = next(item for item in exporter.export_directory_v2(root)["entries"] if item["id"] == "command.blitcp")
+    assert profiled["contributors"][0]["profile"] == profile
+    assert profiled["maintainerGithubIds"] == []
+    Draft202012Validator(v2_schema).validate(exporter.export_directory_v2(root))
     assert row["listing"]["path"] == "contributions/extension-listings/command.blitcp.json"
 
 
@@ -229,9 +262,7 @@ def test_directory_fixture_preserves_projected_authority_and_exporter_rejects_pe
     projected = tmp_path / "projected"
     copy_projected_contribution_sources(root, projected)
     entries = exporter.export_directory(projected)["entries"]
-    assert {row["runtimeExtensionId"] for row in entries} == {
-        row.extension_id for row in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
-    }
+    assert {row["runtimeExtensionId"] for row in entries} == {row.extension_id for row in exporter.native_extensions()}
     assert "mcp.pending-fixture" not in {row["id"] for row in entries}
     known = "contributions/mcp-servers/mcp.filesystem.json"
     assert (projected / known).read_bytes() == (root / known).read_bytes()

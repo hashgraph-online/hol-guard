@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sqlite3
 import subprocess
@@ -531,6 +532,8 @@ def test_guard_settings_set_encoded_payloads(tmp_path, capsys):
         ("mcp", "ask-all", "mcp_dangerous_tool", "require-reapproval"),
         ("skills", "ask-dangerous", "malicious_skill", "require-reapproval"),
         ("packages", "ask-lifecycle", "package_script", "require-reapproval"),
+        ("packages", "ask-lifecycle", "package_install", "allow"),
+        ("packages", "ask-all", "package_install", "require-reapproval"),
         ("output-scanning", "ask", "encoded_exfiltration", "require-reapproval"),
     ],
 )
@@ -818,6 +821,11 @@ class _SyncRequestHandler(BaseHTTPRequestHandler):
 
 
 class TestGuardCli:
+    @pytest.fixture(autouse=True)
+    def _bundled_native_runtime_present(self, monkeypatch):
+        # These update tests simulate package-index installs; a source checkout has no bundled runtime.
+        monkeypatch.setattr(guard_update_commands_module, "bundled_native_runtime_missing", lambda: False)
+
     def test_claude_guard_hook_command_detection_handles_legacy_and_pinned_commands(self):
         legacy_command = "/opt/python/bin/python3 -m codex_plugin_scanner.cli guard hook --guard-home /tmp/guard"
         pinned_command = (
@@ -1839,19 +1847,17 @@ args = ["workspace-skill.js"]
             custom_config_dir / "plugins" / "shared.mjs"
         )
 
-    def test_guard_detect_handles_unreadable_opencode_plugin_files(self, tmp_path, capsys, monkeypatch):
+    @pytest.mark.skipif(
+        sys.platform == "win32" or os.geteuid() == 0,
+        reason="file modes do not block reads here",
+    )
+    def test_guard_detect_handles_unreadable_opencode_plugin_files(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _write_json(workspace_dir / "opencode.json", {})
-        _write_text(workspace_dir / ".opencode" / "plugins" / "broken.mjs", "export default {};\n")
-        original_read_bytes = Path.read_bytes
-
-        def _patched_read_bytes(path: Path) -> bytes:
-            if path.name == "broken.mjs":
-                raise OSError("Permission denied")
-            return original_read_bytes(path)
-
-        monkeypatch.setattr(Path, "read_bytes", _patched_read_bytes)
+        broken = workspace_dir / ".opencode" / "plugins" / "broken.mjs"
+        _write_text(broken, "export default {};\n")
+        broken.chmod(0o000)
 
         rc = main(
             [
@@ -2952,7 +2958,7 @@ args = ["workspace-skill.js", "--changed"]
             guard_home=home_dir,
         )
         expected_session_start_argv = ClaudeCodeHarnessAdapter._session_start_command_parts(context)
-        assert guard_pretool_entry["matcher"] == "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+        assert guard_pretool_entry["matcher"] == "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
         assert (
             _command_handler_argv(install_settings_payload["hooks"]["SessionStart"][0]["hooks"][0])
             == expected_session_start_argv
@@ -4354,7 +4360,9 @@ args = ["workspace-skill.js", "--changed"]
                 }
             },
         }
-        guard_update_commands_module.CodexHarnessAdapter._install_config_hooks(config_payload, context)
+        guard_update_commands_module.CodexHarnessAdapter._install_config_hooks(
+            config_payload, context, config_path=home_dir / ".codex" / "config.toml"
+        )
         hooks = config_payload["hooks"]
         assert isinstance(hooks, dict)
         pre_tool_groups = hooks["PreToolUse"]

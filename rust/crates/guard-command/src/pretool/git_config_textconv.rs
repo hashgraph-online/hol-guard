@@ -19,7 +19,11 @@ pub(super) fn may_run(operation: &str, options: &[&str]) -> bool {
         // refuses.
         "branch" | "hash-object" | "config" | "grep" => false,
         // Only the plain object-read forms, which never convert, reach the probe.
-        "ls-tree" | "cat-file" => false,
+        // Reference listings and commit walks print names and object ids only.
+        "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list" => false,
+        // describe prints a ref name; reflog prints the ref log's own entries.
+        // blame is absent on purpose: it converts the blob it annotates.
+        "describe" | "reflog" => false,
         _ => true,
     }
 }

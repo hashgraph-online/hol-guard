@@ -21,6 +21,23 @@ pub fn changed() -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, "filesystem binding changed")
 }
 
+/// Ask the OS using effective credentials, including ACLs, before PATH selection.
+#[cfg(unix)]
+pub fn can_execute(path: &Path) -> io::Result<bool> {
+    let path = CString::new(path.as_os_str().as_bytes()).map_err(|_| changed())?;
+    if unsafe { libc::faccessat(libc::AT_FDCWD, path.as_ptr(), libc::X_OK, libc::AT_EACCESS) } == 0
+    {
+        return Ok(true);
+    }
+    let error = io::Error::last_os_error();
+    match error.kind() {
+        io::ErrorKind::NotFound
+        | io::ErrorKind::NotADirectory
+        | io::ErrorKind::PermissionDenied => Ok(false),
+        _ => Err(error),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Identity {
     #[cfg(unix)]
@@ -92,8 +109,6 @@ pub struct ReadFile {
 }
 
 fn regular(file: &File, executable: bool) -> io::Result<()> {
-    #[cfg(not(unix))]
-    let _ = executable;
     let m = file.metadata()?;
     if !m.is_file() {
         return Err(changed());
@@ -106,6 +121,10 @@ fn regular(file: &File, executable: bool) -> io::Result<()> {
     {
         use std::os::windows::fs::MetadataExt;
         if m.file_attributes() & 0x400 != 0 {
+            return Err(changed());
+        }
+        // A second name can alias a withheld file, as on Unix.
+        if !executable && !guard_runtime_windows_process::is_single_link_handle(file)? {
             return Err(changed());
         }
     }

@@ -42,12 +42,16 @@ class SubprocessCaseWorker:
         workdir: Path,
         command: list[str] | None = None,
         pass_fds: tuple[int, ...] = (),
+        label: str | None = None,
     ):
+        # A re-run of the same case passes its own ``label`` so the earlier run's
+        # result, group ledger and worker logs are not overwritten by this one.
+        label = label or scenario_id
         self.scenario_id = scenario_id
-        self._result = _result_path(workdir, scenario_id)
-        self._groups = workdir / f"{scenario_id}.groups"
-        out = (workdir / f"{scenario_id}.stdout.txt").open("wb")
-        err = (workdir / f"{scenario_id}.stderr.txt").open("wb")
+        self._result = _result_path(workdir, label)
+        self._groups = workdir / f"{label}.groups"
+        out = (workdir / f"{label}.stdout.txt").open("wb")
+        err = (workdir / f"{label}.stderr.txt").open("wb")
         self._files = (out, err)
         try:
             self.process = subprocess.Popen(
@@ -167,6 +171,16 @@ def main() -> int:
     if identity.sha256 != spec["identity_sha256"] or capabilities.build_sha != spec["build_sha"]:
         raise RuntimeError("installed Guard changed between runner and case worker")
     host_process.group_ledger = Path(spec["groups"])
+    full_task = spec.get("full_task")
+    if full_task is not None:
+        from .full_task_parallel import run_worker_full_task
+
+        case = run_worker_full_task(spec, full_task, identity)
+        result = Path(spec["result"])
+        temporary = result.with_suffix(".tmp")
+        temporary.write_text(json.dumps({"assessment": case["assessment"], "case": case}), encoding="utf-8")
+        os.replace(temporary, result)
+        return 0
     scenario = next(s for s in load_catalog() if s.id == spec["scenario_id"])
     if spec.get("harness", "omp") != "omp":
         from .harness_case import run_harness_case
@@ -191,6 +205,7 @@ def main() -> int:
             identity=identity,
             provider=spec["provider"],
             timeout=float(spec["timeout"]),
+            attempt=int(spec.get("attempt", 1)),
         )
     result = Path(spec["result"])
     temporary = result.with_suffix(".tmp")

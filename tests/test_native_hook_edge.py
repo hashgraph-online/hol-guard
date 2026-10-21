@@ -172,6 +172,17 @@ def test_edge_decoder_accepts_omitted_optional_request_id() -> None:
     assert _decode_edge(with_extra) is None
 
 
+@pytest.mark.parametrize("route", ("none", "sink", "grant"))
+def test_edge_decoder_accepts_the_stamped_containment_route(route: str) -> None:
+    edge = {**_edge_result(), "containment_route": route}
+    assert _decode_edge(edge) == edge
+
+
+@pytest.mark.parametrize("route", ("allow", None, ["sink"], 1))
+def test_edge_decoder_refuses_a_containment_route_it_does_not_know(route: object) -> None:
+    assert _decode_edge({**_edge_result(), "containment_route": route}) is None
+
+
 def test_edge_decoder_requires_receipt_bound_to_result() -> None:
     missing_receipt = _edge_result()
     del missing_receipt["receipt"]

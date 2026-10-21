@@ -7,8 +7,8 @@ fn relay_command_and_feature_names_are_stable() {
 }
 
 #[test]
-fn the_relay_is_not_advertised_until_decisions_are_native() {
-    assert!(!crate::resident_protocol::capabilities()
+fn the_relay_is_advertised() {
+    assert!(crate::resident_protocol::capabilities()
         .features
         .iter()
         .any(|feature| feature == RELAY_FEATURE));

@@ -347,7 +347,8 @@ fn omp_bounded_line_selectors_keep_sensitive_and_unsupported_targets_denied() {
         format!("{}:raw", project.join(".env").display()),
         format!("{}:raw", ssh.join("id_ed25519").display()),
         format!("{}:raw", project.display()),
-        "main.rs:1-5:raw".to_owned(),
+        "main.rs:raw:raw".to_owned(),
+        "main.rs:-5,1-2:raw".to_owned(),
         "main.rs:img".to_owned(),
     ] {
         let decision = read_directory("omp", &target, &home, &project);

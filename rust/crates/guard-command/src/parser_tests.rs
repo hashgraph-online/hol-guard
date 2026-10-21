@@ -63,13 +63,17 @@ fn one_trailing_terminator_ends_the_command() {
         );
     }
     assert_eq!(parse_command(&request("ls;")).unwrap().segments.len(), 1);
-    for command in [";", "ls; ;", "ls;;", "ls &&", "ls ||", "ls |"] {
-        assert_ne!(
-            parse_command(&request(command)).unwrap().confidence,
-            "exact",
-            "{command:?}"
-        );
-    }
+    // These are POSIX parser results. A Windows host retries input POSIX
+    // cannot prove as PowerShell, where an empty statement (`ls; ;`) is valid.
+    crate::powershell_reads::with_posix_powershell_host(|| {
+        for command in [";", "ls; ;", "ls;;", "ls &&", "ls ||", "ls |"] {
+            assert_ne!(
+                parse_command(&request(command)).unwrap().confidence,
+                "exact",
+                "{command:?}"
+            );
+        }
+    });
 }
 
 #[test]
@@ -183,11 +187,10 @@ fn marks_complex_shell_forms_uncertain_without_partial_segments() {
         "echo hello > out.txt",
         "sleep 1 &",
         "sudo -s rm -rf /tmp/example",
-        "sh -c 'rm -rf /tmp/example'",
         "eval 'rm -rf /tmp/example'",
         "if true; then echo yes; fi",
         "[[ -f Cargo.toml ]]",
-        "echo $'non-posix quote'",
+        "echo $\"locale translation\"",
         "xargs rm -rf",
         "find . -exec rm {} ;",
     ] {

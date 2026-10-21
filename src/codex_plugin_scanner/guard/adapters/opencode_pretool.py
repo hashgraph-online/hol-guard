@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 
 from ..codex_hook_windows_job import windows_system_executable_path
+from ._modules.opencode.opencode_pretool_template import _PLUGIN_TEMPLATE
 from .base import HarnessContext
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .bounded_cli_hook_native import NATIVE_BOUNDED_HOOK_COMMAND
@@ -15,7 +16,6 @@ from .hook_python import (
     HookPythonExecutableIdentity,
     HookPythonFileMetadata,
 )
-from .opencode_pretool_template import _PLUGIN_TEMPLATE
 from .opencode_v2_entrypoint import OPENCODE_V2_ENTRYPOINT
 
 PLUGIN_FILENAME = "hol-guard-pretool.ts"

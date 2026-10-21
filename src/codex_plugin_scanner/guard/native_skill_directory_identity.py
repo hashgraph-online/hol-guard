@@ -79,11 +79,6 @@ def _is_windows() -> bool:
     return os.name == "nt"
 
 
-def portable_python_required(*paths: Path) -> bool:
-    """Compatibility query: every supported OS path now uses native authority."""
-    return False
-
-
 def _encoded_path(path: Path) -> str:
     text = anchor_to_process_directory(path)
     return (text.encode("utf-16-le", "surrogatepass") if _is_windows() else os.fsencode(text)).hex()
@@ -374,6 +369,5 @@ __all__ = [
     "SKILL_DIRECTORY_IDENTITY_FEATURE",
     "native_discover_skill_documents",
     "native_inspect_skill_directory",
-    "portable_python_required",
     "unavailable_skill_directory_identity",
 ]

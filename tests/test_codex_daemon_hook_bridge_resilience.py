@@ -3,22 +3,15 @@
 from __future__ import annotations
 
 import http.client
-import io
 import json
-import os
 import subprocess
 import sys
 import threading
-import time
-import urllib.error
 from http.server import HTTPServer
 from pathlib import Path
 from urllib.parse import urlencode
 
-import pytest
-
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge_flow as bridge_flow
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_daemon_hook_bridge_fixtures import (
@@ -108,326 +101,6 @@ def test_real_daemon_rejects_consumed_challenge_replay(tmp_path: Path) -> None:
     assert replay_response.status == 401
 
 
-def test_malformed_daemon_and_fallback_outputs_fail_closed(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    daemon = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
-    daemon_thread = threading.Thread(target=daemon.serve_forever, daemon=True)
-    daemon_thread.start()
-    port = daemon.server_address[1]
-    _write_authenticated_daemon_files(guard_home, port)
-    _DaemonHandler.response_body = b"not-json"
-    config = _bridge_config(guard_home, port)
-    config["fallback_command"] = [sys.executable, "-c", "print('still-not-json')"]
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
-
-    try:
-        exit_code = bridge.main(**config)
-    finally:
-        daemon.shutdown()
-        daemon_thread.join(timeout=5)
-
-    assert exit_code == 0
-    output = json.loads(capsys.readouterr().out)
-    assert output["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
-def test_post_tool_use_stdout_is_exactly_one_json_object_with_noisy_fallback(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    config = _bridge_config(guard_home, 1)
-    config["fallback_command"] = [
-        sys.executable,
-        "-c",
-        "print('Guard integrity warning'); print('{\"continue\": true}')",
-    ]
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PostToolUse"})))
-
-    exit_code = bridge.main(**config)
-
-    captured = capsys.readouterr()
-    output = json.loads(captured.out)
-    assert exit_code == 0
-    assert output["continue"] is True
-    assert captured.out == json.dumps(output, separators=(",", ":"))
-    assert captured.err == ""
-
-
-def test_unavailable_daemon_preserves_local_fallback_denial(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    denial = {
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": "blocked by fixture policy",
-        }
-    }
-    config = _bridge_config(guard_home, 1)
-    config["fallback_command"] = [
-        sys.executable,
-        "-c",
-        f"import json; print(json.dumps({denial!r}))",
-    ]
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
-
-    exit_code = bridge.main(**config)
-
-    assert exit_code == 0
-    assert json.loads(capsys.readouterr().out) == denial
-
-
-def test_main_starts_daemon_once_then_retries_hook(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    responses: list[dict[str, object] | None] = []
-    starts: list[tuple[str, ...]] = []
-
-    def daemon_response(**kwargs: object) -> dict[str, object]:
-        responses.append(None)
-        if len(responses) == 1:
-            raise urllib.error.URLError("daemon cold")
-        return {}
-
-    def start_daemon(
-        command: tuple[str, ...],
-        *,
-        timeout_seconds: float,
-        failure_kind: str,
-    ) -> bool:
-        starts.append(tuple(command))
-        assert 1.0 < timeout_seconds <= 2
-        assert failure_kind == "transport-failure"
-        return True
-
-    config = _bridge_config(guard_home, 1)
-    monkeypatch.setattr(bridge_flow, "_daemon_response", daemon_response)
-    monkeypatch.setattr(bridge_flow, "_run_daemon_start", start_daemon)
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
-
-    exit_code = bridge.main(**config)
-
-    assert exit_code == 0
-    assert len(responses) == 2
-    assert starts == [tuple(config["start_command"])]
-    assert json.loads(capsys.readouterr().out) == {}
-
-    fallback_calls: list[str] = []
-    monkeypatch.setattr(
-        bridge_flow,
-        "_daemon_response",
-        lambda **_kwargs: {
-            "continue": False,
-            "stopReason": "isolated review failed",
-            "systemMessage": "isolated review failed",
-            "reason_code": "daemon_hook_process_failed",
-        },
-    )
-    monkeypatch.setattr(
-        bridge_flow,
-        "_run_local_fallback",
-        lambda _command, *, data, timeout_seconds: (
-            fallback_calls.append(data) or {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
-        ),
-    )
-    prompt = {
-        "hook_event_name": "UserPromptSubmit",
-        "prompt": "Reassess the current implementation.",
-    }
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(prompt)))
-
-    assert bridge.main(**config) == 0
-    assert len(fallback_calls) == 1
-    forwarded = json.loads(fallback_calls[0])
-    # The bridge stamps its own execution environment before any route sees the input.
-    assert isinstance(forwarded.pop("guard_execution_environment"), dict)
-    assert forwarded == prompt
-    assert json.loads(capsys.readouterr().out) == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
-
-
-def test_authenticated_overload_fails_closed_without_fallback_or_restart(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    starts: list[tuple[str, ...]] = []
-
-    def overloaded_daemon(**kwargs: object) -> dict[str, object]:
-        del kwargs
-        raise bridge_flow._DaemonResponseError(429, '{"error":"hook_capacity_exhausted"}', authenticated=True)
-
-    def start_daemon(
-        command: tuple[str, ...],
-        *,
-        timeout_seconds: float,
-        failure_kind: str,
-    ) -> bool:
-        del timeout_seconds, failure_kind
-        starts.append(command)
-        return True
-
-    config = _bridge_config(guard_home, 1)
-    monkeypatch.setattr(bridge_flow, "_daemon_response", overloaded_daemon)
-    monkeypatch.setattr(bridge_flow, "_run_daemon_start", start_daemon)
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
-
-    assert bridge.main(**config) == 0
-    assert starts == []
-    payload = json.loads(capsys.readouterr().out)
-    output = payload["hookSpecificOutput"]
-    assert output["permissionDecision"] == "deny"
-    assert output["hookEventName"] == "PreToolUse"
-    assert "temporarily saturated" in output["permissionDecisionReason"]
-
-
-def test_typed_transient_overload_retries_once_when_deadline_fits(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    attempts = 0
-
-    def daemon_response(**kwargs: object) -> dict[str, object]:
-        del kwargs
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise bridge_flow._DaemonResponseError(
-                503,
-                '{"reason_code":"transient_overload","retry_after_ms":25,"estimated_service_ms":100}',
-                authenticated=True,
-            )
-        return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
-
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    monkeypatch.setattr(bridge_flow, "_daemon_response", daemon_response)
-    monkeypatch.setattr(bridge.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr("sys.stdin", io.StringIO('{"hook_event_name":"PreToolUse"}'))
-
-    assert bridge.main(**_bridge_config(guard_home, 1)) == 0
-    assert attempts == 2
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["hookSpecificOutput"] == {"hookEventName": "PreToolUse"}
-    assert "permissionDecision" not in payload["hookSpecificOutput"]
-
-
-def test_daemon_rpc_budget_stays_below_approval_wait(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: list[float] = []
-
-    def fake_daemon(**kwargs: object) -> None:
-        timeout = kwargs["timeout_seconds"]
-        assert isinstance(timeout, float)
-        seen.append(timeout)
-        raise OSError("down")
-
-    monkeypatch.setattr(bridge_flow, "_daemon_response", fake_daemon)
-    monkeypatch.setattr(bridge_flow, "_trusted_launch_for_fallback", lambda **_kwargs: (None, True))
-
-    response, overloaded, integrity_failed = bridge_flow.bridge_review_response(
-        state_path="state.json",
-        fallback_command=["/bin/echo", "fallback"],
-        start_command=["/bin/echo", "start"],
-        query="probe",
-        data="{}",
-        deadline=time.monotonic() + 300,
-        manifest_path="hooks.manifest.json",
-        config_json="{}",
-    )
-
-    assert response is None
-    assert overloaded is False
-    assert integrity_failed is True
-    assert seen == [float(bridge_flow._DAEMON_RPC_TIMEOUT_SECONDS)]
-
-
-@pytest.mark.parametrize(
-    ("event_name", "expected_cap"),
-    [
-        ("UserPromptSubmit", bridge_flow._DAEMON_PROMPT_RPC_TIMEOUT_SECONDS),
-        ("PreToolUse", bridge_flow._DAEMON_RPC_TIMEOUT_SECONDS),
-        (None, bridge_flow._DAEMON_RPC_TIMEOUT_SECONDS),
-    ],
-)
-def test_prompt_rpc_gets_cold_workspace_budget(
-    monkeypatch: pytest.MonkeyPatch, event_name: str | None, expected_cap: float
-) -> None:
-    seen: list[float] = []
-
-    def fake_daemon(**kwargs: object) -> None:
-        timeout = kwargs["timeout_seconds"]
-        assert isinstance(timeout, float)
-        seen.append(timeout)
-        raise OSError("down")
-
-    monkeypatch.setattr(bridge_flow, "_daemon_response", fake_daemon)
-    monkeypatch.setattr(bridge_flow, "_trusted_launch_for_fallback", lambda **_kwargs: (None, True))
-
-    bridge_flow.bridge_review_response(
-        state_path="state.json",
-        fallback_command=["/bin/echo", "fallback"],
-        start_command=["/bin/echo", "start"],
-        query="probe",
-        data="{}",
-        deadline=time.monotonic() + 300,
-        manifest_path="hooks.manifest.json",
-        config_json="{}",
-        event_name=event_name,
-    )
-
-    assert seen == [float(expected_cap)]
-    assert bridge_flow._DAEMON_PROMPT_RPC_TIMEOUT_SECONDS == 10.0
-    assert bridge_flow._DAEMON_RPC_TIMEOUT_SECONDS == 4.0
-
-
-def test_daemon_failure_kind_separates_overload_transport_and_control_plane() -> None:
-    assert (
-        bridge_flow._daemon_failure_kind(
-            bridge_flow._DaemonResponseError(429, '{"error":"hook_capacity_exhausted"}', authenticated=True)
-        )
-        == "overload"
-    )
-    assert bridge_flow._daemon_failure_kind(TimeoutError("deadline")) == "transport-failure"
-    assert bridge_flow._daemon_failure_kind(ValueError("state authentication failed")) == (
-        "authenticated-control-plane-failure"
-    )
-
-
-@pytest.mark.skipif(os.name == "nt", reason="POSIX process-group assertion")
-def test_untrusted_fallback_timeout_kills_descendants(tmp_path: Path) -> None:
-    marker = tmp_path / "escaped-child.marker"
-    child = f"import time;from pathlib import Path;time.sleep(.3);Path({str(marker)!r}).write_text('escaped')"
-    parent = f"import subprocess,sys,time;subprocess.Popen([sys.executable,'-c',{child!r}]);time.sleep(10)"
-
-    response = bridge_flow._run_local_fallback(
-        (sys.executable, "-c", parent),
-        data="{}",
-        timeout_seconds=0.05,
-    )
-    time.sleep(0.4)
-
-    assert response is None
-    assert not marker.exists()
-
-
 def test_bridge_script_cold_start_stays_below_hook_budget(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     daemon = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
@@ -445,6 +118,9 @@ def test_bridge_script_cold_start_stays_below_hook_budget(tmp_path: Path) -> Non
     config = _bridge_config(guard_home, port)
     config["manifest_path"] = str(guard_home / "managed" / "codex" / "hooks-fixture.manifest.json")
     bridge_path = str(Path(bridge.__file__).resolve())
+    # The launcher is the whole Python cost of a hook call: it parses its
+    # config, reads the body and either hands the call to the native command
+    # or fails closed. The sample covers that launcher, not the review.
     timing_wrapper = """
 import runpy
 import sys
@@ -455,7 +131,7 @@ started_at = time.perf_counter()
 try:
     runpy.run_path(bridge_path, run_name="__main__")
 except SystemExit:
-    print(f"bridge-elapsed={time.perf_counter() - started_at}", file=sys.stderr)
+    print(f"launcher-elapsed={time.perf_counter() - started_at}", file=sys.stderr)
     raise
 """
     command = [sys.executable, "-I", "-c", timing_wrapper, bridge_path, json.dumps(config)]
@@ -483,7 +159,7 @@ except SystemExit:
     ]
     responses = [json.loads(result.stdout) for result in results]
     assert all(_is_codex_pretool_continue(response) for response in responses)
-    elapsed_samples = [float(result.stderr.rsplit("bridge-elapsed=", 1)[1]) for result in results]
+    elapsed_samples = [float(result.stderr.rsplit("launcher-elapsed=", 1)[1]) for result in results]
     # The process timeout enforces the hard two-second wall-clock budget. The
     # in-process sample retains the one-second bridge budget without charging
     # interpreter startup and runner dispatch to bridge execution.

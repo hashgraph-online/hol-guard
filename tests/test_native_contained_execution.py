@@ -42,16 +42,18 @@ def test_tsx_positive_nested_reply_reaches_the_caller(monkeypatch):
 )
 def test_preparation_is_one_bound_call(monkeypatch, tmp_path, module, method, profile):
     calls = []
+    home = tmp_path / "home"
 
     def call(action, **kwargs):
         calls.append(action)
         return reply(tmp_path, profile)
 
     monkeypatch.setattr(transport, "_call", call)
-    plan = getattr(module, method)(["node", "--test"], workspace=tmp_path)
+    plan = getattr(module, method)(["node", "--test"], workspace=tmp_path, home_dir=home)
     assert plan.profile_version == profile
     assert len(calls) == 1
     assert calls[0]["kind"] == "restricted_pytest"
+    assert calls[0]["body"]["input"]["home"] == str(home)
     assert not {"allow", "verdict", "decision"}.intersection(calls[0]["body"]["input"])
 
 
@@ -101,7 +103,7 @@ def test_mapping_codec_preserves_full_index_without_python_inspection(monkeypatc
 
 
 def test_large_mapping_response_reaches_namespace_preparation_caller(monkeypatch, tmp_path):
-    from codex_plugin_scanner.guard.runtime.restricted_linux_mapping_plan import collect_mapping_evidence
+    from tests.restricted_linux_test_support import native_mapping_evidence
 
     records = [
         {"path": "/workspace/" + "module-" * 430 + str(i), "identity": [1, i, 1, 1, 0o100500], "sha256": "0" * 64}
@@ -120,7 +122,7 @@ def test_large_mapping_response_reaches_namespace_preparation_caller(monkeypatch
         return {"value": {"decoded_bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}}
 
     monkeypatch.setattr(transport, "_call", call)
-    assert collect_mapping_evidence(images=set(), read_files=set(), runtime_roots=(), workspace=tmp_path) == records
+    assert native_mapping_evidence(images=set(), read_files=set(), runtime_roots=(), workspace=tmp_path) == records
     assert not outputs[0].exists()
 
 

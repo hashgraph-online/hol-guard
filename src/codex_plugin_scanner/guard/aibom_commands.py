@@ -134,6 +134,56 @@ def build_aibom_export_payload(
     return payload
 
 
+_AIBOM_USER_INVENTORY_KEY = "aibom_user_inventory_collection"
+
+
+def remember_user_inventory_if_due(
+    store: Any,
+    *,
+    generated_at: str,
+    min_interval_seconds: int = _AIBOM_AUTO_SYNC_INTERVAL_SECONDS,
+    home_dir: Path | None = None,
+) -> dict[str, object]:
+    """Collect user-wide inventory for fleet posture without syncing an AIBOM snapshot.
+
+    A home-only scan must not replace a workspace-scoped cloud snapshot, so a
+    daemon without workspace context keeps the result local. Fleet posture
+    still reports the machine's user-wide agents, skills and MCP servers.
+    """
+    from . import aibom_cli as api
+    from .runtime.fleet_posture_aibom import remember_aibom_items
+
+    prior = store.get_sync_payload(_AIBOM_USER_INVENTORY_KEY)
+    collected_at = prior.get("collected_at") if isinstance(prior, dict) else None
+    if isinstance(collected_at, str) and collected_at.strip():
+        try:
+            elapsed = (api._aware_utc_timestamp(generated_at) - api._aware_utc_timestamp(collected_at)).total_seconds()
+        except (ValueError, OverflowError, TypeError):
+            elapsed = None
+        if elapsed is not None and 0 <= elapsed < min_interval_seconds:
+            return {"collected": False, "skipped": True, "reason": "recently_collected", "collected_at": collected_at}
+    context = HarnessContext(
+        home_dir=api._resolve_operator_home_dir(home_dir),
+        workspace_dir=None,
+        guard_home=store.guard_home,
+    )
+    snapshots = api.collect_aibom_snapshots(
+        context,
+        generated_at=generated_at,
+        options=api._AIBOM_CLOUD_SYNC_OPTIONS,
+        trust_attestation_context=api._resolve_trust_attestation_context(store, generated_at=generated_at),
+    )
+    items = remember_aibom_items(store, snapshots, now=generated_at, home_dir=context.home_dir)
+    summary: dict[str, object] = {
+        "collected": True,
+        "collected_at": generated_at,
+        "snapshots": len(snapshots),
+        "items": items,
+    }
+    store.set_sync_payload(_AIBOM_USER_INVENTORY_KEY, summary, generated_at)
+    return summary
+
+
 def sync_aibom_snapshots_if_due(
     store: Any,
     *,

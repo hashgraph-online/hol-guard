@@ -7,6 +7,7 @@ the caller already holds. It does not initialize or repair control authority.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from ..native_command_effect import NativeCommandEffectMalformedError
 from ..native_command_model import _canonical_command_from_native
 from ..native_pretool import review_pre_tool_native
 from .command_evaluation import CompositeCommandEvaluation, evaluate_command
+from .command_model import CanonicalCommand
 from .extension_control_runtime import ExtensionControlRuntimeSnapshot, current_extension_control_snapshot
 from .github_workflow_authorization import GitHubWorkflowAuthorization
 from .native_command_extension_evidence import NativeCommandExtensionEvidenceError
@@ -31,20 +33,40 @@ class NativeCommandEvaluation:
         return str(self.payload["minimum_action"])
 
 
-def review_command_native(
+@dataclass(frozen=True, slots=True, repr=False)
+class NativeCommandReview:
+    """The resident's pre-tool review of a command, before host policy resolves it."""
+
+    command: str
+    canonical: CanonicalCommand
+    native: dict[str, object]
+    snapshot: ExtensionControlRuntimeSnapshot
+    guard_home: Path
+    cwd: Path | None
+    home_dir: Path | None
+
+
+def native_command_review(
     command: str,
     *,
     guard_home: Path,
     cwd: Path | None = None,
     home_dir: Path | None = None,
     extension_control_snapshot: ExtensionControlRuntimeSnapshot | None = None,
-    compatibility_action_class: str | None = None,
-    compatibility_reason: str | None = None,
-    workflow_authorization: GitHubWorkflowAuthorization | None = None,
+    execution_environment: Mapping[str, object] | None = None,
     timeout_seconds: float = 0.5,
     record_health: bool = True,
-) -> NativeCommandEvaluation | None:
-    """Return a bound native projection, or None without a usable native result."""
+) -> NativeCommandReview | None:
+    """The resident's review of ``command``, or None without a usable native result.
+
+    It needs no host authorization, so a caller that has to spend one can take
+    this first and claim only once the resident has answered.
+
+    ``execution_environment`` is the stamp the hook bridge took in the shell
+    the command would run in. The rules that have to prove an inherited
+    variable away read it from there; without it the runtime answers from its
+    own process environment, which in the resident daemon is not the caller's.
+    """
     snapshot = extension_control_snapshot or current_extension_control_snapshot()
     if snapshot is None or snapshot.authority_failure is not None:
         return None
@@ -53,6 +75,7 @@ def review_command_native(
         guard_home=guard_home,
         cwd=cwd,
         home_dir=home_dir,
+        execution_environment=execution_environment,
         timeout_seconds=timeout_seconds,
         record_health=record_health,
     )
@@ -64,18 +87,29 @@ def review_command_native(
     canonical = _canonical_command_from_native(command, model)
     if canonical is None:
         return None
+    return NativeCommandReview(command, canonical, native, snapshot, guard_home, cwd, home_dir)
+
+
+def resolve_native_command_review(
+    review: NativeCommandReview,
+    *,
+    compatibility_action_class: str | None = None,
+    compatibility_reason: str | None = None,
+    workflow_authorization: GitHubWorkflowAuthorization | None = None,
+) -> NativeCommandEvaluation | None:
+    """Resolve a native review against host policy, or None without a usable result."""
     try:
         result = evaluate_command(
-            command,
-            canonical_command=canonical,
-            cwd=cwd,
-            home_dir=home_dir,
+            review.command,
+            canonical_command=review.canonical,
+            cwd=review.cwd,
+            home_dir=review.home_dir,
             compatibility_action_class=compatibility_action_class,
             compatibility_reason=compatibility_reason,
             workflow_authorization=workflow_authorization,
-            extension_control_snapshot=snapshot,
-            native_extension_evidence=native,
-            guard_home=guard_home,
+            extension_control_snapshot=review.snapshot,
+            native_extension_evidence=review.native,
+            guard_home=review.guard_home,
         )
     except (NativeCommandExtensionEvidenceError, NativeCommandEffectMalformedError):
         return None
@@ -84,9 +118,44 @@ def review_command_native(
     # command. Preserve the original classification separately and never let
     # such a proof relax a native hard block. Actual execution still requires
     # the authoritative native pre-execution decision and receipt.
-    if native.get("minimum_action") == "block" and result.minimum_action != "block":
+    if review.native.get("minimum_action") == "block" and result.minimum_action != "block":
         return None
-    return NativeCommandEvaluation(result, native, snapshot)
+    return NativeCommandEvaluation(result, review.native, review.snapshot)
+
+
+def review_command_native(
+    command: str,
+    *,
+    guard_home: Path,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
+    extension_control_snapshot: ExtensionControlRuntimeSnapshot | None = None,
+    compatibility_action_class: str | None = None,
+    compatibility_reason: str | None = None,
+    workflow_authorization: GitHubWorkflowAuthorization | None = None,
+    execution_environment: Mapping[str, object] | None = None,
+    timeout_seconds: float = 0.5,
+    record_health: bool = True,
+) -> NativeCommandEvaluation | None:
+    """Return a bound native projection, or None without a usable native result."""
+    review = native_command_review(
+        command,
+        guard_home=guard_home,
+        cwd=cwd,
+        home_dir=home_dir,
+        extension_control_snapshot=extension_control_snapshot,
+        execution_environment=execution_environment,
+        timeout_seconds=timeout_seconds,
+        record_health=record_health,
+    )
+    if review is None:
+        return None
+    return resolve_native_command_review(
+        review,
+        compatibility_action_class=compatibility_action_class,
+        compatibility_reason=compatibility_reason,
+        workflow_authorization=workflow_authorization,
+    )
 
 
 def evaluate_command_native(
@@ -99,6 +168,7 @@ def evaluate_command_native(
     compatibility_action_class: str | None = None,
     compatibility_reason: str | None = None,
     workflow_authorization: GitHubWorkflowAuthorization | None = None,
+    execution_environment: Mapping[str, object] | None = None,
 ) -> CompositeCommandEvaluation | None:
     reviewed = review_command_native(
         command,
@@ -109,5 +179,6 @@ def evaluate_command_native(
         compatibility_action_class=compatibility_action_class,
         compatibility_reason=compatibility_reason,
         workflow_authorization=workflow_authorization,
+        execution_environment=execution_environment,
     )
     return reviewed.evaluation if reviewed is not None else None

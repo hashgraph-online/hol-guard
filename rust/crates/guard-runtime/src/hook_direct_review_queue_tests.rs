@@ -285,51 +285,272 @@ fn only_a_string_or_falsy_reason_is_reproduced() {
 #[cfg(unix)]
 #[test]
 fn a_silent_review_blocks_after_queueing_its_request_and_event() {
-    let home = store_home("review-queue-silent", SILENT_VECTORS);
-    let guard_home = home.to_string_lossy().into_owned();
-    let payload = Map::new();
-    let mut binding = ask_binding();
-    binding.review.blocked_request_mode = Some("safe-alternative".to_owned());
-    let context = Context {
-        harness: "codex",
-        payload: &payload,
-        recorded_payload: &payload,
-        workspace: "/work/space",
-        home_dir: "/home/user",
-        guard_home: &guard_home,
-        binding: &binding,
-    };
-    let vectors: Value = serde_json::from_str(SILENT_VECTORS).unwrap();
-    let request = vectors["scenarios"][1]["request"].clone();
-    let result = json!({
-        "decision": "review",
-        "minimum_action": "require-reapproval",
-        "reason": "Deletes files.",
-        "reason_code": "native_review",
-    });
-    let response = silent(&context, result.as_object().unwrap(), "default", request).unwrap();
-    let mut blocked = result.as_object().unwrap().clone();
-    blocked.insert("decision".to_owned(), json!("deny"));
-    blocked.insert("minimum_action".to_owned(), json!("block"));
-    blocked.insert("policy_action".to_owned(), json!("block"));
-    blocked.insert(
-        "reason".to_owned(),
-        json!(safe_alternative_reason(
+    let safe = safe_alternative_reason_with_retry(
+        "Deletes files.",
+        Some("native_review"),
+        Some(true),
+        true,
+        false,
+    );
+    // Without a daemon token Codex cannot sign the loopback link, so it says
+    // so instead of handing out an unsigned one.
+    for (harness, reason) in [
+        (
+            "claude-code",
+            format!(
+                "{safe} Open HOL Guard to approve or keep this blocked: \
+                 http://127.0.0.1:4781/requests/r-new."
+            ),
+        ),
+        (
+            "codex",
+            format!(
+                "{safe} HOL Guard could not create a signed approval link; open Inbox \
+                 from Guard on this device, then retry."
+            ),
+        ),
+    ] {
+        let home = store_home(&format!("review-queue-silent-{harness}"), SILENT_VECTORS);
+        let guard_home = home.to_string_lossy().into_owned();
+        let payload = Map::new();
+        let mut binding = ask_binding();
+        binding.review.blocked_request_mode = Some("safe-alternative".to_owned());
+        let context = Context {
+            harness,
+            payload: &payload,
+            recorded_payload: &payload,
+            workspace: "/work/space",
+            home_dir: "/home/user",
+            guard_home: &guard_home,
+            binding: &binding,
+        };
+        let vectors: Value = serde_json::from_str(SILENT_VECTORS).unwrap();
+        let request = vectors["scenarios"][1]["request"].clone();
+        let result = json!({
+            "decision": "review",
+            "minimum_action": "require-reapproval",
+            "reason": "Deletes files.",
+            "reason_code": "native_review",
+        });
+        let response = silent(
+            &context,
+            result.as_object().unwrap(),
+            "default",
+            request,
+            true,
+            false,
+        )
+        .unwrap();
+        let mut blocked = result.as_object().unwrap().clone();
+        blocked.insert("decision".to_owned(), json!("deny"));
+        blocked.insert("minimum_action".to_owned(), json!("block"));
+        blocked.insert("policy_action".to_owned(), json!("block"));
+        blocked.insert("reason".to_owned(), json!(reason));
+        let mut expected = pre_tool(harness, &blocked);
+        expected.insert("prompted".to_owned(), json!(false));
+        expected.insert("blocked_request_mode".to_owned(), json!("safe-alternative"));
+        assert_eq!(response, Value::Object(expected), "{harness}");
+        let connection = rusqlite::Connection::open(home.join(STORE_FILE_NAME)).unwrap();
+        let count = |sql: &str| -> i64 { connection.query_row(sql, [], |row| row.get(0)).unwrap() };
+        assert_eq!(count("select count(*) from approval_requests"), 1);
+        assert_eq!(
+            count("select count(*) from guard_events where event_name = 'approval.created'"),
+            1
+        );
+        std::fs::remove_dir_all(home).ok();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_silent_review_links_its_row_only_when_approval_can_unblock_it() {
+    // Unbound: an exact-action Always can still let the retry run, so the
+    // user gets the row's link; without one no approval can, so nothing sends
+    // the user to approve it.
+    for (tag, exact_action_allowable, linked) in [
+        ("always-only", true, true),
+        ("cannot-unblock", false, false),
+    ] {
+        let home = store_home(&format!("review-queue-silent-{tag}"), SILENT_VECTORS);
+        let guard_home = home.to_string_lossy().into_owned();
+        let payload = Map::new();
+        let mut binding = ask_binding();
+        binding.review.blocked_request_mode = Some("safe-alternative".to_owned());
+        let context = Context {
+            harness: "claude-code",
+            payload: &payload,
+            recorded_payload: &payload,
+            workspace: "/work/space",
+            home_dir: "/home/user",
+            guard_home: &guard_home,
+            binding: &binding,
+        };
+        let vectors: Value = serde_json::from_str(SILENT_VECTORS).unwrap();
+        let request = vectors["scenarios"][1]["request"].clone();
+        let result = json!({
+            "decision": "review",
+            "minimum_action": "require-reapproval",
+            "reason": "Deletes files.",
+            "reason_code": "native_review",
+        });
+        let response = silent(
+            &context,
+            result.as_object().unwrap(),
+            "default",
+            request,
+            false,
+            exact_action_allowable,
+        )
+        .unwrap();
+        let safe = safe_alternative_reason_with_retry(
             "Deletes files.",
             Some("native_review"),
-            Some(true)
-        )),
-    );
-    let mut expected = pre_tool("codex", &blocked);
-    expected.insert("prompted".to_owned(), json!(false));
-    expected.insert("blocked_request_mode".to_owned(), json!("safe-alternative"));
-    assert_eq!(response, Value::Object(expected));
-    let connection = rusqlite::Connection::open(home.join(STORE_FILE_NAME)).unwrap();
-    let count = |sql: &str| -> i64 { connection.query_row(sql, [], |row| row.get(0)).unwrap() };
-    assert_eq!(count("select count(*) from approval_requests"), 1);
-    assert_eq!(
-        count("select count(*) from guard_events where event_name = 'approval.created'"),
-        1
-    );
-    std::fs::remove_dir_all(home).ok();
+            Some(true),
+            false,
+            exact_action_allowable,
+        );
+        let reason = if linked {
+            format!(
+                "{safe} Open HOL Guard to approve or keep this blocked: \
+                 http://127.0.0.1:4781/requests/r-new."
+            )
+        } else {
+            safe
+        };
+        let mut blocked = result.as_object().unwrap().clone();
+        blocked.insert("decision".to_owned(), json!("deny"));
+        blocked.insert("minimum_action".to_owned(), json!("block"));
+        blocked.insert("policy_action".to_owned(), json!("block"));
+        blocked.insert("reason".to_owned(), json!(reason));
+        let mut expected = pre_tool("claude-code", &blocked);
+        expected.insert("prompted".to_owned(), json!(false));
+        expected.insert("blocked_request_mode".to_owned(), json!("safe-alternative"));
+        assert_eq!(response, Value::Object(expected), "{tag}");
+        let connection = rusqlite::Connection::open(home.join(STORE_FILE_NAME)).unwrap();
+        let rows: i64 = connection
+            .query_row("select count(*) from approval_requests", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(rows, 1, "{tag}");
+        std::fs::remove_dir_all(home).ok();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn an_omp_silent_review_hands_the_extension_a_resume_only_when_its_retry_is_bound() {
+    // The OMP extension waits for the queued row and then asks the agent to
+    // run the identical call again; an unbound row, or another harness, gets
+    // no handle because approving it cannot let that retry run.
+    for (tag, harness, retry_reuses_approval, exact_action_allowable, resumes) in [
+        ("omp-bound", "omp", true, false, true),
+        ("omp-always-only", "omp", false, true, false),
+        ("omp-cannot-unblock", "omp", false, false, false),
+        ("claude-bound", "claude-code", true, false, false),
+    ] {
+        let home = store_home(&format!("review-queue-resume-{tag}"), SILENT_VECTORS);
+        let guard_home = home.to_string_lossy().into_owned();
+        let payload = Map::new();
+        let mut binding = ask_binding();
+        binding.review.blocked_request_mode = Some("safe-alternative".to_owned());
+        let context = Context {
+            harness,
+            payload: &payload,
+            recorded_payload: &payload,
+            workspace: "/work/space",
+            home_dir: "/home/user",
+            guard_home: &guard_home,
+            binding: &binding,
+        };
+        let vectors: Value = serde_json::from_str(SILENT_VECTORS).unwrap();
+        let request = vectors["scenarios"][1]["request"].clone();
+        let result = json!({
+            "decision": "review",
+            "minimum_action": "require-reapproval",
+            "reason": "Deletes files.",
+            "reason_code": "native_review",
+        });
+        let response = silent(
+            &context,
+            result.as_object().unwrap(),
+            "default",
+            request,
+            retry_reuses_approval,
+            exact_action_allowable,
+        )
+        .unwrap();
+        let expected =
+            resumes.then(|| json!({"request_id": "r-new", "poll_path": "/v1/requests/r-new"}));
+        assert_eq!(response.get("approval_resume").cloned(), expected, "{tag}");
+        assert_eq!(
+            response["blocked_request_mode"], "safe-alternative",
+            "{tag}"
+        );
+        std::fs::remove_dir_all(home).ok();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn ask_without_any_reusable_identity_records_without_starting_a_wait() {
+    for (tag, command) in [
+        ("ask-python", "python3 script.py"),
+        ("ask-push", "git push origin dev"),
+    ] {
+        let home = store_home(tag, SILENT_VECTORS);
+        let guard_home = home.to_string_lossy().into_owned();
+        let binding = ask_binding();
+        let workspace = super::super::tests::workspace(tag);
+        let (_, _, _, mut exact) = super::super::tests::bound_query(&binding, &workspace);
+        let NativeExactActionQueryV1::ExactAction {
+            command: query_command,
+            ..
+        } = &mut exact
+        else {
+            panic!("an exact-action query");
+        };
+        *query_command = Some(command.to_owned());
+        assert!(crate::native_exact_action_op::review_binding_for(&exact, None, None).is_none());
+        let payload = json!({"tool_name": "Bash", "tool_input": {"command": command}});
+        let payload = payload.as_object().unwrap();
+        let fixture = super::super::tests::vectors();
+        let context = Context {
+            harness: "omp",
+            payload,
+            recorded_payload: payload,
+            workspace: &workspace,
+            home_dir: fixture["home_dir"].as_str().unwrap(),
+            guard_home: &guard_home,
+            binding: &binding,
+        };
+        let result = json!({"decision": "deny", "policy_action": "review", "minimum_action": "review",
+                           "reason": "Review this command.", "reason_code": "native_command_review_required"});
+        let response = answer(
+            &context,
+            result.as_object().unwrap(),
+            None,
+            &exact,
+            &Err("mutable_command"),
+        )
+        .expect("an unbound review is recorded without a pause");
+        assert_eq!(response["prompted"], false);
+        assert_eq!(response["policy_action"], "block");
+        assert!(response["reason"]
+            .as_str()
+            .unwrap()
+            .contains("approving it there will not let you run it"));
+        assert!(response.get("approval_request_id").is_none());
+        assert!(response.get("approval_url").is_none());
+        let connection = rusqlite::Connection::open(home.join(STORE_FILE_NAME)).unwrap();
+        let pending: i64 = connection
+            .query_row(
+                "select count(*) from approval_requests where status = 'pending'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending, 1);
+        std::fs::remove_dir_all(home).unwrap();
+    }
 }

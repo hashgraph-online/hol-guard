@@ -59,6 +59,11 @@ fn fixture(name: &str) -> Fixture {
     write(&app.join("README.md"), "# app\n");
     write(&app.join("package.json"), "{\"name\": \"app\"}\n");
     write(&app.join("src/index.ts"), "export const b = 1;\n");
+    write(&app.join("src/rank.ts"), "export const rank = 1;\n");
+    write(
+        &app.join("tests/rank.test.ts"),
+        "export const covered = 1;\n",
+    );
     write(&app.join("tsconfig.json"), "{\"compilerOptions\": {}}\n");
     write(&app.join(".env"), "TOKEN=synthetic\n");
     symlink(home.join(".ssh/id_ed25519"), app.join("notes.md")).unwrap();
@@ -171,6 +176,83 @@ fn scratch_checkout_copies_keep_source_and_destination_screens() {
         "cp src/index.ts src/e.ts && echo done".to_owned(),
     ] {
         assert!(!permitted(&fixture, &command), "{command}");
+    }
+}
+
+/// `cp saved/src/*.ts dir/` is the explicit list the shell expands it to, so
+/// every match gets the source screens and lands at `dir/<name>` under the
+/// destination screens of a literal multi-file copy.
+#[test]
+fn scratch_checkout_globs_copy_like_their_expansion() {
+    let fixture = fixture("glob-copies");
+    let app = fixture.scratch.join("app");
+    let app = app.display();
+    let project = fixture.project.display();
+    for command in [
+        format!("cp {app}/src/*.ts {project}/src/"),
+        format!("cp {app}/*.json src/"),
+        format!(
+            "mkdir -p {project}/src/lib/discovery && cp {app}/src/*.ts {project}/src/lib/discovery/ && cp {app}/tests/rank.test.ts {project}/src/ && echo copied"
+        ),
+        format!("mkdir -p src/lib/rank && cp {app}/src/r?nk.ts {app}/README.md src/lib/rank/"),
+    ] {
+        assert!(permitted(&fixture, &command), "{command}");
+    }
+}
+
+#[test]
+fn scratch_checkout_globs_keep_every_screen() {
+    let fixture = fixture("glob-copies-reviewed");
+    let app = fixture.scratch.join("app");
+    let app = app.display();
+    let project = fixture.project.display();
+    let home = fixture.home.display();
+    for command in [
+        // A match that links to a credential, a hidden match, a directory.
+        format!("cp {app}/*.md {project}/src/"),
+        format!("cp {app}/* {project}/src/"),
+        format!("cp {app}/s* {project}/src/"),
+        // Hook, credential and package-bin destinations.
+        format!("cp {app}/src/*.ts {project}/.git/hooks/"),
+        format!("cp {app}/src/*.ts {home}/.ssh/"),
+        format!("cp {app}/src/*.ts {project}/node_modules/.bin/"),
+        // Nothing matches, the pattern is in a directory, or uses brackets.
+        format!("cp {app}/src/*.missing {project}/src/"),
+        format!("cp {app}/s*/index.ts {project}/src/"),
+        format!("cp {app}/src/[ir]*.ts {project}/src/"),
+        format!("cp {app}/src/**/*.ts {project}/src/"),
+        // A directory the chain creates where the proof saw one operand.
+        format!("mkdir -p src/out && cp {app}/src/*.ts src/out"),
+        // Flags and moves are unchanged.
+        format!("cp -f {app}/src/*.ts {project}/src/"),
+        format!("mkdir -p src/out && mv {app}/src/*.ts src/out/"),
+    ] {
+        assert!(!permitted(&fixture, &command), "{command}");
+    }
+}
+
+/// The glob model ignores case, so it can see more matches than the shell
+/// passes. With one real match, `cp` writes the destination path itself.
+#[test]
+fn glob_copies_into_a_new_path_stay_reviewed() {
+    let fixture = fixture("glob-copies-new-path");
+    let app = fixture.scratch.join("app");
+    write(&app.join("src/RANKED.TS"), "export const ranked = 1;\n");
+    let app = app.display();
+    let project = fixture.project.display();
+    for command in [
+        format!("cp {app}/src/r*.ts {project}/ranked"),
+        format!("cp {app}/src/r*.ts src/ranked.ts"),
+        format!("cp {app}/src/*.ts {project}/fresh"),
+    ] {
+        assert!(!permitted(&fixture, &command), "{command}");
+    }
+    // A trailing slash or an existing directory still copies every match in.
+    for command in [
+        format!("cp {app}/src/r*.ts {project}/src/"),
+        format!("cp {app}/src/r*.ts {project}/src"),
+    ] {
+        assert!(permitted(&fixture, &command), "{command}");
     }
 }
 

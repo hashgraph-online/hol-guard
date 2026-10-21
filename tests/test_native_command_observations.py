@@ -66,7 +66,7 @@ def _rehash(value: dict[str, Any]) -> None:
     ).hexdigest()
 
 
-def _receipt(extensions: dict[str, Any] | None) -> dict[str, Any]:
+def _receipt(extensions: dict[str, Any] | None, *, review_anchor: bool = False) -> dict[str, Any]:
     value: dict[str, Any] = {
         "schema": "guard-native-hook-decision-receipt.v1",
         "version": 1,
@@ -92,10 +92,14 @@ def _receipt(extensions: dict[str, Any] | None) -> dict[str, Any]:
         "observe_mode": False,
         "deadline_budget_ms": 750,
     }
+    if review_anchor:
+        # Evidence only; the store never persists it and it stays out of the
+        # decision identity.
+        value["review_anchor_digest"] = "9" * 64
     if extensions is not None:
         value["command_extensions"] = copy.deepcopy(extensions["binding"])
     identity = {
-        **{key: item for key, item in value.items() if key not in {"authority", "decision_id"}},
+        **{key: item for key, item in value.items() if key not in {"authority", "decision_id", "review_anchor_digest"}},
         "schema": "guard-native-hook-decision-identity.v1",
     }
     value["decision_id"] = hashlib.sha256(
@@ -261,16 +265,15 @@ def test_unknown_fields_duplicates_limits_and_unbound_error_reject() -> None:
 
 
 @pytest.mark.parametrize(
-    ("rule_id", "reason_code", "accepted"),
+    ("rule_id", "reason_code"),
     (
-        ("command.shell-mutations.destructive-shell", "native_workspace_containment_required", True),
-        ("command.ollama.push", "native_workspace_containment_required", False),
-        ("command.shell-mutations.destructive-shell", "native_pytest_readonly_containment_required", False),
+        ("command.shell-mutations.destructive-shell", "native_workspace_containment_required"),
+        ("command.ollama.push", "native_workspace_containment_required"),
+        ("command.shell-mutations.destructive-shell", "native_pytest_readonly_containment_required"),
     ),
 )
-def test_only_workspace_removals_reach_the_sandbox_with_uncertainty(
-    rule_id: str, reason_code: str, accepted: bool
-) -> None:
+def test_the_edge_trusts_the_resident_floor_for_an_uncertain_match(rule_id: str, reason_code: str) -> None:
+    # The floor is Rust's to choose; the edge checks only the receipt's shape.
     extensions = _observations()
     observation = extensions["observations"][0]
     observation.update(
@@ -304,4 +307,4 @@ def test_only_workspace_removals_reach_the_sandbox_with_uncertainty(
         "explicitly_benign": False,
         "command_extensions": extensions,
     }
-    assert _decode_pre_tool_result(result, harness="claude-code") is accepted
+    assert _decode_pre_tool_result(result, harness="claude-code") is True

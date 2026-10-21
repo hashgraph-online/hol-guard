@@ -26,7 +26,7 @@ CODEX_HOOK_INVENTORY_SOURCE_MALFORMED = "codex_hook_inventory_source_malformed"
 CODEX_HOOK_INVENTORY_SOURCE_UNREADABLE = "codex_hook_inventory_source_unreadable"
 CODEX_HOOK_INVENTORY_SOURCE_CHANGED = "codex_hook_inventory_source_changed"
 HookSourceFormat = Literal["json", "toml"]
-HookOwnership = Literal["authenticated_manifest", "exact_legacy_adoption", "unmanaged"]
+HookOwnership = Literal["authenticated_manifest", "exact_legacy_adoption", "self_install_binding", "unmanaged"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,6 +107,7 @@ def enumerate_codex_hooks(
     source_hooks_enabled: bool,
     authenticated_bindings: Sequence[Mapping[str, object]] = (),
     legacy_bindings: Sequence[Mapping[str, object]] = (),
+    self_bindings: Sequence[Mapping[str, object]] = (),
 ) -> CodexHookInventory:
     """Walk every event, group, and handler accepted by the Codex hook shape."""
 
@@ -189,6 +190,7 @@ def enumerate_codex_hooks(
                     group_active=group_active,
                     authenticated_bindings=authenticated_bindings,
                     legacy_bindings=legacy_bindings,
+                    self_bindings=self_bindings,
                     group=group,
                 )
                 if record is not None:
@@ -243,6 +245,7 @@ def _handler_record(
     group_active: bool,
     authenticated_bindings: Sequence[Mapping[str, object]],
     legacy_bindings: Sequence[Mapping[str, object]],
+    self_bindings: Sequence[Mapping[str, object]],
     group: Mapping[str, object],
 ) -> tuple[CodexHookInventoryRecord | None, tuple[CodexHookInventoryIssue, ...]]:
     if not isinstance(handler, Mapping):
@@ -329,6 +332,7 @@ def _handler_record(
         handler,
         authenticated_bindings=authenticated_bindings,
         legacy_bindings=legacy_bindings,
+        self_bindings=self_bindings,
     )
     command_argv = canonical_codex_command_argv(command)
     canonical_identity = canonical_codex_hook_identity(
@@ -412,11 +416,14 @@ def _ownership(
     *,
     authenticated_bindings: Sequence[Mapping[str, object]],
     legacy_bindings: Sequence[Mapping[str, object]],
+    self_bindings: Sequence[Mapping[str, object]] = (),
 ) -> HookOwnership:
     if _bindings_contain_handler(authenticated_bindings, event_name, group, handler):
         return "authenticated_manifest"
     if _bindings_contain_handler(legacy_bindings, event_name, group, handler):
         return "exact_legacy_adoption"
+    if _bindings_contain_handler(self_bindings, event_name, group, handler):
+        return "self_install_binding"
     return "unmanaged"
 
 

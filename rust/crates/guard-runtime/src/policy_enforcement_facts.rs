@@ -4,6 +4,7 @@ use guard_secure_fs::sensitive_path_family;
 use serde_json::{Map, Value};
 use std::path::Path;
 
+mod policy_enforcement_facts_schema;
 mod policy_enforcement_facts_tools;
 
 pub(super) use policy_enforcement_facts_tools::{
@@ -268,24 +269,34 @@ fn codex_command_budget_input<'a>(
     Some(input)
 }
 
+/// `maps` carries every map of the payload and supplies the path selectors and
+/// the native `sensitive_target` verdict. `key_maps` is the subset whose key
+/// names are selectors rather than labels, so a filtered map keeps its path
+/// floor while its field names stop reading as credentials.
 pub(super) fn payload_sensitive_target(
     maps: &[&Map<String, Value>],
+    key_maps: &[&Map<String, Value>],
     codex_budget_input: Option<&Map<String, Value>>,
     codex_wait_process: Option<&Map<String, Value>>,
 ) -> Result<bool, String> {
     let mut sensitive = path_values_sensitive(maps)?;
+    // A native verdict is read wherever it appears, including inside a map
+    // whose names are labels.
+    for record in maps {
+        if let Some(value) = record.get("sensitive_target") {
+            sensitive |= value
+                .as_bool()
+                .ok_or_else(|| "native_policy_sensitive_target_invalid".to_owned())?;
+        }
+    }
     // Traversal borrows maps from the original JSON tree. Identity, rather
     // than value equality, excludes nested and sibling copies. Zero is also
     // numeric metadata; this does not interpret its budget semantics or relax
     // command, path, intrinsic or managed floors.
-    for record in maps {
+    for record in key_maps {
         for (key, value) in *record {
-            if key == "sensitive_target" {
-                let value = value
-                    .as_bool()
-                    .ok_or_else(|| "native_policy_sensitive_target_invalid".to_owned())?;
-                sensitive |= value;
-            } else if sensitive_key(key)
+            if key != "sensitive_target"
+                && sensitive_key(key)
                 && !((key == "max_output_tokens"
                     && value.as_u64().is_some()
                     && codex_budget_input.is_some_and(|input| std::ptr::eq(*record, input)))
@@ -478,18 +489,29 @@ pub(super) fn payload_facts(
     let mut maps = Vec::new();
     let mut nodes = 0usize;
     collect_fact_maps(payload, 0, &mut nodes, &mut maps)?;
-    let publisher = optional_identity(&maps, PUBLISHER_KEYS)?;
-    let artifact = optional_identity(&maps, ARTIFACT_KEYS)?;
-    // An object is not a selector, but it is still publisher metadata. A
-    // proven constant eval may skip the floor only when no identity was sent.
-    let unusable_identity = identity_metadata_supplied(&maps, PUBLISHER_KEYS)
-        || identity_metadata_supplied(&maps, ARTIFACT_KEYS);
+    // Result-schema property names are labels, not authority selectors. Do
+    // not parse a publisher_id or artifact_id label as an identity before
+    // the schema-name filter is applied.
+    let scanned = policy_enforcement_facts_schema::without_schema_names(&maps, payload, harness);
+    let publisher = optional_identity(&scanned, PUBLISHER_KEYS)?;
+    let artifact = optional_identity(&scanned, ARTIFACT_KEYS)?;
+    // An object outside the schema is still publisher metadata.
+    let unusable_identity = identity_metadata_supplied(&scanned, PUBLISHER_KEYS)
+        || identity_metadata_supplied(&scanned, ARTIFACT_KEYS);
     let budget_input = codex_command_budget_input(payload, harness, action_type);
     // Only an exact root-level, syntactically bounded process start identity
     // is timing metadata. Nested copies, extra keys, credentials and command
     // floors retain ordinary enforcement. This grants no process authority.
     let wait_process = codex_browser_process_metadata(payload, harness);
-    let sensitive_target = payload_sensitive_target(&maps, budget_input, wait_process)?
+    // The field names of a `task` result schema, and of the verified report
+    // that answers one, are labels, not credentials.
+    let named = policy_enforcement_facts_schema::without_result_labels(
+        &scanned,
+        payload,
+        harness,
+        reason_code,
+    );
+    let sensitive_target = payload_sensitive_target(&scanned, &named, budget_input, wait_process)?
         || reason_code.contains("secret")
         || reason_code.contains("credential")
         || reason_code.contains("exfiltration");

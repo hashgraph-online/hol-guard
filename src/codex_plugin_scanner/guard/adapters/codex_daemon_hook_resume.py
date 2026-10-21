@@ -19,7 +19,7 @@ from urllib.parse import quote
 
 from ..approval_hook_copy import _SIGNED_APPROVAL_LINK_UNAVAILABLE, authenticated_approval_review_url
 from ..browser_opener import open_browser_url
-from .codex_daemon_hook_transport import _daemon_json_get, _daemon_json_post
+from ._modules.codex.codex_daemon_hook_transport import _daemon_json_get, _daemon_json_post
 
 GUARD_APPROVAL_REQUEST_ID_KEY = "guardApprovalRequestId"
 GUARD_APPROVAL_URL_KEY = "guardApprovalUrl"

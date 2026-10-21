@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import threading
 import time
+from collections import deque
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -80,7 +83,7 @@ def _diagnostics(env: dict[str, str]) -> str:
             # The resident may hold the file without read sharing; say so instead of dropping the evidence.
             lines.append(f"{entry.name}={text}")
             continue
-        phases = [line for line in text.splitlines() if line.startswith("native_resident_phase ")]
+        phases = [line for line in text.splitlines() if line.startswith(_DIAGNOSTIC_PREFIXES)]
         lines.extend(phases[-96:])
     return " | ".join(lines)
 
@@ -132,10 +135,12 @@ def _start_timeline(env: dict[str, str]) -> str:
         if event in _TIMELINE_EVENTS or event == "startup_phase":
             lines.append(f"{record.get('timestamp', '')[11:23]} {event} {record.get('detail', '')}".rstrip())
     for entry in Path(env["HOL_GUARD_HOME"]).rglob("managed-resident-phases.v1.log"):
-        phases = [line for line in _safe_read(entry).splitlines() if line.startswith("native_resident_phase ")]
+        phases = [line for line in _safe_read(entry).splitlines() if line.startswith(_DIAGNOSTIC_PREFIXES)]
         lines.extend(phases[-64:])
     return "\n".join(lines[-300:])
 
+
+_DIAGNOSTIC_PREFIXES = ("native_resident_phase ", "native_resident_note ")
 
 _TIMELINE_EVENTS = frozenset(
     {
@@ -162,7 +167,173 @@ def _full_diagnostics(env: dict[str, str]) -> str:
         for entry in sorted(logs.rglob("*")):
             if entry.is_file():
                 sections.append(f"--- {entry.name} ---\n{_safe_read(entry)}")
+    try:
+        sections.extend(_resident_state_diagnostics(guard_home))
+    except Exception as error:  # evidence collection must never replace the original failure
+        sections.append(f"resident state diagnostics failed: {error!r}")
     return "\n".join(sections)
+
+
+# Resident state fields that locate a resident without exposing its token or MAC.
+_STATE_FIELDS = ("generation", "process_id", "owner_process_id", "transport", "endpoint", "created_ms")
+_RUNTIME_PROCESS_QUERY = (
+    "Get-CimInstance Win32_Process -Filter \"Name like 'hol-guard%'\" | "
+    "Select-Object ProcessId,ParentProcessId,CreationDate,Name,CommandLine | ConvertTo-Json -Compress"
+)
+
+
+def _utc_clock(seconds: float) -> str:
+    return datetime.fromtimestamp(seconds, tz=timezone.utc).strftime("%H:%M:%S.%f")[:-3]
+
+
+def _long_path(path: Path) -> str:
+    """The Win32 long form of ``path``, so an 8.3 alias in the state base is visible."""
+
+    if os.name != "nt":
+        return str(path)
+    import ctypes
+
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = ctypes.windll.kernel32.GetLongPathNameW(str(path), buffer, len(buffer))
+    return buffer.value if 0 < length < len(buffer) else f"<GetLongPathNameW failed for {path}>"
+
+
+def _state_summary(path: Path) -> str:
+    try:
+        state = json.loads(path.read_text())
+    except (OSError, ValueError) as error:
+        return f"<unreadable {error!r}>"
+    if not isinstance(state, dict):
+        return "<not an object>"
+    fields = [f"{key}={state.get(key)!r}" for key in _STATE_FIELDS]
+    digest = state.get("runtime_sha256")
+    fields.append(f"runtime_sha256_prefix={digest[:16] if isinstance(digest, str) else None!r}")
+    fields.append(f"keys={sorted(state)}")
+    return " ".join(fields)
+
+
+def _runtime_tree(guard_home: Path) -> list[str]:
+    """Every native-runtime entry with size and mtime; generation files also name their resident."""
+
+    runtime_dir = guard_home / "native-runtime"
+    lines = []
+    if not runtime_dir.is_dir():
+        return [f"{runtime_dir} missing"]
+    try:
+        entries = sorted(runtime_dir.rglob("*"))
+    except OSError as error:
+        return [f"{runtime_dir} walk={error!r}"]
+    for entry in entries:
+        relative = entry.relative_to(runtime_dir)
+        try:
+            stat = entry.stat()
+        except OSError as error:
+            lines.append(f"{relative} stat={error!r}")
+            continue
+        kind = "dir" if entry.is_dir() else f"size={stat.st_size}"
+        line = f"{relative} {kind} mtime={_utc_clock(stat.st_mtime)}"
+        if entry.is_file() and entry.name.startswith("generation-") and entry.suffix == ".json":
+            line += f" state: {_state_summary(entry)}"
+        lines.append(line)
+    return lines
+
+
+def _resident_state_diagnostics(guard_home: Path) -> list[str]:
+    """Full resident phase history, resident stderr, state tree and the state base each process ran with."""
+
+    runtime_dir = guard_home / "native-runtime"
+    sections = [
+        "--- resident state base ---\n"
+        f"guard_home={guard_home}\nlong_guard_home={_long_path(guard_home)}\n"
+        f"realpath_guard_home={os.path.realpath(guard_home)}\nruntime_dir={runtime_dir}",
+        "--- native-runtime tree ---\n" + "\n".join(_runtime_tree(guard_home)),
+    ]
+    for entry in sorted(guard_home.rglob("managed-resident-phases.v1.log")):
+        sections.append(f"--- full {entry.relative_to(guard_home)} ---\n{_safe_read(entry)}")
+    for entry in sorted(guard_home.rglob("resident-stderr*.log")):
+        sections.append(f"--- {entry.relative_to(guard_home)} ---\n{_safe_read(entry)}")
+    if os.name == "nt":
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", _RUNTIME_PROCESS_QUERY],
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=30,
+            )
+            processes = result.stdout.strip() or result.stderr.strip()
+        except (OSError, subprocess.SubprocessError) as error:
+            processes = repr(error)
+        # Runtime command lines carry --state-dir, generation, owner PID and digest; tokens go over stdin.
+        sections.append(f"--- Guard process command lines ---\n{processes}")
+    return sections
+
+
+class _StateDirSampler:
+    """Record when resident state entries appear, change and vanish while a packaged step runs.
+
+    The client that times out is killed before the post-failure snapshot, so the snapshot alone
+    cannot show whether a generation file existed during its spawn wait.
+    """
+
+    _INTERVAL_SECONDS = 0.2
+    _MAX_EVENTS = 600
+
+    def __init__(self, guard_home: Path) -> None:
+        self._runtime_dir = guard_home / "native-runtime"
+        self._events: deque[str] = deque(maxlen=self._MAX_EVENTS)
+        self._dropped = 0
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="resident-state-sampler", daemon=True)
+
+    def __enter__(self) -> _StateDirSampler:
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self._stop.set()
+        self._thread.join(timeout=5)
+
+    def _snapshot(self) -> dict[str, tuple[int, int]]:
+        entries: dict[str, tuple[int, int]] = {}
+        if not self._runtime_dir.is_dir():
+            return entries
+        try:
+            paths = list(self._runtime_dir.rglob("*"))
+        except OSError:
+            return entries
+        for entry in paths:
+            try:
+                stat = entry.stat()
+            except OSError:
+                continue
+            size = -1 if entry.is_dir() else stat.st_size
+            entries[str(entry.relative_to(self._runtime_dir))] = (size, stat.st_mtime_ns)
+        return entries
+
+    def _record(self, line: str) -> None:
+        if len(self._events) == self._MAX_EVENTS:
+            self._dropped += 1  # the append below evicts the oldest event
+        self._events.append(f"{_utc_clock(time.time())} {line}")
+
+    def _run(self) -> None:
+        previous: dict[str, tuple[int, int]] = {}
+        while not self._stop.is_set():
+            current = self._snapshot()
+            for name in sorted(current.keys() - previous.keys()):
+                size = current[name][0]
+                self._record(f"add {name} {'dir' if size < 0 else f'size={size}'}")
+            for name in sorted(previous.keys() - current.keys()):
+                self._record(f"remove {name}")
+            for name in sorted(current.keys() & previous.keys()):
+                if current[name] != previous[name] and "phases" not in name:
+                    self._record(f"change {name} size={current[name][0]}")
+            previous = current
+            self._stop.wait(self._INTERVAL_SECONDS)
+
+    def report(self) -> str:
+        dropped = f"({self._dropped} earlier events dropped)\n" if self._dropped else ""
+        return "--- native-runtime state timeline ---\n" + dropped + "\n".join(self._events)
 
 
 def _safe_read(path: Path) -> str:
@@ -235,6 +406,8 @@ def test_packaged_windows_core_bootstrap_retry_and_repair(tmp_path: Path, native
     stop_args = ["daemon", "stop", "--guard-home", str(guard_home), "--json"]
     repair_args = ["daemon", "repair", "--guard-home", str(guard_home), "--json"]
 
+    sampler = _StateDirSampler(guard_home)
+    sampler.__enter__()
     try:
         bootstrap = _json_result(_run_core(executable, bootstrap_args, env=env))
         _require(bootstrap["schema"] == "guard-desktop-bootstrap.v1")
@@ -266,8 +439,10 @@ def test_packaged_windows_core_bootstrap_retry_and_repair(tmp_path: Path, native
         repaired_status = _json_result(_run_core(executable, status_args, env=env))
         _require(repaired_status["running"] is True)
     except (Exception, pytest.fail.Exception) as error:
-        pytest.fail(f"{error!r}\n{_full_diagnostics(env)}", pytrace=False)
+        sampler.__exit__()
+        pytest.fail(f"{error!r}\n{_full_diagnostics(env)}\n{sampler.report()}", pytrace=False)
     finally:
+        sampler.__exit__()
         print(f"Packaged daemon start timeline:\n{_start_timeline(env)}")
         cleanup = _run_core(executable, stop_args, env=env)
         assert cleanup.returncode == 0, f"stdout={cleanup.stdout!r}\nstderr={cleanup.stderr!r}"

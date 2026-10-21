@@ -1271,6 +1271,7 @@ def test_codex_guard_proxy_only_passes_through_policy_actions_that_permit_execut
         "evaluate_tool_call",
         lambda **_: ToolCallDecision(
             action=action,
+            policy_action=action,
             source="policy",
             signals=("tool name implies destructive file or system changes",),
             summary="Policy override matched this tool call.",
@@ -1383,6 +1384,7 @@ def test_codex_guard_proxy_reuses_server_identity_with_env_keys(monkeypatch, tmp
         captured["artifact"] = kwargs["artifact"]
         return ToolCallDecision(
             action="allow",
+            policy_action="allow",
             source="heuristic",
             signals=(),
             summary="No high-risk signal was detected in this tool call.",

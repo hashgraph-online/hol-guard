@@ -2,6 +2,7 @@ import type { LocalCliContinuity } from "./custom-extension-continuity-api";
 import { normalizeCodexHostInventory } from "./codex-host-inventory";
 import type { LocalCliCommand, LocalCliItem, LocalCliListResponse, LocalCliSurface, LocalMcpCatalog, McpClassification } from "./local-cli-api";
 import { normalizeProfileFields, normalizeSuggestedState } from "./local-cli-profile-fields";
+import { normalizeCapabilityFields } from "./local-cli-capability";
 import { SHA256_PATTERN, isLocalCliId, isRecord, optionalString, requiredInt, requiredString } from "./local-cli-fields";
 
 export function normalizeMcpClassification(value: unknown): McpClassification | undefined {
@@ -57,7 +58,11 @@ export function normalizeLocalCliItem(value: unknown): LocalCliItem {
     ...(providerCatalog ? { provider_catalog: providerCatalog } : {}),
     ...(["configured-connection", "host-namespace", "legacy-device"].includes(String(value.permission_scope))
       ? { permission_scope: value.permission_scope as LocalCliItem["permission_scope"] } : {}),
+    ...(typeof value.remote_origin === "string" && value.remote_origin.length <= 512
+      && /^https?:\/\/[^\s?#@]+$/.test(value.remote_origin)
+      ? { remote_origin: value.remote_origin } : {}),
     ...normalizeProfileFields(value),
+    ...normalizeCapabilityFields(value),
   };
 }
 
@@ -230,7 +235,8 @@ export function normalizeLocalCliList(value: unknown): LocalCliListResponse {
     schema_version: requiredString(value.schema_version, "schema"),
     revision,
     ...((discoveryIssue === "catalog_limit_reached" || discoveryIssue === "observed_provider_scan_failed"
-      || discoveryIssue === "configured_host_scan_failed" || discoveryIssue === "package_catalog_refresh_failed")
+      || discoveryIssue === "configured_host_scan_failed" || discoveryIssue === "configured_host_persist_failed"
+      || discoveryIssue === "package_catalog_refresh_failed")
       ? { discovery_issue: discoveryIssue } : {}),
     ...(nativePublication ? { native_publication: nativePublication } : {}),
     ...(hostInventory ? { host_inventory: hostInventory } : {}),

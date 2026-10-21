@@ -78,7 +78,7 @@ fn request(
 }
 
 #[cfg(unix)]
-fn account_home() -> Option<String> {
+pub(crate) fn account_home() -> Option<String> {
     let user = nix::unistd::User::from_uid(nix::unistd::Uid::current()).ok()??;
     Path::new(&user.dir)
         .is_absolute()
@@ -86,7 +86,7 @@ fn account_home() -> Option<String> {
 }
 
 #[cfg(not(unix))]
-fn account_home() -> Option<String> {
+pub(crate) fn account_home() -> Option<String> {
     None
 }
 
@@ -94,7 +94,7 @@ fn account_home() -> Option<String> {
 /// the Git path is writable by this account. `getgroups` has no safe binding
 /// on Apple targets, so the system `id` reports them.
 #[cfg(unix)]
-fn groups() -> Option<Vec<u32>> {
+pub(crate) fn groups() -> Option<Vec<u32>> {
     let output = std::process::Command::new("/usr/bin/id")
         .arg("-G")
         .env_clear()
@@ -116,7 +116,7 @@ fn groups() -> Option<Vec<u32>> {
 }
 
 #[cfg(not(unix))]
-fn groups() -> Option<Vec<u32>> {
+pub(crate) fn groups() -> Option<Vec<u32>> {
     None
 }
 

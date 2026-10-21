@@ -285,3 +285,57 @@ fn daemon_of_another_version_or_host_is_refused_before_any_connection() {
         assert!(listener.accept().is_err(), "daemon {index} was contacted");
     }
 }
+
+#[test]
+fn a_down_daemon_of_this_version_yields_its_last_url() {
+    let (home, listener, _state) = live_home("ss-down-url", |state| {
+        state.insert("pid".to_owned(), json!(i32::MAX));
+    });
+    let port = listener.local_addr().unwrap().port();
+
+    assert_eq!(
+        stopped_daemon_url(&home.state_path),
+        Ok(format!("http://127.0.0.1:{port}"))
+    );
+    assert!(verify(&home).is_err());
+}
+
+#[test]
+fn a_running_unidentified_foreign_or_unsigned_daemon_is_not_down() {
+    let (home, _listener, _state) = live_home("ss-down-running", |_| {});
+    assert!(stopped_daemon_url(&home.state_path).is_err(), "running pid");
+
+    let edits: [fn(&mut Map<String, Value>); 4] = [
+        |state| {
+            state.insert("pid".to_owned(), json!(0));
+        },
+        |state| {
+            state.remove("pid");
+        },
+        |state| {
+            state.insert("pid".to_owned(), json!(i32::MAX));
+            state.insert("package_version".to_owned(), json!("0.0.0"));
+        },
+        |state| {
+            state.insert("pid".to_owned(), json!(i32::MAX));
+            state.insert("host".to_owned(), json!("::1"));
+        },
+    ];
+    for (index, edit) in edits.into_iter().enumerate() {
+        let (home, _listener, _state) = live_home(&format!("ss-down-gate-{index}"), edit);
+        assert!(
+            stopped_daemon_url(&home.state_path).is_err(),
+            "gate {index}"
+        );
+    }
+
+    let (home, _listener, mut state) = live_home("ss-down-unsigned", |state| {
+        state.insert("pid".to_owned(), json!(i32::MAX));
+    });
+    state.insert("state_signature".to_owned(), json!("0".repeat(64)));
+    write_private(
+        &home.state_path,
+        &serde_json::to_string(&Value::Object(state)).unwrap(),
+    );
+    assert!(stopped_daemon_url(&home.state_path).is_err(), "unsigned");
+}

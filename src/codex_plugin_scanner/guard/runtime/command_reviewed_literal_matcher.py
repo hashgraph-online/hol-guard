@@ -1,18 +1,14 @@
-"""Rule-local evidence for a maintainer-reviewed, exact literal invocation.
+"""The grammar an author's reviewed literal invocation has to be written in.
 
-This matcher does not approve a command. It can only lower its owning rule's
-contribution to the existing evaluator. It deliberately excludes shell syntax,
-wrappers, environment overrides, extra arguments, and uncertain parse boundaries.
+Matching a reviewed literal belongs to the runtime's ``reviewed-literal.v1``
+matcher. What stays here is the authoring-time spelling check: a bounded
+basename, one to sixteen literal argument tokens, and no shell syntax,
+expansion, wrapper or environment override anywhere in them.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
-from typing import final
-
-from .command_matcher_contracts import MatcherEvidence
-from .command_model import CanonicalCommand
 
 _EXECUTABLE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.+-]{0,63}")
 _LITERAL_ARGUMENT = re.compile(
@@ -36,45 +32,3 @@ def validate_reviewed_literal_argv(executable: str, arguments: tuple[str, ...]) 
     if len(expected) > 120:
         raise ValueError("Reviewed literal invocation exceeds the command example limit")
     return expected
-
-
-@final
-@dataclass(frozen=True, slots=True)
-class ReviewedLiteralCommandMatcher:
-    executable: str
-    arguments: tuple[str, ...]
-
-    def __post_init__(self) -> None:
-        validate_reviewed_literal_argv(self.executable, self.arguments)
-
-    def match(self, command: CanonicalCommand) -> tuple[MatcherEvidence, ...]:
-        evidence: list[MatcherEvidence] = []
-        if self._matches(command):
-            evidence.append(MatcherEvidence(0, self.executable, "Matched one explicitly reviewed literal invocation."))
-        return tuple(evidence)
-
-    def _matches(self, command: CanonicalCommand) -> bool:
-        expected = " ".join((self.executable, *self.arguments))
-        if (
-            command.dialect != "posix"
-            or command.transport != "shell_string"
-            or command.confidence != "exact"
-            or command.raw_text != expected
-            or command.normalized_text != expected
-            or command.wrapper_chain
-            or command.redirects
-            or command.embedded_commands
-            or command.path_overridden
-            or len(command.segments) != 1
-        ):
-            return False
-        segment = command.segments[0]
-        return not (
-            segment.executable != self.executable
-            or segment.tokens != (self.executable, *self.arguments)
-            or segment.arguments != self.arguments
-            or segment.environment_names
-            or segment.wrapper_chain
-            or segment.path_overridden
-            or segment.pipeline_index != 0
-        )

@@ -1,4 +1,5 @@
 //! Credential denials shared by native contained-execution profiles.
+pub(super) use crate::credential_patterns::patterns;
 use serde_json::{json, Value};
 
 pub(super) fn seatbelt_string(value: &str) -> String {
@@ -10,63 +11,6 @@ pub(super) fn seatbelt_string(value: &str) -> String {
             .replace('\n', "\\n")
             .replace('\r', "\\r")
     )
-}
-
-fn literal(value: &str) -> String {
-    let mut result = String::new();
-    for c in value.chars() {
-        if c.is_ascii_alphabetic() {
-            result.push_str(&format!(
-                "[{}{}]",
-                c.to_ascii_lowercase(),
-                c.to_ascii_uppercase()
-            ));
-        } else {
-            if matches!(c, '.' | '-') {
-                result.push('\\');
-            }
-            result.push(c);
-        }
-    }
-    result
-}
-
-fn alternatives(names: &[&str]) -> String {
-    names
-        .iter()
-        .map(|v| literal(v))
-        .collect::<Vec<_>>()
-        .join("|")
-}
-
-pub(super) fn patterns() -> Vec<String> {
-    vec![
-        format!("(^|/){}($|[./])", literal(".env")),
-        format!("(^|/)[^/]*{}$", literal(".key")),
-        format!("(^|/){}[^/]*$", literal("krb5cc_")),
-        format!(
-            "(^|/)({})$",
-            alternatives(&[
-                ".envrc",
-                ".authrc",
-                ".npmrc",
-                ".pypirc",
-                ".netrc",
-                ".git-credentials",
-                "terraform.tfvars",
-                "private.key",
-                "wallet.key"
-            ])
-        ),
-        format!(
-            "(^|/)[^/]*({})[^/]*$",
-            alternatives(&["private-key", "private_key", "wallet-key", "wallet_key"])
-        ),
-        format!(
-            "(^|/)({})(/|$)",
-            alternatives(&[".ssh", ".aws", ".docker", ".kube", ".gnupg", ".hol-guard"])
-        ),
-    ]
 }
 
 pub(super) fn denials(hide_metadata: bool) -> Vec<String> {

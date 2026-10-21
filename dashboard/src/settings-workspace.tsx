@@ -273,6 +273,12 @@ const riskControls = [
   { key: "guard_bypass", label: "Guard bypass", description: "Attempts to disable Guard hooks, policies, or approval flow.", consequence: RISK_CONTROL_CONSEQUENCES["guard_bypass"] },
   { key: "cloud_advisory", label: "Cloud advisories", description: "Team and Cloud guidance for known risky patterns.", consequence: RISK_CONTROL_CONSEQUENCES["cloud_advisory"] },
   { key: "encoded_exfiltration", label: "Encoded exfiltration", description: "Encoded payloads that hide secret extraction and network transfer.", consequence: RISK_CONTROL_CONSEQUENCES["encoded_exfiltration"] },
+  { key: "package_unknown", label: "Unrecognized packages", description: "Packages Guard cannot identify or find reputation for.", consequence: RISK_CONTROL_CONSEQUENCES["package_unknown"] },
+  { key: "package_lockfile_drift", label: "Lockfile bumps", description: "Manifest dependencies the lockfile does not pin yet.", consequence: RISK_CONTROL_CONSEQUENCES["package_lockfile_drift"] },
+  { key: "package_direct_source", label: "Direct package sources", description: "Git, URL, archive, local-path and replaced sources instead of the registry.", consequence: RISK_CONTROL_CONSEQUENCES["package_direct_source"] },
+  { key: "package_custom_registry", label: "Custom registries", description: "Installs that use a non-default package index or registry.", consequence: RISK_CONTROL_CONSEQUENCES["package_custom_registry"] },
+  { key: "package_install", label: "Every package install", description: "Every package install or update, even with no risk signal.", consequence: RISK_CONTROL_CONSEQUENCES["package_install"] },
+  { key: "low_trust_artifact", label: "Low trust scores", description: "Skills, MCP servers, and plugins scoring below 80 in the HOL Registry.", consequence: RISK_CONTROL_CONSEQUENCES["low_trust_artifact"] },
 ] as const;
 
 type RiskKey = (typeof riskControls)[number]["key"];
@@ -292,7 +298,13 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     persistence: "warn",
     guard_bypass: "warn",
     cloud_advisory: "allow",
-    encoded_exfiltration: "warn"
+    encoded_exfiltration: "warn",
+    package_unknown: "allow",
+    package_lockfile_drift: "allow",
+    package_direct_source: "allow",
+    package_custom_registry: "allow",
+    package_install: "allow",
+    low_trust_artifact: "warn"
   },
   balanced: {
     local_secret_read: "require-reapproval",
@@ -308,7 +320,13 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     persistence: "require-reapproval",
     guard_bypass: "block",
     cloud_advisory: "warn",
-    encoded_exfiltration: "require-reapproval"
+    encoded_exfiltration: "require-reapproval",
+    package_unknown: "allow",
+    package_lockfile_drift: "allow",
+    package_direct_source: "allow",
+    package_custom_registry: "allow",
+    package_install: "allow",
+    low_trust_artifact: "require-reapproval"
   },
   strict: {
     local_secret_read: "require-reapproval",
@@ -324,7 +342,13 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     persistence: "block",
     guard_bypass: "block",
     cloud_advisory: "require-reapproval",
-    encoded_exfiltration: "block"
+    encoded_exfiltration: "block",
+    package_unknown: "block",
+    package_lockfile_drift: "require-reapproval",
+    package_direct_source: "require-reapproval",
+    package_custom_registry: "allow",
+    package_install: "allow",
+    low_trust_artifact: "require-reapproval"
   },
   custom: {
     local_secret_read: "require-reapproval",
@@ -340,7 +364,13 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     persistence: "require-reapproval",
     guard_bypass: "block",
     cloud_advisory: "warn",
-    encoded_exfiltration: "require-reapproval"
+    encoded_exfiltration: "require-reapproval",
+    package_unknown: "allow",
+    package_lockfile_drift: "allow",
+    package_direct_source: "allow",
+    package_custom_registry: "allow",
+    package_install: "allow",
+    low_trust_artifact: "require-reapproval"
   }
 };
 

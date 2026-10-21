@@ -14,19 +14,19 @@
   "runtime_groups": [
     {
       "event": "PreToolUse",
-      "matcher": "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+      "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
       "timeout_seconds": 30,
       "status_message": "HOL Guard is checking this tool use"
     },
     {
       "event": "PermissionRequest",
-      "matcher": "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+      "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
       "timeout_seconds": 10,
       "status_message": "HOL Guard is reviewing this approval prompt"
     },
     {
       "event": "PostToolUse",
-      "matcher": "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion",
+      "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion",
       "timeout_seconds": 30,
       "status_message": null
     },

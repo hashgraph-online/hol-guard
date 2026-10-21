@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,9 +16,12 @@ from ..business_policy_document_import import (
     plan_document_for_import,
     read_business_document_for_store,
 )
+from ..native_command_policy_decision import CommandPolicyDecisionUnavailableError
 from ..native_policy_document import NativePolicyDocumentError
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..policy_authority import PolicyAuthorityError
+from ..policy_decision_engine import decide_command
+from ..policy_decision_explain import active_policy_document
 from ..policy_document import policy_document_digest
 from ..policy_document_authority import policy_import_approval_binding
 from ..policy_document_io import (
@@ -33,12 +35,16 @@ from ..policy_document_io import (
     write_private_policy_text,
 )
 from ..policy_document_yaml import PolicyDocumentError, format_policy_document_yaml
-from ..runtime.command_policy import compile_command_policy_rules, evaluate_command_policy_rules
+from ..policy_starters import LEGACY_POLICY_MODELINES, with_modeline
 from ..store import GuardStore
 from ..store_policy_document import PolicyImportMode
 from .approval_gate_prompt import prompt_for_approval_gate
-
-_POLICY_IMPORT_FLAG = "HOL_GUARD_POLICY_YAML_IMPORT"
+from .commands_dispatch_policy_dx import (
+    confirm_policy_import,
+    run_policy_explain_decision,
+    run_policy_status,
+    wants_json,
+)
 
 
 class PolicyDocumentCommandArgs(Protocol):
@@ -83,25 +89,16 @@ def _load_and_compile(path: Path):
     return document, compile_document_for_import(document)
 
 
-def _compile_for_local_store(path: Path):
-    document = load_trusted_policy_document(path)
-    try:
-        return document, compile_document_for_import(document), None
-    except PolicyCompilationError as error:
-        if error.code != "command_expression_requires_guard_3_1_runtime":
-            raise
-        return document, (), error
-
-
 def _run_guard_policy_document_command(
     args: PolicyDocumentCommandArgs,
     *,
     store: GuardStore | None = None,
+    input_text: str | None = None,
     output_stream: TextIO | None = None,
     **_kwargs: object,
 ) -> int:
     command = str(args.policy_command)
-    as_json = bool(getattr(args, "json", False))
+    as_json = wants_json(args)
     try:
         if command == "capabilities":
             _write_payload(
@@ -120,7 +117,9 @@ def _run_guard_policy_document_command(
                             "glob",
                             "regex",
                         ],
-                        "regex_timeout_ms": 50,
+                        # The runtime bounds a pattern by backtracking steps, which decides
+                        # the same way on every machine instead of with the load of the moment.
+                        "regex_backtrack_limit": 100000,
                     },
                     "message": "Command-pattern policy expressions are supported.",
                 },
@@ -129,45 +128,31 @@ def _run_guard_policy_document_command(
             )
             return 0
 
-        if command == "validate":
-            document, compiled, local_store_error = _compile_for_local_store(Path(args.file))
-            if has_business_rules(document):
-                message = f"Valid Guard policy: {document.metadata.id} ({len(document.rules)} business rules)"
-            elif local_store_error is None:
-                message = f"Valid Guard policy: {document.metadata.id} ({len(compiled)} rows)"
-            else:
-                message = f"Valid Guard 3.0 policy: {document.metadata.id}"
-            _write_payload(
-                "policy validate",
-                {
-                    "valid": True,
-                    "document_id": document.metadata.id,
-                    "digest": policy_document_digest(document),
-                    "compiled_rows": len(compiled),
-                    "local_store_compilable": local_store_error is None,
-                    "local_store_reason": local_store_error.code if local_store_error is not None else None,
-                    "message": message,
-                },
-                as_json=as_json,
-                output_stream=output_stream,
-            )
-            return 0
-
         if command == "evaluate-command":
             document = load_trusted_policy_document(Path(args.file))
-            evaluation = evaluate_command_policy_rules(
-                compile_command_policy_rules(document),
+            decision = decide_command(
+                document,
                 str(args.command_text),
+                now=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                guard_home=store.guard_home if store is not None else None,
             )
+            # The runtime reports every rule it considered; the ones it did not rule out are the
+            # matches this command has always named.
+            matching = [
+                str(candidate["ruleId"])
+                for candidate in cast(list[dict[str, object]], decision["candidates"])
+                if candidate["state"] != "unmatched"
+            ]
+            action = str(decision.get("action") or "allow")
             _write_payload(
                 "policy evaluate-command",
                 {
-                    "action": evaluation.action,
-                    "matching_rule_ids": list(evaluation.matching_rule_ids),
+                    "action": action,
+                    "matching_rule_ids": matching,
                     "message": (
                         "No command expression matched; default allow."
-                        if not evaluation.matching_rule_ids
-                        else f"Command matched {len(evaluation.matching_rule_ids)} policy rule(s): {evaluation.action}."
+                        if not matching
+                        else f"Command matched {len(matching)} policy rule(s): {action}."
                     ),
                 },
                 as_json=as_json,
@@ -179,8 +164,11 @@ def _run_guard_policy_document_command(
             path = Path(args.file)
             original = read_trusted_policy_text(path)
             document = load_trusted_policy_document(path)
-            formatted = format_policy_document_yaml(document)
-            changed = original != formatted
+            canonical = format_policy_document_yaml(document)
+            formatted = with_modeline(canonical)
+            # A file formatted before the modeline existed, or under an earlier modeline, is still canonical.
+            accepted = (canonical, formatted, *(f"{line}\n{canonical}" for line in LEGACY_POLICY_MODELINES))
+            changed = original not in accepted if bool(args.check) else original != formatted
             if bool(args.check):
                 _write_payload(
                     "policy fmt",
@@ -207,8 +195,6 @@ def _run_guard_policy_document_command(
         if command == "recover-business-source":
             from ..native_business_source_recovery import recover_committed_business_source
 
-            if os.environ.get(_POLICY_IMPORT_FLAG) != "1":
-                raise NativePolicySnapshotError("policy_import_disabled")
             document, _ = _load_and_compile(Path(args.file))
             gate_input = prompt_for_approval_gate(
                 store.guard_home,
@@ -232,10 +218,7 @@ def _run_guard_policy_document_command(
 
         if command == "diff":
             candidate, _ = _load_and_compile(Path(args.file))
-            base = read_business_document_for_store(store) or build_policy_document_from_rows(
-                store.list_policy_decisions(), include_provenance=True
-            )
-            difference = diff_policy_documents(base, candidate)
+            difference = diff_policy_documents(active_policy_document(store), candidate)
             semantic_payload = _semantic_diff_payload(difference)
             if as_json:
                 _write_payload(
@@ -246,6 +229,7 @@ def _run_guard_policy_document_command(
                 )
             else:
                 summary = (
+                    "Comparing the file against the policy that is Live on this device.\n"
                     f"Semantic changes: {len(difference.additions)} additions, "
                     f"{len(difference.modifications)} modifications, "
                     f"{len(difference.removals)} removals.\n"
@@ -280,7 +264,7 @@ def _run_guard_policy_document_command(
 
                 business_document = without_provenance(business_document)
             document = business_document or build_policy_document_from_rows(rows, include_provenance=include_provenance)
-            formatted = format_policy_document_yaml(document)
+            formatted = with_modeline(format_policy_document_yaml(document))
             output_value = getattr(args, "output", None) if command == "export" else None
             payload: dict[str, object] = {
                 "rules": len(document.rules),
@@ -312,11 +296,12 @@ def _run_guard_policy_document_command(
                     output_stream=output_stream,
                 )
             return 0
+        if command == "status":
+            return run_policy_status(args, store, output_stream)
+        if command == "explain" and getattr(args, "decision_id", None):
+            return run_policy_explain_decision(args, store, output_stream)
         if command == "explain":
-            document = read_business_document_for_store(store) or build_policy_document_from_rows(
-                store.list_policy_decisions(),
-                include_provenance=True,
-            )
+            document = active_policy_document(store)
             compiled = compile_document_for_import(document)
             actions: dict[str, int] = {}
             scopes: dict[str, int] = {}
@@ -353,23 +338,9 @@ def _run_guard_policy_document_command(
             return 0
 
         if command == "import":
-            if os.environ.get(_POLICY_IMPORT_FLAG) != "1":
-                _write_payload(
-                    "policy import",
-                    {
-                        "error": "policy_import_disabled",
-                        "message": f"Policy import requires {_POLICY_IMPORT_FLAG}=1.",
-                    },
-                    as_json=as_json,
-                    output_stream=output_stream,
-                )
-                return 4
             document, compiled = _load_and_compile(Path(args.file))
             mode = cast(PolicyImportMode, args.mode)
-            current_document = read_business_document_for_store(store) or build_policy_document_from_rows(
-                store.list_policy_decisions(),
-                include_provenance=True,
-            )
+            current_document = active_policy_document(store)
             difference = diff_policy_documents(current_document, document)
             plan = plan_document_for_import(store, document, compiled, mode)
             dry_run = bool(args.dry_run)
@@ -396,6 +367,10 @@ def _run_guard_policy_document_command(
                 )
                 return 0
 
+            declined = confirm_policy_import(args, difference.text, output_stream, input_text)
+            if declined is not None:
+                _write_payload("policy import", declined, as_json=as_json, output_stream=output_stream)
+                return 4
             gate_input = prompt_for_approval_gate(
                 store.guard_home,
                 use_cooldown=False,
@@ -446,6 +421,7 @@ def _run_guard_policy_document_command(
         PolicyFileTrustError,
         NativePolicySnapshotError,
         NativePolicyDocumentError,
+        CommandPolicyDecisionUnavailableError,
     ) as error:
         code = getattr(error, "code", error.__class__.__name__)
         _write_payload(

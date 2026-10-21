@@ -35,6 +35,28 @@ fn read_only_loops_match_their_unrolled_form() {
             "for f in a b\ndo\n  echo ${f}\n  echo \"${f}\"\ndone",
             "echo a; echo a; echo b; echo b",
         ),
+        ("for f in src/*.ts; do echo $f; done", "echo src/*.ts"),
+        (
+            "for f in src/*.ts tests/*.ts; do echo $f; done",
+            "echo src/*.ts; echo tests/*.ts",
+        ),
+        ("for d in src/*/; do echo $d; done", "echo src/*/"),
+        // The body talks about the name without binding it, so the loop
+        // variable still holds the header word.
+        (
+            "for pkg in core cli; do echo \"pkg: $pkg\"; done",
+            "echo \"pkg: core\"; echo \"pkg: cli\"",
+        ),
+        (
+            "for f in a b; do wc -l \"$f\" && echo checked f; done",
+            "wc -l \"a\" && echo checked f; wc -l \"b\" && echo checked f",
+        ),
+        // Inside double quotes a backslash before an ordinary character is
+        // part of the word, so `fi\le` is not the loop variable's name.
+        (
+            "for file in a b; do echo \"fi\\le\" \"$file\"; done",
+            "echo \"fi\\le\" \"a\"; echo \"fi\\le\" \"b\"",
+        ),
     ] {
         assert_eq!(decide(looped), decide(unrolled), "{looped}");
         assert_eq!(decide(looped).0, "allow", "{looped}");
@@ -83,6 +105,13 @@ fn unsupported_loops_fall_back_to_review() {
     for command in [
         "for f in $(ls); do echo $f; done",
         "for f in *.ts; do echo $f; done",
+        "for f in [ab]*.ts; do echo $f; done",
+        "for f in build*; do echo $f; done",
+        "for f in ../*.ts; do echo $f; done",
+        "for f in /etc/*.conf; do echo $f; done",
+        "for f in src/../../*.ts; do echo $f; done",
+        "for f in \"src/*.ts\"; do echo $f; done",
+        "for f in 'src/*.ts'; do echo $f; done",
         "for f in a b; do $f; done",
         "for f in a b; do echo hi > $f; done",
         "for f in a b; do f=x; echo $f; done",
@@ -104,6 +133,29 @@ fn unsupported_loops_fall_back_to_review() {
         "for f in README.md; do unset f; cat $f; done",
         "for f in a,b; do export IFS=,; cat $f; done",
         "for f in README.md; do cat $f \u{1}; done",
+        // Quoting splits the name in the written text, not in the word the
+        // shell builds.
+        "for file in README.md; do fi''le=secret; cat $file; done",
+        "for file in README.md; do fi\"\"le=secret; cat $file; done",
+        "for file in README.md; do fi\\le=secret; cat $file; done",
+        "for file in README.md; do read fi''le; cat $file; done",
+        "for file in README.md; do printf -v fi''le %s secret; cat $file; done",
+        "for file in a,b; do export I''FS=,; cat $file; done",
+        // Every other way of binding the name keeps the loop unmodeled.
+        "for f in README.md; do f+=secret; cat $f; done",
+        "for f in README.md; do f[0]=secret; cat $f; done",
+        "for f in README.md; do local f; cat $f; done",
+        "for f in README.md; do eval f=secret; cat $f; done",
+        "for f in README.md; do command read f; cat $f; done",
+        "for f in README.md; do mapfile -t f < list; cat $f; done",
+        "for f in README.md; do getopts o f; cat $f; done",
+        "for f in README.md; do let f=secret; cat $f; done",
+        "for f in README.md; do print -v f report; cat $f; done",
+        "for f in README.md; do getln f; cat $f; done",
+        "for f in README.md; do compgen -V f -W one; cat $f; done",
+        "for f in README.md; do zparseopts -A f; cat $f; done",
+        "for f in README.md; do zstyle -s :x key f; cat $f; done",
+        "for f in README.md; do zformat -a f : one; cat $f; done",
     ] {
         assert_eq!(decide(command).0, "review", "{command}");
     }

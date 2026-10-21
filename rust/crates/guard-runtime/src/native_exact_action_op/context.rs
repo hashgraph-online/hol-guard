@@ -33,6 +33,11 @@ pub(crate) struct LocalExecution {
 /// The resident engines the proofs build on; tests substitute fixed answers so
 /// vectors do not depend on the machine's executables.
 pub(crate) trait Engines {
+    /// Only the POSIX Python bootstrap proof reads the Guard home.
+    #[cfg_attr(windows, allow(dead_code))]
+    fn guard_home(&self) -> Option<&Path> {
+        None
+    }
     fn launch_identity(
         &self,
         executable: &str,
@@ -42,7 +47,9 @@ pub(crate) trait Engines {
         env: &BTreeMap<String, String>,
     ) -> Value;
     fn launch_reusable(&self, identity: &Value) -> bool;
-    /// The machine-wide git config file git would read.
+    /// The machine-wide git config file git would read. Windows reads the
+    /// install's own files instead (`git_windows`).
+    #[cfg_attr(windows, allow(dead_code))]
     fn system_git_config(&self) -> String {
         "/etc/gitconfig".to_owned()
     }
@@ -74,7 +81,10 @@ impl Ctx<'_> {
 }
 
 /// The production engines: the resident's own launch-identity and package-intent code.
-pub(crate) struct ResidentEngines;
+pub(crate) struct ResidentEngines<'a> {
+    #[cfg_attr(windows, allow(dead_code))]
+    pub(crate) guard_home: Option<&'a Path>,
+}
 
 fn evidence_file(
     file: &guard_command::package_intent_common::PackageExecutionFileEvidence,
@@ -87,7 +97,11 @@ fn evidence_file(
     }
 }
 
-impl Engines for ResidentEngines {
+impl Engines for ResidentEngines<'_> {
+    fn guard_home(&self) -> Option<&Path> {
+        self.guard_home
+    }
+
     fn launch_identity(
         &self,
         executable: &str,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
-from codex_plugin_scanner.guard.local_cli_hook import apply_local_cli_grant, observe_unlisted_cli
+from codex_plugin_scanner.guard.local_cli_hook import local_cli_grant_action, observe_unlisted_cli
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.local_cli_commands import resolve_command_id_for_text
 from codex_plugin_scanner.guard.runtime.package_json_script_memory import (
@@ -214,32 +214,35 @@ def test_allowed_nested_script_grant_matches_live_command(tmp_path: Path) -> Non
     )
     observe_unlisted_cli(store=store, command=live, cwd=project, home_dir=home)
     assert (
-        apply_local_cli_grant(
+        local_cli_grant_action(
             store=store,
             command=live,
             cwd=project,
             home_dir=home,
             current_action="review",
+            grant_allowed=True,
         )
         == "allow"
     )
     assert (
-        apply_local_cli_grant(
+        local_cli_grant_action(
             store=store,
             command="pnpm run guard",
             cwd=project,
             home_dir=home,
             current_action="review",
+            grant_allowed=True,
         )
         == "allow"
     )
     assert (
-        apply_local_cli_grant(
+        local_cli_grant_action(
             store=store,
             command="pnpm run not-a-script",
             cwd=project,
             home_dir=home,
             current_action="review",
+            grant_allowed=True,
         )
         == "review"
     )

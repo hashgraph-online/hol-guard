@@ -215,3 +215,39 @@ fn bare_names_resolve_the_latest_release() {
         None
     );
 }
+
+/// Regression for #4809 (Path 2): when a frozen `npm ci` lockfile pins two
+/// scoped packages that share an unscoped name (`@oh-my-pi/pi-coding-agent`
+/// and `@earendil-works/pi-coding-agent`), the package map handed to
+/// `finalize_evaluation` must carry each entry's `namespace` with the
+/// leading `@` (the npm canonical form produced by
+/// `split_namespace_name` / `parse_package_identity` and used by the
+/// sibling test in `package_policy_override_tests.rs`). With the canonical
+/// map, `package_display_name` (the very last step before the user copy is
+/// written) must produce two distinct scoped labels so the review message
+/// can say which scope is under review.
+///
+/// The end-to-end coverage (frozen-lockfile install -> user copy) is part
+/// of the fix commit because it requires a full `SupplyChainEvalDeps`.
+#[test]
+fn package_display_name_round_trips_scope_for_two_scoped_packages_same_unscoped_name() {
+    let mut first = Map::new();
+    first.insert("name".into(), json!("pi-coding-agent"));
+    first.insert("namespace".into(), json!("@oh-my-pi"));
+    first.insert("requestedVersion".into(), json!("0.1.0"));
+    let mut second = Map::new();
+    second.insert("name".into(), json!("pi-coding-agent"));
+    second.insert("namespace".into(), json!("@earendil-works"));
+    second.insert("requestedVersion".into(), json!("0.1.0"));
+    assert_eq!(package_display_name(&first), "@oh-my-pi/pi-coding-agent");
+    assert_eq!(
+        package_display_name(&second),
+        "@earendil-works/pi-coding-agent"
+    );
+    assert_ne!(
+        package_display_name(&first),
+        package_display_name(&second),
+        "two scopes must produce distinct display names; otherwise the user \
+         cannot tell which scoped package is under review"
+    );
+}

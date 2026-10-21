@@ -110,8 +110,16 @@ def test_missing_or_independent_extension_control_decisions_cannot_delegate(brok
 
 
 def test_unsupported_harness_never_receives_a_delegation_hint() -> None:
-    for harness in ("pi", "cursor"):
-        assert "required_execution_profile" not in render_pre_tool(harness, result())
+    assert "required_execution_profile" not in render_pre_tool("cursor", result())
+
+
+def test_pi_family_receipts_stay_denied_without_a_hook_rewrite() -> None:
+    # Pi and OMP extensions route the receipt themselves; an old extension still sees a deny.
+    for harness in ("pi", "omp"):
+        response = render_pre_tool(harness, result())
+        assert response["decision"] == "deny"
+        assert response["required_execution_profile"] == "pytest-readonly-v2"
+        assert "hookSpecificOutput" not in response
 
 
 def test_hook_rewrite_receipts_stay_denied_until_bridge_rewrites_input() -> None:

@@ -126,7 +126,14 @@ fn a_commit_message_naming_guard_keeps_the_allow() {
         &enabled,
         "git -c core.hooksPath=/dev/null commit -m 'fix(hol-guard): x'",
     );
-    assert_eq!(result.minimum_action, "allow", "{}", result.reason_code);
+    // Without a working directory Windows cannot prove `/dev/null` names no
+    // hooks, so there the configured hooks path keeps it reviewed.
+    assert_eq!(
+        result.minimum_action == "allow",
+        !cfg!(windows),
+        "{}",
+        result.reason_code
+    );
 }
 
 /// Configuration that makes Git run a program carries text the shell reads
@@ -189,8 +196,12 @@ fn an_explicit_git_allow_never_settles_configured_programs() {
         "git fetch -u origin",
     ] {
         let result = evaluate(&enabled, command);
+        // Windows cannot prove `/dev/null` names no hooks without a working
+        // directory, so there it keeps the push reviewed.
+        let unproven = cfg!(windows) && command.contains("/dev/null");
         assert_eq!(
-            result.minimum_action, "allow",
+            result.minimum_action == "allow",
+            !unproven,
             "{command}: {}",
             result.reason_code
         );
@@ -359,7 +370,8 @@ fn an_explicit_git_allow_settles_only_known_built_ins() {
         assert_ne!(result.minimum_action, "allow", "{command}");
     }
     // The fixture has no repository, so read-only commands may still wait on
-    // the Git context probes; they must not be held as unmodeled.
+    // the Git context probes; they must not be held as unmodeled. macOS runs a
+    // helper-context review in the Seatbelt git-readonly profile instead.
     for command in [
         "git status",
         "git log --oneline",
@@ -367,12 +379,72 @@ fn an_explicit_git_allow_settles_only_known_built_ins() {
         "git config user.name x",
     ] {
         let result = evaluate(&enabled, command);
+        let contained = cfg!(target_os = "macos")
+            && result.minimum_action == "sandbox-required"
+            && result.reason_code == "native_git_readonly_containment_required";
         assert!(
             result.minimum_action == "allow"
+                || contained
                 || (result.reason_code.starts_with("native_git_")
                     && result.reason_code.ends_with("_context_review")),
             "{command}: {} {}",
             result.minimum_action,
+            result.reason_code
+        );
+    }
+}
+
+#[test]
+fn an_explicit_container_runtime_allow_settles_docker_sensitive_review() {
+    let program = packaged_command_program().unwrap();
+    let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
+        "schema": "guard.native-command-control-binding.v1",
+        "program_digest": program.program_digest, "catalog_digest": program.catalog_digest,
+        "trust_digest": program.trust_digest, "health": "protected",
+        "revision": 1, "managed_revision": 0, "effective_digest": "",
+        "layers": [{
+            "schema_version": "1.0.0", "kind": "local-admin",
+            "catalog_digest": program.catalog_digest, "global_lockdown": false,
+            "controls": [{
+                "target_kind": "permission",
+                "target_id": "command.container-runtime.permission.docker-sensitive",
+                "state": "enabled"
+            }]
+        }]
+    }))
+    .unwrap();
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    let enabled = CompiledNativeCommandControls::new(&binding).unwrap();
+    let baseline = baseline();
+
+    for command in [
+        "docker version --format '{{.Server.Version}}'",
+        "docker compose ps",
+        "docker inspect web",
+    ] {
+        assert_ne!(
+            evaluate(&baseline, command).minimum_action,
+            "allow",
+            "{command}"
+        );
+        let result = evaluate(&enabled, command);
+        assert_eq!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+
+    for remote_or_sensitive_context in [
+        "docker --context production ps",
+        "docker -H tcp://127.0.0.1:2375 ps",
+        "docker --config /tmp/custom-docker ps",
+        "DOCKER_HOST=tcp://127.0.0.1:2375 docker ps",
+    ] {
+        let result = evaluate(&enabled, remote_or_sensitive_context);
+        assert_eq!(
+            result.minimum_action, "review",
+            "{remote_or_sensitive_context}: {}",
             result.reason_code
         );
     }

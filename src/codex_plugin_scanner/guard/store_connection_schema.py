@@ -11,7 +11,12 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, ClassVar, cast
 from uuid import uuid4
 
-from . import store_connection_scope, store_native_decision_receipts, store_review_event_outbox_schema
+from . import (
+    store_connection_scope,
+    store_native_decision_receipts,
+    store_review_event_outbox_schema,
+    store_storage_gate,
+)
 from .fork_safety import forget_in_child
 from .mcp.policy_store import ensure_mcp_policy_request_schema
 from .sqlite_deadline_connection import DeadlineConnection
@@ -37,6 +42,12 @@ from .sqlite_tuning import sqlite_operation_deadline_monotonic
 
 # ruff: noqa: F403,F405
 from .store_base import *
+from .store_bash_operation_schema import (
+    BASH_INVOCATION_MIGRATION_VERSION,
+    BASH_OPERATION_MIGRATION_VERSION,
+    BASH_REVIEW_MIGRATION_VERSION,
+    ensure_bash_operation_schema,
+)
 from .store_command_activity_api_schema import ensure_command_activity_api_schema
 from .store_command_activity_display_schema import (
     COMMAND_ACTIVITY_DISPLAY_SCHEMA_MIGRATION_VERSION,
@@ -181,6 +192,9 @@ _REQUIRED_SCHEMA_MIGRATION_VERSIONS = (  # Keep retired-index databases on the p
     store_review_event_outbox_schema.REVIEW_EVENT_OUTBOX_MIGRATION_VERSION,
     COMMAND_ACTIVITY_DISPLAY_SCHEMA_MIGRATION_VERSION,
     *store_native_decision_receipts.native_decision_receipt_migration_versions(),
+    BASH_OPERATION_MIGRATION_VERSION,
+    BASH_REVIEW_MIGRATION_VERSION,
+    BASH_INVOCATION_MIGRATION_VERSION,
 )
 
 
@@ -203,7 +217,6 @@ class StoreConnectionSchemaMixin:
     )
     _startup_prefetched_policy_integrity_repair_failed = False
     _storage_recovery_local: ClassVar[threading.local] = threading.local()
-    _storage_gate_local: ClassVar[threading.local] = threading.local()
     _last_sqlite_recovery = "skipped"
     _last_sqlite_recovery_details: dict[str, bool] | None = None
 
@@ -216,131 +229,19 @@ class StoreConnectionSchemaMixin:
 
     @contextmanager
     def _hold_storage_gate(self, *, exclusive: bool) -> Iterator[None]:
-        local = self._storage_gate_local
-        if getattr(local, "owner", None) == id(self) and getattr(local, "depth", 0) > 0:
-            if exclusive and getattr(local, "exclusive", False) is False:
-                raise RuntimeError("Cannot upgrade an active Guard storage read gate.")
-            local.depth += 1
-            try:
-                yield
-            finally:
-                local.depth -= 1
-            return
-        path = self.guard_home / "storage-access.lock"
-        deadline = time.monotonic() + sqlite_connect_timeout_seconds()
-        with path.open("a+b") as handle:
-            while True:
-                try:
-                    if os.name == "nt":
-                        import msvcrt
-
-                        handle.seek(0)
-                        if not handle.read(1):
-                            handle.write(b"0")
-                            handle.flush()
-                        handle.seek(0)
-                        mode = msvcrt.LK_NBLCK if exclusive else msvcrt.LK_NBRLCK
-                        msvcrt.locking(handle.fileno(), mode, 1)
-                    else:
-                        import fcntl
-
-                        mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-                        fcntl.flock(handle.fileno(), mode | fcntl.LOCK_NB)
-                    break
-                except OSError:
-                    if time.monotonic() >= deadline:
-                        raise TimeoutError("Timed out waiting for Guard storage access.") from None
-                    time.sleep(0.01)
-            local.owner = id(self)
-            local.depth = 1
-            local.exclusive = exclusive
-            try:
-                yield
-            finally:
-                local.owner = None
-                local.depth = 0
-                local.exclusive = False
-                if os.name == "nt":
-                    import msvcrt
-
-                    handle.seek(0)
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    import fcntl
-
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        with store_storage_gate.hold_storage_gate(self.guard_home, exclusive=exclusive):
+            yield
 
     @contextmanager
     def _try_hold_storage_gate(self, *, exclusive: bool) -> Iterator[bool]:
         """Attempt the storage gate once without blocking; yields the result.
 
-        Re-entrancy matches ``_hold_storage_gate``: nesting under an existing
-        hold yields True, while upgrading a shared hold to exclusive yields
-        False instead of raising. Callers that must never stall on storage
-        (the runtime heartbeat) use this to fail fast and retry on their own
-        cadence.
+        Callers that must never stall on storage (the runtime heartbeat) use
+        this to fail fast and retry on their own cadence.
         """
 
-        local = self._storage_gate_local
-        if getattr(local, "owner", None) == id(self) and getattr(local, "depth", 0) > 0:
-            if exclusive and getattr(local, "exclusive", False) is False:
-                yield False
-                return
-            local.depth += 1
-            try:
-                yield True
-            finally:
-                local.depth -= 1
-            return
-        path = self.guard_home / "storage-access.lock"
-        handle = None
-        acquired = False
-        try:
-            try:
-                handle = path.open("a+b")
-                if os.name == "nt":
-                    import msvcrt
-
-                    handle.seek(0)
-                    if not handle.read(1):
-                        handle.write(b"0")
-                        handle.flush()
-                    handle.seek(0)
-                    mode = msvcrt.LK_NBLCK if exclusive else msvcrt.LK_NBRLCK
-                    msvcrt.locking(handle.fileno(), mode, 1)
-                else:
-                    import fcntl
-
-                    mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-                    fcntl.flock(handle.fileno(), mode | fcntl.LOCK_NB)
-                acquired = True
-            except OSError:
-                acquired = False
-            if not acquired:
-                yield False
-                return
-            local.owner = id(self)
-            local.depth = 1
-            local.exclusive = exclusive
-            try:
-                yield True
-            finally:
-                local.owner = None
-                local.depth = 0
-                local.exclusive = False
-                if handle is not None:
-                    if os.name == "nt":
-                        import msvcrt
-
-                        handle.seek(0)
-                        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-                    else:
-                        import fcntl
-
-                        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-        finally:
-            if handle is not None:
-                handle.close()
+        with store_storage_gate.try_hold_storage_gate(self.guard_home, exclusive=exclusive) as held:
+            yield held
 
     def _store_is_proven_unusable(self, error: BaseException) -> bool:
         detail = sqlite_store_probe_detail(
@@ -632,6 +533,20 @@ class StoreConnectionSchemaMixin:
             timeout_seconds=timeout_seconds,
             poll_seconds=_CLOUD_SYNC_LOCK_POLL_SECONDS,
             timeout_message="Timed out waiting for Guard Cloud sync lock.",
+        ):
+            yield
+
+    @contextmanager
+    def hold_aibom_items_lock(
+        self,
+        *,
+        timeout_seconds: float = _CLOUD_SYNC_LOCK_TIMEOUT_SECONDS,
+    ) -> Iterator[None]:
+        with self._hold_advisory_file_lock(
+            path=self.guard_home / "aibom-items.lock",
+            timeout_seconds=timeout_seconds,
+            poll_seconds=_CLOUD_SYNC_LOCK_POLL_SECONDS,
+            timeout_message="Timed out waiting for Guard AIBOM items lock.",
         ):
             yield
 
@@ -1177,6 +1092,7 @@ class StoreConnectionSchemaMixin:
             ensure_evidence_schema(connection)
             ensure_extension_control_authority_schema(connection, require_compatible=False)
             ensure_local_cli_schema(connection)
+            ensure_bash_operation_schema(connection, applied_at=_now())
             ensure_workflow_capability_schema(connection, applied_at=_now())
             ensure_command_shadow_schema(connection, applied_at=_now())
             ensure_mcp_policy_request_schema(connection)

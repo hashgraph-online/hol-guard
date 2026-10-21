@@ -324,7 +324,17 @@ def test_unavailable_authority_blocks_otherwise_valid_native_destructive_evidenc
     )
 
 
-def test_daemon_starts_fail_closed_with_future_authority_schema(tmp_path: Path) -> None:
+@pytest.mark.parametrize("installed_bundle", [False, True])
+def test_daemon_starts_fail_closed_with_future_authority_schema(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    installed_bundle: bool,
+) -> None:
+    from codex_plugin_scanner.guard.catalog_delivery import preparation_authority
+
+    # An installed wheel ships a pack bundle, so startup also runs the pack
+    # authority migration against the unreadable schema.
+    monkeypatch.setattr(preparation_authority, "load_installed_bundle", lambda: object() if installed_bundle else None)
     store = GuardStore(tmp_path / "guard-home")
     store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
     with store._connect() as connection:
@@ -336,6 +346,115 @@ def test_daemon_starts_fail_closed_with_future_authority_schema(tmp_path: Path) 
         snapshot = daemon._server.extension_control_runtime.current()
         assert snapshot.health is AuthorityHealth.TAMPERED
         assert snapshot.authority_failure is ResolverFailureCode.AUTHORITY_TAMPERED
+    finally:
+        daemon.stop()
+
+
+def test_daemon_rebinds_control_api_once_authority_reads_again(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unavailable(self: GuardStore) -> None:
+        raise ValueError("installed bundle metadata unavailable")
+
+    monkeypatch.setattr(GuardStore, "migrate_installed_command_pack_authority", unavailable)
+    daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
+    try:
+        server = daemon._server
+        assert server._extension_control_on_core_registry
+
+        monkeypatch.setattr(GuardStore, "migrate_installed_command_pack_authority", lambda self: None)
+        snapshot = server.refresh_extension_control_runtime()
+        assert snapshot.health is not AuthorityHealth.TAMPERED
+        assert not server._extension_control_on_core_registry
+        assert server.extension_control_api.catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+    finally:
+        daemon.stop()
+
+
+def test_daemon_rebinds_control_api_when_activated_catalog_changes_after_startup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.catalog_delivery import projection
+    from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
+
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    try:
+        server = daemon._server
+        # Startup read a healthy authority, so the core-registry fallback flag
+        # that used to be the only rebind trigger stays off.
+        assert not server._extension_control_on_core_registry
+        assert server.extension_control_api.catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+
+        activated = GeneratedCommandCatalog(BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[:-1])
+        assert activated.catalog_digest != BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+        metadata, _, _ = projection.capture(store)
+        monkeypatch.setattr(projection, "capture", lambda _store: (metadata, activated, None))
+        monkeypatch.setattr(projection, "require_current", lambda *_args: None)
+        monkeypatch.setattr(
+            store,
+            "read_extension_control_authority_for_registry",
+            lambda registry, *, read_only=False: ExtensionControlAuthorityView(
+                AuthorityHealth.PROTECTED, 1, registry.catalog_digest, ()
+            ),
+        )
+
+        snapshot = server.refresh_extension_control_runtime()
+
+        # The dashboard compares these two digests and refuses to render the
+        # Extensions page while they differ.
+        assert snapshot.catalog_digest == activated.catalog_digest
+        assert server.extension_control_api.catalog_digest == activated.catalog_digest
+        assert server.extension_control_api.effective()["catalog_digest"] == activated.catalog_digest
+    finally:
+        daemon.stop()
+
+
+def test_refresh_does_not_roll_back_an_activation_applied_after_its_lease(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.catalog_delivery import projection
+    from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
+
+    store = GuardStore(tmp_path / "guard-home")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    try:
+        server = daemon._server
+        api = server.extension_control_api
+        runtime = server.extension_control_runtime
+        captured = GeneratedCommandCatalog(BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[:-1])
+        applied = GeneratedCommandCatalog(BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[:-2])
+        metadata, _, _ = projection.capture(store)
+        monkeypatch.setattr(projection, "capture", lambda _store: (metadata, captured, None))
+        monkeypatch.setattr(projection, "require_current", lambda *_args: None)
+        monkeypatch.setattr(
+            store,
+            "read_extension_control_authority_for_registry",
+            lambda registry, *, read_only=False: ExtensionControlAuthorityView(
+                AuthorityHealth.PROTECTED, 1, registry.catalog_digest, ()
+            ),
+        )
+        rebind = api.rebind_registry
+
+        def apply_lands_first(registry, **kwargs):
+            # A dashboard apply activates a newer pack after the refresh
+            # released its lease but before it rebinds the API.
+            with api._apply_lock:
+                api._registry = applied
+                api.catalog_digest = applied.catalog_digest
+                runtime.refresh(ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 2, applied.catalog_digest, ()))
+            return rebind(registry, **kwargs)
+
+        monkeypatch.setattr(api, "rebind_registry", apply_lands_first)
+
+        server.refresh_extension_control_runtime()
+
+        assert runtime.current().catalog_digest == applied.catalog_digest
+        assert api.catalog_digest == applied.catalog_digest
+        assert api.effective()["catalog_digest"] == applied.catalog_digest
     finally:
         daemon.stop()
 

@@ -154,3 +154,28 @@ def test_blocked_extension_catalog_rejects_commands_without_a_reviewed_adapter(c
     }
     with pytest.raises(ValueError):
         load_catalog_data({"schema": "hol.guard-gauntlet.scenarios.v1", "scenarios": [row]})
+
+
+def test_candidate_release_assets_answer_unpublished_extension_data(monkeypatch, tmp_path):
+    """Serve an unreleased candidate's exported pack only from the named directory."""
+    from ci.gauntlet import extension_adapters
+    from codex_plugin_scanner.guard.catalog_delivery import transport
+
+    tag = "extension-data-" + "a" * 40 + "-0.0-000001"
+    asset = "pack-" + "b" * 64 + ".zip"
+    (tmp_path / tag).mkdir()
+    (tmp_path / tag / asset).write_bytes(b"pack")
+    live = []
+    monkeypatch.setattr(transport, "download", lambda url, maximum: live.append(url) or b"live")
+    monkeypatch.setenv(extension_adapters.RELEASE_ASSETS_ENV, str(tmp_path))
+    extension_adapters._serve_candidate_release_assets.cache_clear()
+    try:
+        extension_adapters._serve_candidate_release_assets()
+        release = "https://github.com/hashgraph-online/hol-guard/releases/download/"
+        assert transport.download(f"{release}{tag}/{asset}", 16) == b"pack"
+        assert transport.download("https://example.invalid/root.json", 16) == b"live"
+        assert live == ["https://example.invalid/root.json"]
+        with pytest.raises(RuntimeError):
+            transport.download(f"{release}{tag}/pack-{'c' * 64}.zip", 16)
+    finally:
+        extension_adapters._serve_candidate_release_assets.cache_clear()

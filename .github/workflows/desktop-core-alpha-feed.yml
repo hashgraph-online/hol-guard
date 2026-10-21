@@ -243,7 +243,7 @@ jobs:
           python-version: "3.12"
       - name: Set up uv
         if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'
-        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
           enable-cache: true

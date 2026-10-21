@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
+from ..adapters._modules.opencode.opencode_proxy_refresh import refresh_opencode_proxy_launchers
 from ..adapters.base import HarnessContext
 from ..adapters.opencode_pretool import (
     global_plugin_path,
@@ -12,7 +13,6 @@ from ..adapters.opencode_pretool import (
     managed_plugin_path,
     pretool_plugin_source,
 )
-from ..adapters.opencode_proxy_refresh import refresh_opencode_proxy_launchers
 from ..store import GuardStore
 from .managed_install_context import managed_install_context as _repair_context_from_managed_install
 

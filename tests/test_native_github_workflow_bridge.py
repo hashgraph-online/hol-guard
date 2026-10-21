@@ -186,3 +186,62 @@ def test_persisted_command_verification_only_trusts_an_explicit_true(
 def test_persisted_command_verification_fails_closed_on_mismatch(harness: _Harness) -> None:
     harness.reply = lambda request: _reply(request, verified=True, request_sha256="sha256:" + "0" * 64)
     assert not bridge.github_workflow_persisted_command_matches(_COMMAND, descriptor().record)
+
+
+def _lineage() -> bridge.GitHubWorkflowLineage | None:
+    return bridge.github_workflow_validated_lineage(
+        {"request_id": "req-1"}, {"operation_id": "op-1"}, {"session_id": "sess-1"}
+    )
+
+
+def _lineage_reply(request: dict[str, Any], **lineage_overrides: Any) -> dict[str, Any]:
+    lineage: dict[str, Any] = {
+        "request_id": "req-1",
+        "operation_id": "op-1",
+        "session_id": "sess-1",
+        "record": descriptor().record.to_dict(),
+        "capability_id": "gwc-cap-1",
+        "nonce": "nonce-1",
+    }
+    lineage.update(lineage_overrides)
+    return _reply(request, lineage=lineage)
+
+
+def test_lineage_forwards_the_rows_and_decodes_the_resident_verdict(harness: _Harness) -> None:
+    harness.reply = _lineage_reply
+    assert _lineage() == bridge.GitHubWorkflowLineage(
+        request_id="req-1",
+        operation_id="op-1",
+        session_id="sess-1",
+        record=descriptor().record,
+        capability_id="gwc-cap-1",
+        nonce="nonce-1",
+    )
+    request = harness.requests[0]
+    assert request["mode"] == "lineage"
+    assert request["approval_request"] == {"request_id": "req-1"}
+    assert request["operation"] == {"operation_id": "op-1"}
+    assert request["session"] == {"session_id": "sess-1"}
+
+
+@pytest.mark.parametrize(
+    "reply",
+    (
+        lambda request: _reply(request, code="none"),
+        lambda request: _reply(request),
+        lambda request: _reply(request, lineage=[]),
+        lambda request: _lineage_reply(request, request_id=""),
+        lambda request: _lineage_reply(request, operation_id=None),
+        lambda request: _lineage_reply(request, session_id=7),
+        lambda request: _lineage_reply(request, record="record"),
+        lambda request: _lineage_reply(request, record={"schema_version": "bad"}),
+        lambda request: _lineage_reply(request, capability_id=""),
+        lambda request: _lineage_reply(request, capability_id=None),
+        lambda request: _lineage_reply(request, nonce=""),
+        lambda request: _lineage_reply(request, nonce=11),
+        lambda request: {**_lineage_reply(request), "request_sha256": "sha256:" + "0" * 64},
+    ),
+)
+def test_lineage_fails_closed_on_any_unexpected_reply(harness: _Harness, reply: Any) -> None:
+    harness.reply = reply
+    assert _lineage() is None

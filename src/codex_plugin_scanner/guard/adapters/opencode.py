@@ -13,6 +13,12 @@ from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
+from ._modules.opencode.opencode_config_lock import opencode_config_lock
+from ._modules.opencode.opencode_install_snapshot import (
+    OpenCodeInstallSnapshotError,
+    load_opencode_install_snapshot,
+    write_json_transaction,
+)
 from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall, _command_available, _run_command_probe
 from .hook_python import guard_cli_command
 from .mcp_relay_native import mcp_proxy_command
@@ -28,19 +34,11 @@ from .mcp_servers import (
 from .opencode_artifacts import (
     CONFIG_FILENAMES,
     _command_parts,
-    append_config_artifacts,
-    append_directory_artifacts,
-    append_found_path,
     config_paths,
     configured_config_path,
+    native_artifacts,
     runtime_config_path,
     runtime_overlay,
-)
-from .opencode_config_lock import opencode_config_lock
-from .opencode_install_snapshot import (
-    OpenCodeInstallSnapshotError,
-    load_opencode_install_snapshot,
-    write_json_transaction,
 )
 from .opencode_pretool import (
     global_plugin_path,
@@ -153,28 +151,12 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         return context.home_dir / ".config" / "opencode" / "opencode.json"
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
-        artifacts = []
-        found_paths: list[str] = []
-        seen_artifact_ids: set[str] = set()
+        configs = []
         for config_path in config_paths(context):
             payload, parse_error, _parse_reason = _load_json_or_jsonc(config_path)
-            if parse_error or not payload:
-                continue
-            append_found_path(found_paths, config_path)
-            scope = self._scope_for(context, config_path)
-            append_config_artifacts(
-                artifacts=artifacts,
-                seen_artifact_ids=seen_artifact_ids,
-                scope=scope,
-                config_path=config_path,
-                payload=payload,
-            )
-        append_directory_artifacts(
-            context=context,
-            artifacts=artifacts,
-            found_paths=found_paths,
-            seen_artifact_ids=seen_artifact_ids,
-        )
+            if not parse_error and payload:
+                configs.append((config_path, self._scope_for(context, config_path), payload))
+        artifacts, found_paths = native_artifacts(context, configs)
         detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),

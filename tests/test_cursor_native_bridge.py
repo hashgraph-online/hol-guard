@@ -15,17 +15,17 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_command_line
+from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_command_line import split_cursor_hook_command
+from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_native import (
+    NATIVE_CURSOR_HOOK_COMMAND,
+    NATIVE_CURSOR_HOOK_FEATURE,
+)
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor_hook_command_line import split_cursor_hook_command
 from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
     _is_managed_hook_command,
     _is_structured_managed_cursor_hook_command,
     _live_cursor_hook_script_path,
     _managed_hook_command,
-)
-from codex_plugin_scanner.guard.adapters.cursor_hook_native import (
-    NATIVE_CURSOR_HOOK_COMMAND,
-    NATIVE_CURSOR_HOOK_FEATURE,
 )
 from codex_plugin_scanner.guard.adapters.cursor_hooks import _HOOK_SCRIPT_TEMPLATE, cursor_hook_script_source
 from codex_plugin_scanner.guard.adapters.native_hook_bridge import native_hook_bridge_executable
@@ -249,8 +249,8 @@ def _native_digest() -> str:
 
 def test_native_bridge_was_ported_from_the_current_client() -> None:
     # A template change must be ported to cursor_hook_bridge.rs before the
-    # digest is updated; until then the native bridge would answer for a
-    # client it does not match.
+    # digest is updated: the native bridge answers for every client it can
+    # read, with no Python to hand a newer template to.
     digest = hashlib.sha256(_HOOK_SCRIPT_TEMPLATE.encode("utf-8")).hexdigest()
 
     assert digest == _native_digest()
@@ -323,6 +323,31 @@ def test_client_never_gains_time_from_the_handoff(tmp_path: Path, monkeypatch: p
     started = namespace["_HOOK_STARTED_MONOTONIC"]
     deadline = namespace["_HOOK_DEADLINE_MONOTONIC"]
     assert started <= deadline <= started + timeout
+
+
+@pytest.mark.parametrize(
+    ("body", "taken"),
+    [
+        ('{"policy_action":"review","approval_url":"http://127.0.0.1:4781/approvals/req-1"}', True),
+        ('{"policy_action":"block"}', True),
+        ('{"policy_action":"allow"}', False),
+        ('{"policy_action":"maybe"}', False),
+        ("[]", False),
+        ("{", False),
+        (None, False),
+    ],
+)
+def test_client_takes_only_a_restrictive_daemon_reply_from_the_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str | None, taken: bool
+) -> None:
+    namespace = _client(tmp_path)
+    flag = namespace["_NATIVE_DAEMON_REPLY_FLAG"]
+    argv = [sys.argv[0], "--cursor-hook-event", "beforeShellExecution", flag]
+    monkeypatch.setattr(sys, "argv", argv if body is None else [*argv, body])
+
+    reply = namespace["_native_daemon_reply_from_argv"]()
+
+    assert reply == ((0, body, "") if taken else None)
 
 
 def _run_after_client(tmp_path: Path, raw: str, body: str) -> tuple[dict[str, object], str, int]:

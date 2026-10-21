@@ -33,7 +33,8 @@ const EVENT_UNAVAILABLE: &str = "native_silent_review_event_unavailable";
 const ROW_UNAVAILABLE: &str = "native_silent_review_row_unavailable";
 /// `native_approval_scope._ENVELOPE_KEYS`: the envelope fields the scope
 /// contract reads.
-const ENVELOPE_KEYS: [&str; 25] = [
+const ENVELOPE_KEYS: [&str; 26] = [
+    "native_bash",
     "schema_version",
     "harness",
     "event_name",
@@ -164,6 +165,7 @@ fn decision_input(row: &Row, name: &str) -> StoreResult<Value> {
 /// `request_scope_contract_payloads` derives for the draft payload.
 fn recommended_allow_scope(row: &Row, projection: &Value) -> StoreResult<Value> {
     let item = ApprovalScopeItemV1 {
+        request_id: present(raw(row, "request_id")),
         artifact_id: Some(Value::String(py_str(row.get("artifact_id"))?)),
         artifact_type: Some(Value::String(py_str(row.get("artifact_type"))?)),
         artifact_hash: Some(Value::String(py_str(row.get("artifact_hash"))?)),
@@ -210,7 +212,7 @@ fn evidence(row: &Row) -> StoreResult<Vec<Value>> {
 }
 
 /// `native_approval_scope._narrow_envelope`.
-fn narrow_envelope(envelope: &Value) -> Value {
+pub(crate) fn narrow_envelope(envelope: &Value) -> Value {
     let Value::Object(fields) = envelope else {
         return envelope.clone();
     };
@@ -239,12 +241,12 @@ fn present(value: Value) -> Option<Value> {
     (!value.is_null()).then_some(value)
 }
 
-fn raw(row: &Row, name: &str) -> Value {
+pub(crate) fn raw(row: &Row, name: &str) -> Value {
     row.get(name).cloned().unwrap_or(Value::Null)
 }
 
 /// `str(value)` for a stored cell.
-fn py_str(value: Option<&Value>) -> StoreResult<String> {
+pub(crate) fn py_str(value: Option<&Value>) -> StoreResult<String> {
     Ok(match value {
         None | Some(Value::Null) => "None".to_owned(),
         Some(Value::String(stored)) => stored.clone(),

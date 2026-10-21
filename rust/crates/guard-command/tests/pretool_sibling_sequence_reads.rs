@@ -4,7 +4,8 @@
 //! of sibling files and `rustfmt` of sibling sources. After `cd <dir>;` every
 //! later segment runs in `<dir>` when the `cd` succeeded and in the original
 //! directory when it failed, so each one must be safe in both. Steps chained
-//! to the `cd` with `&&` or `|` run in `<dir>` only.
+//! to the `cd` with `&&` or `|` run in `<dir>` only; a `||` alternative and
+//! everything after it run in either directory, like a `;` tail.
 
 use crate::git_helper_fixture as fixture;
 use fixture::*;
@@ -165,14 +166,14 @@ fn semicolon_cd_runs_later_reads_in_either_directory() {
             format!("cd {sibling}; ls src && pwd"),
             format!("cd {sibling}; git status"),
             format!("cd {parent}; true"),
+            // `git log` can start a configured diff helper, and the helper
+            // probe inspects both directories this read can run in.
+            format!("cd {sibling}; git log -1"),
         ],
         &[
             format!("cd {ssh}; cat id_rsa"),
             format!("cd {sibling}; cat .env"),
             format!("cd {sibling}; rm -rf src"),
-            // `git log` can start a configured diff helper, and the helper
-            // probe runs in one directory only.
-            format!("cd {sibling}; git log -1"),
         ],
     );
 }
@@ -209,6 +210,9 @@ fn and_cd_reads_then_semicolon_reads_run_where_the_shell_runs_them() {
             ),
             format!("cd {sibling} && git status --short && ls src; git status"),
             format!("cd {sibling} && ls src; ls"),
+            // `git log` can start a configured diff helper, and the helper
+            // probe inspects both directories this list can run its reads in.
+            format!("cd {sibling} && git log -1; git status"),
         ],
         &[
             // `||` runs its right side in the original directory when the
@@ -218,9 +222,6 @@ fn and_cd_reads_then_semicolon_reads_run_where_the_shell_runs_them() {
             format!("cd {sibling} && git status; cat .env"),
             format!("cd {sibling} && git status; cd src; git status"),
             format!("cd {sibling} && git config core.pager id; git status"),
-            // `git log` can start a configured diff helper, and the helper
-            // probe runs in one directory only.
-            format!("cd {sibling} && git log -1; git status"),
         ],
     );
 }
@@ -244,6 +245,50 @@ fn and_cd_git_reads_need_helper_free_configuration_where_they_run() {
         git(repository, &["config", "--unset", "core.fsmonitor"]);
     }
     check(&space, std::slice::from_ref(&command), &[]);
+}
+
+#[test]
+fn and_cd_reads_with_or_fallbacks_run_where_the_shell_runs_them() {
+    let (space, _cleanup) = space("or-cd");
+    let sibling = space.sibling.display();
+    check(
+        &space,
+        &[
+            format!(
+                r#"cd {sibling} && git status --short | head -4 && git worktree list | grep -c "fix" || echo "no fix worktrees remain" && gh pr list --repo example-org/app-portal --state open --author octocat --json number,title --jq '.[] | "\(.number) \(.title)"' | head -4"#
+            ),
+            format!("cd {sibling} && ls src || echo missing"),
+            format!("cd {sibling} && git status --short || echo none; git worktree list"),
+            format!("cd {sibling} && ls || echo none && git log -1"),
+        ],
+        &[
+            // A failed `cd` runs the alternative and everything after it in
+            // the original directory; each must be safe in both.
+            format!("cd {sibling} && git status || cat .env"),
+            format!("cd {sibling} && ls || echo none && rm -rf src"),
+            format!("cd {sibling} && ls || git push"),
+            format!("cd {sibling} && ls || cd src && git status"),
+            format!("cd {sibling} && ls || gh pr merge 1 --repo example-org/app-portal"),
+        ],
+    );
+}
+
+#[test]
+fn or_fallback_git_reads_need_helper_free_configuration_in_both_directories() {
+    let (space, _cleanup) = space("or-cd-git");
+    let command = format!(
+        "cd {} && ls src || git status --short",
+        space.sibling.display()
+    );
+    check(&space, std::slice::from_ref(&command), &[]);
+    for repository in [&space.sibling, &space.project] {
+        git(
+            repository,
+            &["config", "core.fsmonitor", "./synthetic-never-execute"],
+        );
+        check(&space, &[], std::slice::from_ref(&command));
+        git(repository, &["config", "--unset", "core.fsmonitor"]);
+    }
 }
 
 #[test]

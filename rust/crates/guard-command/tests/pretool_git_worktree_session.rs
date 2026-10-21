@@ -66,7 +66,10 @@ fn evaluate_in(
             cdpath_unset: false,
             rustup_override_absent: false,
             npm_config_inert: false,
+            pip_config_inert: false,
             shell_home_matches: false,
+            ripgrep_config_absent: false,
+            psql_environment: Default::default(),
         },
         Some(&context),
     )
@@ -169,6 +172,45 @@ fn worktree_proof_follows_the_session_git_configuration() {
     assert!(git(&repository, &["add", "tracked.txt"]));
     assert!(git(&repository, &["commit", "--quiet", "-m", "fixture"]));
 
+    // Git creates missing parent directories itself. A first worktree under
+    // an ordinary scratch directory must not need a separate mkdir approval.
+    let nested = "git worktree add .worktrees/review -b nested-review HEAD";
+    assert!(!repository.join(".worktrees").exists());
+    let admitted = evaluate(&repository, nested, None, true);
+    assert_eq!(admitted.minimum_action, "allow", "{}", admitted.reason_code);
+    assert_eq!(admitted.reason_code, "native_exact_safe_worktree_add");
+    assert!(git(
+        &repository,
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            ".worktrees/review",
+            "-b",
+            "nested-review",
+            "HEAD"
+        ]
+    ));
+    assert!(repository.join(".worktrees/review/tracked.txt").is_file());
+    std::os::unix::fs::symlink("absent", repository.join(".worktrees/dangling")).unwrap();
+    std::fs::write(repository.join(".worktrees/file"), "not a directory").unwrap();
+    // Existing targets and execution-control destinations remain reviewed.
+    for destination in [
+        ".worktrees/review",
+        ".git/hooks/new/review",
+        ".github/workflows/new/review",
+        ".worktrees/dangling/new/review",
+        ".worktrees/file/new/review",
+    ] {
+        let result = evaluate(
+            &repository,
+            &format!("git worktree add {destination} -b protected-review HEAD"),
+            None,
+            true,
+        );
+        assert_ne!(result.minimum_action, "allow", "{destination}");
+    }
+
     let sibling = "git worktree add ../weekly-report -b weekly-report";
     let admitted = evaluate(&repository, sibling, None, true);
     assert_eq!(admitted.minimum_action, "allow", "{}", admitted.reason_code);
@@ -186,9 +228,26 @@ fn worktree_proof_follows_the_session_git_configuration() {
     ));
     assert!(root.join("weekly-report/tracked.txt").is_file());
 
-    // Leaving home, or climbing anywhere but the start, keeps review.
+    // Climbing out of home lands beside it. A fresh leaf directly in the
+    // shared temporary root, where the macOS fixture home sits, is admitted
+    // like any temporary checkout; anywhere else outside home is reviewed.
+    let beside_home = format!(
+        "git worktree add ../../{}-beside -b beside-home",
+        root.file_name().unwrap().to_str().unwrap()
+    );
+    let beside_home = evaluate(&repository, &beside_home, None, true);
+    let home_in_temporary_root = root.parent() == std::fs::canonicalize("/tmp").ok().as_deref();
+    assert_eq!(
+        beside_home.minimum_action == "allow",
+        home_in_temporary_root,
+        "{}",
+        beside_home.reason_code
+    );
+
+    // Leaving home and the temporary directories, or climbing anywhere but
+    // the start, keeps review.
     for command in [
-        "git worktree add ../../outside-home -b outside-home",
+        "git worktree add ../../../outside-home -b outside-home",
         "git worktree add sub/../escape -b escape",
         "git worktree add ./here -b here",
         "git worktree add .. -b parent",
@@ -300,14 +359,16 @@ fn worktree_proof_accepts_a_leading_directory_change() {
         "git -C {repo} worktree add -b fix/one {}/one HEAD",
         home.display()
     )));
+    // Relative to the -C directory, `../<home name>` is a fresh leaf in home.
+    // From the cwd (home) it would name home itself, which exists, so the
+    // acceptance proves the -C directory is used.
+    let home_name = home.file_name().unwrap().to_str().unwrap();
     assert!(from_home(&format!(
-        "git -C {repo} worktree add -b fix/two ../two"
+        "git -C {repo} worktree add -b fix/two ../{home_name}"
     )));
     assert!(from_home(
         "git -C repository worktree add -b fix/three ../three"
     ));
-    // `../two` is relative to the -C directory: from the cwd (home) it would
-    // leave home, so acceptance above proves the -C directory is used.
     for command in [
         format!("git -C {repo} -C {repo} worktree add -b a ../a"),
         "git -C '' worktree add -b a ../a".to_owned(),
@@ -316,7 +377,8 @@ fn worktree_proof_accepts_a_leading_directory_change() {
         format!("git -C {repo} --git-dir=.git worktree add -b a ../a"),
         format!("git -C {repo} --work-tree=. worktree add -b a ../a"),
         format!("git -C {repo} -c core.hooksPath=/x worktree add -b a ../a"),
-        format!("git -C {repo} worktree add -b a ../../outside-home-a"),
+        // Above the fixture's parent: neither home nor a temporary directory.
+        format!("git -C {repo} worktree add -b a ../../../outside-home-a"),
     ] {
         assert!(!from_home(&command), "{command}");
     }

@@ -90,13 +90,19 @@ fn read_only_segments_before_a_git_read_keep_its_proof() {
         &home,
         &["config", "core.pager", &format!("touch '{marker}'")],
     );
-    // Either Git context check may stop it first; both keep the review.
+    // Either Git context check may stop it first; both keep the review. On
+    // macOS the helper check sends a Git inspection to its read-only
+    // sandbox instead (`git_inspections_require_protected_execution_not_helper_consent`),
+    // which still never runs it directly.
+    let contained = cfg!(target_os = "macos").then_some("native_git_readonly_containment_required");
     for command in ["git log --oneline -5", "ls && git log --oneline -5"] {
         let code = reason(&home, &repository, command);
         assert!(
-            [FLOOR, "native_git_helper_context_review"].contains(&code.as_str()),
+            [FLOOR, "native_git_helper_context_review"].contains(&code.as_str())
+                || contained == Some(code.as_str()),
             "{command}: {code}"
         );
+        assert_ne!(action(&home, &repository, command), "allow", "{command}");
     }
 }
 
@@ -182,4 +188,188 @@ fn merge_base_object_names_feed_a_git_read() {
     let command = "git merge-base feature HEAD | xargs git show";
     assert_ne!(action(&home, &repository, command), "allow", "{command}");
     assert!(!root.join("helper-ran").exists());
+}
+
+fn result(
+    home: &std::path::Path,
+    cwd: &std::path::Path,
+    command: &str,
+) -> guard_contracts::PreToolResultV1 {
+    let controls = github_controls("enabled");
+    evaluate_pre_tool_envelope_with_context(
+        "omp",
+        "PreToolUse",
+        &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+        Some(&controls),
+        None,
+        home.to_str(),
+        cwd.to_str(),
+    )
+}
+
+// An agent told only that "this Git read may execute a configured helper"
+// stopped using Git for the rest of the task. When the read itself was proven
+// helper-free and only an earlier step kept that proof from carrying over,
+// the reason names the step and says the read is fine as its own command.
+#[test]
+fn an_unproven_step_before_a_proven_git_read_is_named() {
+    let root = std::env::temp_dir().join(format!("guard read order {}", std::process::id()));
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let repository = root.join("repository");
+    for directory in [&home, &repository] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    let home = home.canonicalize().unwrap();
+    let repository = repository.canonicalize().unwrap();
+    git(&repository, &home, &["init", "--quiet"]);
+    git(
+        &repository,
+        &home,
+        &["config", "user.email", "fixture@example.test"],
+    );
+    git(&repository, &home, &["config", "user.name", "fixture"]);
+    std::fs::write(repository.join("package.json"), "{}\n").unwrap();
+    git(&repository, &home, &["add", "-A"]);
+    git(&repository, &home, &["commit", "--quiet", "-m", "fixture"]);
+    let linked = root.join("linked");
+    git(
+        &repository,
+        &home,
+        &["worktree", "add", "--quiet", linked.to_str().unwrap()],
+    );
+    let linked = linked.canonicalize().unwrap();
+
+    let command = "corepack pnpm --version && git status --short";
+    let ordered = result(&home, &linked, command);
+    assert_eq!(ordered.reason_code, FLOOR, "{}", ordered.reason);
+    assert!(
+        ordered
+            .reason
+            .contains("Step 1 (corepack pnpm) runs before the Git read")
+            && ordered.reason.contains("run it as its own command"),
+        "{}",
+        ordered.reason
+    );
+    assert_ne!(reason(&home, &linked, "git status --short"), FLOOR);
+
+    // A read that would launch a pager keeps the generic reason: running it
+    // alone would not help.
+    let marker = root.join("pager-ran").to_string_lossy().replace('\\', "/");
+    git(
+        &repository,
+        &home,
+        &["config", "core.pager", &format!("touch '{marker}'")],
+    );
+    let helper = result(&home, &linked, "corepack pnpm --version && git log -1");
+    assert!(
+        !helper.reason.contains("own command"),
+        "{}: {}",
+        helper.reason_code,
+        helper.reason
+    );
+}
+
+// Agents name commits with Git's brace suffixes, as in
+// `git rev-parse <sha>^{commit}`. A brace with no comma is literal text to the
+// shell, so the read keeps its proof. A brace that spells a sensitive name,
+// or a `..` sequence that bash expands, still does not.
+#[test]
+fn git_brace_revision_suffixes_are_not_globs() {
+    let root = std::env::temp_dir().join(format!("guard brace revision {}", std::process::id()));
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let repository = root.join("repository");
+    for directory in [&home, &repository] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    let home = home.canonicalize().unwrap();
+    let repository = repository.canonicalize().unwrap();
+    git(&repository, &home, &["init", "--quiet"]);
+    git(
+        &repository,
+        &home,
+        &["config", "user.email", "fixture@example.test"],
+    );
+    git(&repository, &home, &["config", "user.name", "fixture"]);
+    std::fs::write(repository.join("package.json"), "{}\n").unwrap();
+    git(&repository, &home, &["add", "-A"]);
+    git(&repository, &home, &["commit", "--quiet", "-m", "fixture"]);
+
+    for command in [
+        "git rev-parse HEAD^{commit}",
+        "git rev-parse --verify 'HEAD^{tree}'",
+        "git rev-parse HEAD@{0}",
+        "git log -1 HEAD^{commit}",
+        "git status --short && git rev-parse HEAD^{commit} && git show -s --format='%H %s' HEAD && git worktree list",
+    ] {
+        assert_eq!(action(&home, &repository, command), "allow", "{command}");
+    }
+    // A brace with `..` is a sequence: bash expands `.en{v..v}` to `.env`.
+    std::fs::write(repository.join(".env"), "FIXTURE=1\n").unwrap();
+    std::fs::write(repository.join(".npmrc"), "fixture=1\n").unwrap();
+    std::fs::create_dir_all(repository.join(".ssh")).unwrap();
+    for command in [
+        "cat .en{v..v}",
+        "cat .npmr{c..c}",
+        "cat .git-credential{s..s}",
+        "cat .en{v..v..1}",
+        "grep -r x .ss{h..h}",
+        "git log -1 -- '{.env}'",
+        "git log -1 -- 'config/{.env,x}'",
+        "git diff HEAD -- '{.env,README.md}'",
+    ] {
+        assert_ne!(action(&home, &repository, command), "allow", "{command}");
+    }
+}
+
+// An explicit Git Allow settles Rust's review of an unproven read, but a glob
+// that bash or a Git pathspec could expand to a secret file name keeps the
+// review: `.en?` is `.env` once the shell expands it.
+#[test]
+fn an_explicit_git_allow_does_not_settle_a_glob_that_names_a_secret() {
+    let root = std::env::temp_dir().join(format!("guard allow secret glob {}", std::process::id()));
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let repository = root.join("repository");
+    for directory in [&home, &repository] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    let home = home.canonicalize().unwrap();
+    let repository = repository.canonicalize().unwrap();
+    git(&repository, &home, &["init", "--quiet"]);
+    git(
+        &repository,
+        &home,
+        &["config", "user.email", "fixture@example.test"],
+    );
+    git(&repository, &home, &["config", "user.name", "fixture"]);
+    std::fs::create_dir_all(repository.join("src")).unwrap();
+    std::fs::write(repository.join("src/index.ts"), "export {};\n").unwrap();
+    std::fs::write(repository.join("README.md"), "fixture\n").unwrap();
+    git(&repository, &home, &["add", "-A"]);
+    git(&repository, &home, &["commit", "--quiet", "-m", "fixture"]);
+    std::fs::write(repository.join(".env"), "FIXTURE=1\n").unwrap();
+
+    for command in [
+        "git diff --no-index .en? README.md",
+        "git diff --no-index .en{v..v} README.md",
+        "git diff --no-index .e*v README.md",
+        "git log -p -1 -- .en?",
+        "git log -p -1 -- '.en*'",
+        "git show HEAD -- '*.env*'",
+        "git log -p -1 -- ':(top).en*'",
+        "git log -p -1 -- ':(top,glob).en*'",
+        "git log -p -1 -- ':/!.en?'",
+    ] {
+        assert_ne!(action(&home, &repository, command), "allow", "{command}");
+    }
+    // An ordinary glob and a brace revision keep the Allow.
+    for command in [
+        "git diff --no-index src/inde? README.md",
+        "git log -p -1 -- 'src/*.ts'",
+        "git log -1 HEAD@{0}",
+    ] {
+        assert_eq!(action(&home, &repository, command), "allow", "{command}");
+    }
 }

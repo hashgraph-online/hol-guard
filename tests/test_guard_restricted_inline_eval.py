@@ -110,7 +110,13 @@ def test_original_and_resolved_eval_need_independent_native_authority(
 ):
     resolved = f"/usr/bin/{runtime}"
     plan = SimpleNamespace(profile_version=profile, command=(resolved, *shlex.split(flag), "synthetic analysis"))
-    monkeypatch.setattr(sink, "prepare_restricted_inline_eval", lambda *args, **kwargs: plan)
+    prepared = []
+
+    def prepare(*args, **kwargs):
+        prepared.append((args, kwargs))
+        return plan
+
+    monkeypatch.setattr(sink, "prepare_restricted_inline_eval", prepare)
     calls, executed = [], []
     monkeypatch.setattr(sink, "run_restricted_inline_eval", lambda *args, **kwargs: executed.append(args) or 0)
 
@@ -125,18 +131,24 @@ def test_original_and_resolved_eval_need_independent_native_authority(
             "observe_mode": failure == "watch",
         }
 
+    home = tmp_path / "home"
     payload = {"tool_input": {"command": f"{runtime} {flag} 'synthetic analysis'"}}
     if failure:
         with pytest.raises(RestrictedPytestError):
-            sink.run_authorized_contained_test(payload, workspace=tmp_path, authorize=authorize, timeout_seconds=20)
+            sink.run_authorized_contained_test(
+                payload, workspace=tmp_path, home_dir=home, authorize=authorize, timeout_seconds=20
+            )
         assert not executed
     else:
         assert (
-            sink.run_authorized_contained_test(payload, workspace=tmp_path, authorize=authorize, timeout_seconds=20)
+            sink.run_authorized_contained_test(
+                payload, workspace=tmp_path, home_dir=home, authorize=authorize, timeout_seconds=20
+            )
             == 0
         )
         assert executed == [(plan,)]
         assert calls == [f"{runtime} {flag} 'synthetic analysis'", f"{resolved} {flag} 'synthetic analysis'"]
+    assert prepared[0][1]["home_dir"] == home
     assert profile in READ_ONLY_TEST_PROFILES
 
 

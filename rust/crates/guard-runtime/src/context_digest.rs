@@ -7,9 +7,10 @@
 //! components and project the typed result, never a Python-built hash, into
 //! approval evidence.
 
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
-use serde_json::{Map, Value};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::context_digest_json::{
@@ -41,6 +42,21 @@ const ERR_ARGUMENTS: &str = "native_mcp_arguments_invalid";
 
 fn component_hash(component: &str, value: &Value) -> Result<String, &'static str> {
     component_hash_with(component, |out| write_canonical_json(value, out))
+}
+
+pub(crate) fn component_matches(token: &str, component: &str, value: &Value) -> bool {
+    let Some(token) = parse_context_token(&Value::String(token.to_owned())) else {
+        return false;
+    };
+    let actual = match component {
+        "identity" => token.identity,
+        "content" => token.content,
+        "capabilities" => token.capabilities,
+        "policy" => token.policy,
+        "sandbox" => token.sandbox,
+        _ => return false,
+    };
+    component_hash(component, value).is_ok_and(|expected| expected == actual)
 }
 
 fn component_hash_with(
@@ -439,6 +455,9 @@ fn evaluate_request(
         } => {
             result.validation_reason = validate_context_tokens(saved_token, current_token);
         }
+        ContextDigestKindV1::ApprovalContextTokenWellFormed { token } => {
+            result.approval_context_token_well_formed = Some(parse_context_token(token).is_some());
+        }
         ContextDigestKindV1::ConfiguredEnvironmentHash {
             values,
             configured_keys,
@@ -490,6 +509,15 @@ fn evaluate_request(
             result.mcp_redacted_value = Some(
                 guard_command::mcp_arguments::redact_json(material).map_err(|_| ERR_ARGUMENTS)?,
             );
+        }
+        ContextDigestKindV1::NativeBashReplyValidation {
+            reply_kind,
+            material,
+            request,
+        } => {
+            result.native_bash_reply_valid = Some(crate::native_bash_reply_validation::validate(
+                reply_kind, material, request,
+            ));
         }
         ContextDigestKindV1::McpLaunchEnvironment {
             inherited,
@@ -704,6 +732,67 @@ fn evaluate_request(
                     )
                 }));
         }
+        ContextDigestKindV1::GuardRunLaunchPlans {
+            adapter_commands,
+            environment,
+            launch_cwd,
+        } => {
+            let plans = observe_value(Phase::ContextGuardRunLaunchPlans, || {
+                let cwd = Path::new(launch_cwd.as_str());
+                let mut seen: Vec<Vec<String>> = Vec::new();
+                let mut built: Vec<Value> = Vec::new();
+                for adapter_command in adapter_commands {
+                    let Some(plan) = guard_command::guard_run_launch::guard_run_plan_for_command(
+                        adapter_command,
+                        environment,
+                        cwd,
+                    ) else {
+                        continue;
+                    };
+                    if seen.contains(&plan.adapter_command) {
+                        continue;
+                    }
+                    seen.push(plan.adapter_command.clone());
+                    built.push(json!({
+                        "adapter_command": plan.adapter_command,
+                        "execution_command": plan.execution_command,
+                        "environment_sha256": plan.environment_sha256,
+                        "identity": plan.identity,
+                        "launch_cwd": plan.launch_cwd.to_string_lossy(),
+                        "reusable": plan.reusable,
+                    }));
+                }
+                json!({ "plans": built })
+            });
+            result.guard_run_launch = Some(plans);
+        }
+        ContextDigestKindV1::GuardRunAuthorizedPrefixes { plans } => {
+            let prefixes = observe_value(Phase::ContextGuardRunAuthorizedPrefixes, || {
+                // The prefix prelude reads only the argv pair, the shared
+                // environment digest and reusability; the identity and cwd stay
+                // with the caller, so bind a single synthetic environment whose
+                // digest is the one the caller recorded.
+                let rebuilt: Vec<guard_command::guard_run_launch::GuardRunLaunchPlan> = plans
+                    .iter()
+                    .map(|plan| guard_command::guard_run_launch::GuardRunLaunchPlan {
+                        adapter_command: plan.adapter_command.clone(),
+                        execution_command: plan.execution_command.clone(),
+                        environment: BTreeMap::new(),
+                        environment_sha256: plan.environment_sha256.clone(),
+                        identity: Value::Null,
+                        launch_cwd: PathBuf::new(),
+                        reusable: plan.reusable,
+                    })
+                    .collect();
+                match guard_command::guard_run_launch::guard_run_authorized_executable_prefixes(
+                    &rebuilt,
+                ) {
+                    Some(prefixes) => json!({ "prefixes": prefixes }),
+                    None => Value::Null,
+                }
+            });
+            result.guard_run_launch = Some(prefixes);
+        }
         ContextDigestKindV1::RuntimeLaunchIdentityMatches {
             expected_identity,
             command,
@@ -817,12 +906,14 @@ fn evaluate_context_digest_request_inner(
         token: None,
         digest: None,
         validation_reason: None,
+        approval_context_token_well_formed: None,
         mcp_launch_environment: None,
         package_context: None,
         mcp_server_identity: None,
         mcp_tool_identity: None,
         browser_mcp: None,
         mcp_redacted_value: None,
+        native_bash_reply_valid: None,
         runtime_identity: None,
         runtime_identity_match: None,
         runtime_identity_reusable: None,
@@ -837,6 +928,7 @@ fn evaluate_context_digest_request_inner(
         custom_extension_suggestion: None,
         claude_guard_question: None,
         memory_pattern: None,
+        guard_run_launch: None,
     };
     if let Err(code) = evaluate_request(request, &mut result) {
         result.status = "error".to_owned();

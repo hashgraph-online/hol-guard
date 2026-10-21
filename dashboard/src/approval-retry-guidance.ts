@@ -1,11 +1,14 @@
-// Guidance for native reviews whose one-time approval never lets the agent's next call through.
-// The daemon marks them with the `retry_cannot_reuse_approval` scope restriction.
+// Native reviews may lack a retry binding or a supported script execution route.
+// The daemon reports the restriction; a specific script refusal takes precedence
+// over stale persistence eligibility and legacy retry advice.
+import { onceOnlyReasonCopy } from "./approval-scopes";
 import type { GuardApprovalRequest } from "./guard-types";
 import type { QueueGroup } from "./queue-state";
 
 /** True when the daemon reports that a retry of this native command can never reuse its approval. */
 export function retryCannotReuseApproval(item: GuardApprovalRequest): boolean {
-  return item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
+  return item.once_only_reason === "script_execution_binding_unavailable" ||
+    item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
 }
 
 /** Native one-time approvals are honoured for 5 minutes (store_native_review_approvals.py); others for 15. */
@@ -22,28 +25,30 @@ function allowPermissionLabels(item: GuardApprovalRequest): string | null {
   return labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
 }
 
-/** Explain, before approval, what actually lets the agent run a command whose one-time approval cannot. */
-export function retryCannotReuseApprovalHint(item: GuardApprovalRequest, harness: string): string {
-  const base = `Approving just this once records your decision but does not let ${harness} run this command; it will be blocked again.`;
+/** What lets the agent run a command whose request predates retry bindings. Never "run it yourself". */
+function legacyRequestNextStep(item: GuardApprovalRequest, harness: string): string {
   if (item.exact_action_persistence_eligible === true) {
-    return `${base} To let ${harness} run this exact command, choose "Always allow exact action".`;
+    return `Choose "Always allow exact action" to let ${harness} run this exact command.`;
   }
   const labels = allowPermissionLabels(item);
-  return labels === null
-    ? `${base} Copy the command and run it yourself.`
-    : `${base} To let ${harness} run commands like this, set ${labels} to Allow in Extensions, or copy the command and run it yourself.`;
+  const retry = `Ask ${harness} to run the command again; the new request offers Allow once and Always allow.`;
+  return labels === null ? retry : `${retry} To let ${harness} run commands like this, set ${labels} to Allow in Extensions.`;
 }
 
-/** Post-approval copy for a one-time approval that leaves the agent blocked. */
-export function retryBlockedApprovalCopy(item: GuardApprovalRequest, harness: string): string {
-  const base = `Decision recorded. ${harness} will still be blocked on this command.`;
-  if (item.exact_action_persistence_eligible === true) {
-    return `${base} To let it run this exact command, approve it with "Always allow exact action", or run it yourself.`;
+/** Explain unavailable delivery before approval, preserving legacy recovery where applicable. */
+export function retryCannotReuseApprovalHint(item: GuardApprovalRequest, harness: string): string {
+  if (item.once_only_reason === "script_execution_binding_unavailable") {
+    return onceOnlyReasonCopy(item.once_only_reason);
   }
-  const labels = allowPermissionLabels(item);
-  return labels === null
-    ? `${base} Copy the command and run it yourself.`
-    : `${base} To let it run commands like this, set ${labels} to Allow in Extensions, or run the command yourself.`;
+  return `An older version of Guard recorded this request, so Run once cannot reach ${harness}'s retry. ${legacyRequestNextStep(item, harness)}`;
+}
+
+/** Post-decision copy must not promise a retry through an unsupported execution route. */
+export function retryBlockedApprovalCopy(item: GuardApprovalRequest, harness: string): string {
+  if (item.once_only_reason === "script_execution_binding_unavailable") {
+    return `Decision recorded. ${onceOnlyReasonCopy(item.once_only_reason)}`;
+  }
+  return `Decision recorded. ${legacyRequestNextStep(item, harness)}`;
 }
 
 /**
@@ -99,6 +104,5 @@ export function bulkApproveConsequenceCopyForSelection(
   defaultCopy: (count: number) => string,
 ): string {
   if (retryBlockedActionCount <= 0) return defaultCopy(actionCount);
-  const blocked = `${retryBlockedActionCount} of them ${retryBlockedActionCount === 1 ? "is a command" : "are commands"} the agent will still be blocked on.`;
-  return `Guard will record your decision for ${actionCount} ${actionCount === 1 ? "action" : "actions"} once and won't remember it. ${blocked} Mass approval skips opening each request, so an unexpected action is harder to catch.`;
+  return `Run once is unavailable for ${retryBlockedActionCount} of these ${actionCount} actions. Open those requests to inspect their execution limitations before approving the remaining actions.`;
 }

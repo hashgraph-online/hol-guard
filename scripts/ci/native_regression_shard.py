@@ -53,13 +53,16 @@ def _configure_installed_native() -> None:
     if status.identity is None:
         raise pytest.UsageError("installed wheel has no native runtime identity")
     try:
-        compiler = find_packaged_source_compiler()
+        find_packaged_source_compiler()
     except NativeSourceCompilerError as error:
         raise pytest.UsageError(f"installed wheel has no native source compiler: {error}") from error
-    # Publish neither override until both checks pass. Never use a source-tree or
-    # caller-provided binary as a fallback for an incomplete installed wheel.
+    # Publish the runtime only after both checks pass. Never use a source-tree or
+    # caller-provided binary as a fallback for an incomplete installed wheel. The
+    # source compiler stays unexported: the installed wheel refuses any compiler
+    # override, and tests read the packaged compiler directly.
     os.environ["HOL_GUARD_NATIVE_BINARY"] = str(status.identity.path)
-    os.environ["HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER"] = str(compiler)
+    os.environ.pop("HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER", None)
+    os.environ.pop("HOL_GUARD_NATIVE_SOURCE_COMPILER", None)
 
 
 class _AssertInstalled:

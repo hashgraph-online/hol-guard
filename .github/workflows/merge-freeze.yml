@@ -1,0 +1,83 @@
+name: Merge freeze
+
+# Blocks every pull request from merging while the repository variable
+# MERGE_FREEZE is true. The freeze is enforced by `hol-guard / required`, which
+# the main-status-checks ruleset already requires. See scripts/ci/merge_freeze.py.
+#
+# Freeze (a repository admin sets the variable; anyone with write access can
+# run the workflow):
+#
+#   gh variable set MERGE_FREEZE --body true --repo hashgraph-online/hol-guard \
+#     && gh workflow run merge-freeze.yml --repo hashgraph-online/hol-guard
+#
+# Unfreeze:
+#
+#   gh variable set MERGE_FREEZE --body false --repo hashgraph-online/hol-guard \
+#     && gh workflow run merge-freeze.yml --repo hashgraph-online/hol-guard
+#
+# Deleting the variable (`gh variable delete MERGE_FREEZE`) also unfreezes. Any
+# value other than true or false blocks every pull request until it is fixed.
+#
+# Let specific pull requests merge during a freeze (comma-separated numbers,
+# then run the workflow again):
+#
+#   gh variable set MERGE_FREEZE_ALLOW --body "123,456" --repo hashgraph-online/hol-guard
+#
+# To ship a hotfix release during a freeze, add the Release Please pull request
+# to MERGE_FREEZE_ALLOW. Its number stays the same as Release Please updates it.
+# No branch name is exempt by itself, because anyone who can push a branch can
+# choose its name.
+#
+# The variable only changes results computed after it changes. Running this
+# workflow re-evaluates the open pull requests whose CI already finished: it
+# posts a failing `hol-guard / required` check run while frozen. On unfreeze it
+# marks that check run neutral, or re-runs the real aggregate when the two share
+# a check suite; CI's own result still has to pass. A pull request with no CI
+# result yet stays blocked until CI reports. Add
+# `-f dry_run=true` to see what would change without writing anything.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Report what would change without posting or re-running anything
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: merge-freeze
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Re-evaluate open pull requests
+    # Only default-branch code gets a token that can write checks and re-run jobs.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      checks: write
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ci/merge_freeze.py
+          sparse-checkout-cone-mode: false
+      - name: Re-evaluate every open pull request
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          MERGE_FREEZE: ${{ vars.MERGE_FREEZE }}
+          MERGE_FREEZE_ALLOW: ${{ vars.MERGE_FREEZE_ALLOW }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            python3 scripts/ci/merge_freeze.py reconcile --dry-run
+          else
+            python3 scripts/ci/merge_freeze.py reconcile
+          fi

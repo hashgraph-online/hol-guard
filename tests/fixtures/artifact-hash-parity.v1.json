@@ -1,0 +1,809 @@
+{
+  "schema": "artifact-hash-parity.v1",
+  "generator": "scripts/ci/generate_artifact_hash_parity.py",
+  "cases": [
+    {
+      "case": "plain_hook",
+      "covers": "the default payload: no codex identity, no prompt redaction",
+      "artifact": {
+        "artifact_id": "claude-code:hook:PreToolUse",
+        "name": "pre tool hook",
+        "harness": "claude-code",
+        "artifact_type": "hook",
+        "source_scope": "harness",
+        "config_path": "/home/u/.claude/settings.json"
+      },
+      "expected_sha256": "882bb0fd5988957fda310b5d43d405eee6870a6ebabfe8ceef1cef06fdd1adee"
+    },
+    {
+      "case": "codex_hook_identity",
+      "covers": "the codex-hook short payload, which ignores every other field",
+      "artifact": {
+        "artifact_id": "codex:hook:exec",
+        "name": "exec hook",
+        "harness": "codex",
+        "artifact_type": "hook",
+        "source_scope": "harness",
+        "config_path": "/home/u/.codex/config.toml",
+        "metadata": {
+          "codex_hook_identity": "exec:v1",
+          "ignored": "by the short payload"
+        }
+      },
+      "expected_sha256": "dbf023414b7c5d047340b1c5fdfeacbc2f3237c989bb2f1e838acf8072c22cf4"
+    },
+    {
+      "case": "codex_hook_identity_blank",
+      "covers": "a blank identity falling back to the default payload",
+      "artifact": {
+        "artifact_id": "codex:hook:exec",
+        "name": "exec hook",
+        "harness": "codex",
+        "artifact_type": "hook",
+        "source_scope": "harness",
+        "config_path": "/home/u/.codex/config.toml",
+        "metadata": {
+          "codex_hook_identity": ""
+        }
+      },
+      "expected_sha256": "3afc23d787fae75cd63f7ff2f89b76df3de655d9781348974f9b051f1d76028a"
+    },
+    {
+      "case": "prompt_request_volatile_metadata",
+      "covers": "prompt_request dropping the volatile keys and keeping the intent hash",
+      "artifact": {
+        "artifact_id": "claude-code:native-prompt:session",
+        "name": "user prompt",
+        "harness": "claude-code",
+        "artifact_type": "prompt_request",
+        "source_scope": "harness",
+        "config_path": "",
+        "metadata": {
+          "normalized_path": "/w/notes.md",
+          "prompt_intent_hash": "  abc123  ",
+          "prompt_request_classes": [
+            "secret_read"
+          ]
+        }
+      },
+      "expected_sha256": "372037e7683759084a2cfc75a8fff1aae8634366719c4f2a5d97a68060cb3792"
+    },
+    {
+      "case": "prompt_request_without_normalized_path",
+      "covers": "prompt_request keeping its metadata when no path was normalized",
+      "artifact": {
+        "artifact_id": "claude-code:native-prompt:session",
+        "name": "user prompt",
+        "harness": "claude-code",
+        "artifact_type": "prompt_request",
+        "source_scope": "harness",
+        "config_path": "",
+        "metadata": {
+          "prompt_request_classes": [
+            "local_env_read"
+          ]
+        }
+      },
+      "expected_sha256": "cea0abb0a16a0bd58038266c56c95384bdecc745bf6a9ef5b55264ecb8768e08"
+    },
+    {
+      "case": "redacted_url_query",
+      "covers": "url query redaction and its re-encoding",
+      "artifact": {
+        "artifact_id": "mcp:server:remote",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/sse?api_key=live-secret&page=2&Token=x y&plain=keep",
+        "transport": "sse"
+      },
+      "expected_sha256": "7b91d40ae98153d56a1db7ad176dfd40cbc9b0f51a02a99c09f738456836f29a"
+    },
+    {
+      "case": "url_without_query",
+      "covers": "a url with no query returning unchanged",
+      "artifact": {
+        "artifact_id": "mcp:server:remote",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/sse#frag"
+      },
+      "expected_sha256": "c57b79cc0b059ddd91210c9115cb19ea7628629d5573aa70eacbe9f7ddf04114"
+    },
+    {
+      "case": "redacted_args",
+      "covers": "header-style and query-style argument redaction",
+      "artifact": {
+        "artifact_id": "mcp:server:local",
+        "name": "local server",
+        "harness": "codex",
+        "artifact_type": "mcp_server",
+        "source_scope": "user",
+        "config_path": "/w/.mcp.json",
+        "command": "npx",
+        "args": [
+          "--header",
+          "Authorization: Bearer live-secret",
+          "API-Key: live",
+          "--url=https://example.test?token=live",
+          "token=live",
+          "--keep=1"
+        ]
+      },
+      "expected_sha256": "f6db4c16653a3063eb83d4b7b3fce9469147c6b8a6d88d4f8386445d37027023"
+    },
+    {
+      "case": "redacted_metadata_tree",
+      "covers": "env masking, secret-keyed values and recursion through lists",
+      "artifact": {
+        "artifact_id": "mcp:server:env",
+        "name": "env server",
+        "harness": "codex",
+        "artifact_type": "mcp_server",
+        "source_scope": "user",
+        "config_path": "/w/.mcp.json",
+        "metadata": {
+          "env": {
+            "OPENAI_API_KEY": "live",
+            "PATH": "/usr/bin"
+          },
+          "environment": {
+            "X": "live"
+          },
+          "auth_token": "live",
+          "nested": [
+            {
+              "password": "live"
+            },
+            {
+              "plain": "keep"
+            }
+          ],
+          "env_keys": [
+            "OPENAI_API_KEY",
+            "PATH"
+          ],
+          "count": 3
+        }
+      },
+      "expected_sha256": "827955c8a239e4b253b81085c99a7273abb95c41ec0f42f5c020875b7e129e1c"
+    },
+    {
+      "case": "prompt_request_redacted_env_keys",
+      "covers": "env_keys surviving as the masked string the redaction left behind",
+      "artifact": {
+        "artifact_id": "claude-code:native-prompt:session",
+        "name": "user prompt",
+        "harness": "claude-code",
+        "artifact_type": "prompt_request",
+        "source_scope": "harness",
+        "config_path": "",
+        "metadata": {
+          "normalized_path": "/w/.env",
+          "env_keys": [
+            "OPENAI_API_KEY"
+          ],
+          "prompt_display_text": "dropped",
+          "request_summary": "dropped"
+        }
+      },
+      "expected_sha256": "31827b5701a08d8a7edacae011188e14d7c6fd86e4fc87ade7f01d66fba386bd"
+    },
+    {
+      "case": "prompt_request_blank_intent_hash",
+      "covers": "a whitespace-only intent hash keeping the unredacted value",
+      "artifact": {
+        "artifact_id": "claude-code:native-prompt:session",
+        "name": "user prompt",
+        "harness": "claude-code",
+        "artifact_type": "prompt_request",
+        "source_scope": "harness",
+        "config_path": "",
+        "metadata": {
+          "normalized_path": "/w/notes.md",
+          "prompt_intent_hash": "   "
+        }
+      },
+      "expected_sha256": "b36378304b5368c735cfc63c568e087460a1cb20d23c273fbad6567b8c7346fe"
+    },
+    {
+      "case": "metadata_without_env_keys",
+      "covers": "the env_keys mirror defaulting to an empty list",
+      "artifact": {
+        "artifact_id": "mcp:server:bare",
+        "name": "bare server",
+        "harness": "codex",
+        "artifact_type": "mcp_server",
+        "source_scope": "user",
+        "config_path": "/w/.mcp.json",
+        "metadata": {
+          "count": 1
+        },
+        "publisher": "example",
+        "transport": "stdio"
+      },
+      "expected_sha256": "8258ad28cbc26438400f97814cf820b76a78a73da0fd151ed71d8aab1ffa2e68"
+    },
+    {
+      "case": "non_ascii_and_floats",
+      "covers": "the ASCII escaping and float spelling the encoder has to match",
+      "artifact": {
+        "artifact_id": "codex:hook:café",
+        "name": "naïve 😀 hook",
+        "harness": "codex",
+        "artifact_type": "hook",
+        "source_scope": "harness",
+        "config_path": "/w/ünïcode.toml",
+        "metadata": {
+          "ratio": 0.1,
+          "whole": 2.0,
+          "big": 1e+22,
+          "小": "値"
+        }
+      },
+      "expected_sha256": "dfb4911c88c6b03981faf8975f58370fb6ad782451aa7d47673f9e4275a5eb0b"
+    },
+    {
+      "case": "url_plus_and_percent",
+      "covers": "url redaction round-tripping plus and percent",
+      "artifact": {
+        "artifact_id": "mcp:server:plus_and_percent",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/p?q=a+b%20c&r=%2Fslash%3Acolon"
+      },
+      "expected_sha256": "2b4e7c9cc0af1ae1d895a3d385020d8f8223a005a8adbed0a5ca2fff95940ec8"
+    },
+    {
+      "case": "url_blank_and_bare_keys",
+      "covers": "url redaction round-tripping blank and bare keys",
+      "artifact": {
+        "artifact_id": "mcp:server:blank_and_bare_keys",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/p?a=&b&c=1"
+      },
+      "expected_sha256": "08241852773dcbdc27fdd07137c8c3fea4573e72f541801bf1db221caa90a684"
+    },
+    {
+      "case": "url_empty_and_repeated_separators",
+      "covers": "url redaction round-tripping empty and repeated separators",
+      "artifact": {
+        "artifact_id": "mcp:server:empty_and_repeated_separators",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/p?&&a=1&&"
+      },
+      "expected_sha256": "0efb3be1bfe904b78ff805172c926224fdd3a0285be9b6df85c2a4e64d67ad31"
+    },
+    {
+      "case": "url_repeated_keys",
+      "covers": "url redaction round-tripping repeated keys",
+      "artifact": {
+        "artifact_id": "mcp:server:repeated_keys",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/p?a=1&a=2&A=3"
+      },
+      "expected_sha256": "1cf08527a044189f8e78a216e6428ba41ee111387021d95be4922de1ce2d7c27"
+    },
+    {
+      "case": "url_unreserved_round_trip",
+      "covers": "url redaction round-tripping unreserved round trip",
+      "artifact": {
+        "artifact_id": "mcp:server:unreserved_round_trip",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/p?k=-_.~abcZ09"
+      },
+      "expected_sha256": "fe9733b135121b1d0fe8df2961c5e8066f465c60243a34fba8fab021d8a1d594"
+    },
+    {
+      "case": "url_reserved_needs_encoding",
+      "covers": "url redaction round-tripping reserved needs encoding",
+      "artifact": {
+        "artifact_id": "mcp:server:reserved_needs_encoding",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/p?k=a/b:c@d,e;f!g*h'i(j)"
+      },
+      "expected_sha256": "d1df80d45b8d685b3fff454bb1e684b447faa4c874a164f2a2b56a489c0115ef"
+    },
+    {
+      "case": "url_raw_non_ascii_query",
+      "covers": "url redaction round-tripping raw non ascii query",
+      "artifact": {
+        "artifact_id": "mcp:server:raw_non_ascii_query",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/p?q=café&小=値"
+      },
+      "expected_sha256": "6c94683d2a05bf89088ea8b251f6d3d867a05a4f96018773984bd07741768db0"
+    },
+    {
+      "case": "url_percent_encoded_non_ascii",
+      "covers": "url redaction round-tripping percent encoded non ascii",
+      "artifact": {
+        "artifact_id": "mcp:server:percent_encoded_non_ascii",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/p?q=caf%C3%A9"
+      },
+      "expected_sha256": "79164f8453494ebdbd33d0aae8725cc114986fd020396a1c4c92f82a726f31e1"
+    },
+    {
+      "case": "url_invalid_percent_escape",
+      "covers": "url redaction round-tripping invalid percent escape",
+      "artifact": {
+        "artifact_id": "mcp:server:invalid_percent_escape",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/p?q=%zz%4&r=%"
+      },
+      "expected_sha256": "12e76184b6e3f62d0bfaffdcb1a2765ab5819d8c6bb264009b20b4e7527be16d"
+    },
+    {
+      "case": "url_invalid_utf8_escape",
+      "covers": "url redaction round-tripping invalid utf8 escape",
+      "artifact": {
+        "artifact_id": "mcp:server:invalid_utf8_escape",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/p?q=%e0%80%41"
+      },
+      "expected_sha256": "0de3ae8846733cd7451c3ddd0f7b965cd6c72dcdde41be11de1240b44cbb441f"
+    },
+    {
+      "case": "url_mixed_case_secret_keys",
+      "covers": "url redaction round-tripping mixed case secret keys",
+      "artifact": {
+        "artifact_id": "mcp:server:mixed_case_secret_keys",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/p?AUTHORIZATION=x&Api_Token=y&monkey=z"
+      },
+      "expected_sha256": "dfddb8e6f85d28631ff9ad9a64a9269f45733d2c0f01dad999e14133b9e5b766"
+    },
+    {
+      "case": "url_secret_substring_key",
+      "covers": "url redaction round-tripping secret substring key",
+      "artifact": {
+        "artifact_id": "mcp:server:secret_substring_key",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/p?keyboard=1&tokenizer=2"
+      },
+      "expected_sha256": "9306e3313b21425b19a7ac1669b5f1cfbfc46b7674773830a1f2906a00be3a1f"
+    },
+    {
+      "case": "url_fragment_after_query",
+      "covers": "url redaction round-tripping fragment after query",
+      "artifact": {
+        "artifact_id": "mcp:server:fragment_after_query",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/p?a=1#frag?b=2"
+      },
+      "expected_sha256": "96c115d031225ad695b02ccca6c4ac4ecc12803f77b19d295ce7d0facdba8b5a"
+    },
+    {
+      "case": "url_uppercase_scheme",
+      "covers": "url redaction round-tripping uppercase scheme",
+      "artifact": {
+        "artifact_id": "mcp:server:uppercase_scheme",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "HTTPS://Example.Test/P?a=1"
+      },
+      "expected_sha256": "7c7f868e91017a660beba5b9efce611dae73bf7aa006ff1b349c38e454046abd"
+    },
+    {
+      "case": "url_scheme_relative",
+      "covers": "url redaction round-tripping scheme relative",
+      "artifact": {
+        "artifact_id": "mcp:server:scheme_relative",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "//example.test/p?a=1"
+      },
+      "expected_sha256": "e6fc0ae1934fa26d212ffffb141a04855fa70f47ba97bed5fac221d3c0dabb3a"
+    },
+    {
+      "case": "url_path_only",
+      "covers": "url redaction round-tripping path only",
+      "artifact": {
+        "artifact_id": "mcp:server:path_only",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "p/q?a=1"
+      },
+      "expected_sha256": "94ee8b66061df868c291dfe00afa7baa5d4f5a217e898a376235108db383108e"
+    },
+    {
+      "case": "url_netloc_absent_uses_netloc_scheme",
+      "covers": "url redaction round-tripping netloc absent uses netloc scheme",
+      "artifact": {
+        "artifact_id": "mcp:server:netloc_absent_uses_netloc_scheme",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https:?a=1"
+      },
+      "expected_sha256": "825152a7f260e9d829d903de281e8631985700fe46f573585b8dad0a2ee4ecd4"
+    },
+    {
+      "case": "url_unknown_scheme",
+      "covers": "url redaction round-tripping unknown scheme",
+      "artifact": {
+        "artifact_id": "mcp:server:unknown_scheme",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "custom:opaque?a=1"
+      },
+      "expected_sha256": "e55993e18138c75931b2c079212f4dbcee9f588f0eee46aac98a10f22c70a102"
+    },
+    {
+      "case": "url_userinfo_and_port",
+      "covers": "url redaction round-tripping userinfo and port",
+      "artifact": {
+        "artifact_id": "mcp:server:userinfo_and_port",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://user:pw@example.test:8443/p?a=1"
+      },
+      "expected_sha256": "35e6b57e1b184b6312693a7c996397d59541fce6d7dfe91f883e87577f1f03b0"
+    },
+    {
+      "case": "url_ipv6_host",
+      "covers": "url redaction round-tripping ipv6 host",
+      "artifact": {
+        "artifact_id": "mcp:server:ipv6_host",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "http://[::1]:8080/p?a=1"
+      },
+      "expected_sha256": "38f0b1320225d041c14f165ba701a730c1ede5bbcc08dda97d860abde2a0d31f"
+    },
+    {
+      "case": "url_ipv6_zone",
+      "covers": "url redaction round-tripping ipv6 zone",
+      "artifact": {
+        "artifact_id": "mcp:server:ipv6_zone",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "http://[fe80::1%25eth0]/p?a=1"
+      },
+      "expected_sha256": "e0c75e76c332eb47bee35ac42c30872f0493ba7f3bdcd6d1565f945735936c6c"
+    },
+    {
+      "case": "url_ipv_future_host",
+      "covers": "url redaction round-tripping ipv future host",
+      "artifact": {
+        "artifact_id": "mcp:server:ipv_future_host",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "http://[v7.plan9]/p?a=1"
+      },
+      "expected_sha256": "e799de96b352c1d83dc7abf12cac404e3e42f12e8253acbdb8e3fc48a8996598"
+    },
+    {
+      "case": "url_unterminated_ipv6_is_unchanged",
+      "covers": "url redaction round-tripping unterminated ipv6 is unchanged",
+      "artifact": {
+        "artifact_id": "mcp:server:unterminated_ipv6_is_unchanged",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "http://[::1/p?a=1"
+      },
+      "expected_sha256": "522ec865ab2635d2dd719e921efbcc5b8be4fe818b370cdba616df07393ee3f4"
+    },
+    {
+      "case": "url_ipv4_in_brackets_is_unchanged",
+      "covers": "url redaction round-tripping ipv4 in brackets is unchanged",
+      "artifact": {
+        "artifact_id": "mcp:server:ipv4_in_brackets_is_unchanged",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "http://[127.0.0.1]/p?a=1"
+      },
+      "expected_sha256": "5ad5c46ef7fe7bb4d20b7c006a43c83357ea993937fa041aafe52ad8894fc647"
+    },
+    {
+      "case": "url_data_before_bracket_is_unchanged",
+      "covers": "url redaction round-tripping data before bracket is unchanged",
+      "artifact": {
+        "artifact_id": "mcp:server:data_before_bracket_is_unchanged",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "http://a[::1]/p?token=x"
+      },
+      "expected_sha256": "0aed85f79f3f630d733e918bca99a91f7ab9fc9ae3ef9e2949f7a223b7acd18a"
+    },
+    {
+      "case": "url_data_after_bracket_is_unchanged",
+      "covers": "url redaction round-tripping data after bracket is unchanged",
+      "artifact": {
+        "artifact_id": "mcp:server:data_after_bracket_is_unchanged",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "http://[::1]x/p?token=x"
+      },
+      "expected_sha256": "3dba4b1e30f6c5a7a15e64443abbdddb2e2afc41e10a69e2085641d849ce8b5d"
+    },
+    {
+      "case": "url_bracketed_userinfo_before_ipv6_host",
+      "covers": "url redaction round-tripping bracketed userinfo before ipv6 host",
+      "artifact": {
+        "artifact_id": "mcp:server:bracketed_userinfo_before_ipv6_host",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "http://u[x]@[::1]/p?token=x"
+      },
+      "expected_sha256": "e23002d5543f7355e44ad1db539e232e47ab3ffa36bcc228983f79c65c51a886"
+    },
+    {
+      "case": "url_bracketed_userinfo_before_named_host_is_unchanged",
+      "covers": "url redaction round-tripping bracketed userinfo before named host is unchanged",
+      "artifact": {
+        "artifact_id": "mcp:server:bracketed_userinfo_before_named_host_is_unchanged",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "http://u[x]@example.test/p?token=x"
+      },
+      "expected_sha256": "1ca888cb7b92bd2208c3158b09d5d40dd96f25bf8396e6d50d0d03461fe2a6d1"
+    },
+    {
+      "case": "url_empty_authority_double_slash_path",
+      "covers": "url redaction round-tripping empty authority double slash path",
+      "artifact": {
+        "artifact_id": "mcp:server:empty_authority_double_slash_path",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https:////example.test/p?token=abc"
+      },
+      "expected_sha256": "91fd65eeaa1a3762f4f3c48be108bd67c75807bc67310e09a64e38268db00266"
+    },
+    {
+      "case": "url_nfkc_netloc_is_unchanged",
+      "covers": "url redaction round-tripping nfkc netloc is unchanged",
+      "artifact": {
+        "artifact_id": "mcp:server:nfkc_netloc_is_unchanged",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "http://example℀com/p?a=1"
+      },
+      "expected_sha256": "af14854bce75ccd5ae459a9473e25bb69d43b4042b554a28be77ffb915acb15e"
+    },
+    {
+      "case": "url_leading_control_and_inner_tabs",
+      "covers": "url redaction round-tripping leading control and inner tabs",
+      "artifact": {
+        "artifact_id": "mcp:server:leading_control_and_inner_tabs",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "  \u0001https://exa\tmple.test/p?a=\n1"
+      },
+      "expected_sha256": "7aa34f98bea00d2abe6b81be6c41b3ca3f4417410c35fa4efb58da98a52362e2"
+    },
+    {
+      "case": "url_empty_query_marker",
+      "covers": "url redaction round-tripping empty query marker",
+      "artifact": {
+        "artifact_id": "mcp:server:empty_query_marker",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "https://example.test/p?"
+      },
+      "expected_sha256": "ded6aa7694a95761e3dde7997dfa783122a276fbd2dbca3fac2535d5be8a4642"
+    },
+    {
+      "case": "url_query_only",
+      "covers": "url redaction round-tripping query only",
+      "artifact": {
+        "artifact_id": "mcp:server:query_only",
+        "name": "remote server",
+        "harness": "claude-code",
+        "artifact_type": "mcp_server",
+        "source_scope": "project",
+        "config_path": "/w/.mcp.json",
+        "url": "?token=live"
+      },
+      "expected_sha256": "3db6998b8fb25bc62607eda4457355c6c769aa2f54a88c63db868b06b1413cd8"
+    },
+    {
+      "case": "args_header_case_insensitive",
+      "covers": "argument redaction for header case insensitive",
+      "artifact": {
+        "artifact_id": "mcp:server:header_case_insensitive",
+        "name": "local server",
+        "harness": "codex",
+        "artifact_type": "mcp_server",
+        "source_scope": "user",
+        "config_path": "/w/.mcp.json",
+        "command": "npx",
+        "args": [
+          "authorization: Bearer x",
+          "X-API-Key: live",
+          "AUTHORIZATION:x"
+        ]
+      },
+      "expected_sha256": "6bd326207e59516a160d8ac5c141933c72826b89d1bb1c8ff3ee25833b87a367"
+    },
+    {
+      "case": "args_bearer_without_colon",
+      "covers": "argument redaction for bearer without colon",
+      "artifact": {
+        "artifact_id": "mcp:server:bearer_without_colon",
+        "name": "local server",
+        "harness": "codex",
+        "artifact_type": "mcp_server",
+        "source_scope": "user",
+        "config_path": "/w/.mcp.json",
+        "command": "npx",
+        "args": [
+          "Bearer live-secret"
+        ]
+      },
+      "expected_sha256": "fadabe81c75e0b19270bdd5212d43590d204a5e892a1ee51a2cc62ef820b0520"
+    },
+    {
+      "case": "args_query_style_variants",
+      "covers": "argument redaction for query style variants",
+      "artifact": {
+        "artifact_id": "mcp:server:query_style_variants",
+        "name": "local server",
+        "harness": "codex",
+        "artifact_type": "mcp_server",
+        "source_scope": "user",
+        "config_path": "/w/.mcp.json",
+        "command": "npx",
+        "args": [
+          "apikey=1",
+          "API_KEY=2",
+          "--api-key=3",
+          "a=b&token=c",
+          "secret=d"
+        ]
+      },
+      "expected_sha256": "2d7c2b2182c7b02a1aeb8a42fdd0caeb9e7b08d66da92e5d37b725a1a18ac7a9"
+    },
+    {
+      "case": "args_colon_before_equals",
+      "covers": "argument redaction for colon before equals",
+      "artifact": {
+        "artifact_id": "mcp:server:colon_before_equals",
+        "name": "local server",
+        "harness": "codex",
+        "artifact_type": "mcp_server",
+        "source_scope": "user",
+        "config_path": "/w/.mcp.json",
+        "command": "npx",
+        "args": [
+          "https://u:p@h/x?token=1"
+        ]
+      },
+      "expected_sha256": "372e67d3707711afdf13fa669e412d3c3e3003df4e478e0730b0cf0e002701b5"
+    },
+    {
+      "case": "args_no_delimiter_match",
+      "covers": "argument redaction for no delimiter match",
+      "artifact": {
+        "artifact_id": "mcp:server:no_delimiter_match",
+        "name": "local server",
+        "harness": "codex",
+        "artifact_type": "mcp_server",
+        "source_scope": "user",
+        "config_path": "/w/.mcp.json",
+        "command": "npx",
+        "args": [
+          "--plain",
+          "value",
+          "",
+          "token",
+          "key="
+        ]
+      },
+      "expected_sha256": "728feff4f6372f608ae9d182eb7d3de588800e23dce3d78dbf056b7391c14557"
+    }
+  ]
+}

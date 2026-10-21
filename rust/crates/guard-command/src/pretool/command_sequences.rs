@@ -3,15 +3,19 @@
 //!
 //! * `cd <dir> && ls src; ls tests`: the shell groups this as
 //!   `(cd <dir> && ls src); ls tests`. Segments chained to the `cd` with
-//!   `&&` or `|` run only in the new directory; every segment after a `;`
-//!   runs there when the `cd` succeeded and in the original directory when
-//!   it failed, so each is proven against both. Git reads follow the same
-//!   split in the Git execution-context floor.
+//!   `&&` or `|` run only in the new directory; every segment after the
+//!   first `;` or `||` runs there when the `cd` succeeded and in the
+//!   original directory when it failed, so each is proven against both.
+//!   `cd <dir> && ls src || echo none && ls tests` splits the same way: a
+//!   failed `cd` runs the `||` alternative and everything after it in the
+//!   original directory. Git reads follow the same split in the Git
+//!   execution-context floor.
 //! * `cd <dir>; ls src`: nothing is chained to the `cd`, so every later
 //!   segment runs in `<dir>` when the `cd` succeeded and in the original
-//!   directory when it failed. Each is proven against both. A Git read is
-//!   admitted only without helper context; the Git execution-context floor
-//!   inspects its configuration in both directories.
+//!   directory when it failed. Each is proven against both, and a Git read
+//!   that starts a configured helper has its configuration inspected in
+//!   both directories by the Git execution-context floor and the
+//!   helper-configuration probe.
 //! * `touch <f> && echo ok || echo fail; rm -f <f>`: a write probe that
 //!   creates one new file and removes it again. The file must not exist
 //!   before the command runs, so the trailing `rm` can only remove what the
@@ -39,6 +43,31 @@ fn separators(model: &CanonicalCommandV1) -> Option<Vec<String>> {
             Some(separator.trim().to_owned())
         })
         .collect()
+}
+
+/// A separator after which a segment can run whether or not the leading
+/// `cd` succeeded.
+fn forks(separator: &str) -> bool {
+    matches!(separator, ";" | "||")
+}
+
+/// A GitHub CLI read names its repository, so the directory it runs in
+/// selects nothing and no Git command runs to resolve a remote.
+fn selects_repository(segment: &CommandSegmentV1) -> bool {
+    segment
+        .arguments
+        .iter()
+        .enumerate()
+        .any(|(index, argument)| {
+            (matches!(argument.as_str(), "--repo" | "-R")
+                && segment
+                    .arguments
+                    .get(index + 1)
+                    .is_some_and(|value| !value.is_empty() && !value.starts_with('-')))
+                || argument
+                    .strip_prefix("--repo=")
+                    .is_some_and(|value| !value.is_empty())
+        })
 }
 
 fn plain_segment(segment: &CommandSegmentV1) -> bool {
@@ -108,10 +137,11 @@ pub(in crate::pretool) fn leading_semicolon_cd(
     Some((cwd, rest))
 }
 
-/// `cd <dir> && <head>; <tail>` with the head joined by `&&` or `|` and no
-/// other directory change. The shell groups it as `(cd <dir> && <head>);
-/// <tail>`: the head runs only in `<dir>`, and the tail runs there after the
-/// head or in the original directory when the `cd` failed. Returns the
+/// `cd <dir> && <head>; <tail>` or `cd <dir> && <head> || <tail>` with the
+/// head joined by `&&` or `|` and no other directory change. The shell
+/// groups it as `(cd <dir> && <head>); <tail>`: the head runs only in
+/// `<dir>`, and the tail runs there after the head or in the original
+/// directory when the `cd` failed. Returns the
 /// directory, every segment after the `cd`, and the tail on its own; both
 /// keep the original text and spans.
 pub(in crate::pretool) fn leading_and_cd(
@@ -122,7 +152,7 @@ pub(in crate::pretool) fn leading_and_cd(
         return None;
     }
     let separators = separators(model)?;
-    let tail = separators.iter().position(|separator| separator == ";")? + 1;
+    let tail = separators.iter().position(|separator| forks(separator))? + 1;
     if separators.first().map(String::as_str) != Some("&&")
         || !separators[..tail - 1]
             .iter()
@@ -149,10 +179,10 @@ fn cd_then_read_sequence(
     let leading_semicolon = separators.first().map(String::as_str) == Some(";");
     if !(leading_semicolon
         || (separators.first().map(String::as_str) == Some("&&")
-            && separators.iter().any(|separator| separator == ";")))
+            && separators.iter().any(|separator| forks(separator))))
         || !separators
             .iter()
-            .all(|separator| matches!(separator.as_str(), "&&" | "|" | ";"))
+            .all(|separator| matches!(separator.as_str(), "&&" | "|" | ";" | "||"))
     {
         return false;
     }
@@ -164,26 +194,22 @@ fn cd_then_read_sequence(
         ..context
     };
     // The Git floor splits both forms and inspects each Git read in every
-    // directory it can run in. A read that needs the helper probe stays
-    // reviewed, because that probe runs in one directory only.
-    let git = model.segments[1..]
-        .iter()
-        .any(|segment| segment.executable.as_deref().map(executable_basename) == Some("git"));
-    let allow_git_helper_context = allow_git_helper_context && !leading_semicolon && !git;
-    let mut after_semicolon = false;
+    // directory it can run in, and the helper-configuration probe makes the
+    // same split, so a Git read that needs helper context keeps it here.
+    let mut after_fork = false;
     model.segments[1..]
         .iter()
         .zip(&separators)
         .all(|(segment, separator)| {
-            after_semicolon |= separator == ";";
+            after_fork |= forks(separator);
             let executable = segment.executable.as_deref().map(executable_basename);
             plain_segment(segment)
                 && !changes_directory(segment)
                 && (cwd_read_executable(segment.executable.as_deref())
                     || crate::pretool::version_probes::lone_probe_segment(segment))
-                && executable.is_some_and(|name| name != "gh")
+                && executable.is_some_and(|name| name != "gh" || selects_repository(segment))
                 && exact_safe_segment_with_context(model, segment, allow_git_helper_context, moved)
-                && (!after_semicolon
+                && (!after_fork
                     || exact_safe_segment_with_context(
                         model,
                         segment,
@@ -194,7 +220,7 @@ fn cd_then_read_sequence(
 }
 
 /// The trailing `rm` of a write probe that the native proof accepts: it
-/// removes only the file the same command creates, and that file does not
+/// removes only the file or directory the same command creates, and that path does not
 /// exist yet. The compatibility layer does not treat it as a destructive
 /// delete.
 pub(crate) fn proven_created_file_removal(
@@ -218,8 +244,7 @@ fn created_file_probe(model: &CanonicalCommandV1, context: PathContext<'_>) -> b
     let Some(separators) = separators(model) else {
         return false;
     };
-    if first.executable.as_deref() != Some("touch")
-        || last.executable.as_deref() != Some("rm")
+    if last.executable.as_deref() != Some("rm")
         || !model
             .segments
             .iter()
@@ -230,18 +255,20 @@ fn created_file_probe(model: &CanonicalCommandV1, context: PathContext<'_>) -> b
     {
         return false;
     }
-    let created = match first.arguments.as_slice() {
-        [target] => target,
-        [separator, target] if separator == "--" => target,
-        _ => return false,
+    let Some((created, directory)) = created_target(first) else {
+        return false;
     };
-    let removed = match last.arguments.as_slice() {
-        [target] => target,
-        [flag, target] if matches!(flag.as_str(), "-f" | "--") => target,
-        [force, separator, target] if force == "-f" && separator == "--" => target,
-        _ => return false,
+    let Some(removed) = removed_target(&last.arguments, directory) else {
+        return false;
     };
-    if removed != created || sensitive_command(&last.text) || !absent_target(created, context) {
+    // The absence proof expands `~` to home; a quoted `~` stays a relative path
+    // that may name something that already exists.
+    if removed != created
+        || sensitive_command(&last.text)
+        || !crate::pretool::directory_targets::home_targets_unquoted(first)
+        || !crate::pretool::directory_targets::home_targets_unquoted(last)
+        || !absent_target(created, context)
+    {
         return false;
     }
     let mut creation = model.clone();
@@ -255,6 +282,55 @@ fn created_file_probe(model: &CanonicalCommandV1, context: PathContext<'_>) -> b
                     Some("echo" | "printf" | "true")
                 ) && exact_safe_segment_with_context(model, segment, false, context)
             })
+}
+
+/// The path a `touch` or `mkdir` segment creates, and whether it is a
+/// directory. A directory path must name only new components: `mkdir -p`
+/// creates every missing parent, so `new/../kept` would make `kept` look absent.
+fn created_target(segment: &CommandSegmentV1) -> Option<(&String, bool)> {
+    let arguments = segment.arguments.as_slice();
+    match segment.executable.as_deref() {
+        Some("touch") => match arguments {
+            [target] => Some((target, false)),
+            [separator, target] if separator == "--" => Some((target, false)),
+            _ => None,
+        },
+        Some("mkdir") => {
+            let target = match arguments {
+                [target] => target,
+                [flag, target] if matches!(flag.as_str(), "-p" | "--") => target,
+                [parents, separator, target] if parents == "-p" && separator == "--" => target,
+                _ => return None,
+            };
+            plain_directory_path(target).then_some((target, true))
+        }
+        _ => None,
+    }
+}
+
+/// The path an `rm` segment removes: a file without `-r`, a directory only with it.
+fn removed_target(arguments: &[String], directory: bool) -> Option<&String> {
+    let recursive = |flag: &str| matches!(flag, "-r" | "-R" | "-rf" | "-fr" | "-Rf" | "-fR");
+    match (arguments, directory) {
+        ([target], false) => Some(target),
+        ([flag, target], false) if matches!(flag.as_str(), "-f" | "--") => Some(target),
+        ([force, separator, target], false) if force == "-f" && separator == "--" => Some(target),
+        ([flag, target], true) if recursive(flag) => Some(target),
+        ([flag, separator, target], true) if recursive(flag) && separator == "--" => Some(target),
+        _ => None,
+    }
+}
+
+fn plain_directory_path(value: &str) -> bool {
+    !value.is_empty()
+        && !value.starts_with('-')
+        && !value.contains(['*', '?', '[', ']', '{', '}', '$', '`', '\\', '\n'])
+        && std::path::Path::new(value).components().all(|component| {
+            matches!(
+                component,
+                std::path::Component::Normal(_) | std::path::Component::RootDir
+            )
+        })
 }
 
 fn absent_target(value: &str, context: PathContext<'_>) -> bool {

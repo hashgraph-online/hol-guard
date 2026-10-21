@@ -37,7 +37,10 @@ pub(crate) fn benign_command_segments(
         cdpath_unset: context.cdpath_unset,
         rustup_override_absent: context.rustup_override_absent,
         npm_config_inert: context.npm_config_inert,
+        pip_config_inert: context.pip_config_inert,
         shell_home_matches: context.shell_home_matches,
+        ripgrep_config_absent: context.ripgrep_config_absent,
+        psql_environment: context.psql_environment,
         cwd: cwd.as_deref().or(context.cwd),
     };
     let segment_benign: Vec<bool> = model
@@ -78,6 +81,7 @@ pub(crate) fn benign_command_segments(
                     | "ps"
                     | "lsof"
                     | "pg_isready"
+                    | "psql"
             ) || segment.arguments.is_empty()
                 || stdin_filter;
             // Context-free public wrappers cannot prove that a file operand or
@@ -85,10 +89,12 @@ pub(crate) fn benign_command_segments(
             // from upgrading those lexical-only proofs; callers with verified
             // home/cwd context retain the bounded path proof below.
             let requires_path_context = !path_free
-                && matches!(
-                    basename,
+                && (super::digest_reads::digest_program(basename)
+                    || matches!(
+                        basename,
                     "ls" | "cat"
                         | "base64"
+                        | "dd"
                         | "cp"
                         | "mkdir"
                         | "touch"
@@ -107,9 +113,16 @@ pub(crate) fn benign_command_segments(
                         | "find"
                         | "du"
                         | "diff"
+                        | "file"
                         | "npm"
                         | "jq"
-                );
+                        | "pkill"
+                ))
+                // A file operand prints a source line on a syntax error, so it
+                // gets the same session proof as `cat`.
+                || (matches!(basename, "node" | "nodejs")
+                    && segment.arguments.len() == 2
+                    && matches!(segment.arguments[0].as_str(), "--check" | "-c"));
             let ls_has_explicit_target = basename != "ls" || {
                 let mut skip_next = false;
                 let mut found = false;
@@ -165,12 +178,15 @@ pub(crate) fn benign_command_segments(
 pub(super) fn stdin_filter_segment(segment: &crate::CommandSegmentV1) -> bool {
     let basename = executable_basename(segment.executable.as_deref().unwrap_or(""));
     segment.pipeline_index > 0
-        && ((matches!(basename, "head" | "tail")
-            && safe_reads::safe_head_tail_stdin_arguments(&segment.arguments))
+        && ((basename == "cat" && safe_reads::safe_cat_stdin_arguments(&segment.arguments))
+            || (matches!(basename, "head" | "tail")
+                && safe_reads::safe_head_tail_stdin_arguments(&segment.arguments))
             || (basename == "jq" && safe_reads::safe_jq_stdin_arguments(&segment.arguments))
             || (basename == "wc"
                 && safe_reads::safe_word_count_stdin_arguments(&segment.arguments))
             || (basename == "od" && safe_reads::safe_byte_dump_stdin_arguments(&segment.arguments))
+            || (super::digest_reads::digest_program(basename)
+                && super::digest_reads::safe_digest_stdin_arguments(&segment.arguments))
             || (basename == "grep" && search::safe_grep_stdin_arguments(&segment.arguments))
             || (basename == "rg" && search::safe_rg_stdin_arguments(&segment.arguments))
             || (basename == "sed" && safe_reads::safe_sed_stdin_arguments(&segment.arguments))
@@ -192,8 +208,14 @@ pub(super) fn exact_safe_segment_with_context(
     let jq_filter = (basename == "jq")
         .then(|| safe_reads::jq_filter_position(&segment.arguments, segment.pipeline_index > 0))
         .flatten();
-    let inert_search = matches!(basename, "rg" | "grep" | "fd")
-        && search::safe_search_arguments_with_context(basename, &segment.arguments, context);
+    // The same proof the admission arm runs below, so a search segment that
+    // arm refuses cannot shed its sensitive-text screen here.
+    let inert_search = match basename {
+        "grep" => search::grep::safe_grep_segment(model, segment, context),
+        "rg" => search::safe_rg_segment(model, segment, context),
+        "fd" => search::safe_search_arguments_with_context(basename, &segment.arguments, context),
+        _ => false,
+    };
     let search_text = if basename == "git" {
         super::git_search_text::pattern_positions(&segment.arguments)
     } else {
@@ -215,7 +237,10 @@ pub(super) fn exact_safe_segment_with_context(
                         && !search_text.contains(&index)
                         && sensitive_path_argument(argument)
                 }))
-        || !segment.environment_names.is_empty()
+        || !(segment.environment_names.is_empty()
+            || super::inert_environment::inert_prefix(segment)
+            || (basename == "kubectl"
+                && super::kubectl_reads::trusted_kubeconfig_prefix(segment, context)))
         || (executable.contains(['/', '\\'])
             && !super::postgres_reads::trusted_pg_ctl_path(executable, context))
     {
@@ -231,6 +256,7 @@ pub(super) fn exact_safe_segment_with_context(
                 && super::directory_targets::drive_targets_quoted(segment)
         }
         "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" => true,
+        "unset" | "set" => super::inert_environment::safe_shell_setting(basename, segment),
         "type" | "command" => {
             super::lookup_reads::safe_lookup_arguments(basename, &segment.arguments)
         }
@@ -242,11 +268,18 @@ pub(super) fn exact_safe_segment_with_context(
         "pgrep" => super::safe_scalar::safe_pgrep_arguments(&segment.arguments),
         "ps" => super::safe_scalar::safe_ps_arguments(&segment.arguments),
         "lsof" => super::safe_scalar::safe_lsof_arguments(&segment.arguments),
+        "pkill" => super::process_stops::safe_pkill_arguments(&segment.arguments, context),
         "pg_isready" => super::safe_scalar::safe_pg_isready_arguments(&segment.arguments),
         "ls" => {
             super::listing_reads::safe_listing_segment(&segment.text, &segment.arguments, context)
         }
         "test" => safe_reads::safe_file_predicate_arguments(&segment.arguments, context),
+        "[" => segment
+            .arguments
+            .split_last()
+            .is_some_and(|(last, predicate)| {
+                last == "]" && safe_reads::safe_file_predicate_arguments(predicate, context)
+            }),
         "find" => {
             super::find_reads::safe_find_listing_arguments(&segment.arguments, context)
                 || super::fanout_reads::safe_find_exec(model, segment, context)
@@ -257,7 +290,7 @@ pub(super) fn exact_safe_segment_with_context(
         }
         // Operand-free `cat` after a pipe only copies the proven producer's output.
         "cat" => {
-            (segment.pipeline_index > 0 && segment.arguments.is_empty())
+            (segment.pipeline_index > 0 && safe_reads::safe_cat_stdin_arguments(&segment.arguments))
                 || safe_reads::safe_plain_file_arguments(&segment.arguments, context)
         }
         "base64" => {
@@ -265,27 +298,43 @@ pub(super) fn exact_safe_segment_with_context(
                 || (segment.pipeline_index > 0
                     && super::stdin_filters::safe_arguments(basename, &segment.arguments))
         }
+        "dd" => super::dd_reads::safe_dd_arguments(&segment.arguments, context),
         "du" => super::metadata_reads::safe_du_arguments(&segment.arguments, context),
         "df" => super::metadata_reads::safe_df_arguments(&segment.arguments),
         "diff" => super::metadata_reads::safe_diff_arguments(&segment.arguments, context),
-        "stat" => matches!(segment.arguments.as_slice(), [target]
-            if !target.starts_with('-')
-                && safe_reads::bounded_read_target(target, context.home_dir, context.cwd, false)),
+        "file" => super::metadata_reads::safe_file_arguments(&segment.arguments, context),
+        "stat" => super::metadata_reads::safe_stat_arguments(&segment.arguments, context),
+        "dirname" | "basename" => {
+            super::path_word_reads::safe_path_word_arguments(basename, &segment.arguments)
+        }
+        "readlink" | "realpath" => super::path_word_reads::safe_resolved_path_arguments(
+            basename,
+            &segment.arguments,
+            context,
+        ),
         "cp" => {
             super::chain_temporary::copy_segments_allowed(model, segment, context)
                 && super::directory_targets::drive_targets_quoted(segment)
-                && (safe_reads::safe_copy_arguments(&segment.arguments, context)
-                    || super::recursive_copy::safe_recursive_copy_arguments(
-                        &segment.arguments,
-                        context,
-                    ))
+                && (safe_reads::safe_copy_arguments_into(
+                    &segment.arguments,
+                    context,
+                    &super::chain_temporary::created_scratch_directories(model, context),
+                ) || super::recursive_copy::safe_recursive_copy_arguments(
+                    &segment.arguments,
+                    context,
+                ))
         }
         "mktemp" | "mkdir" | "touch" | "mv" | "ln" | "rm" => {
+            let alone = basename != "ln" || model.segments.len() == 1;
             (model.segments.len() == 1
-                || (basename == "mkdir" && super::chain_temporary::mkdir_chain(model)))
+                || (basename == "mkdir" && super::chain_temporary::mkdir_chain(model))
+                || (basename == "ln" && super::symlink_writes::link_chain(model)))
                 && (basename != "ln" && basename != "rm"
                     || super::directory_targets::home_targets_unquoted(segment))
-                && (safe_reads::safe_file_mutation_arguments(basename, &segment.arguments, context)
+                // In a chain the link must join two checkouts of one
+                // repository; a link to any readable source is proven alone.
+                && ((alone
+                    && safe_reads::safe_file_mutation_arguments(basename, &segment.arguments, context))
                     // A session run from the directory above its checkouts can
                     // still share a dependency directory between two of them.
                     || (basename == "ln"
@@ -305,16 +354,22 @@ pub(super) fn exact_safe_segment_with_context(
         "gh" => safe_gh_arguments(&segment.arguments, &segment.text),
         "curl" => super::curl_reads::safe_curl_segment(model, segment, context),
         "kubectl" => super::kubectl_reads::safe_kubectl_segment(model, segment, context),
-        "export" => super::kubectl_reads::safe_export_segment(model, segment, context),
+        "export" => {
+            super::kubectl_reads::safe_export_segment(model, segment, context)
+                || super::inert_environment::safe_shell_setting(basename, segment)
+        }
         "wrangler" => super::wrangler_reads::safe_wrangler_arguments(&segment.arguments),
+        "doctl" => super::doctl_reads::safe_doctl_arguments(&segment.arguments),
         "docker" => super::docker_reads::safe_docker_segment(model, segment),
         "nc" | "netcat" => super::port_probes::safe_nc_segment(model, segment),
         "brew" => super::brew_reads::safe_brew_segment(model, segment),
         "pg_ctl" => super::postgres_reads::safe_pg_ctl_arguments(&segment.arguments),
+        "psql" => super::postgres_reads::safe_psql_arguments(&segment.arguments, context),
         "npm" => {
             super::npm_reads::read_only_neighbors(model)
                 && super::npm_reads::safe_npm_read(&segment.arguments, context)
         }
+        "pip" | "pip3" => super::pip_reads::safe_pip_segment(model, segment, context),
         "hol-guard" => super::guard_diagnostics::safe_hol_guard_segment(
             &segment.arguments,
             context.cwd,
@@ -335,17 +390,32 @@ pub(super) fn exact_safe_segment_with_context(
             segment.pipeline_index > 0,
             context,
         ),
+        name if super::digest_reads::digest_program(name) => {
+            super::digest_reads::safe_digest_arguments(
+                &segment.arguments,
+                segment.pipeline_index > 0,
+                context,
+            )
+        }
         "sort" | "uniq" | "cut" | "tr" => {
-            segment.pipeline_index > 0
-                && super::stdin_filters::safe_arguments(basename, &segment.arguments)
+            (segment.pipeline_index > 0
+                && super::stdin_filters::safe_arguments(basename, &segment.arguments))
+                || super::stdin_filters::safe_file_arguments(basename, &segment.arguments, context)
         }
         "rg" | "grep" | "fd" => {
-            search::safe_search_arguments_with_context(basename, &segment.arguments, context)
-                && super::directory_targets::search_home_targets_safe(
-                    segment,
-                    context.cwd,
-                    context.home_dir,
-                )
+            (match basename {
+                "grep" => search::grep::safe_grep_segment(model, segment, context),
+                "rg" => search::safe_rg_segment(model, segment, context),
+                _ => search::safe_search_arguments_with_context(
+                    basename,
+                    &segment.arguments,
+                    context,
+                ),
+            }) && super::directory_targets::search_home_targets_safe(
+                segment,
+                context.cwd,
+                context.home_dir,
+            )
         }
         "sed" => {
             safe_reads::safe_sed_arguments(&segment.arguments, segment.pipeline_index > 0, context)
@@ -364,6 +434,12 @@ pub(super) fn exact_safe_segment_with_context(
         "python" | "python3" | "node" | "nodejs" => {
             super::safe_scalar::version_probe_arguments(basename, &segment.arguments)
                 || pure_expression::safe_inline_expression(basename, &segment.arguments)
+                || (matches!(basename, "node" | "nodejs")
+                    && super::safe_scalar::node_syntax_check_arguments(
+                        &segment.arguments,
+                        segment.pipeline_index > 0,
+                        context,
+                    ))
         }
         _ => false,
     }

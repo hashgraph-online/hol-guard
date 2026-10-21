@@ -1,10 +1,12 @@
 """Route Codex contained-test receipts through the PreToolUse ``updatedInput`` rewrite.
 
 Codex applies ``permissionDecision: "allow"`` with ``updatedInput`` from 0.131.0.
-macOS routes every contained profile and Linux the workspace sandbox, as for Z Code.
+Which receipts the sink takes on each host is the resident's answer, as for Z Code.
 Older releases treat that output as an unsupported hook result and run the
 original command, so the bridge rewrites only after it has confirmed the Codex
-process that launched it is new enough. Otherwise the denial stands.
+process that launched it is new enough. A pre-release counts only when its
+base version is newer than 0.131.0: ``0.131.0-alpha.N`` precedes the release
+that added the rewrite. Otherwise the denial stands.
 """
 
 from __future__ import annotations
@@ -19,7 +21,8 @@ import time
 from pathlib import Path
 from typing import TypeGuard
 
-from .zcode_contained_tests import contained_zcode_response, platform_contains
+from ..native_hook_containment_route import native_containment_sink
+from .zcode_contained_tests import contained_zcode_response
 
 _MIN_VERSION = (0, 131, 0)
 _MAX_ANCESTORS = 6
@@ -27,6 +30,19 @@ _PROC_PIDTBSDINFO = 3
 _PROC_BSDINFO_SIZE = 136
 _PPID_OFFSET = 16
 _VERSION = re.compile(r"^codex-cli (\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?\s*$")
+# Release archives name the binary for its target, as ``codex-aarch64-apple-darwin``.
+_RELEASE_TARGETS = frozenset(
+    {
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-musl",
+        "x86_64-unknown-linux-musl",
+        "aarch64-pc-windows-msvc",
+        "x86_64-pc-windows-msvc",
+    }
+)
 UPDATE_HINT = "Update Codex to 0.131 or later so HOL Guard can run this command inside its contained runner."
 
 
@@ -38,21 +54,24 @@ def route_codex_containment(
     home_dir: Path | None = None,
     deadline: float | None = None,
 ) -> dict[str, object]:
-    """Rewrite a containment receipt into the contained sink, or keep the denial."""
+    """Rewrite a containment receipt into the contained sink, or keep the denial.
 
-    if (
-        not platform_contains(response)
-        or guard_home is None
-        or not _absolute_hook_home(home_dir)
-        or response.get("policy_action") != "sandbox-required"
-        or response.get("decision") != "deny"
-    ):
+    The resident answers whether the sink takes the call; only then is the
+    running Codex asked whether it applies the rewrite.
+    """
+
+    if guard_home is None or not _absolute_hook_home(home_dir):
         return response
     try:
         payload = json.loads(hook_input)
     except ValueError:
         return response
-    if not isinstance(payload, dict) or payload.get("guard_containment_receipt_only") is True:
+    if not isinstance(payload, dict):
+        return response
+    sink = native_containment_sink(
+        response, harness="codex", bridge=True, payload=payload, guard_home=guard_home, deadline=deadline
+    )
+    if sink.profile is None:
         return response
     executable = launching_codex_executable()
     if executable is None or not codex_applies_updated_input(executable, deadline=deadline):
@@ -67,6 +86,7 @@ def route_codex_containment(
             "package_root": str(Path(__file__).resolve().parents[3]),
         },
         cli_args=["--home", str(home_dir)],
+        sink=sink,
     )
     return routed if routed is not None else response
 
@@ -84,6 +104,10 @@ def launching_codex_executable() -> Path | None:
 
     if sys.platform == "linux":
         return _linux_codex_ancestor()
+    if sys.platform == "win32":
+        from .codex_contained_tests_windows import windows_codex_ancestor
+
+        return windows_codex_ancestor(is_codex_binary_name, _MAX_ANCESTORS)
     try:
         libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
     except OSError:
@@ -96,7 +120,7 @@ def launching_codex_executable() -> Path | None:
         if libproc.proc_pidpath(pid, path_buffer, len(path_buffer)) <= 0:
             return None
         path = Path(os.fsdecode(path_buffer.value))
-        if path.name == "codex":
+        if is_codex_binary_name(path.name):
             return path
         info = ctypes.create_string_buffer(_PROC_BSDINFO_SIZE)
         size = libproc.proc_pidinfo(pid, _PROC_PIDTBSDINFO, ctypes.c_uint64(0), info, _PROC_BSDINFO_SIZE)
@@ -104,6 +128,22 @@ def launching_codex_executable() -> Path | None:
             return None
         pid = int.from_bytes(info.raw[_PPID_OFFSET : _PPID_OFFSET + 4], sys.byteorder)
     return None
+
+
+def is_codex_binary_name(name: str) -> bool:
+    """``codex`` or an official release binary named for its target triple.
+
+    The npm, bun and Homebrew launchers start this native binary as their
+    child, so it is always the nearer ancestor of the hook; a ``node`` or
+    ``bun`` process is never taken for Codex.
+    """
+
+    if sys.platform == "win32":
+        name = name.lower()
+        if name.endswith(".exe"):
+            name = name[: -len(".exe")]
+    prefix, separator, target = name.partition("-")
+    return prefix == "codex" and (not separator or target in _RELEASE_TARGETS)
 
 
 def _linux_codex_ancestor() -> Path | None:
@@ -115,7 +155,7 @@ def _linux_codex_ancestor() -> Path | None:
             return None
         try:
             path = Path(os.readlink(f"/proc/{pid}/exe"))
-            if path.name == "codex":
+            if is_codex_binary_name(path.name):
                 return path
             stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -130,7 +170,7 @@ def _linux_codex_ancestor() -> Path | None:
 
 
 def codex_applies_updated_input(executable: Path, *, deadline: float | None = None) -> bool:
-    """True when ``codex --version`` reports a stable release that applies ``updatedInput``."""
+    """True when ``codex --version`` reports a release that applies ``updatedInput``."""
 
     timeout = _version_probe_timeout(deadline)
     if timeout is None:
@@ -143,7 +183,7 @@ def codex_applies_updated_input(executable: Path, *, deadline: float | None = No
             timeout=timeout,
             check=False,
             stdin=subprocess.DEVNULL,
-            env={"PATH": "/usr/bin:/bin", "HOME": str(Path.home())},
+            env=_probe_environment(),
         )
     except (OSError, subprocess.SubprocessError):
         return False
@@ -151,8 +191,18 @@ def codex_applies_updated_input(executable: Path, *, deadline: float | None = No
     if match is None:
         return False
     version = tuple(int(part) for part in match.group(1, 2, 3))
-    # Any pre-release can predate the rewrite support, including one newer than 0.131.0.
-    return match.group(4) is None and version >= _MIN_VERSION
+    if match.group(4) is None:
+        return version >= _MIN_VERSION
+    # A pre-release sorts before its base, so 0.131.0-alpha.N can predate the rewrite support.
+    return version > _MIN_VERSION
+
+
+def _probe_environment() -> dict[str, str]:
+    if sys.platform != "win32":
+        return {"PATH": "/usr/bin:/bin", "HOME": str(Path.home())}
+    # Windows programs need the system root to start; nothing else is passed on.
+    system_root = os.environ.get("SYSTEMROOT", r"C:\Windows")
+    return {"SYSTEMROOT": system_root, "PATH": rf"{system_root}\System32", "USERPROFILE": str(Path.home())}
 
 
 def _version_probe_timeout(deadline: float | None) -> float | None:

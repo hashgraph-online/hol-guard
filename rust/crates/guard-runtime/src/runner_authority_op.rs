@@ -22,11 +22,15 @@ use super::claude_code_detect;
 use super::codex_detect;
 use super::context_digest_json::write_canonical_json_with_limit;
 use super::copilot_detect;
+use super::cursor_detect;
+use super::devin_detect;
 use super::gemini_detect;
 use super::grok_detect;
 use super::hermes_detect;
 use super::kimi_detect;
 use super::oci_bundle_op as oci;
+use super::openclaw_detect;
+use super::opencode_detect;
 use super::pi_detect;
 use super::runner_authority_signature as signature;
 use super::zcode_detect;
@@ -100,6 +104,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "authority_gate" => signature::authority_gate(args),
         "policy_shadow_mismatch" => signature::policy_shadow_mismatch(args),
         "sync_url" => sync_url::sync_url(args),
+        "network_check" => crate::network_protection::check_op(args),
         "pain_signal_batch" => signals::pain_signal_batch(args),
         "value_metrics" => signals::value_metrics(args),
         "completed_event_ids" => signals::completed_event_ids(args),
@@ -128,8 +133,12 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "claude_code_detect" => claude_code_detect::detect(args),
         "gemini_detect" => gemini_detect::detect(args),
         "antigravity_detect" => antigravity_detect::detect(args),
+        "devin_detect" => devin_detect::detect(args),
         "grok_detect" => grok_detect::detect(args),
         "kimi_detect" => kimi_detect::detect(args),
+        "openclaw_detect" => openclaw_detect::detect(args),
+        "cursor_detect" => cursor_detect::detect(args),
+        "opencode_detect" => opencode_detect::detect(args),
         _ => Err(ERR_KIND),
     }
 }

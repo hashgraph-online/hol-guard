@@ -97,7 +97,7 @@ SCENARIOS: list[dict[str, object]] = [
         "request": request("r-new", **{**TOOL_ACTION, "artifact_hash": "unknown"}),
     },
     {
-        "name": "scope_guard_control_not_overridable",
+        "name": "scope_guard_control_approvable",
         "request": request("r-new", policy_action="review", action_envelope_json={"action_type": "guard_control"}),
     },
     {"name": "scope_block_not_overridable", "request": request("r-new", policy_action="block")},

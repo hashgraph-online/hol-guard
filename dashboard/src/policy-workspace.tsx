@@ -16,6 +16,12 @@ export function resolvePolicyViewLabel(view: PolicyPageView): string {
   return "How Guard decides";
 }
 
+export function resolvePolicyViewHint(view: PolicyPageView): string {
+  if (view === "rules") return "What you approved or blocked";
+  if (view === "exceptions") return "Approved in Guard Cloud";
+  return "Which rule wins, and why";
+}
+
 export {
   groupPoliciesByHarness,
   resolveSecurityModeCopy,
@@ -60,6 +66,7 @@ export function PolicyWorkspace({
           cloudControlsUrl={resolveCloudPolicyControlsUrl(snapshot)}
           onClearPolicy={onClearPolicy}
           onOpenCloudExceptions={onOpenCloudExceptions ?? (() => undefined)}
+          onOpenInbox={onOpenInbox}
           onNavigate={onNavigate}
         />
       </div>

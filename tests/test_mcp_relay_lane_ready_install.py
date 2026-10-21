@@ -4,7 +4,9 @@ The installer, the daemon and the resident run as a host would start them, in
 a temporary home. The lane is ready only once the daemon publishes the
 exact-action state, which on a fresh home needs the policy-integrity row the
 publisher refreshes; a policy write advances that state, and the daemon has to
-republish the generation the write signed.
+republish the generation the write signed. A server no session reported a
+catalog of starts native and reports the catalog it relays; its later
+sessions start on the ready lane.
 """
 
 from __future__ import annotations
@@ -21,15 +23,49 @@ from typing import TypeVar, cast
 
 import pytest
 
+from tests.support.bounded_subprocess import run_bounded
+
 try:
     import tomllib
 except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
-pytestmark = pytest.mark.skipif(os.name != "posix", reason="the native MCP relay is Unix only")
-
 _LANE_READY = "hol-guard mcp-relay: lane ready: "
 _HAND_OFF = "hol-guard mcp-relay: python proxy: "
+_NOT_READY = "hol-guard mcp-relay: lane not ready: "
+_SERVER_UNKNOWN = _NOT_READY + "mcp_relay_session_server_unknown"
+_SERVER = """
+import json
+import sys
+for line in sys.stdin:
+    message = json.loads(line)
+    if "id" not in message:
+        continue
+    if message.get("method") == "tools/list":
+        schema = {"type": "object", "properties": {"path": {"type": "string"}}}
+        result = {"tools": [{"name": "read_note", "inputSchema": schema}]}
+    else:
+        result = {"protocolVersion": "2025-06-18", "capabilities": {"tools": {}},
+                  "serverInfo": {"name": "canary", "version": "1"}}
+    print(json.dumps({"jsonrpc": "2.0", "id": message["id"], "result": result}), flush=True)
+"""
+_LIST_TOOLS = "".join(
+    json.dumps(message) + "\n"
+    for message in (
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "e2e", "version": "1"},
+            },
+        },
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+    )
+).encode("utf-8")
 _ACK = Path("native-runtime") / "direct-lane" / "ack.json"
 _WAIT_SECONDS = 60.0
 T = TypeVar("T")
@@ -76,11 +112,24 @@ class _Install:
         self.home, self.guard_home, self.workspace = root / "home", root / "guard-home", root / "workspace"
         for directory in (self.home, self.guard_home, self.workspace / ".codex"):
             directory.mkdir(parents=True, mode=0o700)
+        server = root / "canary_server.py"
+        server.write_text(_SERVER, encoding="utf-8")
         (self.workspace / ".codex" / "config.toml").write_text(
-            '[mcp_servers.canary]\ncommand = "/bin/cat"\nargs = []\n', encoding="utf-8"
+            f"[mcp_servers.canary]\ncommand = {json.dumps(sys.executable)}\nargs = [{json.dumps(str(server))}]\n",
+            encoding="utf-8",
         )
-        keep = {"PATH", "LANG", "LC_ALL", "TMPDIR", "PYTHONPATH"}
+        # A source checkout names its source compiler; the daemon asks it
+        # whether this installation carries a release bundle.
+        keep = {"PATH", "LANG", "LC_ALL", "TMPDIR", "PYTHONPATH", "HOL_GUARD_NATIVE_SOURCE_COMPILER"}
+        if os.name == "nt":
+            keep |= {"PATHEXT", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP"}
         self.env = {key: value for key, value in os.environ.items() if key in keep}
+        if os.name == "nt":
+            self.env.update(
+                USERPROFILE=str(self.home),
+                APPDATA=str(self.home / "AppData" / "Roaming"),
+                LOCALAPPDATA=str(self.home / "AppData" / "Local"),
+            )
         self.env.update(
             HOME=str(self.home),
             XDG_CONFIG_HOME=str(self.home / ".config"),
@@ -95,37 +144,59 @@ class _Install:
 
     def guard(self, *args: str, extra: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
         places = ("--home", str(self.home), "--guard-home", str(self.guard_home))
-        return subprocess.run(
+        return run_bounded(
             [sys.executable, "-c", _CLI, str(self.home), "guard", *args, *places],
             env={**self.env, **(extra or {})},
             cwd=self.workspace,
-            capture_output=True,
-            text=True,
             timeout=180,
-            check=False,
+            text=True,
         )
 
-    def relay_start(self) -> str:
-        """The start line of one relay session that reads no input."""
-
+    def _relay(self) -> tuple[list[str], dict[str, str]]:
         with (self.home / ".codex" / "config.toml").open("rb") as handle:
             entry = tomllib.load(handle)["mcp_servers"]["canary"]
         argv = [str(entry["command"]), *map(str, entry["args"])]
         assert argv[1:2] == ["mcp-relay"], argv
-        completed = subprocess.run(
+        return argv, {**self.env, **{str(k): str(v) for k, v in dict(entry.get("env", {})).items()}}
+
+    def relay_start(self) -> str:
+        """The start line of one relay session that reads no input."""
+
+        argv, env = self._relay()
+        completed = run_bounded(
             argv,
-            env={**self.env, **{str(k): str(v) for k, v in dict(entry.get("env", {})).items()}},
+            env=env,
             cwd=self.workspace,
             stdin=subprocess.DEVNULL,
-            capture_output=True,
             timeout=60,
-            check=False,
         )
-        stderr = completed.stderr.decode("utf-8", errors="replace")
-        for line in stderr.splitlines():
-            if line.startswith((_LANE_READY, _HAND_OFF)):
-                return line
-        raise AssertionError(f"the relay wrote no start line: {stderr[-2000:]}")
+        return _start_line(completed.stderr.decode("utf-8", errors="replace"))
+
+    def relay_list_tools(self) -> str:
+        """The start line of one relay session that lists the server's tools."""
+
+        argv, env = self._relay()
+        with subprocess.Popen(
+            argv,
+            env=env,
+            cwd=self.workspace,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ) as session:
+            assert session.stdin is not None and session.stdout is not None
+            session.stdin.write(_LIST_TOOLS)
+            session.stdin.flush()
+            # Hold the session open until the host has the catalog.
+            for line in session.stdout:
+                if json.loads(line).get("id") == 2:
+                    break
+            try:
+                _, stderr = session.communicate(timeout=60)
+            except subprocess.TimeoutExpired:
+                session.kill()
+                raise
+        return _start_line(stderr.decode("utf-8", errors="replace"))
 
     def integrity(self) -> tuple[object, list[object]]:
         with sqlite3.connect(self.guard_home / "guard.db") as connection:
@@ -133,6 +204,13 @@ class _Install:
             stored = row.fetchone()
             signed = [item[0] for item in connection.execute("select integrity_generation from policy_decisions")]
         return (json.loads(stored[0]) if stored else None), signed
+
+
+def _start_line(stderr: str) -> str:
+    for line in stderr.splitlines():
+        if line.startswith((_LANE_READY, _HAND_OFF, _NOT_READY)):
+            return line
+    raise AssertionError(f"the relay wrote no start line: {stderr[-2000:]}")
 
 
 def _until(condition: Callable[[], T | None | bool], what: str) -> T:
@@ -162,18 +240,20 @@ def installed(tmp_path: Path) -> Iterator[_Install]:
 
 def test_a_fresh_install_starts_ready_and_rebinds_after_a_policy_write(installed: _Install) -> None:
     _until(lambda: (installed.guard_home / _ACK).is_file(), "the direct-lane ACK")
+    # The lane is bound once the only reason left is the unreported server.
+    _until(lambda: installed.relay_start() == _SERVER_UNKNOWN, "a lane bound but for the server")
+    assert installed.relay_list_tools() == _SERVER_UNKNOWN
     start = _until(lambda: (line := installed.relay_start()).startswith(_LANE_READY) and line, "a ready lane")
     assert start.startswith(_LANE_READY), start
     state, signed = installed.integrity()
     assert isinstance(state, dict) and signed == []
 
-    written = subprocess.run(
+    written = run_bounded(
         [sys.executable, "-c", _WRITE_POLICY, str(installed.guard_home)],
         env=installed.env,
-        capture_output=True,
-        text=True,
+        cwd=installed.workspace,
         timeout=120,
-        check=False,
+        text=True,
     )
     assert written.returncode == 0, written.stderr[-2000:]
 

@@ -225,6 +225,79 @@ def test_status_payload_skips_installed_app_scan_when_requested(monkeypatch, tmp
     assert harnesses[0]["review_count"] == 0
     assert harnesses[0]["installed"] is True
     assert harnesses[0]["warning_count"] == 0
+    assert harnesses[0]["artifacts_scanned"] is False
+    assert payload["protection_in_effect"] is True
+
+
+def test_scanned_status_does_not_treat_a_host_artifact_as_guard_registration(
+    monkeypatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard.adapters.base import HarnessContext
+    from codex_plugin_scanner.guard.cli import product
+    from codex_plugin_scanner.guard.config import GuardConfig
+    from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    guard_home = tmp_path / "guard-home"
+    home_dir.mkdir()
+    workspace.mkdir()
+    store = GuardStore(guard_home)
+    store.set_managed_install(
+        "claude-code",
+        True,
+        str(workspace),
+        {"shim_path": str(guard_home / "shims" / "claude-code")},
+        "2026-09-12T00:00:00+00:00",
+    )
+    context = HarnessContext(home_dir=home_dir, workspace_dir=workspace, guard_home=guard_home)
+    config = GuardConfig(guard_home=guard_home, workspace=workspace)
+    host_only = HarnessDetection(
+        harness="claude-code",
+        installed=True,
+        command_available=True,
+        config_paths=(str(home_dir / "settings.json"),),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="skill",
+                name="notes",
+                harness="claude-code",
+                artifact_type="skill",
+                source_scope="user",
+                config_path=str(home_dir / "settings.json"),
+                command="claude",
+            ),
+        ),
+    )
+    registered = HarnessDetection(
+        harness="claude-code",
+        installed=True,
+        command_available=True,
+        config_paths=(),
+        artifacts=(
+            GuardArtifact(
+                artifact_id="hook",
+                name="guard",
+                harness="claude-code",
+                artifact_type="hook",
+                source_scope="user",
+                config_path=str(home_dir / "settings.json"),
+                command="hol-guard",
+            ),
+        ),
+    )
+
+    monkeypatch.setattr(product, "detect_all", lambda _context: [host_only])
+    unregistered = product.build_guard_status_payload(context, store, config)
+    assert unregistered["harnesses"][0]["artifact_count"] == 1
+    assert unregistered["harnesses"][0]["guard_registered"] is False
+    assert unregistered["protection_in_effect"] is False
+
+    monkeypatch.setattr(product, "detect_all", lambda _context: [registered])
+    protected = product.build_guard_status_payload(context, store, config)
+    assert protected["harnesses"][0]["guard_registered"] is True
+    assert protected["protection_in_effect"] is True
 
 
 def test_status_payload_marks_inactive_managed_installs_as_not_installed(monkeypatch, tmp_path: Path) -> None:

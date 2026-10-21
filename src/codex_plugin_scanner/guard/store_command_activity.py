@@ -78,23 +78,6 @@ class StoreCommandActivityMixin:
             )
         return int(row[0]) if row is not None else 0
 
-    def count_command_activity_rule_hits(self: _ConnectionOwner, rule_id: str | None = None) -> int:
-        with self._connect() as connection:
-            if rule_id is None:
-                row = cast(
-                    tuple[int] | None,
-                    connection.execute("select count(*) from command_activity_matches").fetchone(),
-                )
-            else:
-                row = cast(
-                    tuple[int] | None,
-                    connection.execute(
-                        "select count(*) from command_activity_matches where rule_id = ?",
-                        (rule_id,),
-                    ).fetchone(),
-                )
-        return int(row[0]) if row is not None else 0
-
 
 def _validate_command_activity_write(
     evidence: CommandActivityEvidence,

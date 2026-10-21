@@ -7,13 +7,15 @@ use guard_rules::{
     MAX_CONTENT_ITEMS, MAX_DEPTH, MAX_OBJECT_KEYS, MAX_OUTPUT_CHARS, MAX_SCAN_BYTES,
     OUTPUT_TEXT_KEYS, PAYLOAD_OUTPUT_KEYS, REVIEWED_EXCERPT_CHARS,
 };
-use guard_scanner::scan_text;
+use guard_scanner::{scan_match_spans, scan_text};
 use guard_secure_fs::{classify_scannable_source_path, read_bounded, sensitive_path_family};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::path::Path;
 use std::time::{Duration, Instant};
+
+mod source_slice;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExtractedOutput {
@@ -175,17 +177,108 @@ fn envelope_target(payload: &Value) -> Option<String> {
     None
 }
 
-fn sensitive_envelope_target(payload: &Value) -> bool {
+/// A listing target that resolves inside the session's workspace with no
+/// hidden component below it. PreToolUse already admitted the read against the
+/// workspace, and an ordinary source folder such as `src/lib/auth` holds
+/// feature code rather than credential material, so denying its names-only
+/// listing stops real work without protecting anything. The recheck still
+/// refuses a target that resolves outside the workspace, or through a link
+/// into a dot-directory such as `.aws`, which is the post-PreToolUse swap it
+/// exists to catch. Only directories qualify, and every component of the
+/// resolved path has to name either no credential at all or one of the feature
+/// folders in `FEATURE_FOLDER_NAMES`: a credential-named file such as
+/// `deploy/id_rsa`, or a store such as `secrets` or `prod-secrets`, keeps its
+/// review even inside the workspace, including when an admitted folder is
+/// swapped for a link into one.
+fn workspace_visible_target(target: &Path, request: &NativeHookRequestV1) -> bool {
+    let Some(cwd) = request.cwd.as_deref() else {
+        return false;
+    };
+    let Ok(workspace) = std::fs::canonicalize(cwd) else {
+        return false;
+    };
+    let candidate = if target.is_absolute() {
+        target.to_path_buf()
+    } else {
+        workspace.join(target)
+    };
+    let Ok(resolved) = std::fs::canonicalize(candidate) else {
+        return false;
+    };
+    if !resolved.is_dir() {
+        return false;
+    }
+    let Ok(relative) = resolved.strip_prefix(&workspace) else {
+        return false;
+    };
+    relative.components().all(|component| {
+        let name = component.as_os_str().to_string_lossy();
+        !name.starts_with('.')
+            && (!guard_secure_fs::credential_directory_path(Path::new(name.as_ref()))
+                || FEATURE_FOLDER_NAMES.contains(&name.to_ascii_lowercase().as_str()))
+    })
+}
+
+/// Credential-marker names that, as a workspace directory, hold feature code
+/// rather than stored credentials.
+const FEATURE_FOLDER_NAMES: [&str; 2] = ["auth", "authorization"];
+
+fn sensitive_envelope_target(request: &NativeHookRequestV1) -> bool {
+    let payload = &request.payload;
     let target = envelope_target(payload);
     let resolved_directory_target = payload
         .get("resolved_directory_target")
         .and_then(Value::as_str);
     let is_sensitive = |target: &str| {
         let path = Path::new(target.trim());
-        sensitive_path_family(path).is_some() || guard_secure_fs::credential_named_path(path)
+        sensitive_path_family(path).is_some()
+            || (guard_secure_fs::credential_named_path(path)
+                && !workspace_visible_target(path, request))
     };
-    target.as_deref().is_some_and(is_sensitive)
-        || resolved_directory_target.is_some_and(is_sensitive)
+    // A `file.json?q=<filter>` read queries the file before the `?`.
+    let is_sensitive_entry = |entry: &str| {
+        is_sensitive(entry)
+            || entry
+                .split_once('?')
+                .is_some_and(|(base, _)| is_sensitive(base))
+    };
+    target.as_deref().is_some_and(|target| {
+        search_entries(target, request)
+            .iter()
+            .any(|entry| is_sensitive_entry(entry))
+    }) || resolved_directory_target.is_some_and(is_sensitive)
+}
+
+/// The paths an OMP search `path` names. When the whole string is not an
+/// existing path, OMP splits it on `;` and searches each entry, so each entry
+/// is judged on its own: joining them would let one entry's directory names
+/// and another's file name read as a single credential path. A string that
+/// exists, or cannot be resolved, is also judged whole.
+fn search_entries<'a>(target: &'a str, request: &NativeHookRequestV1) -> Vec<&'a str> {
+    if !target.contains(';') {
+        return vec![target];
+    }
+    let mut entries: Vec<&str> = target
+        .split(';')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .collect();
+    let literal = match target.strip_prefix("~/") {
+        Some(rest) => Some(Path::new(&request.home_dir).join(rest)),
+        None if Path::new(target).is_absolute() => Some(Path::new(target).to_path_buf()),
+        None => request
+            .cwd
+            .as_deref()
+            .map(|cwd| Path::new(cwd).join(target)),
+    };
+    let literal_absent = literal.is_some_and(|path| {
+        std::fs::symlink_metadata(path)
+            .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+    });
+    if !literal_absent {
+        entries.push(target);
+    }
+    entries
 }
 
 fn inline_local_content(payload: &Value) -> bool {
@@ -390,6 +483,15 @@ fn review_source(
     if let Some((family, _)) = sensitive_path_family(Path::new(candidate)) {
         return HookReviewResponseV1::deny("sensitive_path", sensitive_reason(family));
     }
+    // A failed read of a missing file returns the host's error text, not file
+    // content. No file backs the reference, so the presented text is reviewed
+    // on its own, as for any inline output.
+    if host_reported_error(&request.payload)
+        && source_missing(candidate, cwd, home)
+        && source_missing(&target, cwd, home)
+    {
+        return review_presented_output(request, source);
+    }
     let allow_external =
         matches!(request.harness.as_str(), "pi" | "omp") && request.source_ref_external_allowed;
     let candidate_decision =
@@ -429,9 +531,16 @@ fn review_source(
         deadline(request),
     );
     if scan.budget_exhausted {
-        return inconclusive_source();
+        // Name the real exit, as the inline path does. An exhausted scan budget
+        // is not a failed proof, and reporting it as `no_output_to_review` hid
+        // a load problem behind a classifier problem.
+        return HookReviewResponseV1::deny(
+            "scanner_budget_exhausted",
+            "HOL Guard could not complete local hook review safely.",
+        );
     }
-    if !scan.matches.is_empty() {
+    if !scan.matches.is_empty() && (raw_output_matches || !clean_slice(request, text, &source.path))
+    {
         return HookReviewResponseV1::deny(
             "source_secret_match",
             "HOL Guard blocked this output because it contains sensitive content.",
@@ -445,25 +554,100 @@ fn review_source(
         }
         // Hosts may add line anchors or headers. Scan the entire presentation
         // independently, but never promote a partial excerpt to original output.
-        let output = extract_payload_output(&request.payload);
-        let excerpt_truncated = request
-            .payload
-            .get("tool_response_summary")
-            .and_then(|summary| summary.get("excerpt_truncated"))
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        if output.truncated
-            || excerpt_truncated
-            || output.text.chars().count() != source.output_chars as usize
-            || sha256_text(&output.text) != source.output_sha256
-        {
-            return inconclusive_source();
-        }
-        return review_inline(request);
+        return review_presented_output(request, source);
     }
     let mut response = HookReviewResponseV1::allow("source_full_scan_allow");
     response.reviewed_output_sha256 = Some(source.output_sha256.clone());
     response
+}
+
+/// Review the text the host presented on its own. Only complete output whose
+/// digest matches the reference is reviewed; a partial excerpt is never
+/// promoted to original output.
+fn review_presented_output(
+    request: &NativeHookRequestV1,
+    source: &HookSourceFileRefV1,
+) -> HookReviewResponseV1 {
+    let output = extract_payload_output(&request.payload);
+    let excerpt_truncated = request
+        .payload
+        .get("tool_response_summary")
+        .and_then(|summary| summary.get("excerpt_truncated"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if output.truncated
+        || excerpt_truncated
+        || output.text.chars().count() != source.output_chars as usize
+        || sha256_text(&output.text) != source.output_sha256
+    {
+        return inconclusive_source();
+    }
+    review_inline(request)
+}
+
+/// Whether the host reported the tool call as failed.
+fn host_reported_error(payload: &Value) -> bool {
+    ["is_error", "isError"]
+        .iter()
+        .any(|key| payload.get(*key).and_then(Value::as_bool) == Some(true))
+}
+
+/// Whether nothing exists at `target`. Oh My Pi's `path:selector` form
+/// counts as missing only when the base path before the selector is missing
+/// too. Any error other than "not found" leaves the path treated as present.
+fn source_missing(target: &str, cwd: &Path, home: &Path) -> bool {
+    let missing = |candidate: &str| {
+        guard_secure_fs::resolve_candidate(candidate, Some(cwd), home).is_ok_and(|path| {
+            std::fs::symlink_metadata(path)
+                .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+        })
+    };
+    if !missing(target) {
+        return false;
+    }
+    let name_start = target.rfind(['/', '\\']).map_or(0, |index| index + 1);
+    match target[name_start..].rfind(':') {
+        Some(colon) => missing(&target[..name_start + colon]),
+        None => true,
+    }
+}
+
+/// Whether the output is a line-numbered slice of `file` that no whole-file
+/// match overlaps and whose runs of lines, each with the context above it,
+/// match no secret rule (see [`source_slice`]). The presented text is still verified
+/// and scanned on its own afterwards.
+fn clean_slice(request: &NativeHookRequestV1, file: &str, path: &str) -> bool {
+    let output = extract_payload_output(&request.payload);
+    if output.truncated {
+        return false;
+    }
+    let Some(runs) = source_slice::covered_runs(&output.text, file) else {
+        return false;
+    };
+    if runs
+        .iter()
+        .any(|&(first, last)| source_slice::key_block_overlaps(file, first, last))
+    {
+        return false;
+    }
+    let local = local_samples_should_be_unsuppressed(path);
+    let Some(spans) = scan_match_spans(file, local, true, deadline(request)) else {
+        return false;
+    };
+    runs.iter().all(|&(first, last)| {
+        if source_slice::spans_overlap(file, first, last, &spans) {
+            return false;
+        }
+        let start = first.saturating_sub(source_slice::CONTEXT_LINES).max(1);
+        let scan = scan_text(
+            &source_slice::lines(file, start, last),
+            local,
+            true,
+            MAX_SCAN_BYTES,
+            deadline(request),
+        );
+        !scan.budget_exhausted && scan.matches.is_empty()
+    })
 }
 
 fn review_inline(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
@@ -539,7 +723,7 @@ pub fn review_post_tool(request: &NativeHookRequestV1) -> HookReviewResponseV1 {
     // PreToolUse cannot make a sensitive root's listing model-visible.
     if request.harness == "omp"
         && source_ref(&request.payload).is_none()
-        && sensitive_envelope_target(&request.payload)
+        && sensitive_envelope_target(request)
     {
         return HookReviewResponseV1::deny(
             "sensitive_path",

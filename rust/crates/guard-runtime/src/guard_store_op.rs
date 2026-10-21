@@ -1,5 +1,6 @@
 //! `GuardStore` — resident op owning request-path persistence over
-//! `guard.db`. Each call opens the store, applies the same connection pragmas
+//! `guard.db`. Each call opens the store (reusing a kept connection to the
+//! same file), applies the same connection pragmas
 //! as the Python store, runs one method in a single SQLite transaction,
 //! finalizes trigger-written outbox payload hashes, commits, and reports the
 //! outbox generation when rows changed.
@@ -15,12 +16,23 @@ use guard_contracts::{
     GUARD_STORE_REQUEST_SCHEMA, GUARD_STORE_RESULT_SCHEMA,
 };
 use guard_policy_snapshot::digest_bytes;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::guard_store_advisory_cache as advisory_cache;
-use crate::guard_store_approval_write::add_native_review_approval_request;
+use crate::guard_store_approval_backfill;
+use crate::guard_store_approval_metadata as approval_metadata;
+use crate::guard_store_approval_page_reads as approval_pages;
+use crate::guard_store_approval_queue::queue_blocked_approvals;
+use crate::guard_store_approval_queue_result as queue_result;
+use crate::guard_store_approval_reads as approval_reads;
+use crate::guard_store_approval_resolve::{
+    resolve_approval_request, resolve_harness_native_approval_request,
+    resolve_matching_duplicate_requests,
+};
+use crate::guard_store_approval_sweep::resolve_matching_approval_requests;
+use crate::guard_store_approval_write::{add_approval_request, add_native_review_approval_request};
 use crate::guard_store_args::Args;
 use crate::guard_store_claude_review::add_claude_native_review_approval_request;
 use crate::guard_store_clients as clients;
@@ -30,12 +42,16 @@ use crate::guard_store_cmd_feedback as feedback;
 use crate::guard_store_cmd_lifecycle as lifecycle;
 use crate::guard_store_cmd_maintenance as maintenance;
 use crate::guard_store_cmd_privacy as privacy;
+use crate::guard_store_composio_catalog as composio_catalog;
 use crate::guard_store_connect as connect;
+use crate::guard_store_connector_context as connector_context;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
 use crate::guard_store_inventory as inventory;
 use crate::guard_store_local_cli as local_cli;
 use crate::guard_store_local_cli_grants as local_cli_grants;
+use crate::guard_store_local_mcp_declarations as local_mcp_declarations;
 use crate::guard_store_local_mcp_observation as local_mcp;
+use crate::guard_store_native_receipts as native_receipts;
 use crate::guard_store_native_review_consume as native_review_consume;
 use crate::guard_store_observed_mcp as observed_mcp;
 use crate::guard_store_outbox_binding::{
@@ -58,7 +74,7 @@ use crate::guard_store_storage_maintenance as storage_maintenance;
 use crate::guard_store_tool_call_evidence as tool_call_evidence;
 use crate::guard_store_wfcap_wire as wfcap;
 
-const MAX_BUSY_TIMEOUT_MS: u64 = 600_000;
+pub(crate) const MAX_BUSY_TIMEOUT_MS: u64 = 600_000;
 const CACHE_SIZE_KIB: i64 = 256 * 1024;
 const MMAP_SIZE_BYTES: i64 = 1024 * 1024 * 1024;
 
@@ -70,11 +86,23 @@ fn request_digest(request: &GuardStoreRequestV1) -> Result<String, &'static str>
     Ok(format!("sha256:{}", digest_bytes(&bytes)))
 }
 
+#[cfg(test)]
 pub(crate) fn evaluate_guard_store_request(
     request: &GuardStoreRequestV1,
 ) -> Result<Vec<u8>, String> {
+    evaluate_guard_store_request_with_owner(request, None)
+}
+
+pub(crate) fn evaluate_guard_store_request_with_owner(
+    request: &GuardStoreRequestV1,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest(request).map_err(str::to_owned)?;
-    let (status, code, payload, generation) = match evaluate(request) {
+    let outcome = match owner {
+        Some(owner) => evaluate_with_owner(request, Some(owner)),
+        None => evaluate(request),
+    };
+    let (status, code, payload, generation) = match outcome {
         Ok((payload, generation)) => ("ok".to_owned(), "ok".to_owned(), Some(payload), generation),
         Err(error) => {
             let payload = Some(json!({ "message": error.message() }));
@@ -93,6 +121,13 @@ pub(crate) fn evaluate_guard_store_request(
 }
 
 pub(crate) fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Option<i64>)> {
+    evaluate_with_owner(request, None)
+}
+
+fn evaluate_with_owner(
+    request: &GuardStoreRequestV1,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> StoreResult<(Value, Option<i64>)> {
     let invalid = |code| Err(StoreError::Invalid(code));
     if request.schema != GUARD_STORE_REQUEST_SCHEMA {
         return invalid("native_guard_store_schema_mismatch");
@@ -110,10 +145,9 @@ pub(crate) fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Opt
         Some(kind) => kind,
         None => return invalid("native_guard_store_method_unknown"),
     };
-    let connection = Connection::open_with_flags(
-        &path,
-        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?;
+    // A warm call reuses a kept connection: reopening parsed the whole schema
+    // on every call (see `guard_store_write_cache`).
+    let connection = crate::guard_store_write_cache::open_read_write_cached(&path)?;
     connection.busy_timeout(Duration::from_millis(request.busy_timeout_ms))?;
     apply_pragmas(&connection)?;
     // A total read only writes for the one-time rebuild a migration requests;
@@ -136,20 +170,30 @@ pub(crate) fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Opt
         Kind::Snapshot => connection.execute_batch("BEGIN")?,
         Kind::Read => {}
     }
-    let outcome = dispatch(&connection, &request.source, &request.method, &args);
+    let outcome = dispatch(
+        &connection,
+        &request.source,
+        &request.guard_home,
+        &request.method,
+        &args,
+        owner,
+    );
     let payload = match outcome {
         Ok(payload) => payload,
         Err(error) => {
             if kind != Kind::Read {
                 let _ = connection.execute_batch("ROLLBACK");
             }
+            guard_store_approval_backfill::settle(false);
             return Err(error);
         }
     };
     if kind == Kind::Snapshot {
         connection.execute_batch("ROLLBACK")?;
     } else {
-        finalize_and_commit(&connection, writes)?;
+        let committed = finalize_and_commit(&connection, writes);
+        guard_store_approval_backfill::settle(committed.is_ok());
+        committed?;
     }
     let generation = (connection.total_changes() > initial_changes)
         .then(|| outbox_generation(&connection))
@@ -285,16 +329,35 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "read_local_cli_command_catalog"
         | "read_local_cli_command_states"
         | "list_cached_advisories"
-        | "policy_source_contexts" => Kind::Read,
+        | "policy_source_contexts"
+        | "matching_native_review_block" => Kind::Read,
         "list_command_activity_page"
         | "command_activity_analytics"
         | "list_command_activity_invalidations"
         | "command_activity_diagnostics"
         | "list_command_shadow_observations"
         | "observed_mcp_tool_actions"
-        | "workflow_capability_plan" => Kind::Snapshot,
+        | "workflow_capability_plan"
+        | "get_approval_request"
+        | "list_approval_requests"
+        | "list_approval_request_page"
+        | "count_approval_requests"
+        | "get_next_pending_request"
+        | "get_approval_extension_allow_hint"
+        | "approval_desktop_notified_at"
+        | "oldest_approval_request_created_at" => Kind::Snapshot,
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
+        | "resolve_matching_approval_requests"
+        | "resolve_approval_request"
+        | "resolve_one_request_only"
+        | "resolve_harness_native_approval_request"
+        | "resolve_request_with_queue_result"
+        | "resolve_native_workspace_review_request"
+        | "resolve_matching_duplicate_requests"
+        | "mark_approval_desktop_notified"
+        | "add_approval_request"
+        | "queue_blocked_approvals"
         | "add_native_review_approval_request"
         | "add_silent_native_review_approval_request"
         | "add_claude_native_review_approval_request"
@@ -333,6 +396,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "next_aibom_trust_attestation_sequence"
         | "add_receipt"
         | "record_tool_call_evidence"
+        | "record_native_decision_receipt"
         | "set_receipt_action_envelope"
         | "update_receipt_policy_decision"
         | "update_receipt_approval_context"
@@ -343,12 +407,16 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "maintain_storage"
         | "managed_keyring_reconcile"
         | "record_local_cli_observation"
+        | "replace_local_cli_commands"
         | "forget_local_cli_observation"
+        | "record_connector_setup_context"
         | "local_cli_replay_allowed"
         | "prune_inactive_local_cli_observations"
         | "cache_advisories" => Kind::Write,
         "find_local_mcp_observation" => Kind::Read,
-        "ensure_local_mcp_observation" => Kind::Write,
+        "ensure_local_mcp_observation"
+        | "reconcile_remote_mcp_declarations"
+        | "record_composio_discovery" => Kind::Write,
         _ if connect::is_state_read(method) => Kind::Read,
         _ if connect::handles(method) => Kind::Write,
         _ => return None,
@@ -358,8 +426,10 @@ fn method_kind(method: &str) -> Option<Kind> {
 fn dispatch(
     connection: &Connection,
     source: &str,
+    guard_home: &str,
     method: &str,
     args: &Args,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> StoreResult<Value> {
     match method {
         "review_event_outbox_status" => queries::status(connection, source, args),
@@ -453,6 +523,9 @@ fn dispatch(
         "cache_advisories" => advisory_cache::cache(connection, args),
         "list_cached_advisories" => advisory_cache::list(connection, args),
         "consume_native_review_approval" => native_review_consume::consume(connection, args),
+        "matching_native_review_block" => native_review_consume::matching_block(connection, args),
+        "add_approval_request" => add_approval_request(connection, source, args),
+        "queue_blocked_approvals" => queue_blocked_approvals(connection, source, args),
         "add_native_review_approval_request" => {
             add_native_review_approval_request(connection, source, args)
         }
@@ -465,11 +538,19 @@ fn dispatch(
         "workflow_capability_plan" => wfcap::plan(connection, args),
         "workflow_capability_commit" => wfcap::commit(connection, args),
         "record_local_cli_observation" => local_cli::record_observation(connection, args),
+        "replace_local_cli_commands" => local_cli::replace_commands(connection, args),
         "forget_local_cli_observation" => local_cli::forget_observation(connection, args),
+        "record_connector_setup_context" => connector_context::record_context(connection, args),
         "local_cli_replay_allowed" => local_cli::replay_allowed_op(connection, args),
         "prune_inactive_local_cli_observations" => local_cli::prune_inactive(connection, args),
         "find_local_mcp_observation" => local_mcp::find_observation(connection, args),
         "ensure_local_mcp_observation" => local_mcp::ensure_observation(connection, args),
+        "reconcile_remote_mcp_declarations" => {
+            local_mcp_declarations::reconcile_remote_declarations(connection, args)
+        }
+        "record_composio_discovery" => {
+            composio_catalog::record_composio_discovery(connection, args)
+        }
         "upsert_guard_session" => sessions::upsert_session(connection, args),
         "get_guard_session" => sessions::get_session(connection, args),
         "list_guard_sessions" => sessions::list_sessions(connection, args),
@@ -506,6 +587,9 @@ fn dispatch(
         "record_tool_call_evidence" => {
             tool_call_evidence::record_tool_call_evidence(connection, args)
         }
+        "record_native_decision_receipt" => {
+            native_receipts::record_native_decision_receipt(connection, args)
+        }
         "set_receipt_action_envelope" => receipt_writes::set_action_envelope(connection, args),
         "update_receipt_policy_decision" => {
             receipt_writes::update_policy_decision(connection, args)
@@ -520,6 +604,50 @@ fn dispatch(
         }
         "latest_receipt_rowid" => receipt_reads::latest_rowid(connection, args),
         "get_receipt" => receipt_reads::get_receipt(connection, args),
+        "get_approval_request" => {
+            approval_reads::get_approval_request(connection, guard_home, args, owner)
+        }
+        "list_approval_requests" => {
+            approval_reads::list_approval_requests(connection, guard_home, args, owner)
+        }
+        "list_approval_request_page" => {
+            approval_pages::list_approval_request_page(connection, guard_home, args)
+        }
+        "count_approval_requests" => approval_pages::count_approval_requests(connection, args),
+        "get_next_pending_request" => {
+            approval_pages::get_next_pending_request(connection, guard_home, args, owner)
+        }
+        "get_approval_extension_allow_hint" => {
+            approval_metadata::get_approval_extension_allow_hint(connection, args)
+        }
+        "approval_desktop_notified_at" => {
+            approval_metadata::approval_desktop_notified_at(connection, args)
+        }
+        "mark_approval_desktop_notified" => {
+            approval_metadata::mark_approval_desktop_notified(connection, args)
+        }
+        "oldest_approval_request_created_at" => {
+            approval_metadata::oldest_approval_request_created_at(connection, args)
+        }
+        "resolve_approval_request" => resolve_approval_request(connection, guard_home, args, false),
+        "resolve_one_request_only" => resolve_approval_request(connection, guard_home, args, true),
+        "resolve_harness_native_approval_request" => {
+            resolve_harness_native_approval_request(connection, guard_home, args)
+        }
+        "resolve_request_with_queue_result" => {
+            queue_result::resolve_request_with_queue_result(connection, guard_home, args, owner)
+        }
+        "resolve_native_workspace_review_request" => {
+            queue_result::resolve_native_workspace_review_request(
+                connection, guard_home, args, owner,
+            )
+        }
+        "resolve_matching_duplicate_requests" => {
+            resolve_matching_duplicate_requests(connection, source, guard_home, args)
+        }
+        "resolve_matching_approval_requests" => {
+            resolve_matching_approval_requests(connection, guard_home, args)
+        }
         "get_receipt_for_approval_request" => {
             receipt_reads::get_for_approval_request(connection, args)
         }

@@ -54,6 +54,7 @@ fn rust_version_queries_are_allowed_unless_a_toolchain_file_selects_a_binary() {
     .unwrap();
     // A symlinked working directory resolves below the pinned toolchain file,
     // which rustup reads even though the textual path does not contain it.
+    #[cfg(unix)]
     let alias = root.join("alias");
     #[cfg(unix)]
     std::os::unix::fs::symlink(&nested_plain, &alias).unwrap();
@@ -144,7 +145,10 @@ fn decide_with(
             cdpath_unset: false,
             rustup_override_absent: false,
             npm_config_inert: false,
+            pip_config_inert: false,
             shell_home_matches: false,
+            ripgrep_config_absent: false,
+            psql_environment: Default::default(),
         },
         Some(&environment),
     )

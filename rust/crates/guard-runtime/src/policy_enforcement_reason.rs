@@ -1,5 +1,15 @@
 use super::policy_enforcement_helpers::FloorCause;
 
+/// The package script setting holds lifecycle scripts, not the install. These
+/// are the forms `no_script_install_command` proves, which the setting skips.
+pub(super) const NO_SCRIPT_INSTALL_ALTERNATIVE: &str =
+    "This setting holds package lifecycle scripts. \
+An install of the committed lockfile with scripts turned off is not held by it: run \
+`bun install --frozen-lockfile --ignore-scripts`, `npm ci --ignore-scripts` or \
+`pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile` on its own, choosing the \
+manager whose lockfile the project commits (`bun.lock`, `package-lock.json` or `pnpm-lock.yaml`), \
+then run tests or builds as separate commands.";
+
 /// The reason code and text for a result the installed policy raised, naming
 /// the policy setting that raised it when it is known.
 pub(super) fn policy_override_reason(
@@ -63,6 +73,12 @@ fn risk_label(risk: &str) -> &'static str {
         "guard_bypass" => "Guard bypass",
         "cloud_advisory" => "cloud advisory",
         "encoded_exfiltration" => "encoded export",
+        "package_unknown" => "unrecognized package",
+        "package_lockfile_drift" => "unpinned dependency",
+        "package_direct_source" => "direct package source",
+        "package_custom_registry" => "custom package registry",
+        "package_install" => "package install",
+        "low_trust_artifact" => "low trust score",
         "execution" => "command execution",
         "supply_chain" => "supply chain",
         "policy_bypass" => "policy bypass",

@@ -19,12 +19,14 @@ import pytest
 
 from ci.native_runtime.native_process_test_support import process_is_alive
 from codex_plugin_scanner.guard.live_process_identity import process_start_token
+from codex_plugin_scanner.guard.native_command_control_binding import read_native_command_control_binding
 from codex_plugin_scanner.guard.native_policy_snapshot import (
     _policy_snapshot_push_bytes_v3,
     build_policy_snapshot_v3,
     derive_native_policy_verifier_key,
     provision_native_policy_verifier_key,
 )
+from codex_plugin_scanner.guard.store import GuardStore
 
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
 _NATIVE_DIAGNOSTIC_RE = re.compile(rb"\bnative_[a-z0-9_]+\b")
@@ -69,6 +71,22 @@ def _rule_digest(runtime: Path) -> str:
     return digest
 
 
+def _command_controls(root: Path) -> tuple[dict[str, object], bytes]:
+    """Bind the packaged command program the way a real snapshot push does.
+
+    Without a binding the runtime compiles no command controls, so extension
+    observations, permission observations and workspace containment proofs all
+    stay inert and this end-to-end path silently covers less than it appears
+    to. The binding authenticates its authority with the store's own policy
+    integrity key, so the snapshot has to be verified by that same key.
+    """
+    store = GuardStore(root)
+    binding, _ = read_native_command_control_binding(store)
+    master_key, _key_id = store._policy_integrity_secret_material(create=True)
+    assert isinstance(master_key, bytes) and len(master_key) == 32
+    return binding, master_key
+
+
 def _request(
     runtime: Path,
     root: Path,
@@ -81,7 +99,9 @@ def _request(
 ) -> bytes:
     runtime_identity = hashlib.sha256(runtime.read_bytes()).hexdigest()
     rule_digest = _rule_digest(runtime)
-    policy_master = b"\x07" * 32
+    # The store mints its policy integrity key here, and refuses to mint one
+    # once a native verifier key is already on disk. Bind before provisioning.
+    command_extensions, policy_master = _command_controls(root)
     provision_native_policy_verifier_key(root, policy_master)
     policy_snapshot = build_policy_snapshot_v3(
         config={
@@ -106,6 +126,7 @@ def _request(
         rule_digest=rule_digest,
         verifier_key=derive_native_policy_verifier_key(policy_master),
         generation=generation,
+        command_extensions=command_extensions,
     )
     return json.dumps(
         {

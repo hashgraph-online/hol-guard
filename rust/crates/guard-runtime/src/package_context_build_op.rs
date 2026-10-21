@@ -6,9 +6,9 @@
 //! typed `error` result; the caller never computes a context itself.
 
 use guard_contracts::{
-    PackageContextBuildComponentV1, PackageContextBuildContextV1, PackageContextBuildRequestV1,
-    PackageContextBuildResultV1, PACKAGE_CONTEXT_BUILD_MAX_BYTES,
-    PACKAGE_CONTEXT_BUILD_REQUEST_SCHEMA, PACKAGE_CONTEXT_BUILD_RESULT_SCHEMA,
+    PackageContextBuildContextV1, PackageContextBuildRequestV1, PackageContextBuildResultV1,
+    PACKAGE_CONTEXT_BUILD_MAX_BYTES, PACKAGE_CONTEXT_BUILD_REQUEST_SCHEMA,
+    PACKAGE_CONTEXT_BUILD_RESULT_SCHEMA,
 };
 
 use crate::package_authority_op::request_digest_with_limit;
@@ -54,6 +54,7 @@ fn build(request: &PackageContextBuildRequestV1) -> Result<PackageContextBuildCo
     use guard_command::package_context_build::{
         build_package_execution_context, BuildError, BuildInput,
     };
+    use guard_contracts::PackageContextBuildComponentV1;
 
     let metadata = metadata_from(request);
     let input = BuildInput {
@@ -137,6 +138,16 @@ fn result_for(
         detail,
         context,
     }
+}
+
+/// The same build in process, for the resident's own lanes. A failure is one
+/// code rather than a typed result: the caller is not a request to answer, so
+/// it defers on anything this cannot build, the unsupported Windows path
+/// semantics included.
+pub(crate) fn build_execution_context(
+    request: &PackageContextBuildRequestV1,
+) -> Result<PackageContextBuildContextV1, &'static str> {
+    evaluate(request).map_err(|failure| failure.code)
 }
 
 pub(crate) fn evaluate_package_context_build(

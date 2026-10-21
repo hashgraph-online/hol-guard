@@ -36,6 +36,7 @@ from codex_plugin_scanner.guard.approvals import apply_approval_resolution, wait
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction_module
 from codex_plugin_scanner.guard.cli import render as guard_render_module
+from codex_plugin_scanner.guard.cli.commands_support_runtime_artifact_policy import runtime_policy_artifact_facts
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
     _codex_post_tool_output_artifact,
 )
@@ -63,6 +64,7 @@ from codex_plugin_scanner.guard.policy_bundle_delivery import policy_bundle_ackn
 from codex_plugin_scanner.guard.policy_bundle_parser import (
     computed_policy_bundle_hash,
     payload_hash_for_policy_bundle,
+    policy_bundle_rejection_message,
     validated_policy_bundle_payload,
 )
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
@@ -81,7 +83,7 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
 )
 from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import extract_package_intent_request
-from codex_plugin_scanner.guard.runtime.secret_file_request_services import constants_core, pytest_target_detection
+from codex_plugin_scanner.guard.runtime.secret_file_request_services import constants_core
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_file_write_request,
     extract_sensitive_tool_action_request,
@@ -90,16 +92,20 @@ from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import (
     GuardStore,
     _runtime_scoped_exact_match_key,
-    runtime_tool_action_exact_match_context,
 )
 from codex_plugin_scanner.guard.synced_policy import synced_policy_payload
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
+from tests.native_permission_plan_stub import answer_persist_plans
 from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_keyring,
     policy_bundle_test_verification_key,
     sign_policy_bundle,
 )
 from tests.support.network import stub_authenticated_urlopen
+
+# A credential-shaped literal in source output, assembled so that repository
+# secret scanning does not flag the fixture itself.
+_SOURCE_LITERAL = "".join(("key_", "a1b2c3d4", "e5f6g7h8"))
 
 pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mark.usefixtures("native_hook_force")]
 
@@ -170,6 +176,17 @@ def _isolate_codex_runtime_marker(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CODEX_HOME", raising=False)
 
 
+def _claude_pending_permission_state_key(session_id: str, artifact_id: str) -> str:
+    """The key the resident derives for a Claude pending permission.
+
+    Spelled out here so the legacy-row tests below can seed the exact row the
+    resident will look up for an artifact.
+    """
+
+    fingerprint = hashlib.sha256(artifact_id.encode("utf-8")).hexdigest()[:24]
+    return f"claude_pending_permission:{session_id}:{fingerprint}"
+
+
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -189,7 +206,7 @@ def _install_codex_native_hooks(home_dir: Path, workspace_dir: Path) -> None:
     )
     config_path = home_dir / ".codex" / "config.toml"
     payload = read_toml_payload(config_path)
-    CodexHarnessAdapter._install_config_hooks(payload, context)
+    CodexHarnessAdapter._install_config_hooks(payload, context, config_path=config_path)
     CodexHarnessAdapter._write_authenticated_hook_config(
         context,
         config_path=config_path,
@@ -957,7 +974,7 @@ clearer UX and an implementation plan with technical references.
                 )
             },
             "tool_response": {
-                "stdout": "src/lib/email-service.ts:12:const SMTP_TOKEN = process.env.SMTP_TOKEN",
+                "stdout": f'src/lib/email-service.ts:12:const SMTP_TOKEN = "{_SOURCE_LITERAL}"',
             },
             "source_scope": "project",
         }
@@ -982,6 +999,90 @@ clearer UX and an implementation plan with technical references.
         assert output["continue"] is True
         assert output["approval_reuse"]["action"] == "require-reapproval"
 
+    def test_codex_post_tool_use_allows_source_that_only_references_credentials(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "rg -g '*.ts' TOKEN src"},
+            "tool_response": {
+                "stdout": (
+                    "src/config.ts:1:const auth_token = process.env.TOKEN;\n"
+                    "src/config.ts:2:function client(apiKey: string) {}\n"
+                    'src/config.ts:3:const obj = {token: "${TOKEN}"};\n'
+                ),
+            },
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        capsys.readouterr()
+
+        assert rc == 0
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            'TOKEN="$2" + "{}"',
+            'TOKEN="$2"{}',
+            'TOKEN="$2",{}',
+            'TOKEN="$2"]{}',
+            "TOKEN=\"$2\"''{}",
+            'TOKEN="$2"\u00a0{}',
+            'TOKEN=<your-token> + "{}"',
+            'TOKEN=std::env::var("TOKEN").unwrap_or("{}".into())',
+        ],
+    )
+    def test_codex_post_tool_use_keeps_literal_tails_guarded(self, monkeypatch, tmp_path, capsys, source: str) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        literal = "".join(("UPPER", "_PASSWORD", "_VALUE"))
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "rg -g '*.ts' TOKEN src"},
+            "tool_response": {"stdout": "src/config.ts:1:" + source.replace("{}", literal)},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "codex",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+        assert rc == 1
+        assert output["approval_reuse"]["action"] == "require-reapproval"
+
     def test_pi_post_tool_use_allows_native_grep_of_external_source_tree(
         self,
         monkeypatch,
@@ -1004,7 +1105,7 @@ clearer UX and an implementation plan with technical references.
             },
             "stdout": (
                 "guard/server.py:42:def handle_post(self):\n"
-                "guard/server.py:43:    daemon_auth_token = self.headers.get('X-Guard-Token')\n"
+                "guard/server.py:43:    daemon_auth_token = 'dev-token-123'\n"
             ),
             "source_scope": "project",
         }
@@ -1028,6 +1129,49 @@ clearer UX and an implementation plan with technical references.
         assert rc == 1
         assert output["continue"] is True
         assert output["approval_reuse"]["action"] == "require-reapproval"
+
+    def test_pi_post_tool_use_does_not_review_native_grep_of_token_handling_code(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = home_dir / "workspace"
+        external_source_dir = tmp_path / "codex_plugin_scanner_full"
+        external_source_dir.mkdir(parents=True)
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "grep",
+            "tool_input": {"pattern": "handle_post|token", "path": str(external_source_dir)},
+            "stdout": (
+                "guard/server.py:42:def handle_post(self):\n"
+                "guard/server.py:43:    daemon_auth_token = self.headers.get('X-Guard-Token')\n"
+                "guard/server.py:44:    signed_token = await sign_token(user.id)\n"
+            ),
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "pi",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["continue"] is True
+        assert output.get("approval_reuse", {}).get("action") != "require-reapproval"
 
     def test_pi_post_tool_use_blocks_private_key_from_external_source_tree(
         self,
@@ -1057,6 +1201,110 @@ clearer UX and an implementation plan with technical references.
             "tool_name": "grep",
             "tool_input": {"pattern": "PRIVATE KEY", "path": str(external_source_dir)},
             "stdout": private_key_pem,
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "pi",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["approval_requests"]
+        assert "tool output contains credential-looking material" in output["risk_signals"]
+
+    def test_pi_post_tool_use_passes_native_read_of_token_handling_source(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = home_dir / "workspace"
+        external_source_dir = tmp_path / "app-portal"
+        (external_source_dir / "src").mkdir(parents=True)
+        source = (
+            "export function connectAs(session, cfg) {\n"
+            "  const client = connect({ token: session.token, user: session.user });\n"
+            "  const database = {\n"
+            "    host: cfg.host,\n"
+            "    password: cfg.password, // database\n"
+            "  };\n"
+            "  return { client, database };\n"
+            "}\n"
+        )
+        source_file = external_source_dir / "src" / "session.ts"
+        source_file.write_text(source, encoding="utf-8")
+        _build_guard_fixture(home_dir, workspace_dir)
+        # The harness's own read tool sends no command line, so the only proof
+        # that nothing left the host is the target it names.
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "read",
+            "tool_input": {"path": f"{source_file}:1-8"},
+            "tool_response": {"content": source},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "pi",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["continue"] is True
+
+    def test_pi_post_tool_use_blocks_native_read_of_private_key(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
+
+        home_dir = tmp_path / "home"
+        workspace_dir = home_dir / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        private_key_pem = (
+            ec.generate_private_key(ec.SECP256R1())
+            .private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            .decode("ascii")
+        )
+        key_file = home_dir / ".ssh" / "id_rsa"
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_text(private_key_pem, encoding="utf-8")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "read",
+            "tool_input": {"path": str(key_file)},
+            "tool_response": {"content": private_key_pem},
             "source_scope": "project",
         }
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
@@ -1676,7 +1924,7 @@ clearer UX and an implementation plan with technical references.
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        _write_text(workspace_dir / "src" / "example.ts", "const SMTP_TOKEN = process.env.SMTP_TOKEN;\n")
+        _write_text(workspace_dir / "src" / "example.ts", f'const SMTP_TOKEN = "{_SOURCE_LITERAL}";\n')
         _write_text(
             workspace_dir / ".github" / "workflows" / "publish.yml",
             "jobs:\n  build:\n    steps:\n      - name: Compute publish version\n",
@@ -1685,7 +1933,7 @@ clearer UX and an implementation plan with technical references.
             "event": "PostToolUse",
             "tool_name": "Bash",
             "tool_input": {"command": command},
-            "tool_response": {"stdout": "const SMTP_TOKEN = process.env.SMTP_TOKEN;\n"},
+            "tool_response": {"stdout": f'const SMTP_TOKEN = "{_SOURCE_LITERAL}";\n'},
             "source_scope": "project",
         }
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
@@ -1726,7 +1974,7 @@ clearer UX and an implementation plan with technical references.
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"
         _build_guard_fixture(home_dir, workspace_dir)
-        _write_text(workspace_dir / "src" / "example.ts", "const SMTP_TOKEN = process.env.SMTP_TOKEN;\n")
+        _write_text(workspace_dir / "src" / "example.ts", f'const SMTP_TOKEN = "{_SOURCE_LITERAL}";\n')
         _write_text(workspace_dir / ".github" / "workflows" / "publish.yml", "jobs: {}\n")
         _write_text(workspace_dir / ".env", "API_TOKEN=fixture-only\n")
         event = {
@@ -2167,7 +2415,7 @@ clearer UX and an implementation plan with technical references.
             "tool_name": "Bash",
             "tool_input": {"command": "rg -g '*.ts' TOKEN src"},
             "tool_response": {
-                "stdout": "src/config.ts:1:const auth_token = process.env.TOKEN",
+                "stdout": f'src/config.ts:1:const auth_token = "{_SOURCE_LITERAL}"',
             },
             "source_scope": "project",
         }
@@ -2711,11 +2959,20 @@ clearer UX and an implementation plan with technical references.
     ) -> None:
         command = "env -i OPENAI_API_KEY=$OPENAI_API_KEY | grep OPENAI_API_KEY"
 
-        assert guard_commands_module._codex_command_reads_environment_pipeline(command) is True
-        assert guard_commands_module._codex_command_may_read_local_content(
-            command,
+        artifact = guard_commands_module._codex_post_tool_output_artifact(
+            payload={
+                "tool_name": "Bash",
+                "tool_input": {"command": command},
+                "tool_response": {"stdout": "OPENAI_API_KEY=token=definitely-invalid\n"},
+            },
+            config_path=str(tmp_path / "config.toml"),
+            source_scope="project",
             cwd=tmp_path,
         )
+
+        assert artifact is not None
+        assert artifact.metadata["guard_default_action"] == "require-reapproval"
+        assert artifact.metadata["secret_source_family"] == "environment variables"
 
     def test_codex_post_tool_use_detects_url_looking_local_secret_paths(
         self,
@@ -2767,12 +3024,19 @@ clearer UX and an implementation plan with technical references.
         outside_secret.parent.mkdir(parents=True)
         outside_secret.write_text("OPENAI_API_KEY=token=definitely-invalid\n", encoding="utf-8")
 
-        matches = guard_commands_module._codex_sensitive_path_matches_in_text(
-            f"python -c \"print(open('https://example.test/../../{outside_secret.parent.name}/.env').read())\"",
+        command = f"python -c \"print(open('https://example.test/../../{outside_secret.parent.name}/.env').read())\""
+        artifact = guard_commands_module._codex_post_tool_output_artifact(
+            payload={
+                "tool_name": "Bash",
+                "tool_input": {"command": command},
+                "tool_response": {"stdout": "token=definitely-invalid\n"},
+            },
+            config_path=str(tmp_path / "config.toml"),
+            source_scope="project",
             cwd=tmp_path,
         )
 
-        assert matches == []
+        assert artifact is None or "secret_source_family" not in artifact.metadata
 
     def test_codex_post_tool_use_allows_short_option_value_payloads(
         self,
@@ -2788,7 +3052,7 @@ clearer UX and an implementation plan with technical references.
             "tool_name": "Bash",
             "tool_input": {"command": "rg -gLICENSE TOKEN src"},
             "tool_response": {
-                "stdout": "src/config.ts:1:const auth_token = process.env.TOKEN",
+                "stdout": f'src/config.ts:1:const auth_token = "{_SOURCE_LITERAL}"',
             },
             "source_scope": "project",
         }
@@ -2827,7 +3091,7 @@ clearer UX and an implementation plan with technical references.
             "tool_name": "Bash",
             "tool_input": {"command": "rg -- --follow src"},
             "tool_response": {
-                "stdout": "src/config.ts:1:const auth_token = process.env.TOKEN",
+                "stdout": f'src/config.ts:1:const auth_token = "{_SOURCE_LITERAL}"',
             },
             "source_scope": "project",
         }
@@ -2918,7 +3182,7 @@ clearer UX and an implementation plan with technical references.
             "tool_name": "Bash",
             "tool_input": {"command": "rg -T js TOKEN src"},
             "tool_response": {
-                "stdout": "src/config.ts:1:const TOKEN = TOKEN",
+                "stdout": "src/config.ts:1:const TOKEN = rotatedValue",
             },
             "source_scope": "project",
         }
@@ -2957,7 +3221,7 @@ clearer UX and an implementation plan with technical references.
             "tool_name": "Bash",
             "tool_input": {"command": "rg --iglob '*.ts' --max-depth 2 TOKEN src"},
             "tool_response": {
-                "stdout": "src/config.ts:1:const TOKEN = TOKEN",
+                "stdout": "src/config.ts:1:const TOKEN = rotatedValue",
             },
             "source_scope": "project",
         }
@@ -2996,7 +3260,7 @@ clearer UX and an implementation plan with technical references.
             "tool_name": "Bash",
             "tool_input": {"command": "git grep TOKEN --max-depth 1 src"},
             "tool_response": {
-                "stdout": "src/config.ts:1:const TOKEN = TOKEN",
+                "stdout": "src/config.ts:1:const TOKEN = rotatedValue",
             },
             "source_scope": "project",
         }
@@ -3035,7 +3299,7 @@ clearer UX and an implementation plan with technical references.
             "tool_name": "Bash",
             "tool_input": {"command": "bash -lc 'rg TOKEN src'"},
             "tool_response": {
-                "stdout": "src/config.ts:1:const TOKEN = TOKEN",
+                "stdout": "src/config.ts:1:const TOKEN = rotatedValue",
             },
             "source_scope": "project",
         }
@@ -3074,7 +3338,7 @@ clearer UX and an implementation plan with technical references.
             "tool_name": "Bash",
             "tool_input": {"command": "git --no-pager -c color.ui=never grep TOKEN src"},
             "tool_response": {
-                "stdout": "src/config.ts:1:const TOKEN = TOKEN",
+                "stdout": "src/config.ts:1:const TOKEN = rotatedValue",
             },
             "source_scope": "project",
         }
@@ -3863,7 +4127,7 @@ clearer UX and an implementation plan with technical references.
             "tool_name": "Bash",
             "tool_input": {"command": "git grep TOKEN --textconv src"},
             "tool_response": {
-                "stdout": "src/config.ts:1:const TOKEN = TOKEN",
+                "stdout": "src/config.ts:1:const TOKEN = rotatedValue",
             },
             "source_scope": "project",
         }
@@ -4100,7 +4364,7 @@ clearer UX and an implementation plan with technical references.
                 "client_title": "HOL Guard CLI",
                 "client_version": guard_runner_module.__version__,
                 "workspace": "local-machine",
-                "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon"],
+                "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon", "fleet-posture/v1"],
                 "policy_bundle_versions": [
                     "guard-policy-bundle.v1",
                     "guard-policy-bundle.v2",
@@ -8962,22 +9226,24 @@ def test_guard_hook_claude_docker_saved_allow_does_not_lower_terminal_block(
     workspace_dir = tmp_path / "workspace"
     _build_guard_fixture(home_dir, workspace_dir)
 
-    def saved_allow_lookup(_store, _harness, artifact_id, *, artifact_hash=None, **_kwargs):
-        return {
-            "decision": {
-                "action": "allow",
-                "scope": "workspace",
-                "artifact_id": artifact_id,
-                "artifact_hash": artifact_hash,
-            },
+    def saved_allow_lookup(_store, current, _legacy, _alias, reuse=None):
+        decision = {
+            "action": "allow",
+            "scope": "workspace",
+            "artifact_id": current["artifact_id"],
+            "artifact_hash": current["artifact_hash"],
+        }
+        lookup = {
+            "decision": decision,
             "ignored_local_integrity": None,
             "trust_status": {"trusted": True},
             "authority_revision": 1,
         }
+        return lookup, decision, _saved_reuse_query(reuse, decision)
 
     monkeypatch.setattr(
         GuardStore,
-        "resolve_policy_decision_lookup_with_memory_pattern",
+        "resolve_runtime_saved_decision",
         saved_allow_lookup,
     )
     event = {
@@ -9726,7 +9992,8 @@ def test_guard_hook_claude_signed_unseen_pending_cannot_bootstrap_allow(tmp_path
     )
 
 
-def test_guard_hook_claude_native_allow_preserves_authoritative_warn_inventory(tmp_path):
+def test_guard_hook_claude_native_allow_preserves_authoritative_warn_inventory(tmp_path, monkeypatch):
+    asked = answer_persist_plans(monkeypatch)
     store = GuardStore(tmp_path / "home")
     session_id = "session-claude-native-allow-authoritative-warn"
     artifact = GuardArtifact(
@@ -9765,12 +10032,15 @@ def test_guard_hook_claude_native_allow_preserves_authoritative_warn_inventory(t
     )
 
     inventory = store.find_inventory_item(artifact.artifact_id)
+    assert [query["authoritative_action"] for query in asked] == ["warn"]
     assert observed is True
     assert saved is False
     assert store.list_policy_decisions("claude-code") == []
     assert inventory is not None
     assert inventory["last_policy_action"] == "warn"
     assert isinstance(inventory["last_approved_at"], str)
+    retained = store.list_events(event_name="claude/native_permission_current_policy_retained")
+    assert len(retained) == 1
 
 
 def test_guard_hook_claude_ask_user_question_unsigned_legacy_pending_state_cannot_persist_decision(tmp_path):
@@ -9779,7 +10049,7 @@ def test_guard_hook_claude_ask_user_question_unsigned_legacy_pending_state_canno
     session_id = "session-claude-legacy-pending"
     artifact_id = "claude-code:runtime:file-read:.env"
     now = "2026-04-24T00:00:00+00:00"
-    pending_key = guard_commands_module._claude_pending_permission_state_key(session_id, artifact_id)
+    pending_key = _claude_pending_permission_state_key(session_id, artifact_id)
     store.set_sync_payload(
         pending_key,
         {
@@ -9844,61 +10114,6 @@ def test_guard_hook_claude_ask_user_question_unsigned_legacy_pending_state_canno
     assert any(event_payload.get("integrity_status") == "missing_integrity" for event_payload in event_payloads)
 
 
-def test_guard_hook_claude_native_denial_uses_contextual_tool_action_key(tmp_path):
-    home_dir = tmp_path / "home"
-    store = GuardStore(home_dir)
-    session_id = "session-claude-deny"
-    artifact_id = "claude-code:runtime:tool-action:bash"
-    wrapper_chain = ["bash", "zsh"]
-    artifact = GuardArtifact(
-        artifact_id=artifact_id,
-        name="Bash",
-        harness="claude-code",
-        artifact_type="tool_action_request",
-        source_scope="project",
-        config_path="workspace/app/claude-settings.json",
-        command="docker compose up -d postgres",
-        metadata={
-            "raw_command_text": "docker compose up -d postgres",
-            "wrapper_chain": wrapper_chain,
-        },
-    )
-    prompt_payload = {"session_id": session_id, "tool_name": "Bash"}
-    guard_commands_module._record_claude_permission_notice(
-        store=store,
-        payload=prompt_payload,
-        reason="HOL Guard intercepted Claude's shell action.",
-        artifact=artifact,
-        artifact_hash="hash-denied",
-    )
-    notice = guard_commands_module._peek_claude_permission_notice(store, prompt_payload)
-    assert notice is not None
-    guard_commands_module._mark_claude_pending_permission_prompt_seen(
-        store=store,
-        payload=prompt_payload,
-        notice=notice,
-    )
-
-    denied = guard_commands_module._persist_claude_pending_permission_denials(
-        store,
-        {"session_id": session_id},
-    )
-    context = runtime_tool_action_exact_match_context(
-        config_path="workspace/app/claude-settings.json",
-        source_scope="project",
-        raw_command_text="docker compose up -d postgres",
-        wrapper_chain=wrapper_chain,
-    )
-    contextual_key = _runtime_scoped_exact_match_key(artifact_id, context)
-
-    policies = store.list_policy_decisions("claude-code")
-    assert denied == 1
-    assert len(policies) == 1
-    assert policies[0]["artifact_id"] == artifact_id
-    assert policies[0]["artifact_hash"] == contextual_key
-    assert policies[0]["action"] == "block"
-
-
 def test_guard_hook_claude_ask_user_question_unsigned_bound_pending_cannot_persist_decision(tmp_path):
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
@@ -9907,7 +10122,7 @@ def test_guard_hook_claude_ask_user_question_unsigned_bound_pending_cannot_persi
     now = "2026-04-24T00:00:00+00:00"
     approval_code = "abc123abc123"
     approval_question = guard_commands_module._claude_guard_approval_question_text(approval_code)
-    pending_key = guard_commands_module._claude_pending_permission_state_key(session_id, artifact_id)
+    pending_key = _claude_pending_permission_state_key(session_id, artifact_id)
     store.set_sync_payload(
         pending_key,
         {
@@ -10316,7 +10531,7 @@ def test_hook_runtime_artifact_composes_package_and_later_shell_risks(
     assert artifact.artifact_type == "package_request"
     assert artifact.metadata["compound_complete"] is True
     assert artifact.metadata["compound_finding_count"] == 2
-    assert set(guard_commands_module._runtime_artifact_risk_classes(artifact)) >= {
+    assert set(_resident_risk_classes(artifact, native_approval_reuse_runtime)) >= {
         "package_script",
         "destructive_shell",
     }
@@ -10416,7 +10631,9 @@ def test_hook_runtime_artifact_binds_compound_approval_to_effective_cwd(tmp_path
 
 
 @pytest.mark.usefixtures("native_data_flow_runtime")
-def test_hook_runtime_artifact_combines_package_tool_and_data_flow_findings(tmp_path: Path) -> None:
+def test_hook_runtime_artifact_combines_package_tool_and_data_flow_findings(
+    tmp_path: Path, native_approval_reuse_runtime: Path
+) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
@@ -10434,14 +10651,26 @@ def test_hook_runtime_artifact_combines_package_tool_and_data_flow_findings(tmp_
         workspace=workspace_dir,
     )
     assert action is not None
-    data_flow_signals = guard_commands_module._runtime_action_data_flow_signals(action, workspace=workspace_dir)
+    data_flow_signals, data_flow_artifact = guard_commands_module._runtime_action_data_flow_signals(
+        action,
+        workspace=workspace_dir,
+        naming=guard_commands_module._runtime_data_flow_naming(
+            harness="codex",
+            payload=payload,
+            action_envelope=action,
+            home_dir=home_dir,
+            workspace=workspace_dir,
+        ),
+    )
     assert data_flow_signals
+    assert data_flow_artifact is not None
 
     artifact = guard_commands_module._hook_runtime_artifact(
         harness="codex",
         payload=payload,
         action_envelope=action,
         data_flow_signals=data_flow_signals,
+        data_flow_artifact=data_flow_artifact,
         home_dir=home_dir,
         guard_home=home_dir,
         workspace=workspace_dir,
@@ -10452,7 +10681,7 @@ def test_hook_runtime_artifact_combines_package_tool_and_data_flow_findings(tmp_
     assert artifact.metadata["compound_finding_count"] == 3
     assert artifact.metadata["compound_segment_count"] == 3
     assert [segment["index"] for segment in artifact.metadata["compound_segments"]] == [0, 1, 2]
-    assert set(guard_commands_module._runtime_artifact_risk_classes(artifact)) >= {
+    assert set(_resident_risk_classes(artifact, native_approval_reuse_runtime)) >= {
         "package_script",
         "credential_exfiltration",
         "data_flow_exfiltration",
@@ -10950,6 +11179,12 @@ def test_guard_hook_emits_codex_runtime_denial_with_guard_remediation(tmp_path, 
     assert "approve it in hol guard, then retry." not in reason
 
 
+def _composer_never_called(*_args: object, **_kwargs: object) -> dict[str, object]:
+    """Fail when a reason the CLI still composes locally reaches the resident."""
+
+    raise AssertionError("the resident must not be asked for this reason")
+
+
 def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
     artifact = GuardArtifact(
         artifact_id="claude-code:project:tool-action:test",
@@ -10965,6 +11200,8 @@ def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
     reason = guard_commands_module._runtime_artifact_native_reason(
         artifact,
         {"risk_summary": long_summary},
+        composer=_composer_never_called,
+        guard_home=None,
     )
 
     assert reason.startswith("HOL Guard flagged this request: ")
@@ -10991,6 +11228,8 @@ def test_runtime_artifact_native_reason_prefers_decision_v2_harness_message() ->
             },
             "risk_summary": "Generic fallback summary.",
         },
+        composer=_composer_never_called,
+        guard_home=None,
     )
 
     assert reason == "HOL Guard stopped this exact shell command before it touched secrets."
@@ -15077,6 +15316,7 @@ def test_runtime_hook_approval_context_invalidates_one_changed_dimension(
             data_flow_action=None,
             scanner_action=None,
             current_action="review",
+            risk_classes=("destructive_shell",),
             data_flow_signals=(),
             scanner_evidence=scanner_evidence,
         )
@@ -15425,6 +15665,26 @@ def test_guard_hook_saved_file_read_allow_does_not_lower_current_reapproval(tmp_
     assert third_output["policy_action"] == "require-reapproval"
 
 
+def _saved_reuse_query(reuse: dict[str, object] | None, decision: dict[str, object]) -> dict[str, object] | None:
+    """A runtime lookup's ``saved_reuse`` carrying only the query, which the hook composes."""
+    if reuse is None:
+        return None
+    return {
+        "query": {
+            "current_action": reuse["current_action"],
+            "stored_present": True,
+            "stored_action": decision["action"],
+            "stored_artifact_hash": decision["artifact_hash"],
+            "integrity_failure": False,
+            "stored_validation_reason": None,
+            "cursor_native_present": False,
+            "cursor_validation_reason": None,
+            "diagnostic_reason": None,
+            "diagnostic_stored_hash": None,
+        }
+    }
+
+
 def test_guard_hook_exact_v1_allow_cannot_hide_matching_legacy_block(tmp_path, capsys, monkeypatch):
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -15432,28 +15692,27 @@ def test_guard_hook_exact_v1_allow_cannot_hide_matching_legacy_block(tmp_path, c
 
     def saved_decision_lookup(
         _store: GuardStore,
-        _harness: str,
-        _artifact_id: str,
-        *,
-        artifact_hash: str,
-        **kwargs: object,
-    ) -> dict[str, object]:
-        assert kwargs["consume_one_shot"] is False
-        action = "allow" if artifact_hash.startswith(APPROVAL_CONTEXT_TOKEN_PREFIX) else "block"
-        return {
-            "decision": {
-                "action": action,
-                "artifact_hash": artifact_hash,
-                "scope": "artifact",
-                "source": "local",
-            },
-            "ignored_local_integrity": None,
-            "trust_status": {},
+        current: dict[str, object],
+        legacy: dict[str, object],
+        _alias: dict[str, object] | None,
+        reuse: dict[str, object] | None = None,
+    ) -> tuple[dict[str, object], dict[str, object], dict[str, object] | None]:
+        # The resident keeps the strictly more severe legacy-hash block over
+        # the exact v1 allow; the hook must probe both hashes in one call.
+        assert str(current["artifact_hash"]).startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
+        assert not str(legacy["artifact_hash"]).startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
+        decision = {
+            "action": "block",
+            "artifact_hash": legacy["artifact_hash"],
+            "scope": "artifact",
+            "source": "local",
         }
+        lookup = {"decision": decision, "ignored_local_integrity": None, "trust_status": {}}
+        return lookup, decision, _saved_reuse_query(reuse, decision)
 
     monkeypatch.setattr(
         GuardStore,
-        "resolve_policy_decision_lookup_with_memory_pattern",
+        "resolve_runtime_saved_decision",
         saved_decision_lookup,
     )
     monkeypatch.setattr(
@@ -16988,8 +17247,6 @@ def test_guard_runtime_requires_restricted_profile_for_simple_pytest_module_invo
     ),
 )
 def test_guard_runtime_requires_restricted_profile_for_inline_process_pytest(command, tmp_path):
-    assert pytest_target_detection._shell_command_targets_pytest(command)
-
     match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
 
     assert match is not None
@@ -16997,12 +17254,12 @@ def test_guard_runtime_requires_restricted_profile_for_inline_process_pytest(com
     assert match.reason_code == "pytest_restricted_profile_required"
 
 
-def test_guard_runtime_does_not_target_harmless_inline_process_command():
+def test_guard_runtime_does_not_target_harmless_inline_process_command(tmp_path):
     command = "python -c \"import subprocess as sp; sp.run(['echo', 'harmless'])\""
 
-    assert not pytest_target_detection._shell_command_targets_pytest(
-        command,
-    )
+    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+
+    assert match is None or match.reason_code != "pytest_restricted_profile_required"
 
 
 def test_guard_runtime_allows_apply_patch_to_non_sensitive_source_file(tmp_path):
@@ -17865,7 +18122,13 @@ def test_guard_runtime_keeps_pytest_allowlist_disjoint_from_mutating_flags():
     assert constants_core._PYTEST_SAFE_FLAGS_WITH_VALUES.isdisjoint(pytest_mutating_flags)
 
 
-def test_guard_runtime_tool_action_classification_uses_exact_action_classes():
+def _resident_risk_classes(artifact: GuardArtifact, guard_home: Path) -> object:
+    """The risk classes the resident reads off ``artifact``."""
+    config = GuardConfig(guard_home=guard_home, workspace=None)
+    return runtime_policy_artifact_facts(config, artifact, artifact.harness, guard_home=guard_home)["risk_classes"]
+
+
+def test_guard_runtime_tool_action_classification_uses_exact_action_classes(native_approval_reuse_runtime: Path):
     artifact = GuardArtifact(
         artifact_id="codex:test:tool-action:non-destructive",
         name="Bash non-destructive shell command",
@@ -17876,10 +18139,10 @@ def test_guard_runtime_tool_action_classification_uses_exact_action_classes():
         metadata={"action_class": "non-destructive shell command"},
     )
 
-    assert guard_commands_module._runtime_artifact_risk_classes(artifact) == []
+    assert _resident_risk_classes(artifact, native_approval_reuse_runtime) == []
 
 
-def test_guard_runtime_tool_action_classification_emits_network_and_docker_risks():
+def test_guard_runtime_tool_action_classification_emits_network_and_docker_risks(native_approval_reuse_runtime: Path):
     upload_artifact = GuardArtifact(
         artifact_id="codex:test:tool-action:upload",
         name="Bash shell file upload command",
@@ -17908,15 +18171,15 @@ def test_guard_runtime_tool_action_classification_emits_network_and_docker_risks
         metadata={"action_class": "Docker client config access"},
     )
 
-    assert guard_commands_module._runtime_artifact_risk_classes(upload_artifact) == [
+    assert _resident_risk_classes(upload_artifact, native_approval_reuse_runtime) == [
         "credential_exfiltration",
         "network_egress",
     ]
-    assert guard_commands_module._runtime_artifact_risk_classes(docker_artifact) == [
+    assert _resident_risk_classes(docker_artifact, native_approval_reuse_runtime) == [
         "network_egress",
         "destructive_shell",
     ]
-    assert guard_commands_module._runtime_artifact_risk_classes(docker_config_artifact) == ["local_secret_read"]
+    assert _resident_risk_classes(docker_config_artifact, native_approval_reuse_runtime) == ["local_secret_read"]
 
 
 def test_guard_runtime_tool_action_policy_uses_network_egress_when_stricter(tmp_path, native_approval_reuse_runtime):
@@ -17944,312 +18207,6 @@ def test_guard_runtime_tool_action_policy_uses_network_egress_when_stricter(tmp_
             config, artifact, "codex", guard_home=native_approval_reuse_runtime
         )
         == "block"
-    )
-
-
-@pytest.mark.parametrize(
-    "scope",
-    [
-        "harness",
-        "global",
-    ],
-)
-def test_guard_runtime_requires_exact_context_for_saved_broad_risky_tool_action(
-    tmp_path: Path,
-    scope: str,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    workspace = tmp_path / "workspace"
-    request = GuardApprovalRequest(
-        request_id=f"req-opencode-{scope}",
-        harness="opencode",
-        artifact_id="opencode:project:tool-action:docker-compose-postgres",
-        artifact_name="Bash docker-sensitive command",
-        artifact_type="tool_action_request",
-        artifact_hash="hash-request",
-        publisher=None,
-        policy_action="require-reapproval",
-        recommended_scope="artifact",
-        changed_fields=("tool_action_request",),
-        source_scope="project",
-        config_path=str(workspace / "opencode.json"),
-        workspace=str(workspace),
-        launch_target="docker compose -f scripts/guard-cloud/docker-lab/docker-compose.yml up -d postgres",
-        review_command=f"hol-guard approvals approve req-opencode-{scope}",
-        approval_url=f"http://127.0.0.1:5474/requests/req-opencode-{scope}",
-        action_envelope_json={
-            "schema_version": 1,
-            "action_id": f"req-opencode-{scope}",
-            "harness": "opencode",
-            "event_name": "PreToolUse",
-            "action_type": "shell_command",
-            "workspace": str(workspace),
-            "workspace_hash": "workspace-hash",
-            "tool_name": "Bash",
-            "command": "docker compose -f scripts/guard-cloud/docker-lab/docker-compose.yml up -d postgres",
-            "prompt_excerpt": None,
-            "target_paths": [],
-            "network_hosts": [],
-            "mcp_server": None,
-            "mcp_tool": None,
-            "package_manager": None,
-            "package_name": None,
-            "script_name": None,
-            "raw_payload_redacted": {"tool_name": "Bash"},
-        },
-    )
-    store.add_approval_request(request, "2026-06-12T00:00:00+00:00")
-
-    resolution = apply_approval_resolution(
-        store=store,
-        request_id=request.request_id,
-        action="allow",
-        scope=scope,
-        workspace=request.workspace,
-        reason=f"saved for {scope}",
-        now="2026-06-12T00:01:00+00:00",
-    )
-
-    assert resolution["requested_scope"] == scope
-    assert resolution["applied_scope"] == scope
-    assert "scope_warning" not in resolution
-
-    runtime_artifact = GuardArtifact(
-        artifact_id=request.artifact_id,
-        name=request.artifact_name,
-        harness="opencode",
-        artifact_type="tool_action_request",
-        source_scope="project",
-        config_path=request.config_path,
-        publisher=None,
-        metadata={"action_class": "docker-sensitive command"},
-    )
-
-    assert (
-        guard_commands_module._runtime_stored_policy_action(
-            store=store,
-            harness="opencode",
-            artifact=runtime_artifact,
-            artifact_id=runtime_artifact.artifact_id,
-            artifact_hash="hash-retry",
-            workspace=str(workspace),
-        )
-        is None
-    )
-
-
-@pytest.mark.parametrize(
-    "scope",
-    [
-        "harness",
-        "global",
-    ],
-)
-def test_guard_runtime_rejects_saved_allows_for_different_risky_tool_action(
-    tmp_path: Path,
-    scope: str,
-    native_approval_reuse_runtime,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    workspace = tmp_path / "workspace"
-    request = GuardApprovalRequest(
-        request_id=f"req-opencode-{scope}",
-        harness="opencode",
-        artifact_id="opencode:project:tool-action:docker-compose-postgres",
-        artifact_name="Bash docker-sensitive command",
-        artifact_type="tool_action_request",
-        artifact_hash="hash-request",
-        publisher=None,
-        policy_action="require-reapproval",
-        recommended_scope="artifact",
-        changed_fields=("tool_action_request",),
-        source_scope="project",
-        config_path=str(workspace / "opencode.json"),
-        workspace=str(workspace),
-        launch_target="docker compose -f scripts/guard-cloud/docker-lab/docker-compose.yml up -d postgres",
-        review_command=f"hol-guard approvals approve req-opencode-{scope}",
-        approval_url=f"http://127.0.0.1:5474/requests/req-opencode-{scope}",
-        action_envelope_json={
-            "schema_version": 1,
-            "action_id": f"req-opencode-{scope}",
-            "harness": "opencode",
-            "event_name": "PreToolUse",
-            "action_type": "shell_command",
-            "workspace": str(workspace),
-            "workspace_hash": "workspace-hash",
-            "tool_name": "Bash",
-            "command": "docker compose -f scripts/guard-cloud/docker-lab/docker-compose.yml up -d postgres",
-            "prompt_excerpt": None,
-            "target_paths": [],
-            "network_hosts": [],
-            "mcp_server": None,
-            "mcp_tool": None,
-            "package_manager": None,
-            "package_name": None,
-            "script_name": None,
-            "raw_payload_redacted": {"tool_name": "Bash"},
-        },
-    )
-    store.add_approval_request(request, "2026-06-12T00:00:00+00:00")
-
-    resolution = apply_approval_resolution(
-        store=store,
-        request_id=request.request_id,
-        action="allow",
-        scope=scope,
-        workspace=request.workspace,
-        reason=f"saved for {scope}",
-        now="2026-06-12T00:01:00+00:00",
-    )
-
-    assert resolution["requested_scope"] == scope
-    assert resolution["applied_scope"] == scope
-    assert "scope_warning" not in resolution
-
-    later_artifact = GuardArtifact(
-        artifact_id="opencode:project:tool-action:credential-upload",
-        name="Bash shell file upload command",
-        harness="opencode",
-        artifact_type="tool_action_request",
-        source_scope="project",
-        config_path=request.config_path,
-        publisher=None,
-        metadata={"action_class": "shell file upload command"},
-    )
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=None,
-        security_level="balanced",
-    )
-
-    assert (
-        guard_commands_module._runtime_stored_policy_action(
-            store=store,
-            harness="opencode",
-            artifact=later_artifact,
-            artifact_id=later_artifact.artifact_id,
-            artifact_hash="hash-later",
-            workspace=str(workspace),
-        )
-        is None
-    )
-    assert (
-        guard_commands_module._runtime_artifact_policy_action(
-            config, later_artifact, "opencode", guard_home=native_approval_reuse_runtime
-        )
-        == "require-reapproval"
-    )
-
-
-def test_guard_runtime_accepts_contextual_harness_tool_action_policy(tmp_path):
-    workspace = tmp_path / "workspace"
-    artifact_id = "opencode:project:tool-action:docker-compose-postgres"
-    wrapper_chain = ["bash", "zsh"]
-    context = runtime_tool_action_exact_match_context(
-        config_path=str(workspace / "opencode.json"),
-        source_scope="project",
-        raw_command_text="docker compose up -d postgres",
-        wrapper_chain=wrapper_chain,
-    )
-    contextual_key = _runtime_scoped_exact_match_key(artifact_id, context)
-    assert contextual_key is not None
-    expected_workspace = str(workspace)
-
-    class _Store:
-        def resolve_policy_decision(
-            self,
-            harness: str,
-            requested_artifact_id: str,
-            artifact_hash: str | None = None,
-            workspace: str | None = None,
-            publisher: str | None = None,
-            now: str | None = None,
-            runtime_exact_match_context: str | None = None,
-        ) -> dict[str, object]:
-            assert harness == "opencode"
-            assert requested_artifact_id == artifact_id
-            assert artifact_hash == "hash-retry"
-            assert workspace == expected_workspace
-            assert publisher is None
-            assert now is None
-            assert runtime_exact_match_context == context
-            return {
-                "action": "allow",
-                "scope": "harness",
-                "artifact_id": artifact_id,
-                "artifact_hash": contextual_key,
-            }
-
-    runtime_artifact = GuardArtifact(
-        artifact_id=artifact_id,
-        name="Bash docker-sensitive command",
-        harness="opencode",
-        artifact_type="tool_action_request",
-        source_scope="project",
-        config_path=str(workspace / "opencode.json"),
-        publisher=None,
-        metadata={
-            "action_class": "docker-sensitive command",
-            "raw_command_text": "docker compose up -d postgres",
-            "wrapper_chain": wrapper_chain,
-        },
-    )
-
-    assert (
-        guard_commands_module._runtime_stored_policy_action(
-            store=_Store(),
-            harness="opencode",
-            artifact=runtime_artifact,
-            artifact_id=runtime_artifact.artifact_id,
-            artifact_hash="hash-retry",
-            workspace=str(workspace),
-        )
-        == "allow"
-    )
-
-
-def test_guard_runtime_contextual_tool_action_lookup_skips_legacy_fallback_after_integrity_rejection(tmp_path):
-    workspace = tmp_path / "workspace"
-    artifact_id = "opencode:project:tool-action:docker-compose-postgres"
-    runtime_artifact = GuardArtifact(
-        artifact_id=artifact_id,
-        name="Bash docker-sensitive command",
-        harness="opencode",
-        artifact_type="tool_action_request",
-        source_scope="project",
-        config_path=str(workspace / "opencode.json"),
-        publisher=None,
-        metadata={
-            "action_class": "docker-sensitive command",
-            "raw_command_text": "docker compose up -d postgres",
-            "wrapper_chain": ["bash", "zsh"],
-        },
-    )
-
-    class _Store:
-        def resolve_policy_decision(self, *args, **kwargs) -> dict[str, object] | None:
-            raise AssertionError("legacy fallback should not re-query after an integrity rejection lookup")
-
-    assert (
-        guard_commands_module._runtime_stored_policy_action(
-            store=_Store(),
-            harness="opencode",
-            artifact=runtime_artifact,
-            artifact_id=runtime_artifact.artifact_id,
-            artifact_hash="hash-retry",
-            workspace=str(workspace),
-            decision_lookup={
-                "decision": None,
-                "ignored_local_integrity": {
-                    "source": "local_rule",
-                    "scope": "harness",
-                },
-                "trust_status": {
-                    "remembered_rules": "disabled_degraded",
-                },
-            },
-        )
-        is None
     )
 
 
@@ -22832,9 +22789,21 @@ def test_sync_receipts_rejects_policy_bundle_for_the_wrong_workspace(tmp_path, m
     assert "Reconnect Guard" in str(last_error["message"])
 
 
+@pytest.mark.parametrize(
+    ("spec_extra", "reason", "rule_id"),
+    [
+        ({}, "canonical_compile_unsupported_policy_match", "rule.unsupported-operation"),
+        # Budgets are refused before any rule is read, and the compiler names
+        # the policy in place of a rule, so that rejection carries no rule id.
+        ({"budgets": {"daily": 1}}, "canonical_compile_unsupported_policy_budgets", None),
+    ],
+)
 def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failure(
     tmp_path,
     monkeypatch,
+    spec_extra,
+    reason,
+    rule_id,
 ):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
@@ -22889,6 +22858,7 @@ def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failu
                         },
                     }
                 ],
+                **spec_extra,
             },
         },
     }
@@ -22941,13 +22911,18 @@ def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failu
 
     assert store.get_sync_payload("policy_bundle") == last_good
     assert store.get_sync_payload("policy_bundle_last_good") == last_good
-    assert store.get_sync_payload("policy_bundle_last_error") == {
-        "reason": "canonical_compile_unsupported_policy_match"
-    }
+    last_error = store.get_sync_payload("policy_bundle_last_error")
+    assert last_error["reason"] == reason
+    # The rejection names the rule that refused to compile and what Guard can
+    # enforce instead; the bare code alone left an administrator with a
+    # published policy that never applied and nothing to act on.
+    assert last_error.get("ruleId") == rule_id
+    assert last_error["message"] == policy_bundle_rejection_message(reason)
+    assert "keeps the policy it already had" in last_error["message"]
     assert [decision["owner"] for decision in store.list_policy_decisions()] == ["legacy-last-good"]
     rollback_events = store.list_events(event_name="policy_bundle/rollback")
     assert rollback_events[-1]["payload"] == {
-        "reason": "canonical_compile_unsupported_policy_match",
+        "reason": reason,
         "restored": "policy_bundle_last_good",
     }
 
@@ -24272,7 +24247,7 @@ def test_codex_read_only_source_inspection_preserves_pipelines_in_safe_chains(tm
 
 def test_codex_read_only_source_inspection_allows_cd_then_bounded_secret_term_search(tmp_path: Path) -> None:
     repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
-    workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-removal"
+    workspace_dir = repo_root / "cloud-portal" / ".worktrees" / "guard-auth-phase-r-removal"
     source_file = workspace_dir / "src" / "guard-auth.ts"
     live_prefix = "guard" + "_live" + "_"
     _write_text(
@@ -24315,7 +24290,7 @@ def test_codex_read_only_source_inspection_allows_cd_then_bounded_secret_term_se
 
 def test_codex_read_only_source_inspection_rejects_cd_parent_escape(tmp_path: Path) -> None:
     repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
-    workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-removal"
+    workspace_dir = repo_root / "cloud-portal" / ".worktrees" / "guard-auth-phase-r-removal"
     outside_dir = tmp_path / "CascadeProjects" / "outside"
     _write_text(workspace_dir / "src" / "inside.ts", "export const token_label = 'field name only';\n")
     _write_text(outside_dir / "src" / "outside.ts", "export const token_label = 'field name only';\n")
@@ -24334,7 +24309,7 @@ def test_codex_read_only_source_inspection_rejects_cd_parent_escape(tmp_path: Pa
 
 def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_path: Path) -> None:
     repo_root = tmp_path / "CascadeProjects" / "hashgraph-online"
-    workspace_dir = repo_root / "hol-points-portal" / ".worktrees" / "guard-auth-phase-r-default-surfaces"
+    workspace_dir = repo_root / "cloud-portal" / ".worktrees" / "guard-auth-phase-r-default-surfaces"
     _write_text(
         workspace_dir / "app" / "agent-token-detail.tsx",
         "export type AgentTokenDetail = { tokenId: string };\n",
@@ -24343,8 +24318,8 @@ def test_codex_read_only_source_inspection_allows_tilde_worktree_targets(tmp_pat
 
     command = (
         'rg -n "onRotated=|onRotated:|onRotated\\)|AgentTokenDetail" '
-        "~/CascadeProjects/hashgraph-online/hol-points-portal/.worktrees/guard-auth-phase-r-default-surfaces/app "
-        "~/CascadeProjects/hashgraph-online/hol-points-portal/.worktrees/guard-auth-phase-r-default-surfaces/__tests__"
+        "~/CascadeProjects/hashgraph-online/cloud-portal/.worktrees/guard-auth-phase-r-default-surfaces/app "
+        "~/CascadeProjects/hashgraph-online/cloud-portal/.worktrees/guard-auth-phase-r-default-surfaces/__tests__"
     )
 
     assert guard_commands_module._codex_command_is_read_only_source_inspection(

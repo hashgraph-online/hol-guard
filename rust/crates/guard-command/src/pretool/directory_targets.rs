@@ -7,6 +7,12 @@
 
 #[path = "directory_targets_sibling.rs"]
 pub(crate) mod sibling;
+#[path = "directory_targets_tmp_alias.rs"]
+pub(crate) mod tmp_alias;
+
+#[cfg(unix)]
+#[path = "path_trust.rs"]
+pub(in crate::pretool) mod path_trust;
 
 pub(crate) fn safe_directory_target(target: &str) -> bool {
     // Windows spells an absolute directory with backslash separators. Check
@@ -49,6 +55,9 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
         value
     };
     let supplied = std::path::Path::new(value);
+    // Only a spelling the command anchors itself may name its target through
+    // a link; a relative operand follows the shell's logical `$PWD`.
+    let anchored = supplied.is_absolute();
     let joined;
     let supplied = if supplied.is_absolute() {
         supplied
@@ -58,7 +67,7 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
     };
     let canonical = std::fs::canonicalize(supplied).ok()?;
     // Non-aliased targets avoid CDPATH and logical/physical cwd ambiguity.
-    if !absolute_path_spelling_matches(supplied, &canonical)
+    if !absolute_path_spelling_matches(supplied, &canonical, anchored)
         || !canonical.is_dir()
         || !super::read_paths::resolved_path_allowed(&canonical, context.home_dir, context.cwd)
     {
@@ -108,35 +117,37 @@ fn relative_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<s
     Some(joined)
 }
 
-fn absolute_path_spelling_matches(supplied: &std::path::Path, canonical: &std::path::Path) -> bool {
+fn absolute_path_spelling_matches(
+    supplied: &std::path::Path,
+    canonical: &std::path::Path,
+    anchored: bool,
+) -> bool {
     if canonical == supplied {
         return true;
     }
     // macOS exposes the root temporary directory through this fixed system
-    // alias. Permit only the exact canonical suffix; deeper symlink aliases
-    // remain rejected by the physical-cwd proof.
-    #[cfg(target_os = "macos")]
+    // alias. Permit the exact canonical suffix.
+    if tmp_alias::private_tmp_spelling(supplied).is_some_and(|spelling| spelling == canonical) {
+        return true;
+    }
+    // Other links count only when nobody but this user or root can retarget
+    // them, such as `/var -> private/var` or a link in the user's own
+    // directory. A link in a directory others can write stays rejected.
+    #[cfg(unix)]
     {
-        let alias = std::path::Path::new("/tmp");
-        let Ok(relative) = supplied.strip_prefix(alias) else {
-            return false;
-        };
-        let Ok(alias_canonical) = std::fs::canonicalize(alias) else {
-            return false;
-        };
-        alias_canonical == std::path::Path::new("/private/tmp")
-            && canonical == alias_canonical.join(relative)
+        anchored && path_trust::trusted_link_spelling(supplied, canonical)
     }
     // Windows canonical paths carry the verbatim prefix.
     #[cfg(windows)]
     {
+        let _ = anchored;
         supplied
             .to_str()
             .is_some_and(|text| exact_drive_spelling(text, canonical))
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(not(any(unix, windows)))]
     {
-        let _ = (supplied, canonical);
+        let _ = (supplied, canonical, anchored);
         false
     }
 }
@@ -310,6 +321,49 @@ pub(crate) fn exact_existing_drive_target(target: &str) -> bool {
     std::fs::canonicalize(target).is_ok_and(|canonical| exact_drive_spelling(target, &canonical))
 }
 
+/// `exact_drive_spelling` for a drive-absolute target whose deepest names
+/// need not be there yet.
+///
+/// Exact spelling exists to keep a differently cased name, an 8.3 short name
+/// and a junction from standing in for the directory the route proved. None
+/// of those is a name that is not there: a path Windows cannot resolve has no
+/// canonical spelling to differ from, and it names nothing until whoever owns
+/// the directory above it creates it. So the part that exists is held to its
+/// canonical spelling, and the names below it only have to be ordinary ones.
+#[cfg(windows)]
+pub(crate) fn exact_drive_target_with_absent_tail(target: &str) -> bool {
+    let spelled = drive_separators(target);
+    let mut probe = std::path::Path::new(&spelled);
+    let mut absent = 0usize;
+    loop {
+        if let Ok(canonical) = std::fs::canonicalize(probe) {
+            return probe
+                .to_str()
+                .is_some_and(|text| exact_drive_spelling(text, &canonical));
+        }
+        // A name Windows cannot resolve is still read as a name, so only a
+        // plain one may stand below the part that was proved.
+        let Some(name) = probe.components().next_back() else {
+            return false;
+        };
+        if !matches!(name, std::path::Component::Normal(_)) {
+            return false;
+        }
+        absent += 1;
+        if absent > MAX_ABSENT_NAMES {
+            return false;
+        }
+        let Some(parent) = probe.parent() else {
+            return false;
+        };
+        probe = parent;
+    }
+}
+
+/// A `-C` to a directory names the one above it, not a tree to create.
+#[cfg(windows)]
+const MAX_ABSENT_NAMES: usize = 32;
+
 impl<'a> super::PathContext<'a> {
     /// `cdpath_unset` is set only from a harness-stamped environment that
     /// declares no CDPATH, so a bare relative `cd` operand cannot be
@@ -361,6 +415,35 @@ impl<'a> super::PathContext<'a> {
                     && !super::npm_environment::inert_npm_config_name(&name)
             }),
         };
+        // pip reads `PIP_<OPTION>` for every option the running subcommand
+        // takes, so an inherited variable can add the index query or the log
+        // file the command itself leaves out. `XDG_CONFIG_HOME` moves the
+        // user configuration file that does the same, out of the directory
+        // the file check below can see.
+        let pip_config_inert = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment
+                        .environment_names
+                        .iter()
+                        .any(|name| pip_selector(name))
+            }
+            None => !std::env::vars_os()
+                .any(|(name, value)| !value.is_empty() && pip_selector(&name.to_string_lossy())),
+        };
+        // ripgrep reads RIPGREP_CONFIG_PATH unless the command passes
+        // `--no-config`, and ignores it only when it is empty. A stamped
+        // environment carries names without values, so any name counts.
+        let ripgrep_config_absent = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment
+                        .environment_names
+                        .iter()
+                        .any(|name| name.eq_ignore_ascii_case(RIPGREP_CONFIG_NAME))
+            }
+            None => std::env::var_os(RIPGREP_CONFIG_NAME).is_none_or(|value| value.is_empty()),
+        };
         // The shell expands `~` from its own HOME: the stamped one, or the
         // runtime's when no environment was stamped.
         let shell_home = match execution_environment {
@@ -377,16 +460,23 @@ impl<'a> super::PathContext<'a> {
         let shell_home_matches = home_dir.zip(shell_home).is_some_and(|(declared, shell)| {
             canonical(declared).is_some_and(|declared| canonical(&shell) == Some(declared))
         });
+        let psql_environment =
+            super::safe_scalar::psql_environment(execution_environment, shell_home_matches);
         Self {
             home_dir,
             cwd,
             cdpath_unset,
             rustup_override_absent,
             npm_config_inert,
+            pip_config_inert,
             shell_home_matches,
+            ripgrep_config_absent,
+            psql_environment,
         }
     }
 }
+
+const RIPGREP_CONFIG_NAME: &str = "RIPGREP_CONFIG_PATH";
 
 fn rustup_selector(name: &str) -> bool {
     name.eq_ignore_ascii_case("RUSTUP_TOOLCHAIN") || name.eq_ignore_ascii_case("RUSTUP_HOME")
@@ -399,6 +489,35 @@ fn rustup_selector(name: &str) -> bool {
 /// usually for a company's TLS-inspecting proxy that already sees all of the
 /// user's traffic; it leaves the registry where it was, and the agent's own
 /// command cannot set the hook's environment.
+/// Variables pip reads before any option on the command line, beyond the ones
+/// that only change how it prints.
+///
+/// pip asks platformdirs where its user and global configuration files live,
+/// so the four names platformdirs resolves those directories from move a
+/// `pip.conf` out of the directories the file check reads: the config names
+/// on Linux, and the data names on macOS, where a configuration directory is
+/// a data directory. The remaining `XDG_` names, `XDG_RUNTIME_DIR` among
+/// them, name no directory pip reads configuration from.
+fn pip_selector(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    if matches!(
+        upper.as_str(),
+        "XDG_CONFIG_HOME" | "XDG_CONFIG_DIRS" | "XDG_DATA_HOME" | "XDG_DATA_DIRS"
+    ) {
+        return true;
+    }
+    upper.starts_with("PIP_")
+        && !matches!(
+            upper.as_str(),
+            "PIP_DISABLE_PIP_VERSION_CHECK"
+                | "PIP_REQUIRE_VIRTUALENV"
+                | "PIP_NO_COLOR"
+                | "PIP_NO_INPUT"
+                | "PIP_QUIET"
+                | "PIP_VERBOSE"
+        )
+}
+
 fn npm_selector(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     upper.starts_with("NPM_CONFIG_")
@@ -435,6 +554,56 @@ mod tests {
             drive_separators(r"c:\\users\\..\\PROGRA~1"),
             r"c:\users\..\PROGRA~1"
         );
+    }
+
+    /// A `git -C` into a directory that is not there can only print
+    /// `fatal:`, so the route is admitted, but the drive-absolute proof used
+    /// to demand a canonical spelling the path cannot have while it does not
+    /// exist. Every such route was reviewed on Windows and allowed on unix.
+    /// The part that does exist is still held to its canonical spelling.
+    #[cfg(windows)]
+    #[test]
+    fn an_absent_tail_keeps_the_proof_on_the_part_that_exists() {
+        use super::exact_drive_target_with_absent_tail as absent_tail;
+
+        let root = std::env::temp_dir().join(format!(
+            "guard-absent-tail-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(root.join("Code")).unwrap();
+        let canonical = std::fs::canonicalize(&root).unwrap();
+        let spelled = canonical
+            .to_str()
+            .unwrap()
+            .strip_prefix(r"\\?\")
+            .unwrap()
+            .to_owned();
+
+        assert!(absent_tail(&format!(r"{spelled}\Code")));
+        // The directory that is not there, which is the whole point.
+        assert!(absent_tail(&format!(r"{spelled}\Code\not-cloned-yet")));
+        assert!(absent_tail(&format!("{spelled}/Code/not-cloned-yet")));
+        assert!(absent_tail(&format!(r"{spelled}\Code\not-cloned-yet\web")));
+        // A name that is not there is still a name: nothing but a plain one
+        // may stand below the part that was proved.
+        assert!(!absent_tail(&format!(r"{spelled}\Code\..\Code")));
+        assert!(!absent_tail(&format!(r"{spelled}\Code\absent\..")));
+        // The part that does exist keeps its exact spelling.
+        assert!(!absent_tail(&format!(
+            r"{}\CODE\not-cloned-yet",
+            spelled.to_uppercase()
+        )));
+        // A `-C` names one directory, not a tree to create.
+        let deep = "\\absent".repeat(super::MAX_ABSENT_NAMES + 1);
+        assert!(!absent_tail(&format!("{spelled}{deep}")));
+        // A relative target never reaches this proof; it answers for nothing.
+        assert!(!absent_tail("Code/not-cloned-yet"));
+
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]

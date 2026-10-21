@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
 NATIVE_COMMAND_CONTROL_BINDING_SCHEMA = "guard.native-command-control-binding.v1"
 _PROGRAM_DOMAIN = b"hol-guard.native-command-program.v1\0"
-_MAX_PROGRAM_BYTES = 4 * 1024 * 1024
+_MAX_PROGRAM_BYTES = 6 * 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +58,7 @@ def _program_path() -> Path:
 
 
 def load_native_command_program_metadata() -> NativeCommandProgramMetadata:
-    """Capture at most 4 MiB and cache validation by these exact bytes.
+    """Capture at most 6 MiB and cache validation by these exact bytes.
 
     Metadata-only cache keys could miss equal-sized file replacement on a
     filesystem with weak timestamp semantics. At most two captured immutable
@@ -90,10 +90,11 @@ def _metadata_from_bytes(content: bytes) -> NativeCommandProgramMetadata:
         ):
             raise NativePolicySnapshotError("native_command_program_artifact_invalid")
         program_digest = cast(str, raw.pop("program_digest"))
-        canonical = json.dumps(raw, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode(
-            "utf-8"
-        )
-        if hashlib.sha256(_PROGRAM_DOMAIN + canonical).hexdigest() != program_digest:
+        encoder = json.JSONEncoder(sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+        digest = hashlib.sha256(_PROGRAM_DOMAIN)
+        for chunk in encoder.iterencode(raw):
+            digest.update(chunk.encode("utf-8"))
+        if digest.hexdigest() != program_digest:
             raise NativePolicySnapshotError("native_command_program_digest_mismatch")
         return NativeCommandProgramMetadata(
             program_digest, cast(str, raw["catalog_digest"]), cast(str, raw["trust_digest"])
@@ -157,7 +158,10 @@ def read_native_command_control_binding(
 ) -> tuple[dict[str, object], ExtensionControlRuntime]:
     """Read committed local and managed authority, retaining both revision floors."""
 
+    from .catalog_delivery import lifecycle
+    from .catalog_delivery.projection import capture
     from .native_command_control_projection import read_control_projection
 
-    metadata = load_native_command_program_metadata()
-    return read_control_projection(store, metadata, runtime)
+    with store.connection_scope(), lifecycle.session():
+        metadata, registry, record_digest = capture(store)
+        return read_control_projection(store, metadata, runtime, registry=registry, record_digest=record_digest)

@@ -8,10 +8,12 @@
 
 use crate::cloud_scrub_shell::{shell_tokens, ShellToken};
 use crate::pretool::PathContext;
-use guard_contracts::PreToolResultV1;
 
+#[path = "env_prefix_reviewed.rs"]
+mod reviewed;
 #[path = "env_prefix_search_path.rs"]
 mod search_path;
+pub(super) use reviewed::join_reviewed;
 
 const MAX_PROJECTED_CHARS: usize = 32_768;
 
@@ -113,6 +115,8 @@ pub(super) struct ReviewedProjection {
     pub(super) command: String,
     /// The first setting that is not inert, a shape-checked variable name.
     pub(super) setting: String,
+    /// Whether every such setting is data the read-only profiles drop.
+    pub(super) data_only: bool,
 }
 
 /// The command with every inert environment prefix removed, or `None` when
@@ -128,17 +132,18 @@ pub(super) fn project_reviewed(
     command: &str,
     context: PathContext<'_>,
 ) -> Option<ReviewedProjection> {
-    let mut setting = None;
-    let command = project_with(command, Some(&mut setting), context)?;
+    let mut settings = reviewed::Reviewed::default();
+    let command = project_with(command, Some(&mut settings), context)?;
     Some(ReviewedProjection {
         command,
-        setting: setting?,
+        setting: settings.first?,
+        data_only: settings.data_only,
     })
 }
 
 fn project_with(
     command: &str,
-    mut setting: Option<&mut Option<String>>,
+    mut setting: Option<&mut reviewed::Reviewed>,
     context: PathContext<'_>,
 ) -> Option<String> {
     if command.len() > MAX_PROJECTED_CHARS || command.contains(['\n', '\r', '\0']) {
@@ -192,7 +197,7 @@ fn strip_prefixes(
     chars: &[char],
     mut index: usize,
     removed: &mut [bool],
-    mut setting: Option<&mut Option<String>>,
+    mut setting: Option<&mut reviewed::Reviewed>,
     context: PathContext<'_>,
 ) -> Option<usize> {
     let mut stripped = false;
@@ -200,7 +205,8 @@ fn strip_prefixes(
     while index < tokens.len() && !tokens[index].is_control {
         let token = &tokens[index];
         if let Some((name, value)) = shell_assignment(chars, token) {
-            if !literal_word(chars, token) {
+            let reviewed = setting.is_some();
+            if !(literal_word(chars, token) || reviewed && private_temp_word(chars, token)) {
                 return None;
             }
             if !inert_assignment(name, value) {
@@ -257,7 +263,7 @@ fn strip_env_options(
     chars: &[char],
     mut index: usize,
     removed: &mut [bool],
-    mut setting: Option<&mut Option<String>>,
+    mut setting: Option<&mut reviewed::Reviewed>,
     required: &mut Vec<&'static [&'static str]>,
     context: PathContext<'_>,
 ) -> Option<usize> {
@@ -326,7 +332,37 @@ fn shell_assignment<'t>(chars: &[char], token: &'t ShellToken) -> Option<(&'t st
 
 /// The raw word has no expansion, substitution, glob or escape.
 fn literal_word(chars: &[char], token: &ShellToken) -> bool {
-    !chars[token.start..token.end].iter().any(|character| {
+    literal_chars(&chars[token.start..token.end])
+}
+
+/// The raw word's only expansions are `$TMPDIR`, `${TMPDIR}` or
+/// `${TMPDIR:-/tmp}` and nothing in the command rebinds `TMPDIR`. Only a
+/// reviewed projection drops such a setting: the projection never settles
+/// below review, and moving it to the workspace sandbox, which sets `TMPDIR`
+/// itself, re-checks the raw command.
+fn private_temp_word(chars: &[char], token: &ShellToken) -> bool {
+    let word: String = chars[token.start..token.end].iter().collect();
+    let command: String = chars.iter().collect();
+    if !crate::pretool::workspace_contained::private_temp_expansions_only(&word)
+        || crate::pretool::workspace_contained::rebinds_private_temp(&command)
+    {
+        return false;
+    }
+    let fallback = format!(
+        "${}",
+        crate::pretool::workspace_contained::PRIVATE_TEMP_WITH_FALLBACK
+    );
+    let rest: Vec<char> = word
+        .replace(&fallback, "")
+        .replace("${TMPDIR}", "")
+        .replace("$TMPDIR", "")
+        .chars()
+        .collect();
+    literal_chars(&rest)
+}
+
+fn literal_chars(word: &[char]) -> bool {
+    !word.iter().any(|character| {
         matches!(
             character,
             '$' | '`'
@@ -383,8 +419,22 @@ fn plain_scalar(value: &str) -> bool {
 
 /// Unsetting removes context; only names whose absence changes which config
 /// or executables a tool loads stay unproven.
+/// Commit identity a caller may clear so Git falls back to its configured
+/// author and committer; clearing one changes no program, path or config.
+const GIT_IDENTITY_SETTINGS: &[&str] = &[
+    "GIT_AUTHOR_NAME",
+    "GIT_AUTHOR_EMAIL",
+    "GIT_AUTHOR_DATE",
+    "GIT_COMMITTER_NAME",
+    "GIT_COMMITTER_EMAIL",
+    "GIT_COMMITTER_DATE",
+];
+
 fn inert_unset(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
+    if GIT_IDENTITY_SETTINGS.contains(&upper.as_str()) {
+        return true;
+    }
     assignment_name_shape(name)
         && !matches!(upper.as_str(), "PATH" | "HOME")
         && ![
@@ -411,6 +461,17 @@ fn reviewable_assignment(name: &str, value: &str, context: PathContext<'_>) -> b
             .iter()
             .any(|marker| upper.contains(marker))
         && !code_loading_name(&upper)
+}
+
+/// Whether `NAME=value` is a setting a one-time approval may bind by its
+/// spelling: a reviewable name (the same test as above) with a short plain
+/// value. A search path, a file or any text a program could parse as a
+/// program stays outside, so the approved retry runs what was reviewed.
+pub fn bindable_setting(name: &str, value: &str) -> bool {
+    assignment_name_shape(name)
+        && !name.eq_ignore_ascii_case("NODE_PATH")
+        && reviewable_assignment(name, value, PathContext::default())
+        && plain_scalar(value)
 }
 
 /// `NODE_PATH` as one canonical, existing `node_modules` directory inside the
@@ -454,6 +515,43 @@ fn code_loading_name(upper: &str) -> bool {
 /// The first leading setting of any simple command that can load other code,
 /// as a shape-checked name a reason may echo.
 pub(super) fn code_loading_setting(command: &str) -> Option<String> {
+    leading_setting(command, |upper| {
+        crate::command_compatibility::code_or_redirect_environment_name(upper)
+    })
+}
+
+/// The first leading setting of any simple command named for a credential
+/// (`API_KEY`, `GH_TOKEN`), as a shape-checked name a reason may echo.
+pub(super) fn credential_setting(command: &str) -> Option<String> {
+    leading_setting(
+        command,
+        crate::command_compatibility::credential_routing_environment_name,
+    )
+}
+
+/// The heap size when the first code-loading setting is `NODE_OPTIONS` and it
+/// holds only `--max-old-space-size=<MiB>`. That option loads no code, and
+/// `node --max-old-space-size=<MiB> <script>` is a form the read-only sandbox
+/// accepts, so a reason may point the agent to it.
+pub(super) fn node_heap_only_setting(command: &str) -> Option<String> {
+    let (name, value) = leading_assignment(command, |upper| {
+        crate::command_compatibility::code_or_redirect_environment_name(upper)
+    })?;
+    let size = value.strip_prefix("--max-old-space-size=")?;
+    (name.eq_ignore_ascii_case("NODE_OPTIONS")
+        && (1..=6).contains(&size.len())
+        && size.bytes().all(|byte| byte.is_ascii_digit())
+        && size
+            .parse::<u32>()
+            .is_ok_and(|mib| (16..=131072).contains(&mib)))
+    .then(|| size.to_owned())
+}
+
+fn leading_setting(command: &str, matches: impl Fn(&str) -> bool) -> Option<String> {
+    leading_assignment(command, matches).map(|(name, _)| name)
+}
+
+fn leading_assignment(command: &str, matches: impl Fn(&str) -> bool) -> Option<(String, String)> {
     if command.len() > MAX_PROJECTED_CHARS {
         return None;
     }
@@ -477,17 +575,15 @@ pub(super) fn code_loading_setting(command: &str) -> Option<String> {
         if token.value == "env" || token.value == "/usr/bin/env" {
             continue;
         }
-        let Some((name, _)) = shell_assignment(chars.as_slice(), token) else {
+        let Some((name, value)) = shell_assignment(chars.as_slice(), token) else {
             in_prefix = false;
             continue;
         };
         if name.len() <= MAX_SETTING_CHARS
             && assignment_name_shape(name)
-            && crate::command_compatibility::code_or_redirect_environment_name(
-                &name.to_ascii_uppercase(),
-            )
+            && matches(&name.to_ascii_uppercase())
         {
-            return Some(name.to_owned());
+            return Some((name.to_owned(), value.to_owned()));
         }
     }
     None
@@ -504,10 +600,20 @@ pub(super) fn substituted_setting(command: &str) -> Option<String> {
     let tokens = shell_tokens(&chars)?;
     let mut command_start = true;
     let mut in_prefix = false;
+    // Only a setting that a command follows reaches that command's
+    // environment. A bare `n=$((n+1))` sets a shell variable.
+    let mut pending: Option<String> = None;
+    let mut bare_env = false;
     for token in &tokens {
         if token.is_control {
+            // `env` with nothing after it still passes the setting on.
+            if bare_env && pending.is_some() {
+                return pending;
+            }
+            bare_env = false;
             command_start = COMMAND_SEPARATORS.contains(&token.value.as_str());
             in_prefix = false;
+            pending = None;
             continue;
         }
         if command_start {
@@ -515,19 +621,28 @@ pub(super) fn substituted_setting(command: &str) -> Option<String> {
             in_prefix = true;
         }
         if !in_prefix || token.value == "env" || token.value == "/usr/bin/env" {
+            bare_env = in_prefix;
             continue;
         }
         let Some((name, _)) = shell_assignment(chars.as_slice(), token) else {
+            bare_env = false;
+            if pending.is_some() {
+                return pending;
+            }
             in_prefix = false;
             continue;
         };
         let raw = chars.get(token.start..token.end)?;
-        if name.len() <= MAX_SETTING_CHARS
+        if pending.is_none()
+            && name.len() <= MAX_SETTING_CHARS
             && assignment_name_shape(name)
             && raw.iter().any(|character| matches!(character, '$' | '`'))
         {
-            return Some(name.to_owned());
+            pending = Some(name.to_owned());
         }
+    }
+    if bare_env {
+        return pending;
     }
     None
 }
@@ -545,52 +660,6 @@ fn next_word_start(chars: &[char], mut index: usize) -> usize {
         index += 1;
     }
     index
-}
-
-/// Joins the verdict of a [`ReviewedProjection`] with the unprojected
-/// command's own intrinsic verdict, never below review.
-pub(super) fn join_reviewed(
-    mut projected: PreToolResultV1,
-    raw: PreToolResultV1,
-    setting: &str,
-) -> PreToolResultV1 {
-    projected.action.sensitive_target |= raw.action.sensitive_target;
-    projected.action.bounded &= raw.action.bounded;
-    if raw.reason_code != "native_command_review_required"
-        && raw.reason_code != "native_command_extension_evaluation_failed"
-        && rank(&raw.minimum_action) > rank(&projected.minimum_action)
-    {
-        projected.minimum_action = raw.minimum_action;
-        projected.policy_action = raw.policy_action;
-        projected.decision = raw.decision;
-        projected.reason_code = raw.reason_code;
-        projected.reason = raw.reason;
-    }
-    // Protected execution would run the command without its settings.
-    if rank(&projected.minimum_action) < rank("review")
-        || projected.minimum_action == "sandbox-required"
-    {
-        projected.minimum_action = "review".into();
-        projected.policy_action = "review".into();
-        projected.decision = "deny".into();
-        projected.reason_code = "native_command_review_required".into();
-        projected.reason = format!(
-            "HOL Guard requires review because the {setting} setting can change how this command runs."
-        );
-    }
-    projected.explicitly_benign = false;
-    projected
-}
-
-fn rank(action: &str) -> u8 {
-    match action {
-        "allow" => 0,
-        "warn" => 1,
-        "review" => 2,
-        "require-reapproval" => 3,
-        "sandbox-required" => 4,
-        _ => 5,
-    }
 }
 
 #[cfg(test)]

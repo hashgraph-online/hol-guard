@@ -9,15 +9,19 @@ command from a contributor fixture.
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PREFIX = "contributions/command-sources/"
 FIXTURE_PREFIX = "tests/fixtures/command-source-"
 MAX_FIXTURE_BYTES = 1_048_576
+# Compiler digest to command packs staged once for this process.
+_STAGED_PACKS: dict[str, Path] = {}
 
 
 def _relative(path: Path) -> str:
@@ -163,9 +167,49 @@ def _run(command: list[str], *, input_bytes: bytes | None = None) -> bytes:
     return completed.stdout
 
 
+def _development_release(compiler: Path, directory: Path) -> dict:
+    """Prepare native command packs for this checkout's maintainer checks.
+
+    Staging compiles every command pack, and each fixture request gets its own
+    cache. The checkout does not change during a run, so one staging per
+    compiler binary is copied into each request's directory. Authoring runs a
+    private copy of the compiler for every request, so the key is its bytes.
+    """
+    import hashlib
+    import shutil
+
+    import build_native_command_packs as packs
+
+    digest = hashlib.sha256()
+    with compiler.open("rb") as handle:
+        while chunk := handle.read(1 << 20):
+            digest.update(chunk)
+    staged = _STAGED_PACKS.get(digest.hexdigest())
+    if staged is None:
+        staged = Path(tempfile.mkdtemp(prefix="hol-guard-prepare-packs-")).resolve() / "packs"
+        atexit.register(shutil.rmtree, staged.parent, True)
+        packs.stage(compiler, staged, source_root=ROOT)
+        _STAGED_PACKS[digest.hexdigest()] = staged
+    shutil.copytree(staged, directory, dirs_exist_ok=True)
+    manifest = (directory / "release.json").read_bytes()
+    return {"root": json.loads(manifest), "source_context": hashlib.sha256(manifest).hexdigest()}
+
+
 def _validate_fixture(compiler: Path, path: Path) -> str:
     fixture = _load_object(path)
-    result = _run([str(compiler), "test"], input_bytes=path.read_bytes())
+    sys.path.insert(0, str(ROOT / "src"))
+    from codex_plugin_scanner.guard.extension_builder.bundle_baseline import authoring_request
+
+    with tempfile.TemporaryDirectory(prefix="hol-guard-prepare-context-") as scratch:
+        request = authoring_request(
+            "test",
+            fixture,
+            compiler,
+            installed=False,
+            cache_directory=Path(scratch).resolve(strict=True),
+            development=_development_release,
+        )
+        result = _run([str(compiler), "test"], input_bytes=json.dumps(request).encode())
     try:
         payload = json.loads(result)
     except json.JSONDecodeError as error:
@@ -267,7 +311,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             for extension_id in sorted(public_ids):
                 projection.extend(["--publish-descriptor", extension_id])
-        directory = [sys.executable, str(ROOT / "scripts/export_extension_directory.py")]
+        directory = [sys.executable, str(ROOT / "scripts/prepare_extension_directory.py"), "--compiler", str(compiler)]
         if args.check:
             projection.append("--check")
             directory.append("--check")

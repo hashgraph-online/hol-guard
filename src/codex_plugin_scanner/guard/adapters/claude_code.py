@@ -67,44 +67,6 @@ def _run_session_start_from_argv(argv: Sequence[str]) -> int:
     )
 
 
-def _claude_mcp_artifact_id(scope: str, server_name: str) -> str:
-    return f"claude-code:{scope}:mcp:{server_name}"
-
-
-_CLAUDE_BUILTIN_HOOK_TOOL_NAMES = frozenset(
-    {
-        "bash",
-        "shell",
-        "sh",
-        "zsh",
-        "terminal",
-        "run_command",
-        "run_terminal_command",
-        "read",
-        "read_file",
-        "open_file",
-        "view",
-        "view_file",
-        "cat_file",
-        "write",
-        "edit",
-        "multiedit",
-        "write_file",
-        "edit_file",
-        "webfetch",
-        "websearch",
-        "askuserquestion",
-    }
-)
-
-
-def claude_hook_fallback_artifact_id(scope: str, tool_name: str) -> str:
-    normalized_tool = tool_name.strip()
-    if normalized_tool.lower() in _CLAUDE_BUILTIN_HOOK_TOOL_NAMES:
-        return f"claude-code:{scope}:{normalized_tool}"
-    return _claude_mcp_artifact_id(scope, normalized_tool)
-
-
 class ClaudeCodeHarnessAdapter(HarnessAdapter):
     """Discover Claude Code settings, hooks, and workspace agents."""
 
@@ -259,6 +221,14 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
             **shim_manifest,
             "notes": [
                 "Guard hook entries added to ~/.claude/settings.json",
+                *(
+                    [
+                        f"Hooks are installed globally (not in {context.workspace_dir}/.claude); "
+                        "the workspace only scopes the hook URL and Guard policy."
+                    ]
+                    if context.workspace_dir is not None
+                    else []
+                ),
                 *_manifest_notes(shim_manifest),
             ],
         }

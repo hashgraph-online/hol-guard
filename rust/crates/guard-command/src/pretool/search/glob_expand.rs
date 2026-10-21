@@ -26,7 +26,7 @@ const GLOB_CHARACTERS: [char; 3] = ['*', '?', '['];
 /// and a single `*` without it. A wildcard before the last component only
 /// descends into directories, as the shell does.
 pub(super) fn expand_glob_matches(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
-    expand(value, context, false)
+    expand(value, context, Mode::SHELL)
 }
 
 /// [`expand_glob_matches`] under the strict superset model, so an empty list
@@ -35,10 +35,46 @@ pub(super) fn expand_glob_matches_strict(
     value: &str,
     context: ReadContext<'_>,
 ) -> Option<Vec<PathBuf>> {
-    expand(value, context, true)
+    expand(value, context, Mode::STRICT)
 }
 
-fn expand(value: &str, context: ReadContext<'_>, strict: bool) -> Option<Vec<PathBuf>> {
+/// [`expand_glob_matches`] with the strict model's case folding but without
+/// its refusal of a bracket class, for a caller that has already screened the
+/// class itself. An empty list then also covers `nocaseglob`, under which
+/// `app/[slug]` would match a directory named `S`.
+pub(super) fn expand_glob_matches_folded(
+    value: &str,
+    context: ReadContext<'_>,
+) -> Option<Vec<PathBuf>> {
+    expand(value, context, Mode::FOLDED)
+}
+
+/// How closely a component has to match the name of an entry.
+#[derive(Clone, Copy)]
+struct Mode {
+    /// Match ASCII names regardless of case, as `nocaseglob` does.
+    fold_case: bool,
+    /// Refuse a class or `**`, whose match depends on options this matcher
+    /// does not model.
+    refuse_ambiguous: bool,
+}
+
+impl Mode {
+    const SHELL: Self = Self {
+        fold_case: false,
+        refuse_ambiguous: false,
+    };
+    const STRICT: Self = Self {
+        fold_case: true,
+        refuse_ambiguous: true,
+    };
+    const FOLDED: Self = Self {
+        fold_case: true,
+        refuse_ambiguous: false,
+    };
+}
+
+fn expand(value: &str, context: ReadContext<'_>, mode: Mode) -> Option<Vec<PathBuf>> {
     if value.is_empty()
         || value.len() > 4096
         || value.contains(HAZARDS)
@@ -49,7 +85,7 @@ fn expand(value: &str, context: ReadContext<'_>, strict: bool) -> Option<Vec<Pat
         return None;
     }
     let scope = glob_scope::glob_base(value, context)?;
-    let strict = strict || scope.strict;
+    let mode = if scope.strict { Mode::STRICT } else { mode };
     let components: Vec<&str> = scope
         .pattern
         .split('/')
@@ -62,7 +98,9 @@ fn expand(value: &str, context: ReadContext<'_>, strict: bool) -> Option<Vec<Pat
         let is_pattern = component.contains(GLOB_CHARACTERS);
         if *component == ".."
             || (component.starts_with('.') && (is_pattern || !hidden_allowed(component)))
-            || (strict && is_pattern && (component.contains('[') || component.contains("**")))
+            || (mode.refuse_ambiguous
+                && is_pattern
+                && (component.contains('[') || component.contains("**")))
         {
             return None;
         }
@@ -88,7 +126,7 @@ fn expand(value: &str, context: ReadContext<'_>, strict: bool) -> Option<Vec<Pat
                 }
                 let name = entry.ok()?.file_name();
                 let name = name.to_str()?;
-                if !component_matches(component, name, strict)? {
+                if !component_matches(component, name, mode.fold_case)? {
                     continue;
                 }
                 let path = directory.join(name);
@@ -114,12 +152,12 @@ fn expand(value: &str, context: ReadContext<'_>, strict: bool) -> Option<Vec<Pat
     Some(matches)
 }
 
-/// Whether one directory entry matches one pattern component. The strict
-/// model matches ASCII names regardless of case and refuses (`None`) a hidden
+/// Whether one directory entry matches one pattern component. Folding case
+/// matches ASCII names the way `nocaseglob` does and refuses (`None`) a hidden
 /// entry the pattern could match under `dotglob` or a non-ASCII name, where
 /// `?` means a byte or a character depending on the locale.
-fn component_matches(component: &str, name: &str, strict: bool) -> Option<bool> {
-    if !strict {
+fn component_matches(component: &str, name: &str, fold_case: bool) -> Option<bool> {
+    if !fold_case {
         return Some(!name.starts_with('.') && glob_matches(component.as_bytes(), name.as_bytes()));
     }
     if !name.is_ascii() {

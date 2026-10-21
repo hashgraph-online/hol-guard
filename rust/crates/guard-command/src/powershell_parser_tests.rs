@@ -74,7 +74,93 @@ fn statements_and_pipelines_map_to_groups() {
     let model = windows("Get-ChildItem src | Select-Object Name");
     assert_eq!(model.confidence, "exact");
     assert_eq!(model.segments[1].pipeline_index, 1);
-    assert_eq!(model.segments[0].tokens, ["Get-ChildItem", "src"]);
+    assert_eq!(canonical(&model), [words(&["ls", "src"]), words(&["head"])]);
+    // POSIX only sees an unknown word, so the PowerShell model is used.
+    assert_eq!(canonical(&windows("dir")), [words(&["ls"])]);
+    // A form outside the subset keeps the POSIX model.
+    assert_eq!(windows("dir && pwd").dialect, "posix");
+}
+
+#[test]
+fn read_only_cmdlets_map_to_posix_reads() {
+    let cases = [
+        ("Get-ChildItem src", &["ls", "src"][..]),
+        ("gci -Recurse -Filter '*.rs' src", &["ls", "-R", "src"]),
+        ("Get-ChildItem -Force -Path src", &["ls", "-a", "src"]),
+        ("Get-ChildItem 'C:\\repo'", &["ls", "C:\\repo"]),
+        (
+            "Get-Content '\\\\?\\C:\\repo\\notes.md'",
+            &["cat", "\\\\?\\C:\\repo\\notes.md"],
+        ),
+        ("dir", &["ls"]),
+        ("Get-Location", &["pwd"]),
+        ("Set-Location src", &["cd", "src"]),
+        ("Test-Path node_modules", &["test", "-e", "node_modules"]),
+        (
+            "Test-Path -PathType Container build",
+            &["test", "-d", "build"],
+        ),
+        ("Write-Output done", &["echo", "done"]),
+        ("Write-Host -ForegroundColor Green done", &["echo", "done"]),
+        (
+            "Select-String -Path README.md -Pattern TODO",
+            &["grep", "-i", "-e", "TODO", "README.md"],
+        ),
+        (
+            "sls TODO notes.md -CaseSensitive -SimpleMatch",
+            &["grep", "-F", "-e", "TODO", "notes.md"],
+        ),
+        ("Get-Command python", &["which", "python"]),
+        (
+            "New-Item -ItemType Directory -Force build",
+            &["mkdir", "-p", "build"],
+        ),
+        ("Select-Object -First 5", &["head"]),
+        // Unbound forms keep the cmdlet name and are reviewed as before.
+        (
+            "Get-ChildItem -FollowSymlink src",
+            &["Get-ChildItem", "-FollowSymlink", "src"],
+        ),
+        ("Get-Location -Stack", &["Get-Location", "-Stack"]),
+        // `-IsValid` checks path syntax, not whether the file exists.
+        (
+            "Test-Path -IsValid .env",
+            &["Test-Path", "-IsValid", ".env"],
+        ),
+        (
+            "New-Item -ItemType File a.txt",
+            &["New-Item", "-ItemType", "File", "a.txt"],
+        ),
+        // Provider paths and data streams are not files.
+        ("Get-ChildItem 'Env:'", &["Get-ChildItem", "Env:"]),
+        (
+            "Test-Path 'HKCU:\\Software'",
+            &["Test-Path", "HKCU:\\Software"],
+        ),
+        (
+            "Get-ChildItem 'notes.md:hidden'",
+            &["Get-ChildItem", "notes.md:hidden"],
+        ),
+    ];
+    for (command, expected) in cases {
+        let model = parse_command(&request(command, "powershell")).unwrap();
+        assert_eq!(
+            model.confidence, "exact",
+            "{command}: {:?}",
+            model.uncertainty_reason
+        );
+        assert_eq!(model.segments[0].tokens, expected, "{command}");
+    }
+    for command in [
+        "Get-Content 'Env:GITHUB_TOKEN'",
+        "Get-Content -LiteralPath 'Variable:/token'",
+        "Remove-Item 'HKCU:\\Software\\x'",
+        "Copy-Item 'notes.md:hidden' out.txt",
+        "Set-Content 'C:notes.md' x",
+    ] {
+        let model = parse_command(&request(command, "powershell")).unwrap();
+        assert_eq!(model.confidence, "uncertain", "{command}");
+    }
 }
 
 #[test]

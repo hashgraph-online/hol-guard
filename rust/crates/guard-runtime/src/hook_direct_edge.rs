@@ -4,8 +4,7 @@
 use super::workspace::python_strip;
 use super::{
     claude_prompt_text, HookDirectDefer, EVENT_NAME_FIELDS, POST_TOOL_EVENT_NAMES, POST_TOOL_USE,
-    PRE_TOOL_EVENT_NAMES, PRE_TOOL_USE, REPAIRABLE_BLOCK_REASON, USER_PROMPT_EVENT_NAMES,
-    USER_PROMPT_SUBMIT,
+    PRE_TOOL_EVENT_NAMES, PRE_TOOL_USE, USER_PROMPT_EVENT_NAMES, USER_PROMPT_SUBMIT,
 };
 use serde_json::{Map, Value};
 
@@ -28,12 +27,12 @@ pub(super) fn reviewed_edge(edge: &[u8], event: &str) -> Result<Value, HookDirec
 /// - an allow, with an allow or warn floor. The daemon asks for approval
 ///   only on review and require-reapproval floors, so a warn is recorded and
 ///   run like an allow.
-/// - a terminal block or sandbox requirement. The daemon only adds a repair
-///   link to a command-control authority block and routes a Claude Code
+/// - a terminal block or sandbox requirement. The daemon routes a Claude Code
 ///   sandbox requirement to contained execution, which defers here with
 ///   `contained` and is otherwise routed by the caller; any other denial keeps
-///   the edge's harness response. A saved approval never lowers a terminal
-///   action, and the daemon checks custom block rules only against an allow.
+///   the edge's harness response, the command-control repair link included. A
+///   saved approval never lowers a terminal action, and the daemon checks
+///   custom block rules only against an allow.
 pub(super) fn pre_tool_answer(edge: &[u8], contained: bool) -> Result<Value, HookDirectDefer> {
     let parsed = reviewed_edge(edge, PRE_TOOL_USE)?;
     let result = parsed.get("result");
@@ -44,9 +43,7 @@ pub(super) fn pre_tool_answer(edge: &[u8], contained: bool) -> Result<Value, Hoo
     };
     let passed_through = match (field("decision"), field("minimum_action")) {
         (Some("allow"), Some("allow" | "warn")) => true,
-        (Some("deny" | "block"), Some("block")) => {
-            field("reason_code") != Some(REPAIRABLE_BLOCK_REASON)
-        }
+        (Some("deny" | "block"), Some("block")) => true,
         (Some("deny" | "block"), Some("sandbox-required")) => !contained,
         _ => false,
     };

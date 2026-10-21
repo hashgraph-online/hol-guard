@@ -268,14 +268,14 @@
       "variant_remainder": 0
     },
     {
-      "basis": "command substitution remains outside inherited native parser grammar",
+      "basis": "a substitution whose commands are named prints arguments, so the owners of every program it runs bound it at review",
       "expected": {
-        "decision_plane_floor": "block",
-        "evaluation_error": "native_command_evaluation_failed",
+        "decision_plane_floor": "require-reapproval",
+        "evaluation_error": null,
         "model_confidence": "uncertain",
         "model_uncertainty": "command_substitution_not_yet_supported",
-        "native_floor": "block",
-        "native_reason": "native_command_extension_evaluation_failed",
+        "native_floor": "review",
+        "native_reason": "native_command_review_required",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },
@@ -1405,14 +1405,14 @@
   "totals": {
     "below_original_oracle": 0,
     "cases": 51000,
-    "equal_to_original_oracle": 42516,
+    "equal_to_original_oracle": 46683,
     "groups": 58,
     "improved_bounded_git_cases": 50,
     "improved_bounded_git_sources": 2,
     "improved_upstream_benign_cases": 75,
     "improved_upstream_benign_sources": 3,
-    "native_evaluation_errors": 25002,
+    "native_evaluation_errors": 20835,
     "sources": 52,
-    "stronger_than_original_oracle": 8484
+    "stronger_than_original_oracle": 4317
   }
 }

@@ -5,14 +5,16 @@
 //! none of them, each lookup misses and the diagnostic has nothing to explain.
 //! With saved rows the resident reads them itself, on one read-only snapshot,
 //! with the integrity evidence the proxy would ship: the key and state the
-//! daemon published, which the store must still hold, protected. Remote or
-//! bundle authority, an integrity state other than the published protected
-//! one, a newer or unknown schema, and a store it cannot read all defer the
-//! call; a row bound to a portable identity defers every lookup but one whose
-//! workspace resolves to that identity.
+//! daemon published, which the store must still hold, protected. Remote
+//! rows need no more evidence than the proxy ships: the lookup never serves a
+//! cloud-sync or team-policy row and verifies no remote row's integrity. A
+//! policy-bundle row this harness's lookups reach, an integrity state other
+//! than the published protected one, a newer or unknown schema, and a store it
+//! cannot read all defer the call.
 
 use crate::local_store_read::{
-    open_read_only, schema_version, table_exists, STORE_FILE_NAME, SUPPORTED_SCHEMA_VERSION,
+    open_read_only_cached, schema_version, table_exists, CachedConnection, STORE_FILE_NAME,
+    SUPPORTED_SCHEMA_VERSION,
 };
 use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 use base64ct::{Base64UrlUnpadded, Encoding};
@@ -24,18 +26,16 @@ use zeroize::Zeroizing;
 pub(super) const STORE_UNREADABLE: &str = "mcp_relay_store_unreadable";
 pub(super) const SAVED_REMOTE: &str = "mcp_relay_saved_remote_policy";
 const SAVED_UNVERIFIABLE: &str = "mcp_relay_saved_policy_unverifiable";
-/// The tables whose rows a lookup reads under a workspace.
-const PORTABLE_TABLES: [&str; 2] = ["policy_decisions", "guard_local_once_approvals"];
-
 /// `REMOTE_POLICY_SOURCES` (`policy_integrity.py`).
 const REMOTE_SOURCES_SQL: &str = "('cloud-sync', 'team-policy', 'policy-bundle', \
      'policy-bundle-canonical', 'cloud-signed-memory')";
 
 /// The guard store, read-only, at a schema the resident reads; `None` when
-/// there is no store yet, so nothing is saved.
-pub(super) fn open(guard_home: &Path) -> Result<Option<Connection>, &'static str> {
+/// there is no store yet, so nothing is saved. A connection an earlier call
+/// kept for the same file is reused; the schema is still read every call.
+pub(super) fn open(guard_home: &Path) -> Result<Option<CachedConnection>, &'static str> {
     let Some(connection) =
-        open_read_only(&guard_home.join(STORE_FILE_NAME)).map_err(|_| STORE_UNREADABLE)?
+        open_read_only_cached(&guard_home.join(STORE_FILE_NAME)).map_err(|_| STORE_UNREADABLE)?
     else {
         return Ok(None);
     };
@@ -58,8 +58,6 @@ pub(super) struct Saved<'c> {
     pub(super) integrity_state: Value,
     pub(super) key_b64: Zeroizing<String>,
     pub(super) key_id: String,
-    /// The tables holding a row bound to a portable identity.
-    pub(super) portable_tables: Vec<&'static str>,
 }
 
 /// `None` when the store holds no saved row, so every lookup misses; the
@@ -69,14 +67,19 @@ pub(super) fn saved<'c>(
     connection: &'c Connection,
     binding: &DirectLaneBinding,
     guard_home: &str,
+    harness: &str,
 ) -> Result<Option<Saved<'c>>, &'static str> {
     let shape = Shape { connection };
-    // The bundle's decision identities come from a synced, signed payload
-    // the resident does not validate.
-    if shape.any(
-        "sync_state",
-        "select 1 from sync_state where state_key = 'policy_bundle'",
-    )? {
+    // The bundle's decision identities come from a synced, signed payload the
+    // resident does not validate. The lookup reads them only to keep or drop a
+    // policy-bundle row, and it reaches a row bound to this harness or to every
+    // harness: with none of those, the proxy's identities change nothing here.
+    if shape.bundle_row_for(harness)?
+        && shape.any(
+            "sync_state",
+            "select 1 from sync_state where state_key = 'policy_bundle'",
+        )?
+    {
         return Err(SAVED_REMOTE);
     }
     let has_local_policy = shape.any(
@@ -87,25 +90,12 @@ pub(super) fn saved<'c>(
         "guard_local_once_approvals",
         "select 1 from guard_local_once_approvals",
     )?;
-    if shape.any(
+    let has_remote_policy = shape.any(
         "policy_decisions",
         &format!("select 1 from policy_decisions where source in {REMOTE_SOURCES_SQL}"),
-    )? {
-        return Err(SAVED_REMOTE);
-    }
-    if !has_local_policy && !has_local_once {
+    )?;
+    if !has_local_policy && !has_remote_policy && !has_local_once {
         return Ok(None);
-    }
-    // A row bound to a portable identity is read only by a lookup whose
-    // workspace the resident resolves to that identity.
-    let mut portable_tables = Vec::new();
-    for table in PORTABLE_TABLES {
-        if shape.any(
-            table,
-            &format!("select 1 from {table} where workspace like 'git-project:v1:%'"),
-        )? {
-            portable_tables.push(table);
-        }
     }
     let (integrity_state, key) = published_integrity(binding)?;
     if shape.stored_integrity_state()?.as_ref() != Some(&integrity_state) {
@@ -123,7 +113,6 @@ pub(super) fn saved<'c>(
         integrity_state,
         key_b64: Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key)),
         key_id: key.key_id.clone(),
-        portable_tables,
     }))
 }
 
@@ -179,7 +168,27 @@ impl Shape<'_> {
             return Ok(false);
         }
         self.connection
-            .query_row(&format!("{query} limit 1"), [], |_| Ok(()))
+            .prepare_cached(&format!("{query} limit 1"))
+            .and_then(|mut statement| statement.query_row([], |_| Ok(())))
+            .optional()
+            .map(|found| found.is_some())
+            .map_err(|_| STORE_UNREADABLE)
+    }
+
+    /// Whether a `policy-bundle` row is bound to `harness` or to every
+    /// harness, the two selectors every lookup of this harness binds
+    /// (`bounded_non_consuming_policy_rows`). A row bound to another harness
+    /// is read by no lookup here, keep it or drop it.
+    fn bundle_row_for(&self, harness: &str) -> Result<bool, &'static str> {
+        if !table_exists(self.connection, "policy_decisions").map_err(|_| STORE_UNREADABLE)? {
+            return Ok(false);
+        }
+        self.connection
+            .prepare_cached(
+                "select 1 from policy_decisions where source = 'policy-bundle' \
+                 and harness in (?1, '*') limit 1",
+            )
+            .and_then(|mut statement| statement.query_row([harness], |_| Ok(())))
             .optional()
             .map(|found| found.is_some())
             .map_err(|_| STORE_UNREADABLE)
@@ -234,6 +243,8 @@ impl Saved<'_> {
             local_once_integrity_key_id: Some(self.key_id.clone()),
             policy_bundle_decision_identities: None,
             probe_groups: None,
+            portable_workspace: None,
+            evidence_binding: None,
         }
     }
 

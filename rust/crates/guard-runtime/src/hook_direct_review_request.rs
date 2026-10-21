@@ -70,7 +70,7 @@ const ACTION_TYPES: [&str; 10] = [
 const ORDERED_SERVER_FIELDS: [&str; 3] = ["mcp_servers", "mcpServers", "servers"];
 /// Tool-input keys that carry nothing but the shell command
 /// (`_COMMAND_ONLY_INPUT_KEYS`).
-const COMMAND_ONLY_INPUT_KEYS: [&str; 12] = [
+const COMMAND_ONLY_INPUT_KEYS: [&str; 14] = [
     "command",
     "cmd",
     "shell_command",
@@ -83,6 +83,8 @@ const COMMAND_ONLY_INPUT_KEYS: [&str; 12] = [
     "runInBackground",
     "workdir",
     "cwd",
+    "working_directory",
+    "workingDirectory",
 ];
 /// Far under the adapter's 1 MiB string slot and 4 MiB request cap, so the
 /// daemon's adapter call cannot fail on a size the resident accepted.
@@ -139,7 +141,7 @@ pub(super) fn build(
 pub(super) fn envelope_query<'a>(input: &RequestInput<'a>) -> Option<EnvelopeQuery<'a>> {
     // An empty workspace scopes the request to the harness and Guard home,
     // which the daemon fills in.
-    if !cfg!(unix) || input.workspace.is_empty() {
+    if input.workspace.is_empty() {
         return None;
     }
     let text = |name: &str| {
@@ -149,12 +151,8 @@ pub(super) fn envelope_query<'a>(input: &RequestInput<'a>) -> Option<EnvelopeQue
             .map(String::as_str)
             .filter(|value| !value.is_empty())
     };
-    // `os.path.expanduser("~")`; without `HOME` it reads the password
-    // database, which the published environment cannot answer.
-    let home = input.environment.get("HOME")?;
-    let trimmed = home.trim_end_matches('/');
-    let tilde_home = if trimmed.is_empty() { "/" } else { trimmed };
-    let resolved = (!tilde_home.starts_with('~')).then(|| tilde_home.to_owned());
+    let tilde_home = expanded_home(input.environment)?;
+    let resolved = (!tilde_home.starts_with('~')).then_some(tilde_home);
     Some(EnvelopeQuery {
         workspace: input.workspace,
         home_dir: input.home_dir,
@@ -166,6 +164,46 @@ pub(super) fn envelope_query<'a>(input: &RequestInput<'a>) -> Option<EnvelopeQue
             cwd: input.host_cwd.map(str::to_owned),
         },
     })
+}
+
+/// `os.path.expanduser("~")` in the daemon's published environment. Without
+/// `HOME` it reads the password database, which that environment cannot
+/// answer.
+#[cfg(unix)]
+fn expanded_home(environment: &BTreeMap<String, String>) -> Option<String> {
+    let trimmed = environment.get("HOME")?.trim_end_matches('/');
+    Some(if trimmed.is_empty() { "/" } else { trimmed }.to_owned())
+}
+
+/// `ntpath.expanduser("~")`: `USERPROFILE` as it stands, else
+/// `ntpath.join(HOMEDRIVE, HOMEPATH)`. `os.environ` spells Windows names in
+/// upper case, as published.
+#[cfg(windows)]
+fn expanded_home(environment: &BTreeMap<String, String>) -> Option<String> {
+    if let Some(profile) = environment.get("USERPROFILE") {
+        return Some(profile.clone());
+    }
+    let drive = environment.get("HOMEDRIVE").map_or("", String::as_str);
+    join_home_drive(drive, environment.get("HOMEPATH")?)
+}
+
+/// `ntpath.join(drive, path)` where it is plain concatenation: an empty or
+/// letter drive, and a path that names no drive and does not start a UNC
+/// share. Other shapes go through `splitroot`, so the daemon joins them.
+#[cfg(any(windows, test))]
+fn join_home_drive(drive: &str, path: &str) -> Option<String> {
+    let letter_drive = matches!(drive.as_bytes(), [letter, b':'] if letter.is_ascii_alphabetic());
+    let separators = path
+        .bytes()
+        .take_while(|byte| matches!(byte, b'\\' | b'/'))
+        .count();
+    ((drive.is_empty() || letter_drive) && !path.contains(':') && separators < 2)
+        .then(|| format!("{drive}{path}"))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn expanded_home(_environment: &BTreeMap<String, String>) -> Option<String> {
+    None
 }
 
 /// `native_action_envelope`, run in process.
@@ -260,6 +298,11 @@ pub(super) fn finish(
         Some(_) => return None,
     };
     let mut envelope = review_envelope(envelope)?;
+    if matches!(envelope.get("command_category"), None | Some(Value::Null)) {
+        if let Some(category) = result_command_category(result) {
+            envelope.insert("command_category".to_owned(), Value::String(category));
+        }
+    }
     if let Some(receipt) = receipt
         .and_then(Value::as_object)
         .filter(|receipt| receipt.contains_key("origin_authentication"))
@@ -360,6 +403,55 @@ fn review_envelope(envelope: Value) -> Option<Map<String, Value>> {
     Some(envelope)
 }
 
+fn result_command_category(result: &Object) -> Option<String> {
+    let evidence = result.get("command_extensions")?.as_object()?;
+    ["observations", "permission_observations"]
+        .into_iter()
+        .filter_map(|key| Some((key, evidence.get(key)?.as_array()?)))
+        .flat_map(|(key, items)| items.iter().map(move |item| (key, item)))
+        .filter_map(|(key, item)| {
+            let obj = item.as_object()?;
+            let empty_segments = key == "observations"
+                && obj
+                    .get("effective_segment_indexes")
+                    .and_then(Value::as_array)
+                    .is_some_and(Vec::is_empty);
+            (!empty_segments)
+                .then(|| obj.get("extension_id")?.as_str())
+                .flatten()
+                .filter(|id| id.starts_with("command."))
+                .map(str::to_owned)
+        })
+        .next()
+}
+
+fn only_rule_uncertainties(evidence: &Object, count: u64) -> bool {
+    let permission_uncertain = evidence
+        .get("permission_observations")
+        .and_then(Value::as_array)
+        .is_some_and(|items| {
+            items.iter().any(|item| {
+                item.as_object()
+                    .and_then(|obj| obj.get("uncertainty_reasons"))
+                    .is_some_and(truthy)
+            })
+        });
+    count > 0
+        && !permission_uncertain
+        && evidence
+            .get("observations")
+            .and_then(Value::as_array)
+            .is_some_and(|items| {
+                let mut matched = 0u64;
+                for obj in items.iter().filter_map(Value::as_object) {
+                    if obj.get("uncertainty_reasons").is_some_and(truthy) {
+                        matched += 1;
+                    }
+                }
+                matched == count
+            })
+}
+
 /// `native_review_policy_binding` for the edge's own receipt, which matches
 /// the edge result by construction: a command-extension review needs the
 /// typed binding facts, or the daemon creates no approval.
@@ -408,7 +500,17 @@ fn launch_target(
 /// definite extension review of a command-only shell call. The resident does
 /// not run that re-review, so these defer.
 pub(super) fn allow_hint_candidate(payload: &Map<String, Value>, result: &Object) -> Option<bool> {
-    if result.get("minimum_action").and_then(Value::as_str) != Some("review") {
+    if !matches!(
+        result.get("minimum_action").and_then(Value::as_str),
+        Some("review" | "require-reapproval")
+    ) {
+        return Some(false);
+    }
+    // The hint promises an extension Allow settles the pause, which is only
+    // ever true when the pause is the extension review itself. A fixed
+    // PreTool floor (sensitive access, Guard self-protection, ...) carries
+    // its own reason and reviews whatever the extensions say.
+    if result.get("reason_code").and_then(Value::as_str) != Some("native_command_review_required") {
         return Some(false);
     }
     let Some(evidence) = result.get("command_extensions").and_then(Value::as_object) else {
@@ -426,7 +528,12 @@ pub(super) fn allow_hint_candidate(payload: &Map<String, Value>, result: &Object
         Some(Value::Number(count)) => count.as_f64() == Some(0.0),
         _ => false,
     };
-    if !certain
+    let settleable_rule_uncertainty = !certain
+        && binding
+            .get("uncertainty_count")
+            .and_then(Value::as_u64)
+            .is_some_and(|count| only_rule_uncertainties(evidence, count));
+    if !(certain || settleable_rule_uncertainty)
         || !binding
             .get("observations_digest")
             .is_some_and(Value::is_string)

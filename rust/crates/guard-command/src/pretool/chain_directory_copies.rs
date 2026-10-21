@@ -20,14 +20,83 @@ use crate::{CanonicalCommandV1, CommandSegmentV1};
 use std::path::{Path, PathBuf};
 
 /// Two or more segments, at least one `mkdir`, and every other segment a
-/// plain chain peer.
+/// plain chain peer. Git may share a chain without a copy:
+/// `git fetch origin main && mkdir -p ~/notes`. Each Git segment still needs
+/// its own proof, and `mkdir` cannot create the hidden `.git` metadata a Git
+/// command reads. The `mkdir` targets are screened against the files on disk
+/// before the chain runs, so only Git commands that never write the work tree
+/// may join: a `git pull`, `git checkout` or `git worktree add` could check
+/// out a tracked link such as `notes -> ~/.ssh` that a later `mkdir -p
+/// notes/keys` would follow. Copies keep the plain peers.
 pub(in crate::pretool) fn mkdir_chain(model: &CanonicalCommandV1) -> bool {
-    model.segments.len() > 1
-        && super::plain_chain(model, &["mkdir"])
-        && model
+    let named = |name: &str| {
+        model
             .segments
             .iter()
-            .any(|segment| segment.executable.as_deref() == Some("mkdir"))
+            .any(|segment| segment.executable.as_deref() == Some(name))
+    };
+    model.segments.len() > 1
+        && (super::plain_chain(model, &["mkdir"])
+            || (!named("cp")
+                && super::plain_chain(model, &["mkdir", "git"])
+                && model.segments.iter().all(leaves_work_tree)))
+        && named("mkdir")
+}
+
+/// Git subcommands that read the repository or update only refs and
+/// metadata, never files in the work tree.
+const WORK_TREE_READERS: &[&str] = &[
+    "blame",
+    "branch",
+    "cat-file",
+    "describe",
+    "diff",
+    "fetch",
+    "for-each-ref",
+    "grep",
+    "log",
+    "ls-files",
+    "ls-remote",
+    "ls-tree",
+    "merge-base",
+    "rev-list",
+    "rev-parse",
+    "shortlog",
+    "show",
+    "show-ref",
+    "status",
+];
+
+/// Git global options that take the next token as their value.
+const GIT_VALUE_OPTIONS: &[&str] = &[
+    "-C",
+    "-c",
+    "--git-dir",
+    "--work-tree",
+    "--namespace",
+    "--config-env",
+];
+
+/// A non-Git segment, or a Git segment whose subcommand cannot write the
+/// work tree.
+fn leaves_work_tree(segment: &CommandSegmentV1) -> bool {
+    segment.executable.as_deref() != Some("git")
+        || git_subcommand(segment).is_some_and(|name| WORK_TREE_READERS.contains(&name))
+}
+
+/// The subcommand of a Git segment, after any global options and their values.
+pub(super) fn git_subcommand(segment: &CommandSegmentV1) -> Option<&str> {
+    let mut index = 0;
+    while let Some(argument) = segment.arguments.get(index) {
+        if GIT_VALUE_OPTIONS.contains(&argument.as_str()) {
+            index += 2;
+        } else if argument.starts_with('-') {
+            index += 1;
+        } else {
+            return Some(argument.as_str());
+        }
+    }
+    None
 }
 
 /// A `cp` segment in a [`mkdir_chain`] whose destination no `mkdir` in the

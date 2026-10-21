@@ -1,4 +1,5 @@
 use super::*;
+use crate::mcp_tool_call_identity_build::ERR_PROVIDER_HASH;
 use serde_json::json;
 
 const VECTORS: &str =
@@ -126,4 +127,32 @@ fn artifact_too_large_for_one_response_is_a_typed_error() {
         "native_mcp_tool_call_identity_response_too_large"
     );
     assert!(reply["payload"].is_null());
+}
+
+#[test]
+fn only_a_wrapper_that_can_carry_a_provider_action_binds_the_provider_hash() {
+    let doc = vectors();
+    let batch = parse(&doc["vectors"]["composio_provider_hash"]["request"]);
+    let build = batch.build.as_ref().expect("build");
+    let (artifact, _) = build_artifact(build).expect("builds");
+    let hash = artifact
+        .metadata
+        .get("mcp_provider_catalog_hash")
+        .and_then(Value::as_str);
+    assert_eq!(hash, build.provider_catalog_hash.as_deref());
+
+    // Same hash, a discovery wrapper: the routing contract says it cannot
+    // carry a provider action, so no provider authority binds into it.
+    let mut discovery = build.clone();
+    discovery.tool_name = "mcp__codex_apps__composio__composio_search_tools".to_owned();
+    let (artifact, _) = build_artifact(&discovery).expect("builds");
+    assert!(!artifact.metadata.contains_key("mcp_provider_catalog_hash"));
+
+    // A malformed hash is refused wherever it came from, including the
+    // wrapper whose artifact would not have bound it.
+    let mut malformed = build.clone();
+    malformed.provider_catalog_hash = Some("nope".to_owned());
+    assert_eq!(build_artifact(&malformed), Err(ERR_PROVIDER_HASH));
+    malformed.tool_name = "mcp__codex_apps__composio__composio_search_tools".to_owned();
+    assert_eq!(build_artifact(&malformed), Err(ERR_PROVIDER_HASH));
 }

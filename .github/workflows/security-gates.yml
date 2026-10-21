@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
           enable-cache: true
@@ -53,7 +53,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
           enable-cache: true
@@ -158,6 +158,23 @@ jobs:
             echo "head_sha=$EVENT_HEAD_SHA" >> "$GITHUB_OUTPUT"
           else
             echo "mode=dir" >> "$GITHUB_OUTPUT"
+          fi
+      # The denylist lives only in the runner environment or a repository secret, never in
+      # the tree; the check skips when neither is set and never prints a matched token. It
+      # scans the same commit range as Gitleaks, so pull-request, merge-group and push runs
+      # all check their commit messages as well as the tree.
+      - name: Private token check
+        env:
+          GUARD_PRIVATE_TOKEN_DENYLIST_SECRET: ${{ secrets.GUARD_PRIVATE_TOKEN_DENYLIST }}
+          SCOPE_MODE: ${{ steps.gitleaks-scope.outputs.mode }}
+          BASE_SHA: ${{ steps.gitleaks-scope.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.gitleaks-scope.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          if [ "$SCOPE_MODE" = "git" ]; then
+            python3 scripts/ci/check_private_tokens.py --range "$BASE_SHA..$HEAD_SHA"
+          else
+            python3 scripts/ci/check_private_tokens.py
           fi
       - name: Prepare isolated Gitleaks commit range
         id: gitleaks-range

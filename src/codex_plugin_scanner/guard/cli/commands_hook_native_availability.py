@@ -88,24 +88,17 @@ def _native_unavailable_exit_code(
 def _emit_native_unavailable(
     args: argparse.Namespace,
     *,
-    payload: Mapping[str, object],
     workspace: Path | None,
     context: HarnessContext,
     event_name: str,
     reason_code: str,
     worker: HookWorker,
-    recording_only: bool = False,
 ) -> int:
     response = availability_harness_response(
-        dict(payload),
         harness=args.harness,
         event_name=event_name,
         reason_code=reason_code,
         reason="HOL Guard could not complete the native hook decision safely.",
-        workspace=workspace,
-        home_dir=context.home_dir,
-        guard_home=context.guard_home,
-        recording_only=recording_only,
     )
     # The native edge has already returned before this projection.  Keep the
     # native availability response and overlay only the managed model-visible

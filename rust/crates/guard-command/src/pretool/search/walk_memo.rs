@@ -8,7 +8,7 @@
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 
-type WalkKey = (PathBuf, Vec<String>, Vec<String>, bool);
+type WalkKey = (PathBuf, Vec<String>, Vec<String>, bool, bool, bool);
 type Memo = Option<Vec<(WalkKey, bool)>>;
 
 thread_local! {
@@ -33,6 +33,8 @@ pub(super) fn memoized(
     excluded_files: &[&str],
     excluded_directories: &[&str],
     git_metadata: bool,
+    follow_links: bool,
+    skip_hidden: bool,
     walk: impl FnOnce() -> bool,
 ) -> bool {
     let key: WalkKey = (
@@ -46,6 +48,8 @@ pub(super) fn memoized(
             .map(|name| (*name).to_owned())
             .collect(),
         git_metadata,
+        follow_links,
+        skip_hidden,
     );
     let cached = MEMO.with(|memo| {
         memo.borrow().as_ref().map(|entries| {
@@ -84,14 +88,66 @@ mod tests {
             true
         };
         with_walk_memo(|| {
-            assert!(memoized(Path::new("/a"), &[], &[], true, walk));
-            assert!(memoized(Path::new("/a"), &[], &[], true, walk));
-            assert!(memoized(Path::new("/a"), &["x"], &[], true, walk));
-            assert!(memoized(Path::new("/a"), &[], &[], false, walk));
+            assert!(memoized(
+                Path::new("/a"),
+                &[],
+                &[],
+                true,
+                false,
+                false,
+                walk
+            ));
+            assert!(memoized(
+                Path::new("/a"),
+                &[],
+                &[],
+                true,
+                false,
+                false,
+                walk
+            ));
+            assert!(memoized(
+                Path::new("/a"),
+                &["x"],
+                &[],
+                true,
+                false,
+                false,
+                walk
+            ));
+            assert!(memoized(
+                Path::new("/a"),
+                &[],
+                &[],
+                false,
+                false,
+                false,
+                walk
+            ));
+            assert!(memoized(Path::new("/a"), &[], &[], true, true, false, walk));
+            assert!(memoized(Path::new("/a"), &[], &[], true, false, true, walk));
         });
-        assert_eq!(walks.get(), 3);
-        with_walk_memo(|| assert!(memoized(Path::new("/a"), &[], &[], true, walk)));
-        assert!(memoized(Path::new("/a"), &[], &[], true, walk));
         assert_eq!(walks.get(), 5);
+        with_walk_memo(|| {
+            assert!(memoized(
+                Path::new("/a"),
+                &[],
+                &[],
+                true,
+                false,
+                false,
+                walk
+            ))
+        });
+        assert!(memoized(
+            Path::new("/a"),
+            &[],
+            &[],
+            true,
+            false,
+            false,
+            walk
+        ));
+        assert_eq!(walks.get(), 7);
     }
 }

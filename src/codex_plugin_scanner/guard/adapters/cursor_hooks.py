@@ -11,6 +11,18 @@ from typing import TYPE_CHECKING
 
 from ..frozen_runtime_commands import frozen_daemon_recovery_command
 from ..stable_guard_cli import uses_top_level_hook_command as _uses_top_level_hook_command
+from ._modules.cursor.cursor_hook_entries import _remove_managed_hook_entries, _render_without_managed_hook_entries
+from ._modules.cursor.cursor_hook_events import unsupported_cursor_hook_events
+from ._modules.cursor.cursor_hook_guard_cli import HOOK_SCRIPT_TEMPLATE_RESOLVER
+from ._modules.cursor.cursor_hook_payload import (
+    _validated_hol_guard_src_path,
+    cursor_hook_would_prompt_user,
+    prepare_cursor_hook_payload,
+)
+from ._modules.cursor.cursor_hook_script_template_head import HOOK_SCRIPT_TEMPLATE_HEAD
+from ._modules.cursor.cursor_hook_script_template_native_reply import HOOK_SCRIPT_TEMPLATE_NATIVE_REPLY
+from ._modules.cursor.cursor_hook_script_template_reason import HOOK_SCRIPT_TEMPLATE_REASON
+from ._modules.cursor.cursor_hook_script_template_tail import HOOK_SCRIPT_TEMPLATE_TAIL
 from .adapter_safe_output import write_text_at_authorized_path
 from .base import HarnessContext, PreparedHarnessInstall, _ensure_path_within_root
 from .cursor_hook_config import (
@@ -31,20 +43,6 @@ from .cursor_hook_config import (
     _retire_managed_hook_events,
     _strip_managed_hook_entries,
 )
-from .cursor_hook_entries import _remove_managed_hook_entries, _render_without_managed_hook_entries
-from .cursor_hook_events import unsupported_cursor_hook_events
-from .cursor_hook_guard_cli import HOOK_SCRIPT_TEMPLATE_RESOLVER
-from .cursor_hook_payload import (
-    _validated_hol_guard_src_path,
-    cursor_hook_requires_approval_center_queue,
-    cursor_hook_response_from_guard,
-    cursor_hook_should_block,
-    cursor_hook_would_prompt_user,
-    prepare_cursor_hook_payload,
-)
-from .cursor_hook_script_template_head import HOOK_SCRIPT_TEMPLATE_HEAD
-from .cursor_hook_script_template_reason import HOOK_SCRIPT_TEMPLATE_REASON
-from .cursor_hook_script_template_tail import HOOK_SCRIPT_TEMPLATE_TAIL
 from .cursor_native_approval import cursor_hook_attestation_secret_path, ensure_cursor_hook_attestation_secret
 from .cursor_path_cleanup import prune_empty_project_cursor_dir
 from .guard_cli_attestation import resolve_attested_guard_cli
@@ -55,7 +53,11 @@ if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
 
 _HOOK_SCRIPT_TEMPLATE = (
-    HOOK_SCRIPT_TEMPLATE_HEAD + HOOK_SCRIPT_TEMPLATE_REASON + HOOK_SCRIPT_TEMPLATE_RESOLVER + HOOK_SCRIPT_TEMPLATE_TAIL
+    HOOK_SCRIPT_TEMPLATE_HEAD
+    + HOOK_SCRIPT_TEMPLATE_REASON
+    + HOOK_SCRIPT_TEMPLATE_NATIVE_REPLY
+    + HOOK_SCRIPT_TEMPLATE_RESOLVER
+    + HOOK_SCRIPT_TEMPLATE_TAIL
 )
 _INHERIT_ENV_KEYS = (
     "PATH",
@@ -622,23 +624,12 @@ def cursor_native_hook_state(context: HarnessContext) -> dict[str, object]:
     }
 
 
-def _hook_script_mode_is_executable(mode: int) -> bool:
-    """Use POSIX execute bits only on platforms where they govern launch."""
-
-    # Keep this wrapper public so cursor_hooks.os.name monkeypatches still work.
-    return os.name == "nt" or bool(mode & stat.S_IXUSR)
-
-
 __all__ = [
     "HOOK_SCRIPT_NAME",
-    "_hook_script_mode_is_executable",
     "_resolve_guard_cli_command",
     "_strip_managed_hook_entries",
     "_validated_hol_guard_src_path",
-    "cursor_hook_requires_approval_center_queue",
-    "cursor_hook_response_from_guard",
     "cursor_hook_script_source",
-    "cursor_hook_should_block",
     "cursor_hook_would_prompt_user",
     "cursor_hooks_path",
     "cursor_native_hook_state",

@@ -52,6 +52,46 @@ fn only_plain_github_https_urls_are_safe() {
 }
 
 #[test]
+fn only_plain_github_ssh_urls_are_safe() {
+    for url in [
+        "git@github.com:example-org/app-portal.git",
+        "git@github.com:example-org/app-portal",
+        "ssh://git@github.com/example-org/app.portal.git",
+    ] {
+        assert!(safe_github_ssh_remote_url(url), "{url}");
+        assert!(safe_github_remote_url(url), "{url}");
+        assert!(!safe_github_https_remote_url(url), "{url}");
+    }
+    for url in [
+        "https://github.com/example-org/app-portal.git",
+        "git@github.com.evil.example:example-org/app-portal.git",
+        "git@evil.example:example-org/app-portal.git",
+        "git@github.com:example-org",
+        "git@github.com:example-org/app-portal/extra",
+        "git@github.com:/example-org/app-portal.git",
+        "git@github.com:example-org/../app-portal.git",
+        "git@github.com:example-org/-oProxyCommand=id",
+        "git@github.com:example-org/app portal",
+        "git@github.com:example-org/app'portal",
+        "git@github.com:example-org/app-portal.git?x=1",
+        "ssh://git@github.com:2222/example-org/app-portal.git",
+        "ssh://evil@github.com/example-org/app-portal.git",
+        "ssh://git@github.com/example-org",
+        "ssh://github.com/example-org/app-portal.git",
+        "user@github.com:example-org/app-portal.git",
+        "-oProxyCommand=id",
+        "ext::sh -c id",
+        "",
+    ] {
+        assert!(!safe_github_ssh_remote_url(url), "{url}");
+        assert!(
+            !safe_github_remote_url(url) || safe_github_https_remote_url(url),
+            "{url}"
+        );
+    }
+}
+
+#[test]
 fn fetch_routes_reject_programs_rewrites_and_refspecs() {
     let base = [
         (
@@ -61,16 +101,38 @@ fn fetch_routes_reject_programs_rewrites_and_refspecs() {
         ("remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"),
     ];
     assert!(!fetch_config_routes_execution(&config(&base)));
-    assert!(!fetch_config_routes_execution(&config(&[
-        base[0],
+    // Rules that only exchange one GitHub spelling for another.
+    for rewrite in [
         ("url.https://github.com/.insteadof", "git@github.com:"),
-    ])));
+        ("url.https://github.com/.insteadof", "ssh://git@github.com/"),
+        ("url.git@github.com:.insteadof", "https://github.com/"),
+        ("url.ssh://git@github.com/.insteadof", "https://github.com/"),
+    ] {
+        assert!(
+            !fetch_config_routes_execution(&config(&[base[0], rewrite])),
+            "{rewrite:?}"
+        );
+    }
+    // Pruning removes only the remote-tracking refs the plain refspec names.
+    for prune in [("fetch.prune", "true"), ("remote.origin.prune", "true")] {
+        assert!(
+            !fetch_config_routes_execution(&config(&[base[0], prune])),
+            "{prune:?}"
+        );
+    }
     for extra in [
         ("remote.origin.uploadpack", "sh -c id"),
         ("core.sshcommand", "ssh -o ProxyCommand=id"),
         ("core.askpass", "/tmp/askpass"),
-        ("url.git@github.com:.insteadof", "https://github.com/"),
+        ("url.git@github.com:.insteadof", "https://evil.example/"),
+        ("url.git@github.com:.insteadof", "git@github.com:"),
+        ("url.git@github.com:.insteadof", "http://github.com/"),
+        ("url.ssh://git@github.com/.insteadof", "git@github.com:"),
+        ("url.https://github.com/.insteadof", "git@evil.example:"),
         ("url.ssh://evil.example/.insteadof", "https://github.com/"),
+        ("url.git@evil.example:.insteadof", "https://github.com/"),
+        ("fetch.prunetags", "true"),
+        ("remote.origin.prunetags", "true"),
         ("url.https://github.com/.insteadof", "https://evil.example/"),
         ("remote.origin.fetch", "+refs/*:refs/*"),
         ("remote.origin.fetch", "refs/heads/main:refs/heads/main"),
@@ -103,10 +165,23 @@ fn transport_weakening_settings_are_detected() {
         "credential.helper",
         "!sh -c id"
     )])));
-    assert!(repository_config_routes_transport(&config(&[(
-        "core.hookspath",
-        "/tmp/hooks"
-    )])));
+    for hooks in ["/tmp/hooks", "~/hooks", "../hooks", ".husky/../../x", ""] {
+        assert!(
+            repository_config_routes_transport(&config(&[("core.hookspath", hooks)])),
+            "{hooks}"
+        );
+    }
+    // A hooks directory below the repository is a hook manager's.
+    for hooks in [".husky/_", ".githooks", "tools/hooks"] {
+        assert!(
+            !repository_config_routes_transport(&config(&[("core.hookspath", hooks)])),
+            "{hooks}"
+        );
+    }
+    assert!(repository_config_routes_transport(&config(&[
+        ("core.hookspath", ".husky/_"),
+        ("core.hookspath", "/tmp/hooks"),
+    ])));
 }
 
 #[test]

@@ -74,7 +74,7 @@ on the same major version.
 ## Vendor mapping
 
 Guard ships sample mappings for common SIEM sinks in
-`hol-points-portal/src/lib/guard/siem/guard-siem-vendor-formats.ts`. These are
+`cloud-portal/src/lib/guard/siem/guard-siem-vendor-formats.ts`. These are
 schema examples for webhook forwarding; native Splunk, Elastic, Sentinel, and
 Datadog integrations remain **Planned** in the integration catalog until each
 provider has setup, delivery, retry, and test coverage.

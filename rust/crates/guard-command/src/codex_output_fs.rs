@@ -16,7 +16,7 @@ fn as_fs(path: &PyPath) -> String {
     path.to_string()
 }
 
-fn ignorable(error: &std::io::Error) -> bool {
+pub(crate) fn ignorable(error: &std::io::Error) -> bool {
     matches!(error.kind(), ErrorKind::NotFound | ErrorKind::NotADirectory)
         || error.raw_os_error() == Some(40)
         || error.raw_os_error() == Some(62)

@@ -22,7 +22,10 @@ const UNMODELED_GITHUB: &[&str] = &[
     "for n in 1*; do gh pr comment $n --body \"Fixed the node script's env handling.\"; done",
 ];
 
-fn controls(controls: serde_json::Value, lockdown: bool) -> CompiledNativeCommandControls {
+pub(super) fn controls(
+    controls: serde_json::Value,
+    lockdown: bool,
+) -> CompiledNativeCommandControls {
     let program = packaged_command_program().unwrap();
     let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
         "schema": "guard.native-command-control-binding.v1",
@@ -39,7 +42,7 @@ fn controls(controls: serde_json::Value, lockdown: bool) -> CompiledNativeComman
     CompiledNativeCommandControls::new(&binding).unwrap()
 }
 
-fn github(state: &str, disabled: Option<&str>) -> serde_json::Value {
+pub(super) fn github(state: &str, disabled: Option<&str>) -> serde_json::Value {
     GITHUB_PERMISSIONS
         .iter()
         .map(|id| {
@@ -53,7 +56,10 @@ fn github(state: &str, disabled: Option<&str>) -> serde_json::Value {
         .collect()
 }
 
-fn decision(controls: &CompiledNativeCommandControls, command: &str) -> (String, String) {
+pub(super) fn decision(
+    controls: &CompiledNativeCommandControls,
+    command: &str,
+) -> (String, String) {
     let result = crate::pretool::evaluate_pre_tool_envelope_with_extensions(
         "zcode",
         "PreToolUse",
@@ -87,6 +93,8 @@ fn unmodeled_commands_with_literal_redirects_are_reviewable() {
     for command in [
         "git checkout main 2>/dev/null && gh pr view 12",
         "ln -s a b 2>/dev/null; gh pr view 12 >/dev/null",
+        // `&>` inside an argument is not a separator glued to the interpreter.
+        "python3 app.py \"a&>b\"",
     ] {
         assert_ne!(
             decision(&controls, command).1,
@@ -135,8 +143,15 @@ fn unmodeled_commands_take_the_strongest_floor_of_their_possible_owners() {
             "native_command_extension_uncertain".to_owned()
         )
     );
-    // An interpreter could reach any extension, so all of them are consulted.
-    assert_eq!(decision(&controls, "sh -c 'gh pr view 12'").0, "block");
+    // An interpreter reading its script from somewhere else could reach any
+    // extension, so all of them are consulted.
+    assert_eq!(
+        decision(&controls, "sh <<'EOF'\ngh pr view 12\nEOF").0,
+        "block"
+    );
+    // A shell carrying its whole script runs exactly that script, so the
+    // command reaches the floor those same words reach on their own.
+    assert_eq!(decision(&controls, "sh -c 'gh pr view 12'").0, "allow");
     assert_eq!(
         decision(&controls, "for f in *; do echo $f; done").0,
         "review"
@@ -185,7 +200,7 @@ fn a_disabled_extension_for_another_program_does_not_block_unmodeled_commands() 
     // extension is disabled, and the disabled program itself is still named.
     // A docker listing the native proof admits is blocked as well.
     for command in [
-        "sh -c 'gh pr view 12'",
+        "sh <<'EOF'\ngh pr view 12\nEOF",
         "for x in a; do docker ps; done",
         "docker ps",
         "docker ps --format '{{.Names}}' | head -5",
@@ -253,9 +268,7 @@ fn unmodeled_commands_that_move_data_or_hide_programs_keep_the_evaluation_failur
         "gh pr comment 12 --body-file - <<'EOF' > out.txt\nFixed.\nEOF",
         "gh pr comment 12 --body-file - <<'EOF'\nFixed.\nEOF\ngh pr view 12",
         "sh <<'EOF'\ngh pr view 12\nEOF",
-        "sh -c 'gh pr view 12'",
         "command sh -c 'gh pr view 12'",
-        "env CI=1 sh -c 'gh pr view 12'",
         "env GH_HOST=example.com gh pr view 12",
         "fd -x gh pr view {}",
         "for x in a; do PATH=/tmp:$PATH gh pr view 12; done",
@@ -269,6 +282,13 @@ fn unmodeled_commands_that_move_data_or_hide_programs_keep_the_evaluation_failur
             "{command}"
         );
     }
+    // An inert assignment in front of a shell that carries its whole script
+    // adds nothing to the script: both spellings name the same program, so
+    // the command reaches the floor that program reaches on its own.
+    assert_eq!(
+        decision(&controls, "env CI=1 sh -c 'gh pr view 12'"),
+        decision(&controls, "gh pr view 12"),
+    );
 }
 
 #[test]
@@ -389,5 +409,261 @@ fn prefixed_git_commands_keep_the_git_permission_decision() {
         "command command git push origin main",
     ] {
         assert_eq!(decision(&controls, command).0, "block", "{command}");
+    }
+}
+
+fn reason_text(controls: &CompiledNativeCommandControls, command: &str) -> String {
+    crate::pretool::evaluate_pre_tool_envelope_with_extensions(
+        "zcode",
+        "PreToolUse",
+        &serde_json::json!({"tool_name": "Bash", "tool_input": {"command": command}}),
+        Some(controls),
+        None,
+    )
+    .reason
+}
+
+const FAILED: &str = "native_command_extension_evaluation_failed";
+
+#[test]
+fn heredoc_python_edits_and_test_runs_are_reviewed_not_blocked() {
+    let controls = controls(serde_json::json!([]), false);
+    let command = "python3 - <<'EOF'\np='src/cli.js'\ns=open(p).read()\ns=s.replace(\"a\",\"b\")\nopen(p,'w').write(s)\nEOF\ncat > test/todo.test.js <<'EOF'\nimport { test } from 'node:test';\nEOF\nnpm test 2>&1 | tail -15";
+    assert_ne!(decision(&controls, command).1, FAILED);
+    // A body that can start a program keeps the failure.
+    for body in [
+        "import subprocess\nsubprocess.run(['gh','pr','list'])",
+        "import os\nos.system('gh pr list')",
+        "getattr(__import__('os'), 'sys' + 'tem')('x')",
+        "import operator, os\noperator.attrgetter('sys'+'tem')(os)('g'+'h pr merge 1')",
+        "x=1; import pickle\npickle.loads(b'x')",
+        "exec('print(1)')",
+    ] {
+        let command = format!("python3 - <<'EOF'\n{body}\nEOF\nnpm test");
+        assert_eq!(decision(&controls, &command).1, FAILED, "{command}");
+    }
+}
+
+#[test]
+fn a_heredoc_python_edit_that_writes_import_meta_is_reviewed() {
+    let controls = controls(serde_json::json!([]), false);
+    let edit = "s=s.replace(\"if (main) {\",\"if (process.argv[1] && import.meta.url) {\")";
+    let command = format!("python3 - <<'EOF'\ns=open('a').read()\n{edit}\nEOF\nnpm test");
+    assert_ne!(decision(&controls, &command).1, FAILED);
+    // A real import beside it, or a program that starts one, still fails.
+    for body in [
+        format!("{edit}; import os"),
+        "import subprocess\nsubprocess.run(['gh','pr','list'])".to_owned(),
+    ] {
+        let command = format!("python3 - <<'EOF'\n{body}\nEOF\nnode --test test/ 2>&1 | tail -10\nexport TODO_FILE=$(mktemp -d)/t.json; node src/cli.js list");
+        assert_eq!(decision(&controls, &command).1, FAILED, "{command}");
+    }
+}
+
+#[test]
+fn program_lookups_do_not_make_a_command_unmatchable() {
+    let controls = controls(serde_json::json!([]), false);
+    let command = "date -u +%Y-%m-%dT%H:%M:%SZ; echo \"rc=$?\"; echo \"HOME=$HOME\"; command -v doctl; ls -l \"$(command -v doctl)\"";
+    assert_ne!(decision(&controls, command).1, FAILED);
+    // `which` takes a list of names and runs none of them, with or without the
+    // options that only change how it prints the answer.
+    for command in [
+        "which doctl kubectl",
+        "which -a doctl",
+        "which --all doctl kubectl helm",
+        "which doctl kubectl 2>/dev/null",
+        "echo start; which doctl kubectl; echo done",
+    ] {
+        assert_ne!(decision(&controls, command).1, FAILED, "{command}");
+    }
+    // A word the lookup never proves is an operand leaves the whole line alone.
+    for command in [
+        "ls -l \"$(which --exec doctl)\"",
+        "ls -l \"$(which doctl; gh pr list)\"",
+    ] {
+        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+    }
+    // A lookup whose name is computed, or a substitution that runs a program,
+    // still could run anything.
+    for command in [
+        "ls -l \"$(command -v $tool)\"",
+        "ls -l \"$(command -v doctl; gh pr list)\"",
+        "echo $(gh pr list)",
+    ] {
+        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+    }
+}
+
+/// The shell glues a quoted part onto the word before it, so a lookup name
+/// that carries one is not a plain operand and the run has to stop in front of
+/// it. Consuming only its plain prefix would leave the quoted remainder beside
+/// the replacement and invent a command nothing in the line names.
+#[test]
+fn a_quoted_part_of_a_name_is_not_a_separate_operand() {
+    for (command, stripped) in [
+        ("which doctl foo'bar'", "true foo'bar'"),
+        ("which doctl \"kube ctl\"", "true \"kube ctl\""),
+        ("command -v gh'ub'", "command -v gh'ub'"),
+    ] {
+        assert_eq!(
+            super::shapes::without_lookups(command),
+            stripped,
+            "{command}"
+        );
+    }
+}
+
+/// A lookup that reports its answer through the exit status sends the printed
+/// path to a redirection, and the substitution still runs nothing but the
+/// lookup. Reading the close of the substitution as the first character after
+/// the name left `$(true &> /dev/null)` behind, whose bare `$` read as a
+/// computed program, so `if $(command -v tool &> /dev/null)` — the shape every
+/// generated virtualenv activation script carries — reached an evaluation
+/// failure and blocked outright, with no approval left to give it.
+#[test]
+fn redirections_do_not_hide_the_close_of_a_lookup() {
+    for (command, stripped) in [
+        // Discarded output leaves the substitution printing nothing, so the
+        // name is not a word the surrounding command received.
+        ("$(command -v cygpath &> /dev/null)", "true"),
+        ("$(command -v doctl >/dev/null 2>&1)", "true"),
+        ("$(which doctl kubectl 2>&1)", "doctl kubectl"),
+        // Only redirections read past the name; a second command does not.
+        ("$(command -v doctl && gh pr list)", "$(true && gh pr list)"),
+        // A target the shell would truncate is not one of them: reading past
+        // it would drop the write out of the text the rest of the scan reads.
+        (
+            "$(command -v doctl > .git/hooks/post-checkout)",
+            "$(true > .git/hooks/post-checkout)",
+        ),
+        (
+            "$(command -v doctl >> /home/u/.bashrc)",
+            "$(true >> /home/u/.bashrc)",
+        ),
+        ("$(command -v doctl < secrets.env)", "$(true < secrets.env)"),
+    ] {
+        assert_eq!(
+            super::shapes::without_lookups(command),
+            stripped,
+            "{command}"
+        );
+    }
+    let controls = controls(serde_json::json!([]), false);
+    assert_ne!(
+        decision(
+            &controls,
+            "if $(command -v doctl &> /dev/null); then doctl account get; fi"
+        )
+        .1,
+        FAILED
+    );
+    assert_eq!(
+        decision(
+            &controls,
+            "if $(command -v doctl && gh pr list); then echo ok; fi"
+        )
+        .1,
+        FAILED
+    );
+    // The write stays in the text the decision reads, so the command keeps
+    // the opaque substitution it had rather than reading as a bare lookup.
+    assert_eq!(
+        decision(
+            &controls,
+            "echo \"$(command -v doctl > .git/hooks/post-checkout)\""
+        )
+        .1,
+        FAILED
+    );
+}
+
+#[test]
+fn plain_awk_filters_are_not_interpreters() {
+    let controls = controls(serde_json::json!([]), false);
+    let command = "doctl registry repository list-manifests r | grep sha | awk '{print $1}' > /tmp/digests.txt";
+    assert_ne!(decision(&controls, command).1, FAILED);
+    for command in [
+        "doctl registry repository list-manifests r | awk '{system(\"rm x\")}' > /tmp/d.txt",
+        "doctl registry repository list-manifests r | awk '{print | \"sh\"}' > /tmp/d.txt",
+        "doctl registry repository list-manifests r | awk -f prog.awk > /tmp/d.txt",
+    ] {
+        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+    }
+}
+
+#[test]
+fn a_shell_variable_assignment_is_not_named_an_environment_prefix() {
+    let controls = controls(serde_json::json!([]), false);
+    let loop_command = "b=\"\"; n=0; for d in $(doctl registry repository list-manifests r); do b=\"$b $d\"; n=$((n+1)); done";
+    let reason = reason_text(&controls, loop_command);
+    assert!(!reason.contains("environment prefix"), "{reason}");
+    assert!(reason.contains("$(...)"), "{reason}");
+    // A setting that reaches a command's environment is still named.
+    let prefixed = "GH_HOST=$(cat host.txt) gh pr list";
+    assert!(
+        reason_text(&controls, prefixed).contains("GH_HOST"),
+        "{prefixed}"
+    );
+}
+
+#[test]
+fn a_looked_up_program_in_command_position_keeps_its_owner() {
+    let controls = controls(
+        github("enabled", Some("command.github.permission.merge-remote")),
+        false,
+    );
+    // The lookup names the program it will run, so its extension still owns it.
+    assert_eq!(
+        decision(&controls, "\"$(command -v gh)\" pr merge 12; echo done").0,
+        "block"
+    );
+    assert_eq!(
+        decision(&controls, "$(which python3) -c 'print(1)'; echo done").1,
+        FAILED
+    );
+}
+
+#[test]
+fn a_backtick_in_a_redirect_target_does_not_hide_the_interpreter() {
+    assert!(super::unread_file_interpreter("echo hi >`python3 evil.py`"));
+}
+
+#[test]
+fn a_redirect_before_an_awk_program_does_not_hide_it() {
+    let controls = controls(serde_json::json!([]), false);
+    let command =
+        "doctl registry repository list-manifests r | awk > /tmp/d.txt 'BEGIN { system(\"id\") }'";
+    assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+}
+
+#[test]
+fn a_substituted_setting_before_a_bare_env_is_named() {
+    let controls = controls(serde_json::json!([]), false);
+    let reason = reason_text(&controls, "SERVICE_TOKEN=$(echo x) env");
+    assert!(reason.contains("SERVICE_TOKEN"), "{reason}");
+}
+
+#[test]
+fn awk_ending_at_a_separator_with_a_redirect_does_not_swallow_the_next_command() {
+    let controls = controls(serde_json::json!([]), false);
+    for command in [
+        "doctl registry repository list-manifests r | awk '{print}' ;</dev/null sh evil.sh",
+        "doctl registry repository list-manifests r | awk '{print}' |>o bash x.sh",
+        "doctl registry repository list-manifests r | awk '{print}' ;>&/dev/null python3 evil.py",
+        "doctl registry repository list-manifests r | awk '{print}' ;>|log python3 evil.py",
+        "doctl registry repository list-manifests r | awk '{print}' ;< \"in put\" node evil.js",
+    ] {
+        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+    }
+}
+
+#[test]
+fn heredoc_python_with_a_coding_cookie_or_padded_terminator_keeps_the_failure() {
+    let controls = controls(serde_json::json!([]), false);
+    for command in [
+        "python3 - <<'EOF'\n# coding: utf-7\n+AF8AXw-x\nEOF\nnpm test",
+        "python3 - <<'EOF'\nprint(1)\n  EOF\nimport os\nEOF\nnpm test",
+    ] {
+        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
     }
 }

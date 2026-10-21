@@ -137,12 +137,15 @@ class _ControlHealthRoutes:
     def _containment_health_payload(self, *, force_refresh: bool = False) -> dict[str, object] | None:
         from ..runtime.containment_health import probe_containment_health
 
+        daemon_server = self._daemon_server()
+
         def probe() -> dict[str, object]:
             return probe_containment_health(
                 daemon_fingerprint=current_guard_daemon_runtime_fingerprint(),
+                guard_home=daemon_server.store.guard_home,
             ).to_dict()
 
-        return cached_containment_health(self._daemon_server(), force_refresh=force_refresh, probe=probe)
+        return cached_containment_health(daemon_server, force_refresh=force_refresh, probe=probe)
 
     def _coalesce_string(self, mapping: dict[str, object], *keys: str) -> str | None:
         for key in keys:

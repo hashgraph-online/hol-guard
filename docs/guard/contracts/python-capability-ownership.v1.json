@@ -13,11 +13,13 @@
  ],
  "scope_globs": [
   "src/codex_plugin_scanner/guard/adapters/*hook*.py",
+  "src/codex_plugin_scanner/guard/adapters/_modules/*/*hook*.py",
   "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
   "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
   "src/codex_plugin_scanner/guard/daemon/hook_*.py",
   "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
   "src/codex_plugin_scanner/guard/native_hook_edge.py",
+  "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py",
   "src/codex_plugin_scanner/guard/native_response_decoder.py",
   "src/codex_plugin_scanner/guard/native_route_receipt.py",
   "src/codex_plugin_scanner/guard/native_resident_client.py",
@@ -31,9 +33,9 @@
    "class": "required_control_plane",
    "patterns": [
     "src/codex_plugin_scanner/guard/adapters/*hook*.py",
+    "src/codex_plugin_scanner/guard/adapters/_modules/*/*hook*.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_github_workflow.py",
-    "src/codex_plugin_scanner/guard/cli/commands_hook_local_cli.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_native_*.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_decision_copy.py",
     "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
@@ -50,13 +52,15 @@
     "src/codex_plugin_scanner/guard/native_runtime_values.py",
     "src/codex_plugin_scanner/guard/native_runtime_admission.py",
     "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
+    "src/codex_plugin_scanner/guard/native_runtime_durable.py",
     "src/codex_plugin_scanner/guard/native_runtime_detectors.py",
+    "src/codex_plugin_scanner/guard/native_runtime_artifact_identity.py",
     "src/codex_plugin_scanner/guard/native_mode.py",
     "src/codex_plugin_scanner/guard/runtime/hook_review_types.py"
    ],
    "exclude_patterns": [
     "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
-    "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_writer.py",
+    "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py",
     "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py"
    ],
    "production_role": "authentication, transport, adapter projection, supervision, and non-authoritative evidence plumbing",
@@ -67,7 +71,7 @@
    "class": "required_control_plane",
    "patterns": [
     "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
-    "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_writer.py",
+    "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py",
     "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py"
    ],
    "production_role": "non-blocking receipts, metrics, and enrichment only; no decision authority",
@@ -76,13 +80,7 @@
  ],
  "parity_fixture": "tests/fixtures/native-hook-parity/cases.v1.json",
  "package_excluded_candidates": [],
- "deletion_candidates": [
-  "src/codex_plugin_scanner/guard/evaluation_codex_event_trace.py",
-  "src/codex_plugin_scanner/guard/policy_recipe.py",
-  "src/codex_plugin_scanner/guard/runtime/network_public_suffix.py",
-  "src/codex_plugin_scanner/guard/runtime/remote_approval_execution.py",
-  "src/codex_plugin_scanner/guard/runtime/resource_budget.py"
- ],
+ "deletion_candidates": [],
  "dependency_delta": {
   "removed_project_dependencies": [],
   "removed_entrypoints": [],
@@ -1121,12 +1119,575 @@
     "rust/crates/guard-command/src/native_command_catalog.rs",
     "rust/crates/guard-command/src/native_command_program_evaluation.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge_flow.py",
+   "module": "codex_plugin_scanner.guard.adapters.codex_daemon_hook_bridge_flow",
+   "source_sha256": "26f6d12bf74e285aa84d2ace291d6ef3f156c947521f34f213d6e9918352fb22",
+   "forbidden_symbols": [
+    "BridgeFailureCause",
+    "bridge_review_response",
+    "_daemon_response",
+    "_transient_overload",
+    "_retry_transient_overload",
+    "_trusted_launch_for_fallback",
+    "_daemon_start_succeeded",
+    "_fallback_response",
+    "_run_daemon_start",
+    "_authenticated_daemon_overload",
+    "_daemon_process_failed",
+    "_launcher_failure_reason",
+    "_LAUNCHER_INTEGRITY_REASONS",
+    "_DAEMON_START_TIMEOUT_SECONDS",
+    "_DAEMON_RPC_TIMEOUT_SECONDS",
+    "_DAEMON_PROMPT_RPC_TIMEOUT_SECONDS",
+    "_OVERLOAD_RESERVE_MS"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_transport.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_restart.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/adapters/codex_daemon_bridge_failure_reason.py",
+   "module": "codex_plugin_scanner.guard.adapters.codex_daemon_bridge_failure_reason",
+   "source_sha256": "df13b00ef675394e29cf7a835acfda2c0509df5e48cecc243b7d176186754269",
+   "forbidden_symbols": [
+    "daemon_failure_reason",
+    "AUTHENTICATION_FAILED_REASON",
+    "DAEMON_UNAVAILABLE_REASON",
+    "DAEMON_DEAD_REASON",
+    "OVERLOAD_REASON",
+    "UNANSWERED_DAEMON_CODES"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_transport.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_restart.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/adapters/codex_daemon_start_wait.py",
+   "module": "codex_plugin_scanner.guard.adapters.codex_daemon_start_wait",
+   "source_sha256": "76c04a90d449f2d12720a13909d6c90f2fc9afbf980b4a51edfa15aea7550b8c",
+   "forbidden_symbols": [
+    "await_started_daemon",
+    "_keep_waiting",
+    "FIRST_POLL_SECONDS",
+    "MAX_POLL_SECONDS",
+    "RETRYABLE_REASONS"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_transport.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_restart.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/npm_source_spec.py",
+   "module": "codex_plugin_scanner.guard.runtime.npm_source_spec",
+   "source_sha256": "288de3261a2d9a6cdb10abb40c3587f3e4a1f49a9293dde75fe5f492d16363de",
+   "forbidden_symbols": [
+    "NpmSourceSpec",
+    "parse_npm_source_spec",
+    "_url_source",
+    "_git_from_host_path",
+    "_strip_archive_suffix",
+    "_looks_like_archive_filename",
+    "_canonical_revision",
+    "_host_with_port",
+    "_non_git_source"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/npm_source_spec.rs",
+    "rust/crates/guard-command/src/package_intent_common.rs",
+    "rust/crates/guard-command/src/supply_chain_package_eval/package_resolution.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/github_pr_body_file.py",
+   "module": "codex_plugin_scanner.guard.runtime.github_pr_body_file",
+   "source_sha256": "5453086e51325808e512a050a4b7408b8a26f82e2a7e2b6c4fae80367a52ce7a",
+   "forbidden_symbols": [
+    "static_markdown_pr_edit_body_file_operand",
+    "github_pr_body_file_is_safe",
+    "_resolve_operand",
+    "_authored_location_root",
+    "_cascade_projects_authored_root",
+    "_omp_session_authored_root",
+    "_ancestor_chain_is_controlled",
+    "_private_directory_owned_by_current_user",
+    "_is_pr_body_markdown_name"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/sfrs_gh_body_file.rs",
+    "rust/crates/guard-command/src/sfrs_gh_body_file_check.rs",
+    "rust/crates/guard-command/src/sfrs_gh_static_body_safety.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_body_safety.py",
+   "module": "codex_plugin_scanner.guard.runtime.secret_file_request_services.github_pr_body_safety",
+   "source_sha256": "6284a54da84a7e4df7ba9539c214397a4d118ba9d19728a3f92d5f25a2d7c2b9",
+   "forbidden_symbols": [
+    "_gh_pr_create_uses_safe_static_body_file",
+    "_gh_pr_create_segment_with_bounded_output",
+    "_gh_pr_edit_uses_safe_static_body_file",
+    "_shell_segment_reads_sensitive_path",
+    "_find_segment_reads_sensitive_path",
+    "_find_exec_reads_file_content",
+    "_find_target_candidates",
+    "_find_target_candidate_is_sensitive",
+    "_shell_read_segment_can_emit_stdout",
+    "_search_args_use_quiet_mode",
+    "_text_contains_credential_exfiltration",
+    "_shell_heredoc_payloads",
+    "_path_text_looks_sensitive"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/sfrs_gh_body_safety.rs",
+    "rust/crates/guard-command/src/sfrs_gh_static_body_safety.rs",
+    "rust/crates/guard-command/src/sfrs_credential_exfil.rs",
+    "rust/crates/guard-command/src/sfrs_interpreter_heredoc.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/command_option_parsing.py",
+   "module": "codex_plugin_scanner.guard.runtime.command_option_parsing",
+   "source_sha256": "3ce77bdfa45cdd1296b2d85286daf964cbbe61cbee8a280e01cd584a307a3ccf",
+   "forbidden_symbols": [
+    "ArgumentSemantics",
+    "argument_semantics",
+    "matches_subcommands_conservatively",
+    "flags_present_in_all_option_parses",
+    "known_option_advance",
+    "long_flag_assignment_is_enabled",
+    "_option_result",
+    "_option_call"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/command_option_parsing.rs",
+    "rust/crates/guard-command/src/command_argument_semantics.rs",
+    "rust/crates/guard-command/src/shell_helpers.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/executable_flag_contract.py",
+   "module": "codex_plugin_scanner.guard.runtime.executable_flag_contract",
+   "source_sha256": "99934d90e91fc08970ba0d4215b6b0e2446debe2dded11698400de732d5c176d",
+   "forbidden_symbols": [
+    "_ExecutableContractBase"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/executable_flag_contract.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/workspace_path_guard.py",
+   "module": "codex_plugin_scanner.guard.runtime.workspace_path_guard",
+   "source_sha256": "56a69f517de93b42382d0af7183e6148f3950562add1b9761f9fa43fd3e295ac",
+   "forbidden_symbols": [
+    "resolve_path_within_workspace",
+    "read_text_within_workspace",
+    "read_bytes_within_workspace",
+    "existing_paths_within_workspace"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/package_intent_common.rs",
+    "rust/crates/guard-runtime/src/package_authority_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/evaluation_codex_event_trace.py",
+   "module": "codex_plugin_scanner.guard.evaluation_codex_event_trace",
+   "source_sha256": "3542f61aa1b3d8b06346fe4b9bf84b4e79fe62b0edfba9bc82a8cd32130a0318",
+   "forbidden_symbols": [
+    "CodexEventTraceError",
+    "CodexEventTraceSummary",
+    "parse_codex_event_trace"
+   ],
+   "native_replacements": [],
+   "retirement": "dead_code",
+   "removal_reason": "Codex CLI JSON trace parser that no entry point, workflow or contract reached; its own tests were the only importers."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/policy_recipe.py",
+   "module": "codex_plugin_scanner.guard.policy_recipe",
+   "source_sha256": "f642697cd92b6d0129c27eddbd00be9a417c6297e0550d7f7010ab7dac701963",
+   "forbidden_symbols": [
+    "PolicyRecipeMatcher",
+    "PolicyRecipeFixture",
+    "PolicyRecipe",
+    "parse_policy_recipe",
+    "evaluate_policy_recipe_fixture",
+    "validate_policy_recipe_fixtures",
+    "canonical_policy_recipe_json",
+    "policy_recipe_sha256"
+   ],
+   "native_replacements": [],
+   "retirement": "dead_code",
+   "removal_reason": "Policy recipe validation helpers with no caller; the public recipe guide no longer claims a local validator."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/network_public_suffix.py",
+   "module": "codex_plugin_scanner.guard.runtime.network_public_suffix",
+   "source_sha256": "0754f3d94389eb24d2462ee66ba3cbdb991a6f915ae9964c60f4c98748ddf93d",
+   "forbidden_symbols": [
+    "registrable_domain"
+   ],
+   "native_replacements": [],
+   "retirement": "dead_code",
+   "removal_reason": "Registrable-domain projection over the bundled PSL, orphaned with the publicsuffixlist dependency it wrapped."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/remote_approval_execution.py",
+   "module": "codex_plugin_scanner.guard.runtime.remote_approval_execution",
+   "source_sha256": "a23b321831d7866b7208663567eb49aa0cce80633b4cfdeddb432507f5fe43b3",
+   "forbidden_symbols": [
+    "remote_resume_confirmed",
+    "target_string"
+   ],
+   "native_replacements": [],
+   "retirement": "dead_code",
+   "removal_reason": "Response helpers for legacy remote approvals that no approval path still called."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/resource_budget.py",
+   "module": "codex_plugin_scanner.guard.runtime.resource_budget",
+   "source_sha256": "99fe480307251bc1839d2675bcab03a53403b9f6d60236c7fd3fc0b20c644c1f",
+   "forbidden_symbols": [
+    "ResourceControlKind",
+    "ResourceBudget",
+    "AppliedControl",
+    "ResourceBackend",
+    "backend_supports_rlimit",
+    "applied_controls"
+   ],
+   "native_replacements": [],
+   "retirement": "dead_code",
+   "removal_reason": "Resource budget and applied-control evidence scaffolding for an isolated-execution path that was never wired up."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/node_semver.py",
+   "module": "codex_plugin_scanner.guard.runtime.node_semver",
+   "source_sha256": "534232af6dc97a8486104ebeccddf473518352a05497e962a4ca0e278e94ab61",
+   "forbidden_symbols": [
+    "node_semver_spec_matches"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/direct_tool_semver.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/data_flow.py",
+   "module": "codex_plugin_scanner.guard.runtime.data_flow",
+   "source_sha256": "35368cd7d9b631b1f23d61b822b39b6198e7631c1fc78eb553aba44a17192be4",
+   "forbidden_symbols": [
+    "ShellPipe",
+    "extract_command_segments",
+    "extract_input_redirects",
+    "extract_pipes"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/data_flow.rs",
+    "rust/crates/guard-runtime/src/shell_helpers_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_linux_elf.py",
+   "module": "codex_plugin_scanner.guard.runtime.restricted_linux_elf",
+   "source_sha256": "a9579f072979877dc86c7733fe3d2102381e4970339a20133da8ef43f69cf98d",
+   "forbidden_symbols": [
+    "resolve_linux_elf_loader"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/restricted_linux_launch/elf.rs",
+    "rust/crates/guard-runtime/src/restricted_linux_launch/mod.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_linux_paths.py",
+   "module": "codex_plugin_scanner.guard.runtime.restricted_linux_paths",
+   "source_sha256": "d6472b908b34eb0da25d303fdd6b77e2f86976e66f1dbe372479bdf3481a4a70",
+   "forbidden_symbols": [
+    "LinuxReadGrant",
+    "collect_linux_read_grants"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/restricted_linux_launch/read.rs",
+    "rust/crates/guard-runtime/src/restricted_linux_launch/mod.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_linux_mappings.py",
+   "module": "codex_plugin_scanner.guard.runtime.restricted_linux_mappings",
+   "source_sha256": "83c1af1a284ca1f4a3fd861ffd6565f086e9110e98b83e1ef9c5edd17ff04c3f",
+   "forbidden_symbols": [
+    "mount_targets",
+    "validate_records"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/restricted_linux_launch/mappings.rs",
+    "rust/crates/guard-runtime/src/restricted_linux_launch/mounts.rs",
+    "rust/crates/guard-runtime/src/restricted_linux_launch/mapping_records.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/restricted_linux_mapping_plan.py",
+   "module": "codex_plugin_scanner.guard.runtime.restricted_linux_mapping_plan",
+   "source_sha256": "ceac7b7dbb72afc51e47902313b3a1bea570640e06b63614374d644bcbf3f7c3",
+   "forbidden_symbols": [
+    "collect_mapping_evidence"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/restricted_pytest/mapping.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/local_read_operands.py",
+   "module": "codex_plugin_scanner.guard.runtime.secret_file_request_services.local_read_operands",
+   "source_sha256": "b5c830f9abdd9f692575d989741c81e3377a0e4f3df9d16e35760be0f7061742",
+   "forbidden_symbols": [
+    "_bounded_local_read_glob_is_safe",
+    "_cat_file_operand_tokens",
+    "_local_read_operands_resolve_safely",
+    "_plain_file_operand_tokens",
+    "_ripgrep_args_expand_hidden_files",
+    "_search_command_has_no_pattern",
+    "_search_concrete_file_operand_tokens",
+    "_search_file_operand_roles",
+    "_search_file_operand_tokens",
+    "_search_glob_pattern_is_safe",
+    "_sed_file_operand_tokens",
+    "_shell_segment_file_operand_tokens",
+    "search_operands_are_safe"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/shell_secret_read_support.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/shell_command_wrappers.py",
+   "module": "codex_plugin_scanner.guard.runtime.shell_command_wrappers",
+   "source_sha256": "b328f048cc1b0e167dd1c57aeb1eaff84e5db25b6ed582dd3ecf91e0dd44f87e",
+   "forbidden_symbols": [
+    "ShellCommandNormalization",
+    "is_trusted_absolute_command_path",
+    "normalize_transparent_shell_command"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/shell_command_wrappers.rs",
+    "rust/crates/guard-command/src/shell_command_wrappers_paths.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/source_paths.py",
+   "module": "codex_plugin_scanner.guard.runtime.source_paths",
+   "source_sha256": "e187c4541905d1db3e72ebc9b979fb2d22a24261bf18553fdd5ae7dfeb8cefa7",
+   "forbidden_symbols": [
+    "SOURCE_CLASSIFIER_VERSION",
+    "SourcePathDecision",
+    "path_contains_symlink",
+    "resolve_source_candidate_path",
+    "source_path_is_allowed",
+    "_hidden_parts_are_allowed_source",
+    "_path_contains_symlink_component",
+    "_is_immediate_sibling_git_checkout_path",
+    "_external_source_filename_is_sensitive"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/codex_output_source_paths.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/pytest_target_detection.py",
+   "module": "codex_plugin_scanner.guard.runtime.secret_file_request_services.pytest_target_detection",
+   "source_sha256": "80050fe7831fd10c93fe8319a54662f17c83844fa22b5e8cb1f044a8fab23ded",
+   "forbidden_symbols": [
+    "_argument_sequence_targets_pytest",
+    "_inline_python_payload_runs_pytest",
+    "_pytest_args_from_argument_sequence",
+    "_pytest_args_from_argument_sequence_ignoring",
+    "_pytest_args_from_command_position",
+    "_pytest_args_from_runner_argument_sequence",
+    "_python_inline_script_runs_pytest",
+    "_python_process_call_targets_pytest",
+    "_segment_targets_pytest",
+    "_shell_command_targets_pytest",
+    "_shell_token_has_active_glob"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/sfrs_pytest_target.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/python_pytest_entrypoints.py",
+   "module": "codex_plugin_scanner.guard.runtime.secret_file_request_services.python_pytest_entrypoints",
+   "source_sha256": "763d5b1cbb56a0a4999f028572c78bf23ae820824f57df4cea288324ef833df0",
+   "forbidden_symbols": [
+    "_python_segment_targets_module",
+    "_pytest_args_from_python"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/sfrs_selectors.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_expansion.py",
+   "module": "codex_plugin_scanner.guard.runtime.secret_file_request_services.github_pr_expansion",
+   "source_sha256": "bc3b313be283818515d58f0742461ba430775b0da3dd50cd21bffc7c6ae57ed9",
+   "forbidden_symbols": [
+    "_gh_pr_body_args_start_index",
+    "_gh_pr_create_body_args_have_substitution",
+    "_gh_pr_create_body_args_start_index",
+    "_gh_pr_create_body_has_shell_command_substitution",
+    "_gh_pr_create_has_active_shell_expansion",
+    "_gh_pr_edit_has_shell_command_substitution",
+    "_gh_pr_env_split_string_payloads_with_active_expansion",
+    "_is_pytest_python_interpreter_command",
+    "_literal_python_argv",
+    "_python_call_imports_pytest",
+    "_python_call_resolves_pytest_main",
+    "_python_call_runs_pytest_module",
+    "_shell_token_has_active_expansion",
+    "_skip_command_builtin_options",
+    "_skip_env_wrapper_options",
+    "_skip_shell_case_header",
+    "_skip_shell_select_header",
+    "_skip_sudo_wrapper_options"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/sfrs_gh_pr_expansion.rs",
+    "rust/crates/guard-command/src/sfrs_pytest_target.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/adapters/_modules/codex/codex_hook_response.py",
+   "module": "codex_plugin_scanner.guard.adapters._modules.codex.codex_hook_response",
+   "source_sha256": "54d07ed0e88ff3329f76c0e2e1ba3f0e6dca89394dcf3db3d38786cec82176b6",
+   "forbidden_symbols": [
+    "codex_hook_response"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/codex_hook_response.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/sandbox.py",
+   "module": "codex_plugin_scanner.guard.runtime.sandbox",
+   "source_sha256": "db7bde370c9682b5c24e3fca3f266317660e3c966cedfdca548a6f1a524cca6d",
+   "forbidden_symbols": [
+    "SandboxLanguage",
+    "EnvPolicy",
+    "SandboxAnalysisMode",
+    "_DEFAULT_MAX_PROCESSES",
+    "_SECRET_PATH_PATTERNS",
+    "_NETWORK_SYSCALL_PATTERNS",
+    "SandboxRequest",
+    "SandboxResult",
+    "_is_secret_path",
+    "_detect_network_attempts",
+    "_build_env",
+    "_redact_env",
+    "_write_sandbox_files",
+    "_language_argv",
+    "_scan_writes",
+    "_audit_combined_output",
+    "run_sandbox",
+    "_static_only_analysis"
+   ],
+   "native_replacements": [],
+   "retirement": "dead_code",
+   "removal_reason": "Static-first sandbox runner for isolated script analysis that no production caller ever imported. guard-command's sandbox.rs carries the same shape but is itself unreferenced and leaves apply_resource_limits a no-op, so it is not named as a behavioural replacement."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/containment_outputs.py",
+   "module": "codex_plugin_scanner.guard.runtime.containment_outputs",
+   "source_sha256": "64858338b8722344a1a30da5fbeda1cd6325e790d83979e4701229deeb68eda5",
+   "forbidden_symbols": [
+    "_MAX_FILES",
+    "_MAX_ENTRIES",
+    "_MAX_TOTAL_BYTES",
+    "_MAX_CAPTURED_OUTPUT_BYTES",
+    "OutputBoundaryError",
+    "ContainmentCapturedOutput",
+    "capture_declared_outputs",
+    "_snapshot_regular_files",
+    "_bounded_directory_entries",
+    "_bounded_descriptor_entries",
+    "_bounded_windows_entries",
+    "_directory_identity",
+    "_read_verified_output",
+    "__all__"
+   ],
+   "native_replacements": [],
+   "retirement": "dead_code",
+   "removal_reason": "Bounded declared-output capture for contained workspace execution that no production caller ever imported. The native contained-execution path captures only stdout.bin and stderr.bin from its own run directory under its own budgets, so it does not carry this module's declared-output walk and is not named as a behavioural replacement."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py",
+   "module": "codex_plugin_scanner.guard.runtime.github_command_capabilities",
+   "source_sha256": "d85871ebfb6b0d82c4f376aea1efac82d7312bd9c896fc3d3c6a4eaae59cb735",
+   "forbidden_symbols": [
+    "classify_github_cli",
+    "static_markdown_pr_body_file_operand",
+    "_native_classification",
+    "_NATIVE_CACHE"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/github_command_capabilities.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/read_only_filters.py",
+   "module": "codex_plugin_scanner.guard.runtime.secret_file_request_services.read_only_filters",
+   "source_sha256": "63ba263eb7a1f0e873a89fdf9f472f5e0da08f2eccde9bd030a55586c097e4ef",
+   "forbidden_symbols": [
+    "_attached_redirection_operator",
+    "_github_output_filter_segment_is_safe",
+    "_read_only_lookup_arg_is_redirection",
+    "_read_only_lookup_filter_grep_args_are_safe",
+    "_read_only_lookup_filter_rg_args_are_safe",
+    "_read_only_lookup_filter_segment_is_safe",
+    "_read_only_lookup_head_tail_args_are_safe",
+    "_read_only_lookup_may_be_primary",
+    "_read_only_lookup_sed_args_are_safe",
+    "_read_only_lookup_sed_script_is_print_only",
+    "_ripgrep_configuration_is_absent",
+    "_split_attached_redirection_token"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/sfrs_read_only_filters.rs",
+    "rust/crates/guard-command/src/sfrs_search_filters.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/extension_control_resolver.py",
+   "module": "codex_plugin_scanner.guard.runtime.extension_control_resolver",
+   "source_sha256": "9029cc540785062c666d6e6cf8737486ddf95619fee7b96939e2efc05040434d",
+   "forbidden_symbols": [
+    "_has_explicit_enabled_permission",
+    "_validate_layer_targets",
+    "_extension_closure",
+    "_permission_closure"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/extension_control.rs",
+    "rust/crates/guard-runtime/src/extension_control_op.rs"
+   ]
   }
  ],
  "retired_test_paths": [
   "ci/native_runtime/test_guard_native_runtime_resident.py",
   "ci/native_runtime/test_guard_native_runtime_resident_cross_process.py",
   "ci/native_runtime/test_guard_native_runtime_windows_resident.py",
+  "tests/test_claude_daemon_hook_bridge_budget.py",
+  "tests/test_claude_hook_completion_contract.py",
+  "tests/test_claude_hook_exit_paths.py",
   "tests/test_cli_hook_source_ref.py",
   "tests/test_codex_event_trace.py",
   "tests/test_guard_codex_apply_patch_policy.py",
@@ -1143,7 +1704,17 @@
   "tests/test_hook_security_regressions.py",
   "tests/test_hook_source_read_fast_path.py",
   "tests/test_native_approval_bridge.py",
-  "tests/test_structured_data_sensitivity.py"
+  "tests/test_structured_data_sensitivity.py",
+  "tests/test_codex_managed_fallback_authentication.py",
+  "tests/test_codex_daemon_start_wait.py",
+  "tests/test_codex_daemon_bridge_failure_reason.py",
+  "tests/test_npm_source_spec.py",
+  "tests/test_guard_github_pr_body_file.py",
+  "tests/test_native_command_options.py",
+  "tests/test_guard_node_semver.py",
+  "tests/test_hook_source_paths.py",
+  "tests/test_codex_pretool_allow_schema.py",
+  "tests/test_guard_sandbox.py"
  ],
  "retired_bodies": [
   {
@@ -1360,7 +1931,6 @@
     "_SHELL_FUNCTION_DEFINITION",
     "_SHELL_ALIAS_DEFINITION",
     "_DEFERRED_GITHUB_EFFECT",
-    "GitHubShellAnalysis",
     "parse_env_wrapper"
    ],
    "native_replacements": [
@@ -1369,17 +1939,76 @@
    ]
   },
   {
-   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_expansion.py",
-   "source_sha256": "1d245cfc7dd004faba76f35dd631f1d6561945610a6f7e1f1e0236feeb74cf68",
+   "path": "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge.py",
+   "source_sha256": "9f9c3aab117cce72e7cce4e7a062985ae77e22e4204d3ad843f02017b376a512",
    "forbidden_symbols": [
-    "parse_env_wrapper",
-    "_SHELL_CONTROL_PREFIX_TOKENS",
-    "_SUDO_OPTION_VALUE_FLAGS",
-    "_leading_shell_redirection_tokens_consumed"
+    "_FAIL_CLOSED_REASON",
+    "_LAUNCH_INTEGRITY_REASON",
+    "_write_transition_observation",
+    "_unavailable_response",
+    "_write_failure_causes",
+    "_launcher_integrity_response",
+    "_installed_hook_home",
+    "_bridge_output"
    ],
    "native_replacements": [
-    "rust/crates/guard-command/src/shell_request_authority.rs",
-    "rust/crates/guard-runtime/src/shell_request_authority_op.rs"
+    "rust/crates/guard-runtime/src/codex_hook_bridge.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_transport.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_restart.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
+   "source_sha256": "16e0ba714c2f2989e8b0b25711e61d77ae922991545dead5e69deeb32a9bf60a",
+   "forbidden_symbols": [
+    "_build_loopback_opener",
+    "_assert_loopback_http_url",
+    "_LoopbackOnlyRedirectHandler",
+    "_remaining_seconds",
+    "_post_to_loopback_daemon",
+    "_blocking_post_to_loopback_daemon",
+    "_read_bounded_response",
+    "_daemon_url",
+    "_run_local_fallback",
+    "_daemon_failure_reason",
+    "_daemon_failure_is_recoverable",
+    "_daemon_failure_is_authenticated_overload",
+    "_daemon_failure_kind",
+    "_recover_retry_or_fallback",
+    "_run_recovery_command"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge.rs",
+    "rust/crates/guard-runtime/src/claude_hook_bridge_transport.rs",
+    "rust/crates/guard-runtime/src/claude_hook_bridge_http.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "forbidden_symbols": [
+    "verified_npm_version",
+    "_changes_npm",
+    "_loader_paths_outside",
+    "_npmrc_redirects_fetch",
+    "_resolve_executable",
+    "_filters_outside_workspace"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/verified_npm.rs",
+    "rust/crates/guard-runtime/src/verified_npm_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/extension_trust.py",
+   "source_sha256": "d2449a937ba3d7585994787c26ca452eaad05ef0fd714b6717120e78bc55278e",
+   "forbidden_symbols": [
+    "extension_is_active"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/extension_trust.rs",
+    "rust/crates/guard-runtime/src/extension_control_op.rs"
    ]
   }
  ]

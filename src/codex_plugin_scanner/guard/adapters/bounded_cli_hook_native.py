@@ -29,8 +29,41 @@ def bounded_python_argv(argv: Sequence[object]) -> list[object]:
     return values
 
 
-def native_bridge_executable(harness: str) -> Path | None:
-    """The native runtime that launches ``harness`` hooks, or None for Python."""
+def daemon_start_command(
+    python_executable: str, package_root: Path, guard_home: Path, cli_args: Sequence[str]
+) -> list[str]:
+    """The daemon-start argv the native bridge runs when the daemon is unreachable.
+
+    The native bridge runs it only on that failure path, then asks the daemon
+    once more or fails the hook closed; it never runs the Python bridge.
+    """
+    from ..codex_hook_launch_runtime import isolated_daemon_start_command
+
+    args = list(cli_args)
+    home_dir = next((Path(args[i + 1]) for i in range(len(args) - 1) if args[i] == "--home"), None)
+    return list(
+        isolated_daemon_start_command(python_executable, package_root, guard_home.resolve(strict=False), home_dir)
+    )
+
+
+def frozen_daemon_start_command(executable: str, guard_home: Path, cli_args: Sequence[str]) -> list[str]:
+    """The frozen Guard's daemon-recovery argv for the native bridge's failure path.
+
+    A frozen Guard has no interpreter to run the source install's bootstrap,
+    so the native bridge runs the frozen recovery entrypoint instead.
+    """
+    from ..frozen_runtime_commands import frozen_daemon_recovery_command
+
+    args = list(cli_args)
+    home_dir = next((Path(args[i + 1]) for i in range(len(args) - 1) if args[i] == "--home"), Path.home())
+    return list(frozen_daemon_recovery_command(guard_home, home_dir, executable=executable))
+
+
+def native_bridge_executable(harness: str, *, guard_home: Path | None = None) -> Path | None:
+    """The native runtime that launches ``harness`` hooks, or None for Python.
+
+    A frozen build names its runtime's durable copy under ``guard_home``.
+    """
 
     # HOL_GUARD_BOUNDED_HOOK_BRIDGE=python keeps the Python bridge argv. Contract
     # tests set it so a subprocess install and the parent verifier agree. The
@@ -39,7 +72,7 @@ def native_bridge_executable(harness: str) -> Path | None:
         return None
     from .native_hook_bridge import native_hook_bridge_executable
 
-    return native_hook_bridge_executable(NATIVE_BOUNDED_HOOK_FEATURE)
+    return native_hook_bridge_executable(NATIVE_BOUNDED_HOOK_FEATURE, guard_home=guard_home)
 
 
 def take_native_handoff_environment() -> tuple[Callable[[float], float], bool]:
@@ -66,6 +99,7 @@ __all__ = [
     "NATIVE_BOUNDED_HOOK_COMMAND",
     "NATIVE_BOUNDED_HOOK_FEATURE",
     "bounded_python_argv",
+    "frozen_daemon_start_command",
     "native_bridge_executable",
     "take_native_handoff_environment",
 ]

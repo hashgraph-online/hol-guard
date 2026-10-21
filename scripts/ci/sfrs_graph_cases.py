@@ -5,8 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime import github_shell_capabilities as gh_shell
-from codex_plugin_scanner.guard.runtime.github_capability_contract import github_assessment
 from codex_plugin_scanner.guard.runtime.secret_file_request_services import developer_inspection
 
 PROJ = "{ROOT}/home/proj"
@@ -69,19 +67,6 @@ TEXTS = [
 ]
 
 
-def _stand_in(args):
-    joined = " ".join(args)
-    if joined.startswith("pr merge"):
-        capability = "merge_remote"
-    elif "delete" in joined:
-        capability = "delete_remote"
-    elif joined.startswith(("pr view", "repo view")):
-        capability = "read_remote"
-    else:
-        capability = "unknown"
-    return github_assessment(capability, f"stub.{joined}", "stub")
-
-
 def _summary(graph: object, root: Path) -> object:
     if graph is None:
         return None
@@ -111,10 +96,8 @@ def graph_cases(root: Path, add: Callable[[str, list[object], object], None]) ->
     _provision_resident_home()
     home = root / "home"
     proj = home / "proj"
-    original = gh_shell.classify_github_cli
     original_chain = developer_inspection.is_low_risk_compound_git_inspection
     original_segment = developer_inspection.is_low_risk_git_inspection_segment
-    gh_shell.classify_github_cli = _stand_in
     # The Rust port injects git inspection through the resident host; the
     # vectors pin the no-git-host behaviour, so Python's git checks are off.
     developer_inspection.is_low_risk_compound_git_inspection = lambda *_a, **_k: False
@@ -132,4 +115,3 @@ def graph_cases(root: Path, add: Callable[[str, list[object], object], None]) ->
     finally:
         developer_inspection.is_low_risk_compound_git_inspection = original_chain
         developer_inspection.is_low_risk_git_inspection_segment = original_segment
-        gh_shell.classify_github_cli = original

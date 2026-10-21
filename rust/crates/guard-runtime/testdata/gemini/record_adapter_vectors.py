@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Record Gemini, Antigravity, Grok and Kimi detection vectors from the
-ORIGINAL Python implementation.
+"""Record Gemini, Antigravity, Devin, Grok, Kimi, OpenCode and Cursor detection
+vectors from the ORIGINAL Python implementation.
 
 Run against a checkout that still holds the original helper `ORIGINALS` names
 for the harness (the base of the commit that introduced its native
@@ -17,7 +17,10 @@ and MCP metadata digests come from the release resident, so the recorder
 refuses to run without one. An inventory that would carry a lone surrogate is
 recorded as a refusal. Workspace AIBOM discovery is not part of the port and
 is switched off; so are the Grok executable lookup, version probe and stale
-managed-entry check, which stay in Python. The Grok system policy files are
+managed-entry check, which stay in Python, and the OpenCode and Cursor MCP
+firewall, Cursor managed hook and CLI lookups and the OpenCode command lookup,
+which the ports keep in Python around the native call. An OpenCode case with
+`snapshot` records `load_opencode_install_snapshot` instead of `detect`. The Grok system policy files are
 read from `<ROOT>/etc/grok`. `<ROOT>` stands for the fixture root, in paths, in
 file contents and in a case's environment.
 """
@@ -36,7 +39,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from adapter_vector_cases import cases
 
-from codex_plugin_scanner.guard.adapters import antigravity, gemini, grok, grok_config, kimi
+from codex_plugin_scanner.ecosystems.opencode import _load_json_or_jsonc
+from codex_plugin_scanner.guard.adapters import (
+    antigravity,
+    cursor,
+    devin,
+    gemini,
+    grok,
+    grok_config,
+    kimi,
+    opencode,
+    opencode_artifacts,
+)
+from codex_plugin_scanner.guard.adapters._modules.opencode import opencode_install_snapshot
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.grok_executable import GrokExecutableResolution
 from codex_plugin_scanner.guard.models import GuardArtifact
@@ -44,20 +59,31 @@ from codex_plugin_scanner.guard.models import GuardArtifact
 ADAPTERS = {
     "gemini": gemini.GeminiHarnessAdapter,
     "antigravity": antigravity.AntigravityHarnessAdapter,
+    "devin": devin.DevinHarnessAdapter,
     "grok": grok.GrokHarnessAdapter,
     "kimi": kimi.KimiHarnessAdapter,
+    "opencode": opencode.OpenCodeHarnessAdapter,
+    "cursor": cursor.CursorHarnessAdapter,
 }
 # The original helper each port removed; its presence proves the source is
 # the original Python.
 ORIGINALS = {
     "gemini": (gemini.GeminiHarnessAdapter, "_entry_hook_command"),
     "antigravity": (antigravity.AntigravityHarnessAdapter, "_mcp_source"),
+    "devin": (devin.DevinHarnessAdapter, "_claude_hooks_overlap"),
     "grok": (grok_config, "append_mcp_artifacts"),
     "kimi": (kimi.KimiHarnessAdapter, "_append_mcp_artifacts"),
+    "opencode": (opencode_artifacts, "append_config_artifacts"),
+    "cursor": (cursor, "enrich_mcp_server_metadata"),
 }
 
-for module in (gemini, grok, kimi):
+for module in (gemini, devin, grok, kimi, opencode, opencode_install_snapshot, cursor):
     module.extend_detection_with_workspace_aibom = lambda detection, **_: detection
+opencode_artifacts.enrich_artifact_with_mcp_skill_firewall = lambda artifact: artifact
+cursor.enrich_artifact_with_mcp_skill_firewall = lambda artifact: artifact
+cursor.detect_managed_cursor_hook_artifact = lambda _path, _payload: None
+cursor.cursor_cli_command_available = lambda _context: False
+opencode._command_available = lambda _executable: False
 grok.resolve_trusted_grok_executable = lambda _context: GrokExecutableResolution(None)
 grok.GrokHarnessAdapter._version_probe = staticmethod(lambda _context, _resolution: {})
 grok.GrokHarnessAdapter._has_stale_guard_entries = lambda _self, _context: False
@@ -137,7 +163,36 @@ def system_policy_paths(root: Path) -> list[Path]:
     return [root / "etc" / "grok" / name for name in SYSTEM_POLICY]
 
 
-def facade_args(harness: str, context: HarnessContext, root: Path) -> dict:
+def opencode_request(context: HarnessContext, snapshot: bool) -> dict:
+    """The OpenCode configs as the port sends them: parsed, non-empty
+    payloads for `detect`, normalized payloads for the install snapshot."""
+
+    if snapshot:
+        loaded = opencode_install_snapshot.load_opencode_install_snapshot(context, command_available=False)
+        configs = [(config.path, config.scope, config.payload) for config in loaded.configs]
+    else:
+        configs = []
+        for path in opencode_artifacts.config_paths(context):
+            payload, parse_error, _reason = _load_json_or_jsonc(path)
+            if not parse_error and payload:
+                configs.append((path, opencode.OpenCodeHarnessAdapter._scope_for(context, path), payload))
+    config_dir = opencode_artifacts.configured_config_dir(context)
+    return {
+        "configs": [
+            {"path": str(path), "scope": scope, "payload": json.dumps(payload)} for path, scope, payload in configs
+        ],
+        "skip_verified_mcp_companions": not snapshot,
+        "config_dir": None if config_dir is None else str(config_dir),
+    }
+
+
+def detect(harness: str, context: HarnessContext, snapshot: bool):
+    if snapshot:
+        return opencode_install_snapshot.load_opencode_install_snapshot(context, command_available=False).detection
+    return ADAPTERS[harness]().detect(context)
+
+
+def facade_args(harness: str, context: HarnessContext, root: Path, snapshot: bool = False) -> dict:
     """The request the native facade sends for this context."""
 
     home = context.home_dir
@@ -154,8 +209,18 @@ def facade_args(harness: str, context: HarnessContext, root: Path) -> dict:
         request["system_policy_paths"] = [
             str(path) for path in system_policy_paths(root) if path.is_file() and os.access(path, os.R_OK)
         ]
+    if harness == "opencode":
+        request.update(opencode_request(context, snapshot))
+    if harness == "cursor":
+        request["configs"] = [
+            {"path": str(path), "payload": json.dumps(payload)}
+            for path in cursor.CursorHarnessAdapter._editor_config_paths(context)
+            if (payload := cursor._json_payload(path))
+        ]
     if not home.is_absolute() or (workspace is not None and not workspace.is_absolute()):
         request["cwd"] = os.getcwd()
+    if harness == "devin":
+        request["config_dir"] = str(devin.DevinHarnessAdapter._devin_config_dir(context))
     return request
 
 
@@ -176,9 +241,10 @@ def run_case(harness: str, spec: dict, guard_home: Path) -> dict:
             workspace_dir=None if spec["workspace"] is None else base / spec["workspace"],
             guard_home=guard_home,
         )
-        args = facade_args(harness, context, root)
+        snapshot = bool(spec.get("snapshot"))
+        args = facade_args(harness, context, root, snapshot)
         try:
-            detection = ADAPTERS[harness]().detect(context)
+            detection = detect(harness, context, snapshot)
             outcome: dict = {
                 "artifacts": [artifact_dict(item) for item in detection.artifacts],
                 "found_paths": list(detection.config_paths),
@@ -191,6 +257,8 @@ def run_case(harness: str, spec: dict, guard_home: Path) -> dict:
             outcome = {"refused": True}
         record = {key: spec[key] for key in ("name", "files", "symlinks", "dirs", "dir_modes", "home", "workspace")}
         record["relative"] = spec["relative"]
+        if snapshot:
+            record["snapshot"] = True
         record["args"] = scrub(args, root)
         record.update(scrub(outcome, root))
         return record

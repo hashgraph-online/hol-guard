@@ -18,14 +18,24 @@
 //!   identity (`hook_direct_saved_portable.rs`);
 //! - the block or accepted-allow response.
 //!
-//! Any other shape defers, so the daemon takes the request: custom grant
-//! rows, remote decisions, portable decisions bound anywhere but the
-//! workspace's own identity, a portable identity the resident does not
-//! resolve exactly, a policy bundle, an integrity state other than the
-//! published protected one, a missing or unreadable decision, and every step
-//! the daemon could answer differently.
+//! Remote decisions need no more evidence than the daemon ships: the lookup
+//! never serves a cloud-sync or team-policy row and verifies no remote row's
+//! integrity, so the integrity key and state go only with a local decision.
+//! A custom extension rule (`native_local_cli_grant_response`) answers before
+//! the saved decision, as it does in the daemon: its block wins outright, and
+//! its allow lifts only a review the saved decision left standing and the
+//! daemon may override.
+//!
+//! Any other shape defers, so the daemon takes the request:
+//! portable decisions bound anywhere but the workspace's own identity,
+//! a portable identity the resident does not resolve exactly, a policy
+//! bundle with a policy-bundle row to match, an integrity state other than
+//! the published protected one, a missing or unreadable decision, and every
+//! step the daemon could answer differently.
 
+use super::local_cli::block::ReviewVerdict;
 use super::{reviewed_edge, HookDirectDefer, PRE_TOOL_USE};
+use crate::connector_setup::grant_lifts;
 use crate::local_store_read::{
     open_read_only, schema_version, table_exists, STORE_FILE_NAME, SUPPORTED_SCHEMA_VERSION,
 };
@@ -42,7 +52,7 @@ use std::path::Path;
 use zeroize::Zeroizing;
 
 const REVIEW_ACTIONS: [&str; 2] = ["review", "require-reapproval"];
-/// `GUARD_CONTROL_ACTION_TYPES` and `package`: never overridden by an allow.
+/// `GUARD_CONTROL_ACTION_TYPES` and `package`: never lifted by a broad grant.
 const NON_OVERRIDABLE_ACTION_TYPES: [&str; 5] = [
     "guard_control",
     "guard-control",
@@ -111,8 +121,12 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
     if encoded.len() * ESCAPE_FACTOR + ENVELOPE_BYTES > NATIVE_EXACT_ACTION_MAX_BYTES {
         return Err(HookDirectDefer::SavedDecision);
     }
-    let token = crate::native_exact_action_op::exact_action_token(&exact);
+    let token = crate::native_exact_action_op::approval_token_for_home(
+        &exact,
+        Path::new(context.guard_home),
+    );
 
+    let custom;
     let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
     {
         let connection = open_read_only(&store_path)
@@ -130,9 +144,21 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
             harness: context.harness,
             artifact_id: &artifact_id,
         };
-        // A custom grant answers before any saved decision or approval.
-        if !store.base()? {
+        if !store.supported()? {
             return Err(HookDirectDefer::SavedDecision);
+        }
+        // A custom grant answers before any saved decision or approval, but
+        // the daemon reads one only while the store holds a grant row.
+        custom = store
+            .grants()?
+            .then(|| custom_grant(context, &result))
+            .flatten();
+        if let Some(ReviewVerdict::Blocked(name)) = &custom {
+            // A custom block wins over any saved decision or approval.
+            parsed["harness_response"] =
+                super::local_cli::block::block_response(context.harness, &result, name, false)
+                    .ok_or(HookDirectDefer::SavedDecision)?;
+            return Ok(parsed);
         }
         match &token {
             Ok(token) if store.decided(Some(token))? => {
@@ -149,12 +175,49 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
             Err(_) => {}
         }
     }
+    // The custom allow lifts only an overridable review due to non-recognition,
+    // so it never weakens a block, a floor or a risk signal on the operands.
+    let reason = result.get("reason_code").and_then(Value::as_str);
+    if custom == Some(ReviewVerdict::Allowed) && overridable(&result) && grant_lifts(reason) {
+        let mut allowed = result.clone();
+        for key in ["decision", "minimum_action", "policy_action"] {
+            allowed.insert(key.to_owned(), json!("allow"));
+        }
+        parsed["harness_response"] =
+            render(context.harness, &allowed, "accepted").ok_or(HookDirectDefer::SavedDecision)?;
+        return Ok(parsed);
+    }
     parsed["harness_response"] =
         match consume::answer(context, &result, &exact, receipt, &artifact_id)? {
             Some(response) => response,
+            None if connector_setup_candidate(context, &result) => {
+                return Err(HookDirectDefer::ReviewQueue);
+            }
             None => review_queue::answer(context, &result, receipt, &exact, &token)?,
         };
     Ok(parsed)
+}
+
+/// `native_local_cli_grant_response` for this review: the custom rule the
+/// daemon reads before any saved decision, or `None` when none applies. The
+/// daemon reads it only for a review it holds at a review action.
+fn custom_grant(context: &Context<'_>, result: &Object) -> Option<ReviewVerdict> {
+    if !result
+        .get("policy_action")
+        .and_then(Value::as_str)
+        .is_some_and(|action| REVIEW_ACTIONS.contains(&action))
+    {
+        return None;
+    }
+    super::local_cli::review_grant(&super::local_cli::RuleCheck {
+        payload: Some(context.payload),
+        harness: context.harness,
+        workspace: context.workspace,
+        home_dir: context.home_dir,
+        guard_home: context.guard_home,
+        // The daemon pauses no review in Watch, so this lane never records.
+        recording_only: false,
+    })
 }
 
 /// `native_saved_decision_response` for a token with an exact decision: the
@@ -183,10 +246,10 @@ fn saved_response(
     }
     let integrity_state =
         serde_json::to_value(integrity).map_err(|_| HookDirectDefer::SavedDecision)?;
-    if !store.local_only(&integrity_state)? {
+    let Some(has_local_policy) = store.readable(&integrity_state)? else {
         return Err(HookDirectDefer::SavedDecision);
-    }
-    let identity = portable::identity(store, context.workspace)?;
+    };
+    let composition = portable::composition(context.workspace)?;
     let key_b64 = Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key));
     let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
     let request = PolicyDecisionLookupRequestV1 {
@@ -203,13 +266,19 @@ fn saved_response(
         runtime_exact_match_context: None,
         consume_one_shot: false,
         local_once_only: false,
-        integrity_state: Some(integrity_state),
-        integrity_key_b64: Some(key_b64.to_string()),
-        integrity_key_id: Some(key.key_id.clone()),
+        integrity_state: Some(if has_local_policy {
+            integrity_state
+        } else {
+            json!({})
+        }),
+        integrity_key_b64: has_local_policy.then(|| key_b64.to_string()),
+        integrity_key_id: has_local_policy.then(|| key.key_id.clone()),
         local_once_integrity_key_b64: Some(key_b64.to_string()),
         local_once_integrity_key_id: Some(key.key_id.clone()),
         policy_bundle_decision_identities: None,
         probe_groups: None,
+        portable_workspace: None,
+        evidence_binding: None,
     };
     let lookup = |workspace: &str| {
         let request = PolicyDecisionLookupRequestV1 {
@@ -219,10 +288,17 @@ fn saved_response(
         crate::policy_decision_lookup_op::evaluate_non_consuming(&request, store.connection)
             .map_err(|_| HookDirectDefer::SavedDecision)
     };
-    let local = lookup(context.workspace)?;
-    let lookup = match identity {
-        None => local,
-        Some(identity) => portable::compose(local, lookup(&identity)?)?,
+    // A workspace that already names its identity reads that lookup alone, so
+    // the local lookup is never run for it: it would answer nothing, and a row
+    // it matched with invalid integrity would defer the hook over an audit
+    // write this read-only connection cannot take.
+    let lookup = match composition {
+        portable::Composition::Local => lookup(context.workspace)?,
+        portable::Composition::Named(identity) => portable::restrictive_only(lookup(&identity)?),
+        portable::Composition::Both(identity) => {
+            let local = lookup(context.workspace)?;
+            portable::compose(local, lookup(&identity)?)?
+        }
     };
     match saved_verdict(result, &lookup, store.artifact_id, token) {
         Some((verdict, status)) => render(context.harness, &verdict, status)
@@ -268,7 +344,7 @@ fn saved_verdict(
         Some("allow")
             if decision.get("source").and_then(Value::as_str) == Some("approval-gate")
                 && !truthy(decision.get("expires_at"))
-                && overridable(result) =>
+                && approvable(result) =>
         {
             let mut allowed = result.clone();
             for key in ["decision", "minimum_action", "policy_action"] {
@@ -292,25 +368,50 @@ fn render(harness: &str, verdict: &Object, status: &str) -> Option<Value> {
     Some(Value::Object(response))
 }
 
-/// `_native_review_is_overridable`. An unhashable action type, which raises
-/// there, is never overridable here.
-fn overridable(result: &Object) -> bool {
+/// `_native_review_is_approvable`: a review the user answers. The user's own
+/// exact-action allow holds for every such review, whatever its action type
+/// (`docs/guard/approval-invariant.md`).
+fn approvable(result: &Object) -> bool {
     let review = |key: &str| {
         result
             .get(key)
             .and_then(Value::as_str)
             .is_some_and(|action| REVIEW_ACTIONS.contains(&action))
     };
+    review("policy_action") && review("minimum_action")
+}
+
+/// `_native_review_is_overridable`: a review a broad local-CLI grant may lift.
+fn overridable(result: &Object) -> bool {
     let action_type = result
         .get("action")
         .and_then(Value::as_object)
         .and_then(|action| action.get("action_type"));
-    let overridable_type = match action_type {
+    approvable(result) && overridable_action_type(action_type)
+}
+
+/// Whether a review of this `action.action_type` may be lifted by a broad
+/// grant: never Guard control or a package action. An unhashable action type,
+/// which raises in Python, is never overridable here.
+pub(crate) fn overridable_action_type(action_type: Option<&Value>) -> bool {
+    match action_type {
         Some(Value::String(kind)) => !NON_OVERRIDABLE_ACTION_TYPES.contains(&kind.as_str()),
         Some(Value::Array(_) | Value::Object(_)) => false,
         _ => true,
-    };
-    review("policy_action") && review("minimum_action") && overridable_type
+    }
+}
+
+/// A review due only to non-recognition of a command that launches a local
+/// CLI (or may): the daemon reads whether this device was ever set up for the
+/// CLI and groups the row under its connector, so the resident leaves it.
+fn connector_setup_candidate(context: &Context<'_>, result: &Object) -> bool {
+    crate::connector_setup::is_non_recognition(result.get("reason_code").and_then(Value::as_str))
+        && super::local_cli::launches_local_cli(
+            context.payload,
+            context.workspace,
+            context.home_dir,
+        )
+        .unwrap_or(true)
 }
 
 /// Python truthiness of an optional JSON value.
@@ -334,21 +435,26 @@ struct StoreShape<'a> {
 
 impl StoreShape<'_> {
     /// Whether the daemon reads this store's decisions as the resident does:
-    /// a schema it supports and no custom grants.
-    fn base(&self) -> Result<bool, HookDirectDefer> {
+    /// a schema it supports.
+    fn supported(&self) -> Result<bool, HookDirectDefer> {
         let unavailable = |_| HookDirectDefer::SavedDecision;
-        match schema_version(self.connection).map_err(unavailable)? {
-            Some(version) if version <= SUPPORTED_SCHEMA_VERSION => {}
-            _ => return Ok(false),
-        }
+        Ok(matches!(
+            schema_version(self.connection).map_err(unavailable)?,
+            Some(version) if version <= SUPPORTED_SCHEMA_VERSION
+        ))
+    }
+
+    /// Whether the store holds any custom grant or block rule.
+    fn grants(&self) -> Result<bool, HookDirectDefer> {
+        let unavailable = |_| HookDirectDefer::SavedDecision;
         for table in ["local_cli_grant", "local_cli_command_grant"] {
             if table_exists(self.connection, table).map_err(unavailable)?
                 && self.any(&format!("select 1 from {table} limit 1"), &[])?
             {
-                return Ok(false);
+                return Ok(true);
             }
         }
-        Ok(true)
+        Ok(false)
     }
 
     /// The daemon's decision probe for `token`, or for any token when the
@@ -368,25 +474,29 @@ impl StoreShape<'_> {
         }
     }
 
-    /// Whether the daemon's lookup reads only local decisions under the
-    /// published integrity state: no remote or bundle decisions, and the
-    /// published state still stored. Portable decisions are read through the
-    /// workspace's identity (`portable::identity`).
-    fn local_only(&self, integrity_state: &Value) -> Result<bool, HookDirectDefer> {
+    /// Whether the store holds a local decision, when the daemon's lookup
+    /// reads it under the published integrity state: no cached policy bundle
+    /// with a policy-bundle row to match, since the bundle's decision
+    /// identities come from a synced payload the resident does not validate,
+    /// and the published state still stored. `None` otherwise.
+    /// Portable decisions are read through the workspace's identity
+    /// (`portable::composition`).
+    fn readable(&self, integrity_state: &Value) -> Result<Option<bool>, HookDirectDefer> {
         if self.any(
-            &format!("select 1 from policy_decisions where source in {REMOTE_SOURCES_SQL} limit 1"),
+            "select 1 from policy_decisions where source = 'policy-bundle' limit 1",
             &[],
-        )? || !self.any(
+        )? && self.any(
+            "select 1 from sync_state where state_key = 'policy_bundle' limit 1",
+            &[],
+        )? {
+            return Ok(None);
+        }
+        let has_local_policy = self.any(
             &format!(
                 "select 1 from policy_decisions where source not in {REMOTE_SOURCES_SQL} limit 1"
             ),
             &[],
-        )? || self.any(
-            "select 1 from sync_state where state_key = 'policy_bundle' limit 1",
-            &[],
-        )? {
-            return Ok(false);
-        }
+        )?;
         let stored: Option<String> = self
             .connection
             .query_row(
@@ -397,7 +507,7 @@ impl StoreShape<'_> {
             .optional()
             .map_err(|_| HookDirectDefer::SavedDecision)?;
         let stored = stored.and_then(|text| serde_json::from_str::<Value>(&text).ok());
-        Ok(stored.as_ref() == Some(integrity_state))
+        Ok((stored.as_ref() == Some(integrity_state)).then_some(has_local_policy))
     }
 
     fn any(&self, query: &str, values: &[&str]) -> Result<bool, HookDirectDefer> {
@@ -413,7 +523,7 @@ impl StoreShape<'_> {
 mod query;
 
 #[path = "hook_direct_saved_consume.rs"]
-mod consume;
+pub(crate) mod consume;
 
 #[path = "hook_direct_saved_portable.rs"]
 mod portable;
@@ -427,4 +537,4 @@ mod review_queue;
 
 #[cfg(test)]
 #[path = "hook_direct_saved_decision_tests.rs"]
-mod tests;
+pub(crate) mod tests;

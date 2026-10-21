@@ -7,9 +7,10 @@
 //!   categories a prior policy verdict already produced), then renders the
 //!   per-category signal strings and the human summary. Browser scope,
 //!   argument and schema checks, and target redaction all run natively.
-//! * `firewall` projects an `mcp_server` or `tool_call` artifact into the
-//!   portal `mcpSkillFirewall` evidence plus the legacy identity metadata
-//!   keys that go with it.
+//! * `firewall` projects an `mcp_server`, `tool_call` or `skill` artifact
+//!   into the portal `mcpSkillFirewall` evidence plus the legacy identity
+//!   metadata keys that go with it. A skill's identity is derived from its
+//!   document text, which Python reads and ships; the resident does no IO.
 //!
 //! Python ships artifact/argument DTOs and renders the result; it never
 //! recomputes a signal, summary, or fingerprint. Every field is required on
@@ -70,7 +71,7 @@ pub struct McpToolRiskInputV1 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct McpFirewallInputV1 {
-    /// `mcp_server` or `tool_call`.
+    /// `mcp_server`, `tool_call` or `skill`.
     pub artifact_type: String,
     pub name: String,
     #[serde(deserialize_with = "required")]
@@ -100,6 +101,11 @@ pub struct McpFirewallInputV1 {
     pub tool_names: Option<Value>,
     #[serde(deserialize_with = "required")]
     pub tool_names_camel: Option<Value>,
+    /// The `skill` document's text. `null` for every other artifact type, and
+    /// for a skill whose document Python could not read — which projects to
+    /// no firewall, exactly as the unreadable file did before.
+    #[serde(deserialize_with = "required")]
+    pub skill_content: Option<String>, // NOSONAR: rust:S9334; required key, nullable value.
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

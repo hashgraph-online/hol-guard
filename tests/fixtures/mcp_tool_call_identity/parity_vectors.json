@@ -1863,7 +1863,7 @@
     }
    }
   },
-  "composio_provider_hash": {
+  "composio_discovery_provider_hash": {
    "expected": {
     "artifact": {
      "artifact_id": "codex:runtime:project:workspace-tools:mcp__codex_apps__composio__composio_search_tools",
@@ -1900,7 +1900,6 @@
         }
        ]
       },
-      "mcp_provider_catalog_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "mcp_server_identity": {
        "args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
        "command": "workspace-tools",
@@ -1933,7 +1932,7 @@
      "source_scope": "project",
      "transport": "stdio"
     },
-    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxN2E5NDUxNzcxMTMzMGU1NmI3NDNkOWRhOTNjMDU4ZjgyOTQ2NjY2MTg4YTNlYzVhZGYzNGNmNjQyZWM2ZjZlIiwiY29udGVudCI6IjgwMTFhMWIyNTIyZTM2MTJkNjljNzVmZWJjODJmNGRjOWNlNDU1Y2Q4MTBhYTQyODI0MWU0NTE2Yjk4YmRmMTEiLCJpZGVudGl0eSI6Ijc2YTM2NTNmZmJmYmZkYTUxZmU0NGIxODgwYmMzZTMwZWZkOWU2YjI5ZWU1YTRjZDdkZDY1YWE0NDhkYjQwNjciLCJwb2xpY3kiOiIxMWUwNTgyMWU5YThjOTg1ZGE1Y2IyNGQwMWMyNmEzYjc2ZjNjYjZhN2QxNWViZjU1NTY5ODcwNDEyOWEzZmY5Iiwic2FuZGJveCI6IjE2ZDhhNjQ0ZGY3MGFhNmJmMjU2YTZjNGU4ZDQwZDgyMjFhNWEwNzU3ZGZlMGIxYjJjMzJiNTBkMmY0YmRhMzYiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiI2Y2Q4ZGI3MjY5N2RiNWFjMmQ1YTlhYThmN2E5YWU2MjdiM2MwNTkzN2EzZWU5MzZiZWE5MjAyNGNmMzBjNzFjIiwiY29udGVudCI6IjgwMTFhMWIyNTIyZTM2MTJkNjljNzVmZWJjODJmNGRjOWNlNDU1Y2Q4MTBhYTQyODI0MWU0NTE2Yjk4YmRmMTEiLCJpZGVudGl0eSI6Ijc2YTM2NTNmZmJmYmZkYTUxZmU0NGIxODgwYmMzZTMwZWZkOWU2YjI5ZWU1YTRjZDdkZDY1YWE0NDhkYjQwNjciLCJwb2xpY3kiOiIxMWUwNTgyMWU5YThjOTg1ZGE1Y2IyNGQwMWMyNmEzYjc2ZjNjYjZhN2QxNWViZjU1NTY5ODcwNDEyOWEzZmY5Iiwic2FuZGJveCI6IjE2ZDhhNjQ0ZGY3MGFhNmJmMjU2YTZjNGU4ZDQwZDgyMjFhNWEwNzU3ZGZlMGIxYjJjMzJiNTBkMmY0YmRhMzYiLCJ2ZXJzaW9uIjoxfQ",
     "runtime_private_metadata": {}
    },
    "request": {
@@ -1952,6 +1951,122 @@
       "kind": "catalog"
      },
      "tool_name": "mcp__codex_apps__composio__composio_search_tools",
+     "transport": "stdio"
+    },
+    "hash": {
+     "arguments": {
+      "path": "a.txt"
+     },
+     "config": {
+      "artifact_actions": null,
+      "default_action": "warn",
+      "harness_actions": null,
+      "harness_risk_actions": null,
+      "managed_locked_settings": [],
+      "managed_policy_hash": null,
+      "managed_policy_status": "absent",
+      "mode": "prompt",
+      "protection_posture": "protected",
+      "protection_posture_explicit": false,
+      "publisher_actions": null,
+      "risk_actions": null,
+      "sandbox_analysis": "off",
+      "security_level": "balanced"
+     },
+     "extension_control_digest": "20d45a0efad04c26d4bf5e490d0b1924cdc34bc4e2b8b09f4b732bdce8c49043",
+     "workspace": "/work/space"
+    }
+   }
+  },
+  "composio_provider_hash": {
+   "expected": {
+    "artifact": {
+     "artifact_id": "codex:runtime:project:workspace-tools:mcp__codex_apps__composio__composio_multi_execute_tool",
+     "command": "mcp__codex_apps__composio__composio_multi_execute_tool",
+     "config_path": "/work/space/.codex/config.toml",
+     "harness": "codex",
+     "metadata": {
+      "mcpSkillFirewall": {
+       "mcpServer": {
+        "argsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "command": "workspace-tools",
+        "commandHash": "cbbab51e5a10a09ed563e52b4ee8983b64f15f82db8ec66ce8bfe687fe6f15bc",
+        "configPath": "/work/space/.codex/config.toml",
+        "dependencyHash": null,
+        "envKeys": [],
+        "envValuesHash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+        "identityHash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+        "packageName": null,
+        "packageSource": "default",
+        "packageVersion": null,
+        "publisherStableId": null,
+        "transport": "stdio",
+        "transportHash": "c1b9b0d628c08bc5595abfd9c4e78124e760f343d334496d0b61c0136ce0e692"
+       },
+       "mcpTools": [
+        {
+         "descriptionHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+         "descriptorHash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+         "hashScope": "manifest",
+         "identityHash": "eb53d2a929ba3f05b9231d86bdc1a804372c9323208aeea275813c9ebf64a778",
+         "schemaHash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+         "serverHash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+         "toolName": "mcp__codex_apps__composio__composio_multi_execute_tool"
+        }
+       ]
+      },
+      "mcp_provider_catalog_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "mcp_server_identity": {
+       "args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+       "command": "workspace-tools",
+       "command_hash": "cbbab51e5a10a09ed563e52b4ee8983b64f15f82db8ec66ce8bfe687fe6f15bc",
+       "config_path": "/work/space/.codex/config.toml",
+       "dependency_hash": null,
+       "env_keys": [],
+       "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+       "identity_hash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+       "package_name": null,
+       "package_source": "default",
+       "package_version": null,
+       "publisher_stable_id": null,
+       "transport": "stdio",
+       "transport_hash": "c1b9b0d628c08bc5595abfd9c4e78124e760f343d334496d0b61c0136ce0e692"
+      },
+      "mcp_tool_authority_hash": null,
+      "mcp_tool_identity": {
+       "description_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+       "descriptor_hash": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+       "identity_hash": "eb53d2a929ba3f05b9231d86bdc1a804372c9323208aeea275813c9ebf64a778",
+       "schema_hash": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+       "server_hash": "918eb4144fa8dd720db30e9326d7ecfabf38bf6560bf5b57b40f15959693202c",
+       "tool_name": "mcp__codex_apps__composio__composio_multi_execute_tool"
+      },
+      "server_name": "workspace-tools"
+     },
+     "name": "workspace-tools:mcp__codex_apps__composio__composio_multi_execute_tool",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio"
+    },
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiI5ZDQ0Njg3YTg4YjgwNGUzNDRkZDVlMGU2MmY0YThiYjY4ZGY2MDhlYTFjMjA4NjBiZGZiN2NjZmU1YTI2YTI0IiwiY29udGVudCI6Ijg3YTYwN2E3ZGIzMzgxNzgyMjcwM2IxOGZkYjc5OTZkZDliMjBkN2U5MjU4YTA1YzM1ZjM1N2Y0YzJkZjMxYTciLCJpZGVudGl0eSI6Ijg0YWM1MzgyMjdmNzEyNzVhNTE0ODQyYjFlMjQzYjUwODkxNmJhYTFkMzQ4NDViZjRlMjA0ZDdmNWMyZGYyNGYiLCJwb2xpY3kiOiIxMWUwNTgyMWU5YThjOTg1ZGE1Y2IyNGQwMWMyNmEzYjc2ZjNjYjZhN2QxNWViZjU1NTY5ODcwNDEyOWEzZmY5Iiwic2FuZGJveCI6IjE2ZDhhNjQ0ZGY3MGFhNmJmMjU2YTZjNGU4ZDQwZDgyMjFhNWEwNzU3ZGZlMGIxYjJjMzJiNTBkMmY0YmRhMzYiLCJ2ZXJzaW9uIjoxfQ",
+    "runtime_private_metadata": {}
+   },
+   "request": {
+    "artifact": null,
+    "build": {
+     "config_path": "/work/space/.codex/config.toml",
+     "harness": "codex",
+     "provider_catalog_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "server_fingerprint": null,
+     "server_id": null,
+     "server_identity": null,
+     "server_name": "workspace-tools",
+     "source_scope": "project",
+     "tool": {
+      "entry": null,
+      "kind": "catalog"
+     },
+     "tool_name": "mcp__codex_apps__composio__composio_multi_execute_tool",
      "transport": "stdio"
     },
     "hash": {

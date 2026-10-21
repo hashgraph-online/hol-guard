@@ -13,7 +13,9 @@ use guard_contracts::{
 };
 use serde_json::Value;
 
-use crate::hook_decision_native_facts::{benign_native_file_read, benign_tool_action};
+use crate::hook_decision_native_facts::{
+    apply_patch_may_be_verified, benign_native_file_read, benign_tool_action,
+};
 
 pub(crate) const COPILOT_BENIGN_HINT_REASON: &str =
     "untrusted_hook_payload_hint_ignored_guard_verified_benign";
@@ -151,6 +153,26 @@ fn fact(inputs: &HookCompositionInputsV1, name: &'static str) -> Needs<bool> {
     inputs.facts.get(name).copied().ok_or(name)
 }
 
+/// Whether a prompt is clean enough to relax a review tier.
+///
+/// The transport reports one observation per name and composes none of them:
+/// a prompt is clean when it carries no prompt request, names no credential
+/// file, and attaches nothing from the account home. The observations are
+/// asked for in turn, so a prompt that already carries a request never pays
+/// for the scans behind the later two.
+fn prompt_is_clean(inputs: &HookCompositionInputsV1) -> Needs<bool> {
+    for name in [
+        "prompt_request_free",
+        "prompt_credential_free",
+        "prompt_attachment_free",
+    ] {
+        if !fact(inputs, name)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 /// A verified-benign tool call relaxes a review-tier configured default.
 fn relax_configured_default(
     inputs: &HookCompositionInputsV1,
@@ -169,7 +191,7 @@ fn relax_configured_default(
     let canonical = inputs.canonical_harness.as_str();
     if event == Some("UserPromptSubmit") {
         return if inputs.prompt_nonblank {
-            fact(inputs, "prompt_clean")
+            prompt_is_clean(inputs)
         } else {
             Ok(false)
         };
@@ -177,7 +199,10 @@ fn relax_configured_default(
     if event == Some("PostToolUse") && inputs.runtime_artifact_checked && canonical == "codex" {
         return fact(inputs, "post_tool_read_only_inspection");
     }
-    if fact(inputs, "verified_apply_patch")? {
+    if event == Some("PreToolUse")
+        && apply_patch_may_be_verified(inputs)
+        && fact(inputs, "apply_patch_targets_non_sensitive")?
+    {
         return Ok(true);
     }
     let pre = event == Some("PreToolUse");
@@ -238,13 +263,10 @@ fn truthy(value: &Value) -> bool {
     }
 }
 
-/// The edge verdict as a floor on the composed action. A present but
-/// unrecognized action fails closed to `block`.
-pub(crate) fn edge_floor(
-    edge: Option<&HookNativeEdgeV1>,
-    event: Option<&str>,
-) -> Option<GuardAction> {
-    let edge = edge?;
+/// The edge's own action: `policy_action`, else `minimum_action`, else
+/// `block` for a bare deny. A present but unrecognized action fails closed
+/// to `block`.
+pub(crate) fn edge_action(edge: &HookNativeEdgeV1) -> Option<GuardAction> {
     let raw = if truthy(&edge.policy_action) {
         Some(&edge.policy_action)
     } else if truthy(&edge.minimum_action) {
@@ -252,15 +274,27 @@ pub(crate) fn edge_floor(
     } else {
         None
     };
-    let mut action = match raw {
+    match raw {
         Some(value) => Some(normalize_guard_action(value, GuardAction::Block)),
         None if edge.decision.as_str() == Some("deny") => Some(GuardAction::Block),
         None => None,
-    };
-    let hard = matches!(
+    }
+}
+
+pub(crate) fn is_hard(action: Option<GuardAction>) -> bool {
+    matches!(
         action,
         Some(GuardAction::Block | GuardAction::SandboxRequired)
-    );
+    )
+}
+
+/// The edge verdict as a floor on the composed action.
+pub(crate) fn edge_floor(
+    edge: Option<&HookNativeEdgeV1>,
+    event: Option<&str>,
+) -> Option<GuardAction> {
+    let mut action = edge_action(edge?);
+    let hard = is_hard(action);
     if event == Some("PostToolUse") {
         // PostToolUse cannot undo the finished action; the edge deny masks the
         // emitted output while the policy surface stays reviewable.

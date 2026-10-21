@@ -117,6 +117,10 @@ def realistic_environment(environment: dict[str, str], home: Path) -> dict[str, 
             "PYTHONDONTWRITEBYTECODE": "1",
         }
     )
+    # Developer shells put per-user CLIs such as doctl in ~/.local/bin ahead of the system PATH.
+    local_bin = home / ".local/bin"
+    if "PATH" in environment and local_bin.is_dir():
+        environment["PATH"] = str(local_bin) + os.pathsep + environment["PATH"]
     # Windows resolves DLLs through PATH, so a Windows developer shell carries no loader path.
     if os.name != "nt":
         libraries = home / ".local/lib"
@@ -172,7 +176,11 @@ def run_process(
     started = time.monotonic()
     timed_out = False
     with output.open("wb") as out, error_output.open("wb") as err:
-        process = subprocess.Popen(command, cwd=cwd, env=env, stdout=out, stderr=err, start_new_session=True)
+        # The prompt travels in argv. An inherited stdin that never closes makes
+        # omp and codex wait for more input until the deadline.
+        process = subprocess.Popen(
+            command, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=err, start_new_session=True
+        )
         try:
             _record_group("start", process.pid)
             timed_out = _await_bounded(

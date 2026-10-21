@@ -52,7 +52,7 @@
       "evidence": [
         "tests/test_guard_harness_smoke.py",
         "tests/test_guard_risk.py",
-        "tests/test_guard_containment_executor.py"
+        "rust/crates/guard-command/src/contained_runner/real_backend_tests.rs"
       ],
       "blockers": [
         "Detector and containment coverage is present, but selective network enforcement is not installed end to end."

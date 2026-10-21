@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import stat
+import sys
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -48,7 +49,9 @@ def restricted_native(operation: str, fields: Mapping[str, Any], expected: type 
     # Lexical anchoring preserves the caller's cwd/home; the resident owns
     # existence, symlink, workspace and executable admission.
     inputs = dict(fields)
-    if operation in {"prepare_node", "prepare_vitest", "prepare_inline", "approved_node"}:
+    if operation == "approved_node" or (
+        operation in {"prepare_node", "prepare_vitest", "prepare_inline"} and inputs.get("home") is None
+    ):
         inputs["home"] = Path.home()
     if operation.startswith("prepare") and inputs.get("command") and inputs["command"][0].startswith("~"):
         inputs["command"] = [str(Path(inputs["command"][0]).expanduser()), *inputs["command"][1:]]
@@ -150,12 +153,31 @@ def _request(operation: str, wire_input: Mapping[str, Any], expected: type | tup
     )
 
 
+def venv_activation_target(command: str, *, cwd: Path | None = None, home_dir: Path | None = None) -> str | None:
+    """The command a virtualenv activation hands its verdict to, as the pre-tool pass read it.
+
+    The native scan owns the reading: the activation has to resolve to a
+    marked environment's own script, its text has to bound the programs it can
+    run, and only then does the command after it carry the verdict.
+    """
+    try:
+        value = restricted_native(
+            "venv_activation_target",
+            {"text": command, "cwd": cwd, "home": home_dir},
+            (str, type(None)),
+        )
+    except RestrictedPytestError:
+        return None
+    return value if isinstance(value, str) else None
+
+
 def native_launch_plan(
     operation: str,
     command,
     *,
     workspace: Path,
     cwd: Path,
+    home_dir: Path | None = None,
     platform: str,
     backend_executable: Path | None,
     profile: str | tuple[str, ...],
@@ -167,6 +189,7 @@ def native_launch_plan(
             "command": [str(item) for item in command],
             "workspace": workspace,
             "cwd": cwd,
+            "home": home_dir,
             "platform": platform,
             "backend_executable": backend_executable,
         },
@@ -186,7 +209,25 @@ def decode_native_plan(result: dict[str, Any], profiles: tuple[str, ...]):
         or any(not isinstance(result[key], str) for key in scalars)
         or any(not isinstance(result[key], list) or not all(isinstance(v, str) for v in result[key]) for key in arrays)
         or result["profile_version"] not in profiles
-        or result["backend"] not in {"macos-seatbelt", "linux-bubblewrap"}
+        or not (
+            result["backend"] in {"macos-seatbelt", "linux-bubblewrap"}
+            # The Windows runner contains an installed Python interpreter, a
+            # virtual environment's own interpreter running the project's
+            # tests, or a staged local Node tool: a Vite build, or a lint,
+            # typecheck or format check that publishes nothing back.
+            or (
+                result["backend"] == "windows-appcontainer"
+                and sys.platform == "win32"
+                and result["profile_version"]
+                in {
+                    "python-eval-readonly-v1",
+                    "node-eval-readonly-v1",
+                    "node-build-output-v1",
+                    "node-tool-readonly-v1",
+                    "pytest-readonly-v2",
+                }
+            )
+        )
         or not result["command"]
         or not result["allowed_executables"]
     ):

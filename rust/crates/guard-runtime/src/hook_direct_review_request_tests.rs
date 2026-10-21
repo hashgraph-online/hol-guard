@@ -47,6 +47,9 @@ fn input<'a>(vector: &'a Value, environment: &'a BTreeMap<String, String>) -> Re
     }
 }
 
+/// The vectors were recorded where `os.path.expanduser` reads `HOME`; the
+/// Windows expansion from `USERPROFILE` has its own CPython comparison below.
+#[cfg(unix)]
 #[test]
 fn envelope_query_matches_the_daemon() {
     for vector in vectors() {
@@ -119,6 +122,7 @@ fn hint_candidates_match_the_daemon() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn the_adapter_answers_a_shell_review() {
     let vector = vectors().into_iter().next().expect("a vector");
@@ -133,6 +137,7 @@ fn the_adapter_answers_a_shell_review() {
 }
 
 /// Which stage answers `None` for the first vector after `edit`.
+#[cfg(unix)]
 #[derive(Debug, PartialEq)]
 enum Deferred {
     Query,
@@ -141,6 +146,7 @@ enum Deferred {
     No,
 }
 
+#[cfg(unix)]
 fn deferred_at(edit: impl Fn(&mut Value, &mut BTreeMap<String, String>)) -> Deferred {
     let mut vector = vectors().into_iter().next().expect("a vector");
     let mut environment = environment(&vector);
@@ -160,6 +166,7 @@ fn deferred_at(edit: impl Fn(&mut Value, &mut BTreeMap<String, String>)) -> Defe
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn unanswerable_shapes_defer() {
     assert_eq!(deferred_at(|_, _| {}), Deferred::No);
@@ -235,9 +242,177 @@ fn false_and_float_zero_uncertainty_are_hint_candidates() {
     for count in [json!(false), json!(0.0)] {
         let result = json!({
             "minimum_action": "review",
+            "reason_code": "native_command_review_required",
             "command_extensions": {"binding": {"uncertainty_count": count, "observations_digest": "d"}},
         });
         let result = result.as_object().expect("result");
         assert_eq!(allow_hint_candidate(payload, result), Some(true));
+    }
+}
+
+#[test]
+fn the_working_directory_cursor_sends_is_a_hint_candidate() {
+    // Cursor copies the hook's cwd into every shell tool input it forwards,
+    // so rejecting that key left Cursor reviews with no Extension to name.
+    for key in ["working_directory", "workingDirectory"] {
+        let payload = json!({"tool_name": "Bash", "tool_input": {"command": "ls", key: "/w"}});
+        let payload = payload.as_object().expect("payload");
+        let result = json!({
+            "minimum_action": "review",
+            "reason_code": "native_command_review_required",
+            "command_extensions": {"binding": {"uncertainty_count": 0, "observations_digest": "d"}},
+        });
+        let result = result.as_object().expect("result");
+        assert_eq!(allow_hint_candidate(payload, result), Some(true), "{key}");
+    }
+}
+
+#[test]
+fn any_rule_uncertain_observations_are_hint_candidates() {
+    let payload = json!({
+        "tool_name": "Bash",
+        "tool_input": {"command": "docker version --format '{{.Server.Version}}'"},
+    });
+    let payload = payload.as_object().expect("payload");
+    for (extension_id, rule_id) in [
+        (
+            "command.container-runtime",
+            "command.container-runtime.docker-sensitive",
+        ),
+        (
+            "command.kubernetes-secrets",
+            "command.kubernetes-secrets.secret-read",
+        ),
+        (
+            "command.data-protection",
+            "command.data-protection.file-upload",
+        ),
+    ] {
+        let result = json!({
+            "minimum_action": "review",
+            "reason_code": "native_command_review_required",
+            "command_extensions": {
+                "binding": {"uncertainty_count": 1, "observations_digest": "d"},
+                "observations": [
+                    {
+                        "extension_id": extension_id,
+                        "rule_id": rule_id,
+                        "uncertainty_reasons": ["matcher-failure"],
+                    }
+                ],
+            },
+        });
+        let result = result.as_object().expect("result");
+        assert_eq!(
+            allow_hint_candidate(payload, result),
+            Some(true),
+            "{rule_id}"
+        );
+    }
+    // Ruleless permission uncertainty cannot be settled by any one
+    // permission, so it is never a hint candidate.
+    let result = json!({
+        "minimum_action": "review",
+        "reason_code": "native_command_review_required",
+        "command_extensions": {
+            "binding": {"uncertainty_count": 1, "observations_digest": "d"},
+            "observations": [],
+            "permission_observations": [
+                {"uncertainty_reasons": ["matcher-failure"]}
+            ],
+        },
+    });
+    let result = result.as_object().expect("result");
+    assert_eq!(allow_hint_candidate(payload, result), Some(false));
+    // A fixed PreTool floor reviews whatever the extensions say, so an
+    // extension Allow can never settle it and it is not a hint candidate.
+    let result = json!({
+        "minimum_action": "review",
+        "reason_code": "native_sensitive_access_review",
+        "command_extensions": {
+            "binding": {"uncertainty_count": 0, "observations_digest": "d"},
+        },
+    });
+    let result = result.as_object().expect("result");
+    assert_eq!(allow_hint_candidate(payload, result), Some(false));
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_expanded_home_matches_cpython() {
+    for profile in [
+        r"C:\Users\Guard Tester",
+        r"C:\Users\Guard Tester\",
+        "~guard",
+    ] {
+        let output = std::process::Command::new("python")
+            .args(["-c", "import os; print(os.path.expanduser('~'), end='')"])
+            .env("USERPROFILE", profile)
+            .output()
+            .expect("python runs");
+        assert!(output.status.success(), "{profile:?}");
+        let cpython = String::from_utf8(output.stdout).expect("utf-8");
+        let environment = BTreeMap::from([("USERPROFILE".to_owned(), profile.to_owned())]);
+        assert_eq!(expanded_home(&environment), Some(cpython), "{profile:?}");
+    }
+    // Without `USERPROFILE` ntpath joins `HOMEDRIVE` and `HOMEPATH`.
+    for (drive, path) in [
+        (Some("C:"), r"\Users\guard"),
+        (None, r"\Users\guard"),
+        (Some("c:"), "/Users/guard"),
+        (Some("C:"), "Users"),
+    ] {
+        let mut command = std::process::Command::new("python");
+        command
+            .args(["-c", "import os; print(os.path.expanduser('~'), end='')"])
+            .env_remove("USERPROFILE")
+            .env("HOMEPATH", path);
+        let mut environment = BTreeMap::from([("HOMEPATH".to_owned(), path.to_owned())]);
+        match drive {
+            Some(drive) => {
+                command.env("HOMEDRIVE", drive);
+                environment.insert("HOMEDRIVE".to_owned(), drive.to_owned());
+            }
+            None => {
+                command.env_remove("HOMEDRIVE");
+            }
+        }
+        let output = command.output().expect("python runs");
+        assert!(output.status.success(), "{drive:?} {path:?}");
+        let cpython = String::from_utf8(output.stdout).expect("utf-8");
+        assert_eq!(
+            expanded_home(&environment),
+            Some(cpython),
+            "{drive:?} {path:?}"
+        );
+    }
+    // A UNC home share goes through `splitroot`; the daemon joins it.
+    let environment = BTreeMap::from([
+        ("HOMEDRIVE".to_owned(), r"\\srv\share".to_owned()),
+        ("HOMEPATH".to_owned(), r"\".to_owned()),
+    ]);
+    assert_eq!(expanded_home(&environment), None);
+}
+
+/// Expected values are CPython's `ntpath.join(drive, path)`.
+#[test]
+fn home_drive_join_is_ntpath_join_or_left_to_the_daemon() {
+    for (drive, path, joined) in [
+        ("C:", r"\Users\guard", Some(r"C:\Users\guard")),
+        ("", r"\Users\guard", Some(r"\Users\guard")),
+        ("c:", "/Users/guard", Some("c:/Users/guard")),
+        ("C:", "Users", Some("C:Users")),
+        ("C:", "", Some("C:")),
+        ("", "", Some("")),
+        (r"\\srv\share", r"\", None),
+        ("C:", r"\\srv\share", None),
+        ("C:", r"D:\x", None),
+        ("CD", r"\x", None),
+    ] {
+        assert_eq!(
+            join_home_drive(drive, path).as_deref(),
+            joined,
+            "{drive:?} {path:?}"
+        );
     }
 }

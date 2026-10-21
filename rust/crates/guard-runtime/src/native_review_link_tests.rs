@@ -87,3 +87,30 @@ fn codex_loopback_links_need_the_key() {
     let signed = native_review_reason("codex", "Review.", url, Some("key"), 0).expect("reason");
     assert!(signed.contains(&format!("{url}#guard-token={SESSION_PREFIX}.")));
 }
+
+#[test]
+fn loopback_links_the_client_would_sign_are_never_shown_unsigned() {
+    for url in [
+        "http://127.0.0.1:4781/approvals/a?b=c",
+        "http://localhost:4781/approvals/a#guard-token=old",
+        "HTTP://127.0.0.1:4781/approvals/a",
+        "http://user@[::1]:4781/approvals/a%20b",
+        " \x01http://127.0.0.1:4781/approvals/a",
+    ] {
+        assert_eq!(live_review_url(url, Some("key"), 0), None, "{url}");
+        assert_eq!(live_review_url(url, None, 0).as_deref(), Some(url), "{url}");
+    }
+    for url in [
+        "https://guard.example/approvals/a?b=c",
+        "http://[::2]:4781/approvals/a?b=c",
+        "ftp://127.0.0.1/approvals/a",
+    ] {
+        assert_eq!(
+            live_review_url(url, Some("key"), 0).as_deref(),
+            Some(url),
+            "{url}"
+        );
+    }
+    let signed = live_review_url("http://127.0.0.1:4781/approvals/a", Some("key"), 0).unwrap();
+    assert!(signed.starts_with("http://127.0.0.1:4781/approvals/a#guard-token=gld1."));
+}

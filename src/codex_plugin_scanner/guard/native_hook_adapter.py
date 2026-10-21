@@ -45,6 +45,8 @@ from .native_context import (
 )
 from .native_execution import _resident_request
 from .native_hook_adapter_wire import _Tagger, _TooLargeError, _UnrepresentableError
+from .native_resident_client import native_resident_client_failure_code, record_native_resident_client_failure_code
+from .native_resident_revival import RESTART_BLOCKED_CODE
 
 HOOK_ADAPTER_FEATURE = "hook-adapter-v1"
 _REQUEST_SCHEMA = "guard-hook-adapter-request.v1"
@@ -55,6 +57,8 @@ _INVALID = "native_hook_adapter_payload_invalid"
 _DEADLINE = "native_hook_adapter_deadline_expired"
 _REQUEST_TOO_LARGE = "native_hook_adapter_request_too_large"
 _TIMEOUT_SECONDS = 5.0
+_RETRY_MIN_SECONDS = 1.0
+_NO_RETRY_CODES = frozenset({"native_client_timed_out", RESTART_BLOCKED_CODE})
 _MAX_REQUEST_BYTES = 4 * 1024 * 1024
 # Transport framing around ``request`` (operation name, deadline budget).
 _ENVELOPE_OVERHEAD_BYTES = 256
@@ -103,6 +107,16 @@ class NativeHookAdapterError(RuntimeError):
 
 class ClinePayloadError(ValueError):
     """The Cline hook payload is not a supported hook event."""
+
+
+class UnsupportedHarnessError(ValueError):
+    """The resident has no action adapter for this harness.
+
+    Which harnesses can be normalized is the adapter's own registry, so a
+    caller that wants to skip the envelope asks by catching this rather than
+    keeping a second list beside it. It stays a ``ValueError`` because it is
+    still a bad argument to anyone who was not asking the question.
+    """
 
 
 _Built = tuple[dict[str, object], _Tagger]
@@ -213,22 +227,13 @@ def _call(
             raise NativeHookAdapterError("native_hook_adapter_request_invalid") from None
         if memo_key in memo:
             return copy.deepcopy(memo[memo_key])
-    request["request_id"] = f"hook-adapter-{uuid4().hex}"
-    try:
-        digest = "sha256:" + _canonical_request_sha256(request)
-    except (TypeError, ValueError):
-        raise NativeHookAdapterError("native_hook_adapter_request_invalid") from None
     if not ensure_resident_prerequisite(home):
         raise NativeHookAdapterError(_UNAVAILABLE)
-    response = _resident_request(
-        operation="hook_adapter",
-        request=request,
-        guard_home=home,
-        timeout_seconds=_remaining_seconds(deadline),
-        required_feature=HOOK_ADAPTER_FEATURE,
-        response_schema=_RESULT_SCHEMA,
-        max_request_bytes=_MAX_REQUEST_BYTES,
-    )
+    response, digest = _send(request, home, deadline)
+    if response is None and _worth_retrying(deadline):
+        # Adapter calls have no side effects: a resident that dropped one round trip (a restart,
+        # a busy socket) gets one more inside the caller's budget. A second miss fails closed.
+        response, digest = _send(request, home, deadline)
     if deadline is not None and time.monotonic() > deadline:
         # A late answer is as unusable as none: the caller's budget is spent.
         raise NativeHookAdapterError(_DEADLINE)
@@ -258,6 +263,32 @@ def _call(
     return decoded
 
 
+def _send(request: dict[str, object], home: Path, deadline: float | None) -> tuple[dict[str, object] | None, str]:
+    request["request_id"] = f"hook-adapter-{uuid4().hex}"
+    try:
+        digest = "sha256:" + _canonical_request_sha256(request)
+    except (TypeError, ValueError):
+        raise NativeHookAdapterError("native_hook_adapter_request_invalid") from None
+    record_native_resident_client_failure_code(None)
+    response = _resident_request(
+        operation="hook_adapter",
+        request=request,
+        guard_home=home,
+        timeout_seconds=_remaining_seconds(deadline),
+        required_feature=HOOK_ADAPTER_FEATURE,
+        response_schema=_RESULT_SCHEMA,
+        max_request_bytes=_MAX_REQUEST_BYTES,
+    )
+    return response, digest
+
+
+def _worth_retrying(deadline: float | None) -> bool:
+    # A timeout already spent the budget, and a held restart will not clear in time.
+    if native_resident_client_failure_code() in _NO_RETRY_CODES:
+        return False
+    return deadline is None or deadline - time.monotonic() >= _RETRY_MIN_SECONDS
+
+
 def _raise_rejection(code: object, payload: object, query: object) -> None:
     if code == "native_hook_adapter_cline_payload" and isinstance(payload, dict) and set(payload) == {"message"}:
         message = payload["message"]
@@ -266,7 +297,7 @@ def _raise_rejection(code: object, payload: object, query: object) -> None:
     if code == "native_hook_adapter_unsupported_harness" and isinstance(payload, dict) and set(payload) == {"harness"}:
         harness = payload["harness"]
         if isinstance(harness, str) and isinstance(query, Mapping) and harness == query.get("harness"):
-            raise ValueError(f"Unsupported Guard harness for action normalization: {harness}")
+            raise UnsupportedHarnessError(f"Unsupported Guard harness for action normalization: {harness}")
     reason = code if isinstance(code, str) and _RESIDENT_CODE.fullmatch(code) else _UNAVAILABLE
     raise NativeHookAdapterError(reason)
 
@@ -458,6 +489,7 @@ __all__ = [
     "HOOK_ADAPTER_FEATURE",
     "ClinePayloadError",
     "NativeHookAdapterError",
+    "UnsupportedHarnessError",
     "hook_adapter_memo",
     "native_action_envelope",
     "native_apply_patch_paths",

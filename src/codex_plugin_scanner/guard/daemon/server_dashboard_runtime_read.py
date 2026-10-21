@@ -15,8 +15,10 @@ from ..models import format_local_http_origin
 from ..native_daemon_handler import native_events_cursor
 from ..runtime.network_status import build_network_status
 from ..store import GuardStore
+from .command_activity_health_repair import auto_repair_command_activity_health_if_degraded
 from .dashboard_update import merge_dashboard_update_progress
 from .extension_control_api import ExtensionControlApiError
+from .harness_version_api import attach_version_compatibility
 from .local_cli_http import handle_local_cli_list
 from .server_common import _now, _ServerProxy, _settings_export_payload, _settings_response_payload
 from .server_control_cloud_sync import _managed_controls_publish_for, _maybe_queue_first_cloud_sync
@@ -36,10 +38,12 @@ class _DashboardRuntimeReadRoutes:
             self._write_json(catalog, extra_headers={"Cache-Control": "no-store"})
             return True
         if parsed.path == "/v1/extension-controls/effective":
-            self._write_json(
-                self._daemon_server().extension_control_api.effective(),
-                extra_headers={"Cache-Control": "no-store"},
-            )
+            try:
+                effective = self._daemon_server().extension_control_api.effective()
+            except ExtensionControlApiError as error:
+                self._write_json(error.to_payload(), status=error.status)
+                return True
+            self._write_json(effective, extra_headers={"Cache-Control": "no-store"})
             return True
         if parsed.path == "/v1/extension-controls/history":
             try:
@@ -50,7 +54,7 @@ class _DashboardRuntimeReadRoutes:
             self._write_json(history, extra_headers={"Cache-Control": "no-store"})
             return True
         if parsed.path == "/v1/local-clis":
-            handle_local_cli_list(self)
+            handle_local_cli_list(self, parsed.query)
             return True
         if parsed.path == "/v1/capabilities":
             self._handle_capabilities()
@@ -79,6 +83,7 @@ class _DashboardRuntimeReadRoutes:
                 store=store,
                 managed_controls_publish=_managed_controls_publish_for(self._daemon_server()),
             )
+            auto_repair_command_activity_health_if_degraded(store)
             config = load_guard_config(store.guard_home)
             daemon_server = self._daemon_server()
             include_receipts = self._query_bool(parsed.query, "include_receipts", default=True)
@@ -110,7 +115,8 @@ class _DashboardRuntimeReadRoutes:
             return True
         if parsed.path == "/v1/harnesses":
             context = self._harness_context({})
-            self._write_json({"items": list_harness_setup_items(context, self.server.store)})  # type: ignore[attr-defined]
+            items = list_harness_setup_items(context, self.server.store)  # type: ignore[attr-defined]
+            self._write_json({"items": attach_version_compatibility(items, context)})
             return True
         if parsed.path == "/v1/supply-chain/package-shims":
             self._handle_supply_chain_package_firewall_status()

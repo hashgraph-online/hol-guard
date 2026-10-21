@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_hook_containment_route as containment_route
 from codex_plugin_scanner.guard import native_restricted_pytest as native
-from codex_plugin_scanner.guard.adapters import zcode_contained_tests
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_workspace as workspace_sink
 from codex_plugin_scanner.guard.runtime.restricted_pytest import RestrictedPytestError
@@ -51,6 +51,8 @@ def plan(workspace: Path, text: str = COMMAND, **changes: object) -> dict[str, o
         "prefix_command": None,
         "native_suffix": None,
         "denied_capabilities": [],
+        "grant_identity_hash": None,
+        "capabilities": [],
     }
     return value | changes
 
@@ -134,7 +136,7 @@ def test_a_workspace_receipt_runs_shapes_the_wrapper_cannot_peel(
                 timeout_seconds=20,
                 authorize=lambda original, denied=denied: denied,
             )
-        assert error.value.reason_code == "contained_test_authorization_failed"
+        assert error.value.reason_code == "contained_run_authorization_failed"
     assert len(ran) == 1
 
 
@@ -180,6 +182,30 @@ def test_a_plan_that_differs_from_the_authorized_command_is_rejected(
             payload(), workspace=tmp_path, cwd=tmp_path, authorize=lambda original: receipt(), first_receipt=receipt()
         )
     assert started == []
+
+
+def test_a_read_grant_is_one_canonical_script_the_command_names(tmp_path: Path) -> None:
+    (tmp_path / "scratch").mkdir()
+    script = (tmp_path / "scratch" / "check.py").resolve()
+    script.write_text("print(1)\n", encoding="utf-8")
+    link = tmp_path / "scratch" / "link.py"
+    link.symlink_to(script)
+    text = f"python3 {script}"
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    accepted = workspace_sink._validated_plan(plan(workspace, text, read_only_roots=[str(script)]), text, workspace)
+    assert accepted["read_only_roots"] == [str(script)]
+    for roots in (
+        [str(script.parent)],
+        [str(link)],
+        ["check.py"],
+        [str(tmp_path / "scratch" / "missing.py")],
+        [str(tmp_path / "scratch" / "other.py")],
+        str(script),
+        [3],
+    ):
+        with pytest.raises(RestrictedPytestError):
+            workspace_sink._validated_plan(plan(workspace, text, read_only_roots=roots), text, workspace)
 
 
 @pytest.fixture(autouse=True)
@@ -279,8 +305,15 @@ def test_a_prefix_outside_the_authorized_command_is_rejected(monkeypatch: pytest
             )
 
 
-def test_adapters_map_the_workspace_reason_to_its_profile() -> None:
-    assert zcode_contained_tests._PROFILES["native_workspace_containment_required"] == "workspace-contained-v1"
+def test_adapters_map_the_workspace_reason_to_its_profile(
+    native_approval_reuse_runtime: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Linux runs only this profile, so the resident naming it there pins the mapping.
+    monkeypatch.setattr(containment_route, "host_platform", lambda: "linux")
+    sink = containment_route.native_containment_sink(
+        receipt(), harness="claude-code", bridge=False, payload=payload(), guard_home=native_approval_reuse_runtime
+    )
+    assert sink == ("workspace-contained-v1", None)
 
 
 def test_linux_runs_in_an_overlay_and_applies_only_after_exit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -454,3 +487,24 @@ def test_a_cd_below_a_sibling_root_without_a_workspace_receipt_never_runs_there(
                 home_dir=home,
             )
     assert ran == []
+
+
+def test_read_grants_need_a_launched_single_canonical_script(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.restricted_workspace_grants import read_grants_valid
+
+    root = tmp_path.resolve()
+    upper = root / "Build.JS"
+    good = root / "good.py"
+    upper.write_text("x")
+    good.write_text("x")
+    assert read_grants_valid([str(upper)], f"node {upper}")
+    assert not read_grants_valid([str(good)], f"python3 {root}/other/good.py")
+    assert not read_grants_valid([str(good), str(upper)], f"node {upper}; python3 {good}")
+    assert read_grants_valid([str(good)], f"python3 {good};echo ok")
+    assert read_grants_valid([str(good)], f"python3 {good}|head")
+    assert read_grants_valid([str(good)], f"python3 {good}>out.log")
+    hashed = root / "run#2"
+    hashed.mkdir()
+    (hashed / "good.py").write_text("x")
+    assert read_grants_valid([str(hashed / "good.py")], f"python3 {hashed}/good.py")
+    assert not read_grants_valid([str(good)], f"python3 {good}#x")

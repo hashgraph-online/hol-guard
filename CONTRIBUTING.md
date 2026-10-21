@@ -26,6 +26,7 @@ maintainer checks across supported AI plugin ecosystems.
 | Generate a review kit from a trusted offline CLI or MCP export | [Extension Builder](docs/guard/extension-builder/README.md) |
 | New matcher operation or a parser, policy, or hook-runtime change | `rust/crates/`, the [command architecture](docs/guard/command-extension-architecture.md), and [native ownership map](docs/guard/native-hook-data-plane-ownership.md) |
 | MCP server package or tool defaults | [MCP server contribution guide](docs/guard/mcp-server-contributions.md) |
+| New AI coding-app harness adapter or host hook integration | [Harness adapter contribution guide](docs/guard/adapter-contributions.md) |
 | Public extension listing or publisher attribution | [Publisher metadata](docs/guard/extensions/publisher-metadata.md) |
 
 Command source files under `contributions/command-sources/` own extension metadata, permissions,

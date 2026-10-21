@@ -112,6 +112,60 @@ def test_explicit_git_stash_permission_allows_wrapped_shell_forms(
     )
 
 
+def test_explicit_git_stash_permission_covers_a_shell_carrying_the_script(
+    tmp_path: Path, native_approval_reuse_runtime
+) -> None:
+    command = "sh -c 'git stash list'"
+    fixture, canonical, evaluation = _native_fixture(
+        command,
+        controls=(("permission", "command.git.permission.stash", "enabled"),),
+    )
+
+    # `sh -c` reads no startup file, so the shell runs exactly the script it
+    # carries and adds nothing to it. It leaves no wrapper behind and the grant
+    # for the script covers it.
+    assert fixture.payload["command_model"]["wrapper_chain"] == []
+    assert fixture.payload["command_extensions"].get("evaluation_error") is None
+    request = extract_sensitive_tool_action_request(
+        "Shell",
+        {"command": command},
+        cwd=tmp_path,
+        home_dir=tmp_path,
+        canonical_command=canonical,
+        native_evaluation=evaluation,
+    )
+
+    assert request is not None
+    artifact = build_tool_action_request_artifact(
+        "grok",
+        request,
+        config_path="config.toml",
+        source_scope="project",
+        extension_control_snapshot=fixture.snapshot,
+        native_extension_evidence=fixture.payload,
+    )
+
+    assert artifact.metadata["command_action_floor"] == "allow"
+    assert artifact.metadata["extension_control_resolution"] == {
+        "blocked": False,
+        "failures": [],
+        "explicitly_enabled_permission_ids": ["command.git.permission.stash"],
+    }
+    assert (
+        _runtime_artifact_policy_action(
+            GuardConfig(
+                guard_home=tmp_path / "guard",
+                workspace=tmp_path,
+                default_action="review",
+            ),
+            artifact,
+            "grok",
+            guard_home=native_approval_reuse_runtime,
+        )
+        == "allow"
+    )
+
+
 def test_explicit_git_stash_permission_does_not_unwrap_login_shells(tmp_path: Path) -> None:
     command = "zsh -lc 'git stash list'"
     fixture = real_native_review_fixture(

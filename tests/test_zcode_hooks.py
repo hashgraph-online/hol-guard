@@ -6,13 +6,12 @@ import io
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.zcode_hooks import (
+from codex_plugin_scanner.guard.adapters._modules.zcode.zcode_hooks import (
     emit_zcode_hook_response,
     prepare_zcode_hook_payload,
     zcode_authority_block_reason,
     zcode_hook_process_exit,
     zcode_hook_response_from_guard,
-    zcode_hook_should_block,
 )
 from codex_plugin_scanner.guard.runtime.actions import (
     normalize_harness_payload,
@@ -160,13 +159,6 @@ class TestZCodeHookResponses:
         assert (
             "hol-guard command controls recover-authority" in payload["hookSpecificOutput"]["permissionDecisionReason"]
         )
-
-    def test_should_block_flags_blocking_actions(self) -> None:
-        assert zcode_hook_should_block(policy_action="review")
-        assert zcode_hook_should_block(policy_action="block")
-        assert zcode_hook_should_block(policy_action="sandbox-required")
-        assert zcode_hook_should_block(policy_action="require-reapproval")
-        assert not zcode_hook_should_block(policy_action="allow")
 
     def test_process_exit_review_pretool_exits_zero_so_ask_json_is_parsed(self) -> None:
         # ZCode only parses stdout JSON for successful hook processes; exit 2

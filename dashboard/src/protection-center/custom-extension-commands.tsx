@@ -7,6 +7,7 @@ import {
 } from "../extension-policy-panel";
 import { mcpToolCanReceiveDirectAllow } from "./mcp-catalog-state";
 import { McpClassificationEvidence } from "./mcp-classification-evidence";
+import { commandDescriptionIsCode, commandNamePrefix, commandRowUsageFor } from "./custom-extension-command-view";
 
 export function commandStatesPayload(
   commands: readonly LocalCliCommand[],
@@ -22,47 +23,7 @@ export function withCommandState(
   return commands.map((command) => (command.command_id === commandId ? { ...command, state } : command));
 }
 
-export function commandNestingDepth(command: LocalCliCommand): number {
-  if (command.parent_id) return command.parent_id.split(".").filter(Boolean).length;
-  const colons = command.name.split(":").length - 1;
-  return colons > 0 ? colons : 0;
-}
-
-export function commandRowUsage(name: string, usage: string): string | null {
-  const trimmed = usage.trim();
-  if (trimmed === "" || trimmed === name) return null;
-  return trimmed;
-}
-
-export function CustomExtensionCommandList(props: {
-  commands: readonly LocalCliCommand[];
-  disabled: boolean;
-  surface?: LocalCliSurface;
-  onChange: (commandId: string, state: LocalCliCommandState) => void;
-}) {
-  if (props.commands.length === 0) {
-    return (
-      <p className="text-sm leading-6 text-brand-dark/75">
-        {emptyCommandCopy(props.surface)}
-      </p>
-    );
-  }
-  return (
-    <div className="divide-y divide-slate-200">
-      {props.commands.map((command) => (
-        <CustomExtensionCommandRow
-          key={command.command_id}
-          command={command}
-          disabled={props.disabled}
-          surface={props.surface}
-          onChange={props.onChange}
-        />
-      ))}
-    </div>
-  );
-}
-
-function emptyCommandCopy(surface: LocalCliSurface | undefined): string {
+export function emptyCommandCopy(surface: LocalCliSurface | undefined): string {
   if (surface === "mcp") {
     return "Guard has not loaded tools for this MCP server yet. Find the server again to list its tools.";
   }
@@ -72,29 +33,50 @@ function emptyCommandCopy(surface: LocalCliSurface | undefined): string {
   return "Guard has not loaded commands for this tool yet. Find the tool again to read its --help output.";
 }
 
-function CustomExtensionCommandRow(props: {
+export function CustomExtensionCommandRow(props: {
   command: LocalCliCommand;
   disabled: boolean;
   surface?: LocalCliSurface;
+  /** Set when the row renders inside a family heading; the repeated prefix is dimmed. */
+  groupLabel?: string;
+  changed?: boolean;
+  changedLabel?: string;
   onChange: (commandId: string, state: LocalCliCommandState) => void;
 }) {
   const handleChange = useCallback((state: LocalCliCommandState) => {
     props.onChange(props.command.command_id, state);
   }, [props]);
-  const depth = commandNestingDepth(props.command);
+  const prefix = props.groupLabel === undefined ? "" : commandNamePrefix(props.command.name, props.groupLabel);
+  const usage = commandRowUsageFor(props.command, props.surface);
+  const descriptionIsCode = commandDescriptionIsCode(props.command, props.surface);
   return (
     <article
-      className="guard-pattern-row px-4 py-3.5"
+      className="guard-pattern-row px-4 py-3"
       data-command-id={props.command.command_id}
-      style={depth > 0 ? { paddingLeft: `${1.25 + depth * 1.1}rem` } : undefined}
+      data-changed={props.changed ? "true" : undefined}
     >
       <div className="min-w-0 pr-3">
-        <h3 className="text-sm font-semibold text-brand-dark">{props.command.name}</h3>
-        {commandRowUsage(props.command.name, props.command.usage) ? (
-          <p className="guard-pattern-example mt-1" title={props.command.usage}>{props.command.usage}</p>
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+          <h3 className="min-w-0 break-words text-sm font-semibold text-brand-dark">
+            {prefix ? <span className="font-medium text-brand-dark/55">{prefix}</span> : null}
+            {props.command.name.slice(prefix.length)}
+          </h3>
+          {props.changed ? (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-blue">
+              <span className="size-1.5 rounded-full bg-brand-blue" aria-hidden="true" />
+              {props.changedLabel ?? "Unsaved"}
+            </span>
+          ) : null}
+        </div>
+        {usage ? (
+          <p className="guard-pattern-example mt-1 truncate" title={props.command.usage}>{usage}</p>
         ) : null}
         {props.command.description ? (
-          <p className="mt-1.5 text-xs leading-5 text-brand-dark/70">{props.command.description}</p>
+          descriptionIsCode ? (
+            <p className="guard-pattern-example mt-1 truncate" title={props.command.description}>{props.command.description}</p>
+          ) : (
+            <p className="mt-1 text-xs leading-5 text-brand-dark/70">{props.command.description}</p>
+          )
         ) : null}
         <McpClassificationEvidence value={props.command.classification} />
         {props.surface === "mcp" && !mcpToolCanReceiveDirectAllow(props.command) ? (
@@ -117,9 +99,10 @@ function CustomExtensionCommandRow(props: {
   );
 }
 
-function CommandDraftControl(props: {
+export function CommandDraftControl(props: {
   label: string;
-  state: LocalCliCommandState;
+  /** "mixed" renders no checked choice, for a family whose members differ. */
+  state: LocalCliCommandState | "mixed";
   disabled: boolean;
   mcpPolicy?: boolean;
   allowDisabled?: boolean;
@@ -131,7 +114,7 @@ function CommandDraftControl(props: {
     ...(props.mcpPolicy ? [{ value: "review" as const, label: "Ask" }] : []),
     { value: "block", label: props.mcpPolicy ? "Deny" : "Block" },
   ];
-  const tabStopIndex = extensionPolicyRadioTabStop(choices, props.state, props.disabled);
+  const tabStopIndex = extensionPolicyRadioTabStop<LocalCliCommandState | "mixed">(choices, props.state, props.disabled);
   const chooseAdjacent = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
     const next = nextExtensionPolicyRadioIndex(choices, index, event.key, props.disabled);
     if (next < 0) return;

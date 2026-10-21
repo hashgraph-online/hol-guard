@@ -8,7 +8,8 @@ command activity, and the command-line observation; after a reviewed
 ``PostToolUse`` it is the receipt, the binding capture, and the post-tool
 command activity; after a ``UserPromptSubmit`` it is the receipt and the
 binding capture alone. A tool call the native MCP relay decided is recorded
-by ``mcp_relay_evidence_drain`` as the proxy records it. The publisher advertises the drain in the
+by ``mcp_relay_evidence_drain`` as the proxy records it, and one its package
+lane answered by ``mcp_relay_package_evidence_drain``. The publisher advertises the drain in the
 direct-lane binding only while it runs, so a resident never answers directly
 for a daemon that would leave the evidence behind. A page from a current
 resident also carries its diagnostic hook counts, which go to
@@ -27,6 +28,7 @@ from typing import Protocol, cast
 
 from ..native_policy_snapshot_direct_lane import DIRECT_HOOK_EVIDENCE_FEATURE
 from .hook_direct_counters import HookCounterLog
+from .hook_policy_fence_window import record_direct_fence_wait
 
 _DRAIN_SCHEMA = "guard-hook-direct-evidence.v1"
 _DRAIN_INTERVAL_SECONDS = 0.25
@@ -77,10 +79,17 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
     from .hook_native_cli_observer import observe_native_pre_tool_cli
     from .hook_worker_native import _record_native_pre_activity
     from .mcp_relay_evidence_drain import is_mcp_relay_evidence, record_mcp_relay_evidence
+    from .mcp_relay_package_evidence_drain import (
+        is_mcp_relay_package_evidence,
+        record_mcp_relay_package_evidence,
+    )
 
     if is_mcp_relay_evidence(record):
         # A relayed MCP tool call, recorded as the proxy records it.
         return record_mcp_relay_evidence(host.store, host.guard_home, record)
+    if is_mcp_relay_package_evidence(record):
+        # The package lane's own receipt, against the package request's artifact.
+        return record_mcp_relay_package_evidence(host.store, host.guard_home, record)
     if not isinstance(record, Mapping):
         return False
     harness = record.get("harness")
@@ -104,6 +113,8 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
     if _hook_harness_is_unmanaged(host, harness):
         # The daemon passes an unmanaged harness through without recording.
         return True
+    # A hook the resident held through a policy update's fence reports its wait.
+    record_direct_fence_wait(host.store, record.get("fence_wait_ms"))
     accepted = validate_native_decision_receipt(receipt) if receipt is not None else None
     if accepted is not None:
         submit = getattr(host.activity_writer, "submit_native_decision_receipt", None)

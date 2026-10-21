@@ -54,7 +54,9 @@ pub struct GuardAgentInventoryFinding {
     pub title: String,
     pub artifact_id: String,
     pub check_id: String,
-    pub summary: String,
+    /// `None` is the dataclass default; an empty description stays `""`, and
+    /// both the contract JSON and the snapshot digest show the difference.
+    pub summary: Option<String>,
     pub evidence: Map<String, Value>,
     /// Remaining dataclass fields.
     pub extra: Map<String, Value>,
@@ -66,8 +68,10 @@ pub struct GuardInventorySource {
     pub source_id: String,
     pub source_type: String,
     pub status: String,
-    pub detail: String,
-    pub captured_at: String,
+    /// `str | None`, like [`GuardAgentInventoryFinding::summary`].
+    pub detail: Option<String>,
+    /// `str | None`, like [`GuardAgentInventoryFinding::summary`].
+    pub captured_at: Option<String>,
     /// Remaining dataclass fields.
     pub extra: Map<String, Value>,
 }
@@ -351,15 +355,17 @@ pub fn _normalize_redaction_report(report: &Value) -> Map<String, Value> {
             return out;
         }
     };
-    let raw_secrets = report_obj
-        .get("rawSecretsIncluded")
-        .or_else(|| report_obj.get("raw_secret_values"))
-        .or_else(|| report_obj.get("raw_secrets_included"))
+    // Python walks these alternatives with `is None`, so a key that is present
+    // and null falls through to the next spelling instead of settling the
+    // answer. `get` alone returns `Some(Null)` and would stop the walk early.
+    let present = |key: &str| report_obj.get(key).filter(|value| !value.is_null());
+    let raw_secrets = present("rawSecretsIncluded")
+        .or_else(|| present("raw_secret_values"))
+        .or_else(|| present("raw_secrets_included"))
         .cloned()
         .unwrap_or(json!(false));
-    let redacted_fields = report_obj
-        .get("redactedFields")
-        .or_else(|| report_obj.get("redacted_fields"))
+    let redacted_fields = present("redactedFields")
+        .or_else(|| present("redacted_fields"))
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
@@ -468,7 +474,11 @@ fn _inventory_finding_json(finding: &GuardAgentInventoryFinding) -> Value {
     obj.insert("title".into(), json!(finding.title));
     obj.insert("artifactId".into(), json!(finding.artifact_id));
     obj.insert("checkId".into(), json!(finding.check_id));
-    obj.insert("summary".into(), json!(finding.summary));
+    // `_OPTIONAL_ONLY_CONTRACT_KEYS`: Python drops `summary` when it is `None`
+    // and keeps an explicitly empty one.
+    if let Some(summary) = &finding.summary {
+        obj.insert("summary".into(), json!(summary));
+    }
     obj.insert("evidence".into(), Value::Object(finding.evidence.clone()));
     for (k, v) in &finding.extra {
         let camel = _snake_to_camel_case_key(k);
@@ -483,7 +493,7 @@ fn _inventory_source_json(source: &GuardInventorySource) -> Value {
     // Python `asdict(GuardInventorySource)` emits `captured_at`/`detail` as
     // `None` when unset and `_inventory_contract_json` keeps them in dataclass
     // field order (source_id, source_type, status, captured_at, detail). Mirror
-    // that: always emit both keys, `null` for empty, `capturedAt` before
+    // that: always emit both keys, `null` when unset, `capturedAt` before
     // `detail`, and run both through `_normalize_inventory_datetime`.
     let mut obj = Map::new();
     obj.insert("sourceId".into(), json!(source.source_id));
@@ -491,18 +501,16 @@ fn _inventory_source_json(source: &GuardInventorySource) -> Value {
     obj.insert("status".into(), json!(source.status));
     obj.insert(
         "capturedAt".into(),
-        if source.captured_at.is_empty() {
-            Value::Null
-        } else {
-            normalize_inventory_datetime(&json!(source.captured_at))
+        match &source.captured_at {
+            Some(captured_at) => normalize_inventory_datetime(&json!(captured_at)),
+            None => Value::Null,
         },
     );
     obj.insert(
         "detail".into(),
-        if source.detail.is_empty() {
-            Value::Null
-        } else {
-            json!(source.detail)
+        match &source.detail {
+            Some(detail) => json!(detail),
+            None => Value::Null,
         },
     );
     for (k, v) in &source.extra {
@@ -670,8 +678,8 @@ pub fn inventory_snapshot_from_detection(
                 ),
                 source_type: "config".into(),
                 status: "available".into(),
-                detail: redacted,
-                captured_at: generated_at.to_string(),
+                detail: Some(redacted),
+                captured_at: Some(generated_at.to_string()),
                 extra: Map::new(),
             }
         })
@@ -873,7 +881,7 @@ pub fn _cisco_inventory_findings(
                 title,
                 artifact_id,
                 check_id: format!("aibom.{source}.{rule_id}"),
-                summary: run_message.clone(),
+                summary: Some(run_message.clone()),
                 evidence,
                 extra: Map::new(),
             });
@@ -899,8 +907,8 @@ pub fn _cisco_inventory_sources(
             source_id: format!("{source}:source:{run_status}"),
             source_type: source.to_string(),
             status: _source_status_for_cisco_status(&run_status).to_string(),
-            detail,
-            captured_at: run_str(run, "captured_at").unwrap_or("").to_string(),
+            detail: Some(detail),
+            captured_at: run_str(run, "captured_at").map(str::to_string),
             extra: Map::new(),
         });
     }
@@ -952,9 +960,9 @@ pub fn _symlink_findings_from_items(
             title: format!("Symlink source {}", validation_state.replace('_', " ")),
             artifact_id: item.item_id.clone(),
             check_id: format!("aibom.symlink.{validation_state}"),
-            summary: format!(
+            summary: Some(format!(
                 "Inventory item references a symlink source in state {validation_state}."
-            ),
+            )),
             evidence,
             extra: Map::new(),
         });

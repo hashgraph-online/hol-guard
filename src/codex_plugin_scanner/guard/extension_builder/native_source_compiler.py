@@ -17,14 +17,34 @@ import stat
 import subprocess
 import tempfile
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager, suppress
 from importlib import metadata
 from pathlib import Path
 from typing import BinaryIO
 
-_MAX_INPUT_BYTES = 4 * 1024 * 1024
+from ..group_write_trust import writable_only_by_owner
+from ..runtime.extension_control_limits import MAX_NATIVE_COMMAND_PROGRAM_BYTES
+from .native_executable_root import ExecutableMaterializationError, verified_executable
+
+# Mirrors `MAX_SOURCE_INPUT_BYTES` in rust/crates/guard-command, which is what
+# the compiler front end's own stdin readers enforce. Every subcommand this
+# module spawns is dispatched by `source_cli` before the runtime's resident
+# path, so the smaller `MAX_NATIVE_REQUEST_BYTES` the resident protocol uses is
+# not the bound these requests are read against.
 _MAX_REQUEST_BYTES = 8 * 1024 * 1024
+# Mirrors `MAX_NATIVE_REQUEST_BYTES` in rust/crates/guard-contracts. The pack
+# lifecycle subcommand is read by the runtime's own `read_stdin_bounded`, not
+# by `source_cli`, so it is held to this smaller frame. Keeping both numbers
+# here is what lets one transport refuse each request against the bound the
+# process it is about to spawn will actually read it against.
+_MAX_NATIVE_REQUEST_BYTES = 6 * 1024 * 1024
+# The token the runtime writes to stderr, with an empty stdout, when a request
+# it reads on the resident path is past the bound that path enforces. A
+# compiler subcommand refuses an oversized request with a token it also uses
+# for malformed input, so that one cannot be read as a size refusal; the
+# pre-spawn check below is what classifies these.
+_REQUEST_TOO_LARGE_CODE = "native_request_too_large"
 _MAX_OUTPUT_BYTES = 64 * 1024 * 1024
 _MAX_MANIFEST_BYTES = 64 * 1024
 _MAX_COMPILER_BYTES = 128 * 1024 * 1024
@@ -59,6 +79,19 @@ class NativeSourceCompilerError(RuntimeError):
         self.code = code
         self.pointer = pointer
         self.returncode = returncode
+
+
+class NativeRequestTooLargeError(NativeSourceCompilerError):
+    """The request Guard built is larger than the native runtime will read.
+
+    Carried as its own type so callers classify it structurally. Nothing about
+    the installed files is wrong here: the request is assembled from local
+    Guard state, so reinstalling the package cannot change its size and a
+    retry rebuilds the identical, identically oversized request.
+    """
+
+    def __init__(self, message: str, *, returncode: int | None = None) -> None:
+        super().__init__(message, code=_REQUEST_TOO_LARGE_CODE, returncode=returncode)
 
 
 def _read_regular(path: Path, *, limit: int, label: str) -> bytes:
@@ -126,8 +159,9 @@ def _hex(value: object, *, length: int, field: str) -> str:
 def _verify_compiler(path: Path, manifest: Mapping[str, object]) -> bytes:
     raw = _read_regular(path, limit=_MAX_COMPILER_BYTES, label="source compiler")
     if os.name != "nt":
-        mode = stat.S_IMODE(path.stat().st_mode)
-        if mode & 0o022:
+        compiler_stat = path.stat()
+        mode = stat.S_IMODE(compiler_stat.st_mode)
+        if not writable_only_by_owner(compiler_stat, os.getuid(), path):
             raise NativeSourceCompilerError("source compiler is group/world writable")
         if not mode & stat.S_IXUSR:
             raise NativeSourceCompilerError("source compiler is not owner-executable")
@@ -141,7 +175,11 @@ def _verify_compiler(path: Path, manifest: Mapping[str, object]) -> bytes:
 
 
 def _packaged_program_digest() -> str:
-    raw = _read_regular(_PACKAGED_PROGRAM, limit=_MAX_INPUT_BYTES, label="packaged native command program")
+    raw = _read_regular(
+        _PACKAGED_PROGRAM,
+        limit=MAX_NATIVE_COMMAND_PROGRAM_BYTES,
+        label="packaged native command program",
+    )
     try:
         value = json.loads(raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -205,6 +243,15 @@ def find_packaged_source_compiler() -> Path:
     return _NATIVE_PACKAGE / _COMPILER_NAME
 
 
+def installed_compiler_identity() -> tuple[str, str]:
+    """Return release-bound source and implementation floors for data activation."""
+    manifest = _verify_manifest(_NATIVE_PACKAGE / _MANIFEST_NAME)
+    return (
+        _hex(manifest["source_sha"], length=_SHA40, field="source SHA"),
+        _hex(manifest["implementation_digest"], length=_SHA64, field="implementation digest"),
+    )
+
+
 def _canonical_request(request: Mapping[str, object]) -> bytes:
     if not isinstance(request, Mapping):
         raise NativeSourceCompilerError("compiler request must be an object")
@@ -217,8 +264,7 @@ def _canonical_request(request: Mapping[str, object]) -> bytes:
         )
     except (TypeError, ValueError) as exc:
         raise NativeSourceCompilerError("compiler request is not canonical JSON") from exc
-    if len(encoded) > _MAX_REQUEST_BYTES:
-        raise NativeSourceCompilerError("compiler request exceeds the native input bound")
+    _reject_oversized_request(encoded)
     return encoded
 
 
@@ -234,6 +280,13 @@ def _decode_output(
         value = json.loads(stdout.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         detail = stderr[:512].decode("utf-8", errors="replace")
+        # A runtime that refused the request as oversized answers with an empty
+        # stdout and this token on stderr. Without it the failure reads as
+        # unparseable output, which a caller cannot tell from a broken install.
+        if _REQUEST_TOO_LARGE_CODE in detail:
+            raise NativeRequestTooLargeError(
+                "source compiler refused the request as too large", returncode=returncode
+            ) from exc
         raise NativeSourceCompilerError(
             f"source compiler returned invalid JSON{(': ' + detail) if detail else ''}", returncode=returncode
         ) from exc
@@ -254,23 +307,37 @@ def _decode_output(
 @contextmanager
 def _verified_executable(raw: bytes):  # type: ignore[no-untyped-def]
     """Materialize exactly the verified bytes in a private execution directory."""
-    with tempfile.TemporaryDirectory(prefix="hol-guard-source-compiler-", ignore_cleanup_errors=True) as directory:
-        name = "hol-guard-runtime.exe" if os.name == "nt" else "hol-guard-runtime"
-        path = Path(directory) / name
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
-        descriptor = os.open(path, flags, 0o700)
-        try:
-            with os.fdopen(descriptor, "wb") as handle:
-                descriptor = -1
-                handle.write(raw)
-                handle.flush()
-                os.fsync(handle.fileno())
-        finally:
-            if descriptor >= 0:
-                os.close(descriptor)
-        if os.name != "nt":
-            path.chmod(0o700)
-        yield path
+    try:
+        with verified_executable(raw) as path:
+            yield path
+    except ExecutableMaterializationError as exc:
+        raise NativeSourceCompilerError("source compiler could not be started") from exc
+
+
+def _reject_oversized_request(
+    payload: bytes,
+    limit: int = _MAX_REQUEST_BYTES,
+    *,
+    subcommand: str | None = None,
+) -> None:
+    """Refuse a request the runtime would refuse, before spawning it.
+
+    The two numbers go in the message because they are the only thing that
+    tells an operator anything: the refusal is reported to them as local Guard
+    data having outgrown one request, and `failure_detail` carries this text
+    into the daemon log. A cause code alone would say that it grew without
+    saying which request carried it or how far past the bound it got. Neither
+    number is a path or a secret.
+    """
+    if len(payload) > limit:
+        raise NativeRequestTooLargeError(
+            f"{subcommand or 'compiler'} request is {len(payload)} bytes, past the {limit} byte native input bound"
+        )
+
+
+def _spawned_subcommand(arguments: list[str]) -> str | None:
+    """Name the subcommand about to be spawned, for the refusal message."""
+    return arguments[1] if len(arguments) > 1 else None
 
 
 def _run_bounded(
@@ -278,7 +345,15 @@ def _run_bounded(
     payload: bytes,
     *,
     timeout: float,
+    limit: int = _MAX_REQUEST_BYTES,
 ) -> tuple[int, bytes, bytes]:
+    # Every caller reaches the runtime through here, including the pack
+    # lifecycle adapter, which encodes its own JSON and never passes through
+    # `_canonical_request`. Checking the bytes here is the only place that
+    # covers all of them, and it happens before `Popen`. `limit` is the bound
+    # the chosen subcommand is read against, which is not the same number for
+    # the compiler front end and the resident protocol.
+    _reject_oversized_request(payload, limit, subcommand=_spawned_subcommand(arguments))
     if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout) or timeout <= 0:
         raise NativeSourceCompilerError("source compiler timeout must be positive and finite")
     try:
@@ -352,9 +427,12 @@ def run_source_compiler(
     digest: str | None = None,
     compiler: Path | None = None,
     timeout: float = _DEFAULT_TIMEOUT_SECONDS,
+    fetch: Callable[[dict[str, object]], bytes] | None = None,
 ) -> dict[str, object]:
     """Run one native source-compiler operation using bounded JSON stdin."""
-    if subcommand not in {"compile", "validate", "check", "test", "compare", "schema", "descriptor-schema"}:
+    operations = {"compile", "validate", "check", "test", "compare"}
+    operations.update({"schema", "descriptor-schema", "authoring-admission", "bundle-metadata", "bundle-compatibility"})
+    if subcommand not in operations:
         raise NativeSourceCompilerError("unsupported source compiler subcommand")
     if subcommand == "check":
         _hex(digest, length=_SHA64, field="program digest")
@@ -363,8 +441,7 @@ def run_source_compiler(
     if compiler is None and (
         configured_compiler := os.environ.get(_DEVELOPMENT_COMPILER_ENV) or os.environ.get(_TEST_COMPILER_ENV)
     ):
-        # Installed authoring must not bypass its packaged identity checks through
-        # either development or test environment configuration.
+        # Installed authoring cannot bypass packaged identity checks.
         if (_NATIVE_PACKAGE / _MANIFEST_NAME).is_file():
             raise NativeSourceCompilerError("compiler override is not permitted alongside a packaged compiler")
         compiler = Path(configured_compiler)
@@ -382,11 +459,35 @@ def run_source_compiler(
                 "compiler_sha256": hashlib.sha256(compiler_bytes).hexdigest(),
             },
         )
-    if subcommand in {"schema", "descriptor-schema"} and request is None:
-        payload = b""
-    else:
-        payload = _canonical_request(request or {})
-    with _verified_executable(compiler_bytes) as executable:
+    payload = b""
+    with (
+        _verified_executable(compiler_bytes) as executable,
+        tempfile.TemporaryDirectory(prefix="hol-guard-authoring-") as authoring_directory,
+    ):
+        from .bundle_baseline import admission_request, authoring_request
+
+        if subcommand == "bundle-compatibility":
+            from .metadata_index import exchange
+
+            return exchange(executable, subcommand, [request], Path(authoring_directory), fetch=fetch)
+
+        if subcommand == "authoring-admission":
+            return admission_request(
+                request,
+                executable,
+                installed=manifest is not None,
+                directory=Path(authoring_directory).resolve(),
+            )
+
+        request = authoring_request(
+            subcommand,
+            request,
+            executable,
+            installed=manifest is not None,
+            cache_directory=Path(authoring_directory).resolve(strict=True),
+        )
+        if request is not None or subcommand not in {"schema", "descriptor-schema"}:
+            payload = _canonical_request(request or {})
         arguments = [str(executable), subcommand]
         if subcommand == "check" and digest is not None:
             arguments.append(digest)
@@ -400,9 +501,7 @@ def run_source_compiler(
             and isinstance(build_request, Mapping)
             and build_request.get("base") == "packaged"
         ):
-            # Compact validation/fixture responses omit the base digest. Obtain that
-            # binding from the same verified executable and exact input, and
-            # require both native operations to identify the same program.
+            # Bind compact responses through compilation of the identical input.
             returncode, stdout, stderr = _run_bounded(
                 [str(executable), "compile"], _canonical_request(build_request), timeout=timeout
             )
@@ -412,11 +511,12 @@ def run_source_compiler(
             _hex(result_digest, length=_SHA64, field="program digest")
             if not isinstance(program, dict) or program.get("program_digest") != result_digest:
                 raise NativeSourceCompilerError("source compiler validation and compilation identities differ")
-    if manifest is not None and subcommand in {"compile", "validate", "check", "compare"}:
-        if any(
-            output.get("implementation_digest") != manifest.get("implementation_digest")
-            for output in (result, binding_result)
-        ):
+    if manifest is not None and (
+        subcommand in {"compile", "validate", "check", "compare"}
+        or (subcommand == "test" and binding_result is not result)
+    ):
+        outputs = (binding_result,) if subcommand == "test" else (result, binding_result)
+        if any(output.get("implementation_digest") != manifest.get("implementation_digest") for output in outputs):
             raise NativeSourceCompilerError("source compiler implementation identity does not match its manifest")
         if (
             isinstance(build_request, Mapping)
@@ -424,11 +524,30 @@ def run_source_compiler(
             and binding_result.get("base_program_digest") != manifest.get("base_program_digest")
         ):
             raise NativeSourceCompilerError("source compiler base program identity does not match its manifest")
-    if manifest is not None and subcommand == "test" and binding_result is not result:
-        if binding_result.get("implementation_digest") != manifest.get("implementation_digest"):
-            raise NativeSourceCompilerError("source compiler implementation identity does not match its manifest")
-        if binding_result.get("base_program_digest") != manifest.get("base_program_digest"):
-            raise NativeSourceCompilerError("source compiler base program identity does not match its manifest")
+    return result
+
+
+def check_pack_cache(directory: Path, expected_program: str, *, timeout: float = 60.0) -> dict[str, object]:
+    """Check prepared IR using the manifest-bound installed native executable.
+
+    This returns identities only. It neither signs a snapshot nor activates it.
+    """
+    _hex(expected_program, length=_SHA64, field="program digest")
+    manifest = _verify_manifest(_NATIVE_PACKAGE / _MANIFEST_NAME)
+    raw = _verify_compiler(_NATIVE_PACKAGE / _COMPILER_NAME, manifest)
+    with _verified_executable(raw) as executable:
+        returncode, stdout, stderr = _run_bounded(
+            [str(executable), "check-pack-cache", str(directory), expected_program], b"", timeout=timeout
+        )
+    result = _decode_output(stdout, returncode=returncode, stderr=stderr)
+    if (
+        result.get("schema") != "guard.command-pack-cache-check.v1"
+        or result.get("engine") != manifest["implementation_digest"]
+        or result.get("program_digest") != expected_program
+    ):
+        raise NativeSourceCompilerError("pack cache does not match the packaged native implementation")
+    for field in ("program_digest", "catalog_digest", "trust_digest"):
+        _hex(result.get(field), length=_SHA64, field=field)
     return result
 
 
@@ -443,6 +562,7 @@ def validate_source(request: Mapping[str, object], *, compiler: Path | None = No
 
 
 __all__ = [
+    "NativeRequestTooLargeError",
     "NativeSourceCompilerError",
     "compile_source",
     "find_packaged_source_compiler",

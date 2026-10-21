@@ -3,11 +3,13 @@
 //! Initializing a repository copies Git's template directory into it, and a
 //! configured `init.templateDir` can copy in hooks that later commands there
 //! would run. A target that does not exist yet, directly inside a temporary
-//! directory only the user can write, gets a repository with Git's own
-//! samples and touches nothing else. A configured template directory, a
+//! directory only the user can write, or directly in the sticky shared root
+//! or the user's private macOS temporary directory, gets a repository with
+//! Git's own samples and touches nothing else. A configured template directory, a
 //! conditional include that could set one for the new repository, a target
 //! that already exists and every other `init` option keep their review.
 
+use super::git_remote_config::GitConfig;
 use crate::CanonicalCommandV1;
 use std::path::{Component, Path};
 use std::time::Instant;
@@ -47,7 +49,8 @@ pub(crate) fn absolute_target(target: &str) -> bool {
 }
 
 /// A lone `git init` of a fresh directory below an owned temporary
-/// directory, with no template directory configured.
+/// directory, or directly in a temporary root, with no template directory
+/// configured. The same parents `git worktree add` may check out into.
 pub(in crate::pretool) fn exact_safe_command(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
@@ -57,11 +60,27 @@ pub(in crate::pretool) fn exact_safe_command(
     let [segment] = model.segments.as_slice() else {
         return None;
     };
+    if model.confidence != "exact" || model.path_overridden || !model.wrapper_chain.is_empty() {
+        return None;
+    }
+    fresh(segment, context, deadline, execution_environment)?;
+    Some((
+        REASON,
+        "The Rust command authority proved this Git command creates a new repository in a fresh directory under the user's own temporary directory, with no configured template.",
+    ))
+}
+
+/// The effective and repository configuration the session's Git reads for
+/// one `git init` step of the form above, or `None` when the step is not
+/// that form or a template directory could apply.
+pub(in crate::pretool) fn fresh(
+    segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Option<(GitConfig, GitConfig)> {
     let executable = segment.executable.as_deref()?;
-    if model.confidence != "exact"
-        || model.path_overridden
-        || !model.wrapper_chain.is_empty()
-        || super::executable_basename(executable) != "git"
+    if super::executable_basename(executable) != "git"
         || segment.pipeline_index != 0
         || segment.path_overridden
         || !segment.wrapper_chain.is_empty()
@@ -88,7 +107,7 @@ pub(in crate::pretool) fn exact_safe_command(
             .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
     };
     if name.to_string_lossy().starts_with('.')
-        || !super::git_routes::owned_temporary_directory(&parent, context)
+        || !super::git_routes::temporary_checkout_parent(&parent, context)
         || !fresh(target.as_path())
         || !fresh(parent.join(name).as_path())
     {
@@ -101,13 +120,10 @@ pub(in crate::pretool) fn exact_safe_command(
         deadline,
         execution_environment,
     )?;
-    let (effective, _) = probe.config()?;
+    let (effective, repository) = probe.config()?;
     let templated = effective.keys().any(|key| {
         let key = key.to_ascii_lowercase();
         key == "init.templatedir" || key.starts_with("includeif.")
     });
-    (!templated).then_some((
-        REASON,
-        "The Rust command authority proved this Git command creates a new repository in a fresh directory under the user's own temporary directory, with no configured template.",
-    ))
+    (!templated).then_some((effective, repository))
 }

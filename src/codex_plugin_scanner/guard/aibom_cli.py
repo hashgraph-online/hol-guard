@@ -19,6 +19,7 @@ from .aibom_collection import collect_aibom_snapshots as collect_aibom_snapshots
 from .aibom_commands import build_aibom_export_payload as build_aibom_export_payload
 from .aibom_commands import build_aibom_status_payload as build_aibom_status_payload
 from .aibom_commands import build_inventory_json_payload as build_inventory_json_payload
+from .aibom_commands import remember_user_inventory_if_due as remember_user_inventory_if_due
 from .aibom_commands import sync_aibom_snapshots_if_due as sync_aibom_snapshots_if_due
 from .aibom_content_upload import GuardAibomPrimaryContentSource as GuardAibomPrimaryContentSource
 from .aibom_content_upload import empty_content_upload_summary as empty_content_upload_summary
@@ -174,6 +175,16 @@ def sync_aibom_snapshots(
         options=resolved_options,
         trust_attestation_context=trust_attestation_context,
         primary_content_sources=primary_content_sources,
+    )
+    # Fleet posture reports what this collection found; see runtime/fleet_posture_aibom.py.
+    from .runtime.fleet_posture_aibom import remember_aibom_items
+
+    remember_aibom_items(
+        store,
+        snapshots,
+        now=generated_at,
+        home_dir=context.home_dir,
+        workspace_dir=context.workspace_dir,
     )
     snapshots = cloud_syncable_snapshots(snapshots)
     cloud_snapshot_ids = {snapshot.snapshot_id for snapshot in snapshots}

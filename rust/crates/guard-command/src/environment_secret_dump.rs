@@ -9,6 +9,7 @@ use crate::sfrs_shell_tokens::{
     iter_shell_command_segments, shell_segment_primary_command, split_shell_parts,
 };
 use fancy_regex::Regex;
+use std::borrow::Cow;
 use std::path::Path;
 use std::sync::LazyLock;
 
@@ -45,6 +46,13 @@ static ENV_DUMPS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     .map(compile_python_pattern)
     .collect()
 });
+/// What follows `process.env` in a dotted read of one port variable, such as
+/// `PORT` or `DEV_PORT`, on text that has already been lowercased and had
+/// backslashes turned into slashes. A slash, a backslash, or a non-ASCII
+/// character continues the identifier: `PORT\u005fTOKEN` arrives as
+/// `port/u005ftoken`, and `PORTé` is still one name. Those reads stay reviewed.
+static PORT_MEMBER: LazyLock<Regex> =
+    LazyLock::new(|| compile_fancy(r"^\s*\.\s*(?:[a-z0-9]+_)*port(?![a-z0-9_$/\\]|[^\x00-\x7f])"));
 static PYTHON_NAME: LazyLock<Regex> =
     LazyLock::new(|| compile_fancy(r"^pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?$"));
 static ASSIGNMENT: LazyLock<Regex> = LazyLock::new(|| compile_fancy(r"^[A-Za-z_][A-Za-z0-9_]*=.*"));
@@ -93,6 +101,29 @@ pub fn printenv_may_print_secret(text: &str) -> bool {
                     || sensitive_name(name).unwrap_or(true)
             })
     })
+}
+
+/// Lowercased `text` with each dotted read of a port variable
+/// (`process.env.PORT`, `process.env.DEV_PORT`) blanked. A port variable
+/// holds a port number, which a dev server reads to choose where to listen:
+/// it names no secret, and the `.env` inside it is no dotenv file. The whole
+/// object, a computed key and every other variable are left in place.
+pub fn without_node_port_reads(text: &str) -> Cow<'_, str> {
+    let mut kept = String::new();
+    let mut copied = 0;
+    for (start, found) in text.match_indices("process.env") {
+        let read = start + found.len();
+        if let Ok(Some(member)) = PORT_MEMBER.find(&text[read..]) {
+            kept.push_str(&text[copied..start]);
+            kept.push(' ');
+            copied = read + member.end();
+        }
+    }
+    if copied == 0 {
+        return Cow::Borrowed(text);
+    }
+    kept.push_str(&text[copied..]);
+    Cow::Owned(kept)
 }
 fn script_reads_secrets(script: &str) -> Result<bool, &'static str> {
     for pattern in ENV_DUMPS.iter() {

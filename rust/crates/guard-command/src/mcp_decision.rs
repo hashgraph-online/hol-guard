@@ -456,7 +456,7 @@ fn which_in(launcher: &str, parts: &[PathBuf]) -> Option<String> {
 /// File names tried per directory. Windows applies `PATHEXT` the way
 /// `shutil.which` does: a name already carrying a listed extension is tried
 /// as-is, otherwise each extension is appended.
-fn launcher_file_names(launcher: &str) -> Vec<String> {
+pub(crate) fn launcher_file_names(launcher: &str) -> Vec<String> {
     if !cfg!(windows) {
         return vec![launcher.to_owned()];
     }

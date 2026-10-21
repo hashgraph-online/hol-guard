@@ -1,8 +1,10 @@
 //! Opt-in, payload-free phase evidence for native response-wait failures.
 
+use std::collections::HashMap;
 use std::fs::{File, Metadata};
 use std::io::{Cursor, Seek, Write};
 use std::path::Path;
+use std::sync::mpsc::{self, SyncSender, TrySendError};
 use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
@@ -10,6 +12,18 @@ use std::time::{Duration, Instant};
 // It is reused in place, never inherited by a child or rotated/unlinked.
 const MANAGED_PHASE_FILE_NAME: &str = "managed-resident-phases.v1.log";
 const MAX_MANAGED_PHASE_BYTES: u64 = 64 * 1024;
+// Lines waiting for the resident's phase writer. Each line is at most 192
+// bytes, so the queue stays small; a full queue drops the newest line instead
+// of making a request thread wait for diagnostic file I/O.
+const MANAGED_PHASE_QUEUE_LINES: usize = 1024;
+const PHASE_LINE_BYTES: usize = 192;
+// The writer appends every line already queued in one write. Each append runs
+// the private-file checks, which cost far more than the write on Windows; one
+// check per line let a busy resident's backlog take seconds to drain on exit,
+// while it still held the owner lock.
+const PHASE_BATCH_BYTES: usize = 16 * 1024;
+// A batch larger than the bounded file would be refused and stop the writer.
+const _: () = assert!((PHASE_BATCH_BYTES as u64) < MAX_MANAGED_PHASE_BYTES);
 
 struct ManagedPhaseFile {
     file: File,
@@ -116,23 +130,84 @@ impl ManagedPhaseFile {
     }
 }
 
+struct PhaseLine {
+    bytes: [u8; PHASE_LINE_BYTES],
+    length: usize,
+}
+
+impl PhaseLine {
+    fn as_bytes(&self) -> &[u8] {
+        &self.bytes[..self.length]
+    }
+}
+
 enum PhaseOutput {
     HelperStderr,
-    ManagedFile(Option<ManagedPhaseFile>),
+    // Request threads only enqueue. The writer thread owns the private file,
+    // runs every private-file check before each append, and disconnects the
+    // queue when it refuses the sink.
+    ManagedFile(Option<SyncSender<PhaseLine>>),
+}
+
+fn spawn_managed_writer(
+    mut file: ManagedPhaseFile,
+) -> Option<(SyncSender<PhaseLine>, std::thread::JoinHandle<()>)> {
+    let (sender, receiver) = mpsc::sync_channel::<PhaseLine>(MANAGED_PHASE_QUEUE_LINES);
+    let writer = std::thread::Builder::new()
+        .name("hol-guard-phase-sink".to_owned())
+        .spawn(move || {
+            // Ends when the resident retires the sink (every sender dropped)
+            // or when an append refuses an unlinked, altered, non-private, or
+            // broken file. Dropping the receiver disconnects later emits.
+            while let Ok(line) = receiver.recv() {
+                if file.append(&next_batch(line, &receiver)).is_none() {
+                    break;
+                }
+            }
+        })
+        .ok()?;
+    Some((sender, writer))
+}
+
+/// `first` followed by the lines already queued behind it, up to
+/// `PHASE_BATCH_BYTES`, in queue order.
+fn next_batch(first: PhaseLine, receiver: &mpsc::Receiver<PhaseLine>) -> Vec<u8> {
+    let mut batch = Vec::with_capacity(PHASE_BATCH_BYTES);
+    batch.extend_from_slice(first.as_bytes());
+    while batch.len() + PHASE_LINE_BYTES <= PHASE_BATCH_BYTES {
+        let Ok(line) = receiver.try_recv() else {
+            break;
+        };
+        batch.extend_from_slice(line.as_bytes());
+    }
+    batch
 }
 
 static PHASE_OUTPUT: LazyLock<Mutex<PhaseOutput>> =
     LazyLock::new(|| Mutex::new(PhaseOutput::HelperStderr));
 
-pub(crate) struct ManagedPhaseLifetime;
+pub(crate) struct ManagedPhaseLifetime {
+    writer: Option<std::thread::JoinHandle<()>>,
+}
 
 impl Drop for ManagedPhaseLifetime {
     fn drop(&mut self) {
+        // Drop the only sender under the mutex; the guard is a temporary, so
+        // the mutex is released before the join below. Request threads use
+        // the sender only while holding the mutex and never clone it, so no
+        // emit can enqueue after this point.
         *PHASE_OUTPUT
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = PhaseOutput::ManagedFile(None);
-        // Keep the capped file after retirement for a client's timeout tail;
-        // only the resident's descriptor and ownership end here.
+        // The writer then appends the lines it already accepted and closes the
+        // descriptor before the join returns, so the file is released while
+        // this resident still holds the owner lock (which drops after this
+        // guard). A successor resident cannot truncate under a live writer.
+        // Retirement is not a request path, so an unbounded join is acceptable
+        // here: the queue is bounded and each append is one small write.
+        if let Some(writer) = self.writer.take() {
+            let _ = writer.join();
+        }
     }
 }
 
@@ -149,10 +224,13 @@ pub(crate) fn install_managed_sink(
     if matches!(*sink, PhaseOutput::ManagedFile(Some(_))) {
         return None;
     }
-    let file = ManagedPhaseFile::open(state_base, owner);
-    let lifetime = file.as_ref().map(|_| ManagedPhaseLifetime);
-    *sink = PhaseOutput::ManagedFile(file);
-    lifetime
+    let (sender, writer) = ManagedPhaseFile::open(state_base, owner)
+        .and_then(spawn_managed_writer)
+        .unzip();
+    *sink = PhaseOutput::ManagedFile(sender);
+    writer.map(|writer| ManagedPhaseLifetime {
+        writer: Some(writer),
+    })
 }
 
 #[derive(Clone, Copy)]
@@ -179,9 +257,12 @@ pub(crate) enum Phase {
     ResidentEvaluate,
     ResidentResponseWrite,
     ContextDigest,
+    DirectoryTrust,
     ContextRuntimeExecutableIdentity,
     ContextRuntimeLaunchIdentity,
     ContextRuntimeLaunchIdentityMatches,
+    ContextGuardRunLaunchPlans,
+    ContextGuardRunAuthorizedPrefixes,
 }
 
 impl Phase {
@@ -209,9 +290,12 @@ impl Phase {
             Self::ResidentEvaluate => "resident_evaluate",
             Self::ResidentResponseWrite => "resident_response_write",
             Self::ContextDigest => "context_digest",
+            Self::DirectoryTrust => "directory_trust",
             Self::ContextRuntimeExecutableIdentity => "context_runtime_executable_identity",
             Self::ContextRuntimeLaunchIdentity => "context_runtime_launch_identity",
             Self::ContextRuntimeLaunchIdentityMatches => "context_runtime_launch_identity_matches",
+            Self::ContextGuardRunLaunchPlans => "context_guard_run_launch_plans",
+            Self::ContextGuardRunAuthorizedPrefixes => "context_guard_run_authorized_prefixes",
         }
     }
 }
@@ -245,33 +329,63 @@ pub(crate) fn enabled() -> bool {
 }
 
 fn emit(phase: Phase, status: Status, elapsed: Duration) {
-    // A broken diagnostic sink must not change native wire/error results.
-    // Render only finite phase/status labels and elapsed time into a bounded
-    // stack buffer. Helper stderr and the shared resident sink stay separate.
-    let mut line = [0u8; 192];
-    let mut output = Cursor::new(line.as_mut_slice());
-    if writeln!(
-        output,
+    emit_line(format_args!(
         "native_resident_phase phase={} status={} elapsed_ms={}",
         phase.label(),
         status.label(),
         elapsed.as_millis()
-    )
-    .is_ok()
-    {
+    ));
+}
+
+static LAST_NOTES: LazyLock<Mutex<HashMap<&'static str, usize>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Records a finite count next to the phase lines, such as how many resident
+/// states one discovery pass returned. Only fixed names and numbers are
+/// written, never paths or request data. A spawn wait polls discovery every
+/// few milliseconds, so a note is written only when its value changes;
+/// otherwise repeats would push the phase lines out of the bounded tail.
+pub(crate) fn note(name: &'static str, value: usize) {
+    if !enabled() {
+        return;
+    }
+    let changed = LAST_NOTES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(name, value)
+        != Some(value);
+    if changed {
+        emit_line(format_args!(
+            "native_resident_note name={name} value={value}"
+        ));
+    }
+}
+
+fn emit_line(arguments: std::fmt::Arguments<'_>) {
+    // A broken diagnostic sink must not change native wire/error results.
+    // Render only finite labels and numbers into a bounded stack buffer.
+    // Helper stderr and the shared resident sink stay separate.
+    let mut line = [0u8; PHASE_LINE_BYTES];
+    let mut output = Cursor::new(line.as_mut_slice());
+    if writeln!(output, "{arguments}").is_ok() {
         let length = output.position() as usize;
         let mut sink = PHASE_OUTPUT
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         match &mut *sink {
-            PhaseOutput::ManagedFile(file) => {
-                if file
-                    .as_mut()
-                    .is_some_and(|file| file.append(&line[..length]).is_none())
-                {
-                    // Refuse an unlinked, altered, non-private, or broken sink.
-                    // Diagnostic I/O must never change native wire results.
-                    *file = None;
+            PhaseOutput::ManagedFile(sender) => {
+                // Diagnostic I/O must never change native wire results or
+                // timing: a slow disk, an antivirus scan, or a Windows ACL
+                // check on the shared file used to hold this process-wide
+                // mutex and stall every resident request thread behind it.
+                if let Some(queue) = sender.as_ref() {
+                    match queue.try_send(PhaseLine {
+                        bytes: line,
+                        length,
+                    }) {
+                        Ok(()) | Err(TrySendError::Full(_)) => {}
+                        Err(TrySendError::Disconnected(_)) => *sender = None,
+                    }
                 }
             }
             PhaseOutput::HelperStderr => {
@@ -325,3 +439,7 @@ pub(crate) fn observe_value<T>(phase: Phase, operation: impl FnOnce() -> T) -> T
     emit(phase, Status::Ok, started.elapsed());
     result
 }
+
+#[cfg(test)]
+#[path = "resident_diagnostics_tests.rs"]
+mod tests;

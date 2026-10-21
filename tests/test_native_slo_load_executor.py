@@ -83,8 +83,9 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
         *,
         stage: str,
     ) -> tuple[list[Observation], int]:
-        assert stage in {"capacity_prewarm", "concurrent_16", "concurrent_64"}
-        calls.append((f"c{concurrency}", executor))
+        assert stage in {"capacity_prewarm", "concurrent_16", "rss_baseline_requests", "concurrent_64"}
+        name = f"stream-pool-fill-{concurrency}" if stage == "rss_baseline_requests" else f"c{concurrency}"
+        calls.append((name, executor))
         return [Observation("codex", "PreToolUse", "1k", 0.0, "native_resident", True)] * concurrency, 0
 
     monkeypatch.setattr(capacity, "_stabilize_ready_hook_workers", lambda *_args, **_kwargs: 2)
@@ -103,6 +104,7 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
         "prime-16",
         "c16",
         "prime-64",
+        "stream-pool-fill-64",
         "baseline-start",
         "worker-warmup",
         "baseline-end",
@@ -113,7 +115,8 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
     assert executor_by_call["c16"] is not executor_by_call["c64"]
     assert calls[0][1] is calls[1][1]
     assert calls[1][1] is not calls[3][1]
-    assert executor_by_call["prime-64"] is executor_by_call["worker-warmup"] is executor_by_call["c64"]
+    assert executor_by_call["prime-64"] is executor_by_call["stream-pool-fill-64"] is executor_by_call["c64"]
+    assert executor_by_call["worker-warmup"] is executor_by_call["c64"]
 
 
 def test_native_capacity_warmup_initializes_sixteen_streams_with_two_python_workers(

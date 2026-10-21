@@ -325,26 +325,6 @@ def _unbound_hash(label: str) -> str:
     return f"{_UNBOUND_PREFIX}{label}"
 
 
-def shell_execution_segment_hash(
-    context: ShellExecutionContext,
-    segment: ShellExecutionSegment,
-) -> str:
-    """Return an approval-safe identity for one segment and its full command."""
-
-    wire = _single_segment_wire(context, segment)
-    binding = context.native
-    index = segment.segment_index
-    if binding is not None and 0 <= index < len(binding.segment_hashes):
-        issued = dict(binding.wire)
-        shared = ("command_text", "workspace_root", "workspace_identity")
-        if all(issued[key] == wire[key] for key in shared) and issued["segments"][index] == wire["segments"][0]:
-            return binding.segment_hashes[index]
-    result = native_shell_hashes(wire, 0)
-    if isinstance(result, NativeRequestContextFailure) or result[1] is None:
-        return _unbound_hash("shell-segment")
-    return result[1]
-
-
 def shell_execution_context_hash(context: ShellExecutionContext) -> str:
     binding = context.native
     wire = _context_wire(context)
@@ -396,6 +376,5 @@ __all__ = [
     "model_shell_execution_context",
     "shell_execution_context_hash",
     "shell_execution_context_metadata",
-    "shell_execution_segment_hash",
     "validate_shell_execution_segment",
 ]

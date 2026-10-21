@@ -88,7 +88,7 @@ def test_lost_ack_retries_identical_payload(tmp_path: Path, monkeypatch: pytest.
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
         calls.append(payload)
-        return None if len(calls) == 1 else _ack(payload)
+        return None if len(calls) == 1 else _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -127,7 +127,7 @@ def test_floor_only_ack_materializes_strictly_new_generation(tmp_path: Path, mon
                     "resident_generation": 1,
                 }
             ).encode()
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -239,7 +239,7 @@ def test_publisher_process_restart_reuses_cached_payload(
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
         first_calls.append(payload)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     first_publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -257,7 +257,7 @@ def test_publisher_process_restart_reuses_cached_payload(
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
         second_calls.append(payload)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     second_publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -286,7 +286,7 @@ def test_renewal_materializes_higher_generation_before_expiry(tmp_path: Path, mo
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
         calls.append(payload)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -332,7 +332,7 @@ def test_renewal_failure_keeps_barrier_closed_at_expiry(
         calls += 1
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
-        return _ack(payload) if calls == 1 else None
+        return _ack(payload, guard_home=kwargs.get("guard_home")) if calls == 1 else None
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -369,7 +369,7 @@ def test_renewal_retry_reuses_candidate_with_bounded_backoff(
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
         calls.append(payload)
-        return _ack(payload) if len(calls) != 2 else None
+        return _ack(payload, guard_home=kwargs.get("guard_home")) if len(calls) != 2 else None
 
     publisher = NativePolicySnapshotPublisher(
         store=store,

@@ -61,6 +61,7 @@ fn request(
         guard_home: workspace.home(),
         store_path,
         command: command.iter().map(|item| (*item).to_owned()).collect(),
+        cwd: None,
     }
 }
 

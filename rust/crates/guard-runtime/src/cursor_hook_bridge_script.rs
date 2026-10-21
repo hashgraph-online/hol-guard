@@ -2,12 +2,13 @@
 //!
 //! Cursor runs `guard-runtime cursor-hook-bridge <python> -I <script>
 //! --cursor-hook-event <event>`, where `<script>` is the client
-//! `cursor_hook_script_source` rendered. The native bridge answers only for
-//! the client it was ported from: the script, with its six rendered
-//! constants put back to their template placeholders, must hash to
-//! [`CURSOR_SCRIPT_SHA256`]. Any other client, including one installed by
-//! an older Guard, runs as Python with the original argv and stdin.
+//! `cursor_hook_script_source` rendered. The bridge reads the six constants
+//! the renderer writes, from the current client or one an older Guard
+//! installed, and answers the hook itself; the client's own code never
+//! runs. A script whose constants it cannot read fails the hook closed.
 //!
+//! [`CURSOR_SCRIPT_SHA256`] is the digest of the template the bridge was
+//! ported from, with its placeholders in place.
 //! `tests/test_cursor_native_bridge.py` renders the current template and
 //! checks it against this digest, so a template change fails CI until the
 //! native port is reviewed and the digest updated.
@@ -15,13 +16,12 @@
 use std::io::Read;
 use std::path::Path;
 
-use sha2::{Digest, Sha256};
-
 use crate::pyjson::{self, PyVal};
 
 /// SHA-256 of the current template with its placeholders in place.
+#[allow(dead_code)] // Read by `tests/test_cursor_native_bridge.py`.
 pub(crate) const CURSOR_SCRIPT_SHA256: &str =
-    "408da727f1b2f0f6aa5f3ed68be4bb046789fa170f78ca76d7137d354ef31f49";
+    "a772251ec553334e3b24eaaebddca06ee3cdab0842a4afd6c5a1169d1d2be668";
 
 const MAX_SCRIPT_BYTES: u64 = 256 * 1024;
 /// Each constant line the renderer writes, as `<name> = <value>`.
@@ -41,6 +41,10 @@ pub(crate) struct ScriptConstants {
     pub(crate) guard_home: String,
     /// `_guard_hook_arg_value("--home")`.
     pub(crate) home: Option<String>,
+    /// `GUARD_RECOVERY_COMMAND`: the install-time daemon recovery the
+    /// client runs as `[*GUARD_RECOVERY_COMMAND, failure_kind]` when its
+    /// daemon does not answer.
+    pub(crate) recovery_command: Vec<String>,
     /// `GUARD_HOOK_TIMEOUT_SECONDS`: `str(int)`, at least one.
     pub(crate) timeout_seconds: u64,
 }
@@ -102,28 +106,27 @@ pub(crate) fn normalize(text: &str) -> Option<(String, ScriptConstants)> {
     let PyVal::Str(guard_home) = rendered_value(guard_home?)? else {
         return None;
     };
-    for list in [cli?, recovery?, inherit?] {
+    for list in [cli?, inherit?] {
         rendered_value(list)?.as_list()?;
     }
+    let recovery_command = rendered_value(recovery?)?
+        .as_list()?
+        .iter()
+        .map(|item| item.as_str().map(str::to_owned))
+        .collect::<Option<Vec<_>>>()?;
     let argv = rendered_value(argv?)?;
     let constants = ScriptConstants {
         guard_home,
         home: hook_arg_value(argv.as_list()?, "--home"),
+        recovery_command,
         timeout_seconds: parse_timeout(timeout?)?,
     };
     Some((lines.join("\n"), constants))
 }
 
-/// The client's constants when `text` is the ported Cursor client.
-pub(crate) fn ported_constants(text: &str) -> Option<ScriptConstants> {
-    let (template, constants) = normalize(text)?;
-    let digest = hex::encode(Sha256::digest(template.as_bytes()));
-    (digest == CURSOR_SCRIPT_SHA256).then_some(constants)
-}
-
-/// Read the client Python would run and return its constants when it is
-/// the ported Cursor client.
-pub(crate) fn read_ported_script(path: &Path) -> Option<ScriptConstants> {
+/// Read the client the installer wrote and return the constants it was
+/// rendered with.
+pub(crate) fn read_client_constants(path: &Path) -> Option<ScriptConstants> {
     let metadata = std::fs::metadata(path).ok()?;
     if !metadata.is_file() || metadata.len() > MAX_SCRIPT_BYTES {
         return None;
@@ -137,5 +140,5 @@ pub(crate) fn read_ported_script(path: &Path) -> Option<ScriptConstants> {
     if bytes.len() as u64 > MAX_SCRIPT_BYTES {
         return None;
     }
-    ported_constants(std::str::from_utf8(&bytes).ok()?)
+    normalize(std::str::from_utf8(&bytes).ok()?).map(|(_, constants)| constants)
 }

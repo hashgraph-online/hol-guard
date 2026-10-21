@@ -18,7 +18,7 @@ from codex_plugin_scanner.guard.native_policy_snapshot import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
-from .native_policy_snapshot_test_fixtures import _ack, _config, _status
+from .native_policy_snapshot_test_fixtures import _ack, _config, _resident_generation_for_home, _status
 
 # Split modules are implementation containers; the compatibility façade imports
 # their test functions so the historical test path keeps identical collection.
@@ -37,7 +37,7 @@ def test_publisher_startup_ack_and_mutation_push(tmp_path: Path, monkeypatch: py
         assert isinstance(payload, bytes)
         assert (guard_home / "native-runtime" / "policy-verifier.key").is_file()
         calls.append(payload)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -83,7 +83,7 @@ def test_publisher_does_not_ack_snapshot_after_concurrent_mutation(
         assert isinstance(payload, bytes)
         entered.set()
         assert release.wait(2.0)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -118,7 +118,7 @@ def test_publisher_repushes_after_resident_generation_change(
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
         calls.append(payload)
-        return _ack(payload, resident_generation=2 if len(calls) > 1 else 1)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -130,9 +130,11 @@ def test_publisher_repushes_after_resident_generation_change(
     try:
         assert publisher.wait_until_ready(time.monotonic() + 10.0)
         assert len(calls) == 1
+        # Reading the controls may already have started a real resident.
+        restarted = (_resident_generation_for_home(guard_home) or 1) + 1
         resident_state = guard_home / "native-runtime" / "resident-v3-restarted"
         resident_state.mkdir(mode=0o700)
-        (resident_state / "generation-2.json").write_text("{}", encoding="utf-8")
+        (resident_state / f"generation-{restarted}.json").write_text("{}", encoding="utf-8")
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline and len(calls) < 2:
             time.sleep(0.01)
@@ -159,13 +161,21 @@ def test_publisher_does_not_republish_for_generation_created_by_own_ack(
         resident_state = guard_home / "native-runtime" / "resident-v3-owned"
         resident_state.mkdir(mode=0o700)
         (resident_state / "generation-1.json").write_text("{}", encoding="utf-8")
-        return _ack(payload)
+        return _ack(payload, resident_generation=1)
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
         status_provider=_status,
         client_request=client_request,
         poll_interval_seconds=0.05,
+    )
+    # Reading the controls starts the real resident this client stands in
+    # for; observe only the resident the fabricated ACK creates.
+    observe = publisher._current_resident_fingerprint
+    monkeypatch.setattr(
+        publisher,
+        "_current_resident_fingerprint",
+        lambda: tuple(entry for entry in observe() if entry[0].startswith("resident-v3-owned")),
     )
     publisher.start()
     try:

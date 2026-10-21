@@ -4,6 +4,11 @@
 //! metadata file it was read from. The key also names the `.git` directory
 //! the ancestor walk found, and the walk runs before every lookup, so a
 //! repository appearing nearer the workspace is never shadowed by a hit.
+//!
+//! It names the resolved workspace as well, because the identity records the
+//! workspace's path inside the repository: a symlink retargeted to another
+//! directory of the same repository leaves every Git metadata print alone,
+//! and only the resolved path tells the two apart.
 
 use std::fs::Metadata;
 use std::path::{Path, PathBuf};
@@ -18,6 +23,7 @@ static CACHE: Mutex<Vec<(Key, String)>> = Mutex::new(Vec::new());
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct Key {
     workspace: String,
+    resolved: PathBuf,
     git_dir: PathBuf,
     config: (u64, SystemTime),
     head_log: (u64, SystemTime),
@@ -27,6 +33,7 @@ impl Key {
     /// `None` when a file has no modification time to key on.
     pub(super) fn new(
         workspace: &str,
+        resolved: &Path,
         git_dir: &Path,
         config: &Metadata,
         head_log: &Metadata,
@@ -35,6 +42,7 @@ impl Key {
             |metadata: &Metadata| metadata.modified().ok().map(|time| (metadata.len(), time));
         Some(Self {
             workspace: workspace.to_owned(),
+            resolved: resolved.to_path_buf(),
             git_dir: git_dir.to_path_buf(),
             config: print(config)?,
             head_log: print(head_log)?,

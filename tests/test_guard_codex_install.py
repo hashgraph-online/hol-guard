@@ -687,7 +687,7 @@ def test_guard_codex_launch_uses_remote_control_for_dashboard_continuation(tmp_p
         guard_home=tmp_path / "guard-home",
     )
     hook_config: dict[str, object] = {"features": {"hooks": True}}
-    CodexHarnessAdapter._install_config_hooks(hook_config, context)
+    CodexHarnessAdapter._install_config_hooks(hook_config, context, config_path=home_dir / ".codex" / "config.toml")
     _write_text(home_dir / ".codex" / "config.toml", dump_toml(hook_config))
     captured: dict[str, object] = {}
 

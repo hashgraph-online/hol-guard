@@ -108,6 +108,58 @@ fn committing_in_a_linked_worktree_beside_the_checkout_is_a_local_write() {
 }
 
 #[test]
+fn removing_the_dependency_link_before_committing_in_the_worktree_is_a_local_write() {
+    let (session, worktree) = report_worktree("report-unlink-commit");
+    for command in [
+        "cd ../report-wt && rm node_modules && git add reports/weekly.md && git commit -m \"Add weekly report\" && git log --oneline -2",
+        "cd ../report-wt/ && rm node_modules && git add reports/weekly.md && git commit -m x",
+    ] {
+        let (action, reason) = verdict(&session, command);
+        assert!(
+            (action == "allow" && reason == LOCAL_WRITE) || action == "sandbox-required",
+            "{command}: {action} {reason}"
+        );
+    }
+    std::fs::write(worktree.join("notes.txt"), "keep\n").unwrap();
+    std::fs::write(worktree.join(".gitmodules"), "").unwrap();
+    for name in [".gitattributes", ".hidden", "-f"] {
+        std::os::unix::fs::symlink(session.primary.join("node_modules"), worktree.join(name))
+            .unwrap();
+    }
+    let commit = "git add reports/weekly.md && git commit -m x";
+    for command in [
+        // Only a plain `rm` of one link in the worktree root, before any other step.
+        format!("cd ../report-wt && rm -rf node_modules && {commit}"),
+        format!("cd ../report-wt && rm -f node_modules && {commit}"),
+        format!("cd ../report-wt && rm -- node_modules && {commit}"),
+        format!("cd ../report-wt && rm node_modules notes.txt && {commit}"),
+        format!("cd ../report-wt && rm notes.txt && {commit}"),
+        format!("cd ../report-wt && rm reports && {commit}"),
+        format!("cd ../report-wt && rm reports/weekly.md && {commit}"),
+        format!("cd ../report-wt && rm missing && {commit}"),
+        format!("cd ../report-wt && rm ./node_modules && {commit}"),
+        format!("cd ../report-wt && rm -- -f && {commit}"),
+        "cd ../report-wt && git add reports/weekly.md && rm node_modules && git commit -m x"
+            .to_owned(),
+        // Git's own names stay reviewed, links or not.
+        format!("cd ../report-wt && rm .git && {commit}"),
+        format!("cd ../report-wt && rm .git/config && {commit}"),
+        format!("cd ../report-wt && rm .gitmodules && {commit}"),
+        format!("cd ../report-wt && rm .gitattributes && {commit}"),
+        format!("cd ../report-wt && rm .hidden && {commit}"),
+        // Each step must run only after the one before it succeeded.
+        format!("cd ../report-wt; rm node_modules && {commit}"),
+        format!("cd ../report-wt && rm node_modules; {commit}"),
+        format!("cd ../report-wt && rm node_modules || {commit}"),
+        // The `cd` must enter the worktree root itself.
+        format!("cd ../report-wt/reports && rm ../node_modules && {commit}"),
+        format!("rm node_modules && cd ../report-wt && {commit}"),
+    ] {
+        assert_reviewed(&session, &command);
+    }
+}
+
+#[test]
 fn siblings_that_are_not_linked_worktrees_of_the_session_stay_reviewed() {
     let (session, worktree) = report_worktree("report-siblings");
     // A sibling repository with its own `.git` directory.
@@ -141,6 +193,7 @@ fn siblings_that_are_not_linked_worktrees_of_the_session_stay_reviewed() {
             format!("cd ../{name} && git status --short"),
             format!("rm ../{name}/node_modules"),
             format!("rm ../{name}/node_modules && git worktree remove ../report-wt"),
+            format!("cd ../{name} && rm node_modules && git add README.md && git commit -m x"),
         ] {
             assert_reviewed(&session, &command);
         }

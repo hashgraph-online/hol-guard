@@ -14,7 +14,7 @@ from codex_plugin_scanner.guard.adapters import claude_hook_argv
 from codex_plugin_scanner.guard.adapters import claude_hook_config as config
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 
-_LEGACY_TOOL_MATCHER = "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+_LEGACY_TOOL_MATCHER = "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
 _LEGACY_POST_TOOL_MATCHER = f"{_LEGACY_TOOL_MATCHER}|AskUserQuestion"
 _LEGACY_GROUPS = (
     ("PreToolUse", _LEGACY_TOOL_MATCHER, 30, "HOL Guard is checking this tool use"),
@@ -96,7 +96,7 @@ def test_contract_constants_match_legacy_values() -> None:
 
 
 def test_bridge_config_keys_match_contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", lambda: None)
+    monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", lambda *_args, **_kwargs: None)
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=tmp_path / "guard")
     argv = claude_hook_argv.daemon_hook_command_parts(context, fallback_daemon_url="http://127.0.0.1:1")
     keys = tuple(json.loads(argv[-1]))

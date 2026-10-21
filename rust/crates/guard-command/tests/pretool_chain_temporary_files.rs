@@ -243,20 +243,29 @@ fn single_quoted_pattern_anchors_do_not_change_containment() {
         .reason_code
     };
     let contained = "native_workspace_containment_required";
-    for (anchored, plain) in [
+    // An `awk` that reads only its piped input names no file, so its proof
+    // allows it before any sandbox route runs.
+    let piped = "native_exact_safe_command";
+    for (anchored, plain, macos) in [
         (
             "awk 'f&&c<=22{print;c++} /app-shell.ts., .$/{f=1}' notes.txt",
             "awk 'f&&c<=22{print;c++} /app-shell.ts/{f=1}' notes.txt",
+            contained,
         ),
-        ("awk '{print $1}' notes.txt", "awk '{print}' notes.txt"),
+        (
+            "awk '{print $1}' notes.txt",
+            "awk '{print}' notes.txt",
+            contained,
+        ),
         (
             "printf 'a\\n' | awk '/a$/{f=1} END{print f}'",
             "printf 'a\\n' | awk '/a/{f=1} END{print f}'",
+            piped,
         ),
     ] {
         let plain_reason = reason(plain);
         if cfg!(target_os = "macos") {
-            assert_eq!(plain_reason, contained, "{plain}");
+            assert_eq!(plain_reason, macos, "{plain}");
         }
         assert_eq!(reason(anchored), plain_reason, "{anchored}");
     }
@@ -267,6 +276,54 @@ fn single_quoted_pattern_anchors_do_not_change_containment() {
         "awk /x/$PWD notes.txt",
         "sh -c 'cat $HOME/notes.txt'",
         "xargs sh -c 'cat $0' < notes.txt",
+    ] {
+        assert_ne!(reason(command), contained, "{command}");
+    }
+    let _ = std::fs::remove_dir_all(&workspace);
+}
+
+/// `$?` expands to the previous step's exit status, a decimal number, so
+/// printing it cannot reach anything the step alone would not.
+#[test]
+fn exit_status_expansions_keep_containment() {
+    let workspace = std::env::temp_dir().join(format!("hg-chain-status-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&workspace);
+    std::fs::create_dir_all(workspace.join(".git")).unwrap();
+    std::fs::write(workspace.join(".git/config"), "[core]\n\tbare = false\n").unwrap();
+    std::fs::write(workspace.join("package.json"), "{}").unwrap();
+    let workspace = std::fs::canonicalize(&workspace).unwrap();
+    let controls = controls();
+    let reason = |command: &str| {
+        evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name": "bash", "tool_input": {"command": command}}),
+            Some(&controls),
+            None,
+            Some("/home/nobody"),
+            workspace.to_str(),
+        )
+        .reason_code
+    };
+    let contained = "native_workspace_containment_required";
+    let alone = reason("corepack pnpm --version");
+    if cfg!(target_os = "macos") {
+        assert_eq!(alone, contained);
+    }
+    for command in [
+        "corepack pnpm --version; printf 'exit=%s\\n' \"$?\"",
+        "corepack pnpm --version; echo \"exit=$?\"",
+        "corepack pnpm --version; echo $?",
+    ] {
+        assert_eq!(reason(command), alone, "{command}");
+    }
+    // Other expansions, or a command substitution beside `$?`, still reach
+    // outside what the step alone would.
+    for command in [
+        "corepack pnpm --version; echo \"$? $HOME\"",
+        "corepack pnpm --version; echo \"$?$PWD\"",
+        "corepack pnpm --version; echo \"$? `cat /etc/hosts`\"",
+        "corepack pnpm --version; echo $?$(cat /etc/hosts)",
     ] {
         assert_ne!(reason(command), contained, "{command}");
     }

@@ -12,7 +12,10 @@ from codex_plugin_scanner.guard.store_review_event_outbox_writes import append_r
 from tests.guard_exact_cloud_review_support import add_review_request, connected_exact_review_store, review_request
 
 
-@pytest.mark.parametrize("code", ["review_continuation_binding_mismatch", "missing_request_snapshot"])
+@pytest.mark.parametrize(
+    "code",
+    ["review_continuation_binding_mismatch", "review_event_runtime_grant_missing", "missing_request_snapshot"],
+)
 def test_terminal_binding_rejection_is_preserved_without_endless_retry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, code: str
 ) -> None:
@@ -81,7 +84,7 @@ def test_terminal_binding_rejection_is_preserved_without_endless_retry(
         ).fetchone()
     assert terminal is not None
     assert terminal["acknowledged_at"] is None
-    if code == "review_continuation_binding_mismatch":
+    if code != "missing_request_snapshot":
         assert outbox["depth"] == 0
         assert outbox["quarantined_depth"] == 1
         assert terminal["binding_status"] == "quarantined"

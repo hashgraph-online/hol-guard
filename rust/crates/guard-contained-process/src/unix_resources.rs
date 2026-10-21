@@ -1,8 +1,8 @@
 use crate::ResourceLimits;
 use std::io;
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
 type Resource = libc::__rlimit_resource_t;
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
 type Resource = libc::c_int;
 
 pub(crate) struct Limit {

@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from ..runtime.composio_contract import composio_requires_action_review
+from ..runtime.composio_contract import composio_names_a_wrapper
 from ..runtime.mcp_protection import McpServerIdentity
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
 from ..native_cli_runtime_support import cli_runtime_support as _native_cli_support
@@ -174,8 +174,11 @@ def _copilot_runtime_tool_call(
         server_identity=_copilot_identity_dto(server_identity),
         server_fingerprint=identity["fingerprint"], tool_schema=metadata["schema"],
         tool_description=metadata["description"],
-        provider_catalog_hash=store.read_mcp_provider_authority_hash()
-        if store is not None and composio_requires_action_review(runtime_name) else None,
+        provider_catalog_hash=(
+            store.read_mcp_provider_authority_hash()
+            if store is not None and composio_names_a_wrapper(runtime_name)
+            else None
+        ),
     )
     arguments = payload.get("tool_input", payload.get("arguments"))
     artifact_hash = build_tool_call_hash(artifact, arguments, workspace=workspace or Path.cwd(), config=config)

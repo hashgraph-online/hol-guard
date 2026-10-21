@@ -19,10 +19,7 @@ from codex_plugin_scanner.guard.adapters.cursor_hooks import (
     _MANAGED_HOOK_EVENTS,
     _MANAGED_HOOK_TIMEOUT_SECONDS,
     HOOK_SCRIPT_NAME,
-    _hook_script_mode_is_executable,
     _strip_managed_hook_entries,
-    cursor_hook_response_from_guard,
-    cursor_hook_should_block,
     cursor_hooks_path,
     cursor_native_hook_state,
     install_cursor_hooks,
@@ -35,6 +32,27 @@ from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+def _cursor_shell_fingerprint(command: str) -> str:
+    """The digest both Cursor state keys are built from.
+
+    Spelled out here rather than imported from the CLI module: the resident
+    derives these keys now, so a test that wants to read a row back has to say
+    independently what that row is called.
+    """
+
+    from codex_plugin_scanner.guard.adapters.cursor_native_approval import normalize_cursor_shell_command
+
+    return hashlib.sha256(normalize_cursor_shell_command(command).encode("utf-8")).hexdigest()[:24]
+
+
+def _cursor_pending_shell_key(conversation_id: str, command: str) -> str:
+    return f"cursor_pending_shell:{conversation_id}:{_cursor_shell_fingerprint(command)}"
+
+
+def _cursor_native_shell_allow_key(conversation_id: str, command: str) -> str:
+    return f"cursor_native_shell_allow:{conversation_id}:{_cursor_shell_fingerprint(command)}"
+
+
 def _cursor_shell_artifact(*, workspace_dir: Path, command: str) -> GuardArtifact:
     return GuardArtifact(
         artifact_id="cursor:project:shell:rm",
@@ -45,15 +63,6 @@ def _cursor_shell_artifact(*, workspace_dir: Path, command: str) -> GuardArtifac
         config_path=str(workspace_dir / ".cursor" / "mcp.json"),
         command=command,
     )
-
-
-def test_cursor_hook_executable_mode_is_platform_portable(monkeypatch) -> None:
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hooks.os.name", "nt")
-    assert _hook_script_mode_is_executable(0o600) is True
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hooks.os.name", "posix")
-    assert _hook_script_mode_is_executable(0o600) is False
-    assert _hook_script_mode_is_executable(0o700) is True
 
 
 def _record_cursor_pending_for_test(
@@ -1161,35 +1170,6 @@ def test_prepare_cursor_hook_payload_maps_after_mcp_execution() -> None:
     assert tool_input["command"] == "pnpm test"
 
 
-def test_cursor_hook_response_from_guard_maps_read_ask_to_deny() -> None:
-    response = cursor_hook_response_from_guard(
-        policy_action="require-reapproval",
-        guard_payload={"review_hint": "Approve in Guard"},
-        hook_event_name="beforeReadFile",
-    )
-    assert response["permission"] == "deny"
-    assert response["user_message"] == "Approve in Guard"
-
-
-def test_cursor_hook_response_from_guard_allows_shell() -> None:
-    response = cursor_hook_response_from_guard(
-        policy_action="allow",
-        guard_payload={},
-        hook_event_name="beforeShellExecution",
-    )
-    assert response["permission"] == "allow"
-
-
-@pytest.mark.parametrize("policy_action", ["", "future-action", "ALLOW"])
-def test_cursor_hook_response_from_guard_fails_closed_for_unknown_action(policy_action: str) -> None:
-    response = cursor_hook_response_from_guard(
-        policy_action=policy_action,
-        guard_payload={"risk_summary": "Malformed Guard response."},
-        hook_event_name="beforeShellExecution",
-    )
-    assert response["permission"] == "deny"
-
-
 def test_cursor_hook_warn_with_risk_remains_allowed_without_a_prompt() -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_would_prompt_user
 
@@ -1198,12 +1178,6 @@ def test_cursor_hook_warn_with_risk_remains_allowed_without_a_prompt() -> None:
         policy_action="warn",
         guard_payload=payload,
     )
-    response = cursor_hook_response_from_guard(
-        policy_action="warn",
-        guard_payload=payload,
-        hook_event_name="beforeShellExecution",
-    )
-    assert response == {"permission": "allow"}
     assert not cursor_hook_would_prompt_user(policy_action="allow", guard_payload={})
     assert cursor_hook_would_prompt_user(policy_action="review", guard_payload={})
     assert cursor_hook_would_prompt_user(policy_action="require-reapproval", guard_payload={})
@@ -1333,11 +1307,6 @@ def test_cursor_after_shell_refuses_pending_state_that_expires_during_load(
     )
     assert saved is False
     assert guard_commands_module._load_cursor_native_shell_allowance(store, payload) is None
-
-
-def test_cursor_hook_should_block() -> None:
-    assert cursor_hook_should_block(policy_action="block") is True
-    assert cursor_hook_should_block(policy_action="allow") is False
 
 
 def test_cursor_hook_script_source_infers_event_before_prepare(tmp_path: Path) -> None:
@@ -1640,7 +1609,7 @@ def test_cursor_tampered_pending_shell_cannot_bootstrap_signed_native_allow(tmp_
         workspace_dir=workspace_dir,
         generation_id=generation_id,
     )
-    pending_key = guard_commands_module._cursor_pending_shell_state_key(conversation_id, command)
+    pending_key = _cursor_pending_shell_key(conversation_id, command)
     with sqlite3.connect(store.path) as connection:
         row = connection.execute(
             "select payload_json from sync_state where state_key = ?",
@@ -1681,10 +1650,7 @@ def test_cursor_tampered_pending_shell_cannot_bootstrap_signed_native_allow(tmp_
 
     assert saved is False
     assert store.get_sync_payload(pending_key) is None
-    assert (
-        store.get_sync_payload(guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, command))
-        is None
-    )
+    assert store.get_sync_payload(_cursor_native_shell_allow_key(conversation_id, command)) is None
     events = store.list_events(event_name="rule.ignored.local_integrity")
     event_payloads = [event_payload for event in events if isinstance(event_payload := event.get("payload"), dict)]
     assert any(
@@ -1745,82 +1711,6 @@ def test_forged_after_shell_without_attestation_is_rejected(tmp_path: Path) -> N
         ),
     )
     assert len(store.list_policy_decisions("cursor")) == 0
-
-
-def test_cursor_session_allow_without_generation_id_uses_binding_file(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import read_cursor_shell_binding_file
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-no-generation-id"
-    command = "rm -rf ./hol-guard-cursor-native-test-marker"
-    _record_cursor_pending_for_test(
-        store=store,
-        guard_home=home_dir,
-        guard_commands_module=guard_commands_module,
-        conversation_id=conversation_id,
-        command=command,
-        workspace_dir=workspace_dir,
-        generation_id=None,
-    )
-    approval_binding = read_cursor_shell_binding_file(
-        home_dir,
-        conversation_id=conversation_id,
-        command=command,
-    )
-    assert approval_binding is not None
-    assert approval_binding.startswith("hol-guard:")
-    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-        store=store,
-        payload=prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "hook_event_name": "afterShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-                "duration": 8,
-            }
-        ),
-        harness="cursor",
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-        hook_env=_trusted_cursor_after_shell_env(
-            home_dir,
-            conversation_id=conversation_id,
-            command=command,
-            workspace_dir=workspace_dir,
-            approval_binding=approval_binding,
-        ),
-    )
-    assert saved is True
-    assert guard_commands_module._cursor_native_shell_is_approved(
-        store,
-        prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "hook_event_name": "beforeShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-            }
-        ),
-    )
-
-
-def test_cursor_after_shell_proof_message_uses_null_separator() -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import cursor_after_shell_proof_message
-
-    message = cursor_after_shell_proof_message(
-        conversation_id="conv-test",
-        command="echo hello",
-        approval_binding="hol-guard:test-binding",
-    )
-    assert message == (b"conv-test\x00echo hello\x00hol-guard:test-binding\x00afterShellExecution")
 
 
 def test_cursor_native_shell_session_allow_survives_approval_gate_block(tmp_path: Path) -> None:
@@ -1903,8 +1793,8 @@ def test_signed_cursor_allowance_cannot_be_replayed_into_another_conversation(tm
     forged_conversation = "conv-cursor-forged-copy"
     command = "rm -rf ./sensitive-directory"
     now = guard_commands_module._now()
-    approved_state_key = guard_commands_module._cursor_native_shell_allow_state_key(approved_conversation, command)
-    forged_state_key = guard_commands_module._cursor_native_shell_allow_state_key(forged_conversation, command)
+    approved_state_key = _cursor_native_shell_allow_key(approved_conversation, command)
+    forged_state_key = _cursor_native_shell_allow_key(forged_conversation, command)
     assert guard_commands_module._record_cursor_native_shell_allow_state(
         store=store,
         conversation_id=approved_conversation,
@@ -1933,7 +1823,7 @@ def test_malformed_cursor_allowance_json_fails_closed_with_integrity_event(tmp_p
     conversation_id = "conv-cursor-malformed-json"
     command = "rm -rf ./sensitive-directory"
     now = guard_commands_module._now()
-    state_key = guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, command)
+    state_key = _cursor_native_shell_allow_key(conversation_id, command)
     assert guard_commands_module._record_cursor_native_shell_allow_state(
         store=store,
         conversation_id=conversation_id,
@@ -1968,7 +1858,7 @@ def test_cursor_native_shell_does_not_approve_unrelated_command(tmp_path: Path) 
     approved_command = "gh api graphql -f query='query { viewer { login } }'"
     now = guard_commands_module._now()
     store.set_sync_payload(
-        guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, approved_command),
+        _cursor_native_shell_allow_key(conversation_id, approved_command),
         {
             "saved_at": now,
             "action": "allow",

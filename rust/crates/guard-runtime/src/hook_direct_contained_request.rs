@@ -20,27 +20,29 @@ use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const REQUEST_SCHEMA: &str = "guard-contained-test-request.v1";
-pub(super) const REQUEST_DIRECTORY_PREFIX: &str = "hol-guard-contained-test-";
-pub(super) const REQUEST_FILE_NAME: &str = "request.json";
-const MAX_REQUEST_BYTES: usize = 1_048_576;
+pub(crate) const REQUEST_SCHEMA: &str = "guard-contained-test-request.v1";
+pub(crate) const REQUEST_DIRECTORY_PREFIX: &str = "hol-guard-contained-test-";
+pub(crate) const REQUEST_FILE_NAME: &str = "request.json";
+pub(crate) const MAX_REQUEST_BYTES: usize = 1_048_576;
 const STALE_AFTER_SECONDS: i64 = 86_400;
 const MAX_SCANNED_ENTRIES: usize = 4096;
 const NAME_ATTEMPTS: usize = 16;
 const NAME_CHARACTERS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789_";
 
 /// Write the snapshot of the call under `temp` and return the response that
-/// runs the sink on it.
+/// runs the sink on it: the runtime's own sink at `native` when given, else
+/// the daemon's.
 pub(super) fn write_and_route(
     temp: &Path,
     payload: &Map<String, Value>,
     original: &Map<String, Value>,
     target: &SinkTarget<'_>,
+    native: Option<&str>,
 ) -> Result<Option<Routed>, HookDirectDefer> {
     let failed = HookDirectDefer::ContainedRouteFailed;
     // The binding is only as fresh as its last publish; a launcher removed
     // since then leaves the call to the daemon, which resolves it again.
-    if !Path::new(&target.command[0]).is_file() {
+    if native.is_none() && !Path::new(&target.command[0]).is_file() {
         return Err(failed);
     }
     let workspace = std::fs::canonicalize(target.workspace).map_err(|_| failed)?;
@@ -76,11 +78,19 @@ pub(super) fn write_and_route(
         }
     };
     let digest = hex::encode(Sha256::digest(&serialized));
-    let mut command = target.command.to_vec();
+    let mut command = match native {
+        Some(executable) => vec![
+            executable.to_owned(),
+            crate::contained_workspace_sink::SINK_COMMAND.to_owned(),
+        ],
+        None => {
+            let mut command = target.command.to_vec();
+            command.extend(["guard", "execute-contained-test"].map(str::to_owned));
+            command
+        }
+    };
     command.extend(
         [
-            "guard",
-            "execute-contained-test",
             "--harness",
             target.harness,
             "--guard-home",
@@ -100,6 +110,21 @@ pub(super) fn write_and_route(
         routed_response(original, &command),
         Snapshot::new(request),
     )))
+}
+
+/// Write `serialized` as a fresh private request snapshot under `temp`,
+/// reclaiming stale ones first: the request path, or `None` with nothing
+/// left behind.
+pub(crate) fn write_snapshot(temp: &Path, serialized: &[u8]) -> Option<PathBuf> {
+    cleanup_stale_requests(temp);
+    let directory = private_directory(temp)?;
+    let request = directory.join(REQUEST_FILE_NAME);
+    if write_request(&request, serialized).is_some() {
+        return Some(request);
+    }
+    let _ = std::fs::remove_file(&request);
+    let _ = std::fs::remove_dir(&directory);
+    None
 }
 
 /// A new owner-only directory under `temp`, named as `mkdtemp` names one.

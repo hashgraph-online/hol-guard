@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Final
 
+from ..native_extension_control import ControlAnswer, ControlItem, ControlScenario, resolve_scenarios
 from ..runtime.command_extensions import CommandSafetyExtensionRegistry
 from ..runtime.extension_control_contract import (
     ControlLayerKind,
@@ -11,9 +13,7 @@ from ..runtime.extension_control_contract import (
     ControlTargetKind,
     ExtensionControlLayer,
 )
-from ..runtime.extension_control_resolver import resolve_extension_controls
 from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
-from ..runtime.extension_trust import extension_is_active
 
 EFFECTIVE_PROJECTION_SCHEMA: Final = "guard.daemon.extension-control-projection.v1"
 _MAX_PROJECTION_EXTENSIONS: Final = 512
@@ -35,36 +35,41 @@ def _explicit_layer_state(
     return "inherited"
 
 
-def _reason_codes(resolution: object) -> list[str]:
+def _reason_codes(resolution: ControlAnswer) -> list[str]:
     # Keep this DTO human-safe and independent from private decision evidence.
-    factors = getattr(resolution, "factors", ())
-    failures = getattr(resolution, "failures", ())
-    values = {str(factor.reason_code) for factor in factors}
-    values.update(f"resolver.{failure.code.value}" for failure in failures)
+    values = set(resolution.reason_codes)
+    values.update(f"resolver.{failure.code.value}" for failure in resolution.failures)
     return sorted(values)
 
 
 def build_effective_extension_control_projection(
     registry: CommandSafetyExtensionRegistry,
     snapshot: ExtensionControlRuntimeSnapshot,
+    *,
+    guard_home: Path | None = None,
 ) -> dict[str, object]:
     """Project authoritative effective state using the production resolver."""
 
+    extensions = registry.extensions[:_MAX_PROJECTION_EXTENSIONS]
+    permissions = registry.permissions[:_MAX_PROJECTION_PERMISSIONS]
+    # Every item resolves against the same layers: one scenario, answered in order. Each item also asks
+    # whether its extension (for a permission, its owner) is active.
+    items = (
+        *(ControlItem((extension.extension_id,), (), extension.extension_id) for extension in extensions),
+        *(ControlItem((), (permission.permission_id,), permission.extension_id) for permission in permissions),
+    )
+    answers = resolve_scenarios(
+        registry,
+        (ControlScenario(snapshot.layers, items, ControlSurface.COMMAND_EVALUATION, snapshot.authority_failure),),
+        guard_home=guard_home,
+        trust_classes=True,
+    )[0].items
+    extension_answers = answers[: len(extensions)]
+    permission_answers = answers[len(extensions) :]
+
     extension_items: list[dict[str, object]] = []
-    for extension in registry.extensions[:_MAX_PROJECTION_EXTENSIONS]:
-        resolution = resolve_extension_controls(
-            snapshot.layers,
-            registry,
-            extension_ids=(extension.extension_id,),
-            permission_ids=(),
-            surface=ControlSurface.COMMAND_EVALUATION,
-            authority_failure=snapshot.authority_failure,
-        )
-        active = extension_is_active(
-            extension.extension_id,
-            snapshot.layers,
-            required=extension.required,
-        )
+    for extension, resolution in zip(extensions, extension_answers, strict=True):
+        active = resolution.active is True
         extension_items.append(
             {
                 "extension_id": extension.extension_id,
@@ -87,21 +92,9 @@ def build_effective_extension_control_projection(
         )
 
     permission_items: list[dict[str, object]] = []
-    for permission in registry.permissions[:_MAX_PROJECTION_PERMISSIONS]:
-        resolution = resolve_extension_controls(
-            snapshot.layers,
-            registry,
-            extension_ids=(),
-            permission_ids=(permission.permission_id,),
-            surface=ControlSurface.COMMAND_EVALUATION,
-            authority_failure=snapshot.authority_failure,
-        )
-        owner = registry.get(permission.extension_id)
-        active = owner is not None and extension_is_active(
-            permission.extension_id,
-            snapshot.layers,
-            required=owner.required,
-        )
+    for permission, resolution in zip(permissions, permission_answers, strict=True):
+        # An owner the registry does not know is never active.
+        active = resolution.active is True
         permission_items.append(
             {
                 "permission_id": permission.permission_id,

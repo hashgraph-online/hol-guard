@@ -39,7 +39,7 @@ fn never_enrolled_defaults_keep_first_party_protection_without_external_activati
 
 #[test]
 fn delegated_packages_have_owned_native_permission_controls() {
-    let program = packaged_command_program().unwrap();
+    let program = crate::native_command_program::authored_test_support::full_program();
     let delegated: Vec<_> = program
         .extensions
         .iter()
@@ -48,11 +48,8 @@ fn delegated_packages_have_owned_native_permission_controls() {
     assert_eq!(delegated.len(), 8);
     for extension in delegated {
         let permission = &extension.permissions[0].permission_id;
-        let controls = CompiledNativeCommandControls::new(&binding(
-            &[("permission", permission, "disabled")],
-            false,
-        ))
-        .unwrap();
+        let controls =
+            authored_controls(&binding(&[("permission", permission, "disabled")], false)).unwrap();
         let command = format!("{} install fixture-package", extension.executables[0]);
         let result = evaluate_pre_tool_envelope_with_extensions(
             "claude-code",
@@ -87,7 +84,7 @@ fn delegated_packages_have_owned_native_permission_controls() {
 #[test]
 fn native_mcp_defaults_are_opt_in_tightening_only_and_redacted() {
     let tool = serde_json::json!({"tool_name":"mcp__filesystem__write_file", "tool_input":{"path":"fixture.txt","content":"private-fixture-content"}});
-    let inactive = CompiledNativeCommandControls::new(&binding(&[], false)).unwrap();
+    let inactive = authored_controls(&binding(&[], false)).unwrap();
     let off = evaluate_pre_tool_envelope_with_extensions(
         "claude-code",
         "PreToolUse",
@@ -101,7 +98,7 @@ fn native_mcp_defaults_are_opt_in_tightening_only_and_redacted() {
         .unwrap()
         .permission_observations
         .is_empty());
-    let enabled = CompiledNativeCommandControls::new(&binding(
+    let enabled = authored_controls(&binding(
         &[("extension", "command.mcp-filesystem", "enabled")],
         false,
     ))
@@ -133,7 +130,7 @@ fn native_mcp_defaults_are_opt_in_tightening_only_and_redacted() {
         None,
     );
     assert_eq!(inherited.minimum_action, "review");
-    let managed = CompiledNativeCommandControls::new(&binding(
+    let managed = authored_controls(&binding(
         &[("extension", "command.mcp-filesystem", "enabled")],
         true,
     ))
@@ -152,7 +149,7 @@ fn native_mcp_defaults_are_opt_in_tightening_only_and_redacted() {
         .permission_observations
         .is_empty());
 
-    let hosted = CompiledNativeCommandControls::new(&binding(
+    let hosted = authored_controls(&binding(
         &[("extension", "command.mcp-instapods", "enabled")],
         false,
     ))

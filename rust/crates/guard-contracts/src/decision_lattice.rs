@@ -22,7 +22,7 @@
 //! Byte-parity: severity ranks, alias, reason strings, and the upgrade /
 //! downgrade decision branches match the Python source line-for-line.
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::signal_contract::{
     RiskConfidenceLabel, RiskSeverityLabel, RiskSignalCategory, RiskSignalV2,
@@ -203,6 +203,70 @@ pub fn most_restrictive_of(a: GuardAction, b: GuardAction) -> GuardAction {
     } else {
         a
     }
+}
+
+// ---------------------------------------------------------------------------
+// approval_resolution_block_reason
+// ---------------------------------------------------------------------------
+
+/// `approval_resolution.py:TERMINAL_POLICY_ACTION_NOT_RESOLVABLE`.
+pub const TERMINAL_POLICY_ACTION_NOT_RESOLVABLE: &str = "terminal_policy_action_not_resolvable";
+
+/// `approval_resolution.py:approval_resolution_block_reason`: why a stored
+/// approval row cannot accept a user resolution, or `None` when it can.
+///
+/// A row whose decision contract could not be read is inconsistent, and so is
+/// one whose stored policy action is not a lattice action, because neither can
+/// be ranked against the answer a user would give. `block` and
+/// `sandbox-required` are terminal: no answer to a prompt lifts them, so the
+/// row is left as it stands rather than resolved.
+pub fn approval_resolution_block_reason(
+    contract_error: &Value,
+    policy_action: &Value,
+) -> Option<&'static str> {
+    if !contract_error.is_null() {
+        return Some(crate::authoritative_decision::AUTHORITATIVE_DECISION_INCONSISTENT);
+    }
+    let normalized = normalize_guard_action_result(policy_action, GuardAction::RequireReapproval);
+    if !normalized.recognized() {
+        return Some(crate::authoritative_decision::AUTHORITATIVE_DECISION_INCONSISTENT);
+    }
+    matches!(
+        normalized.action,
+        GuardAction::Block | GuardAction::SandboxRequired
+    )
+    .then_some(TERMINAL_POLICY_ACTION_NOT_RESOLVABLE)
+}
+
+// ---------------------------------------------------------------------------
+// evaluation_has_terminal_policy_action
+// ---------------------------------------------------------------------------
+
+/// `approvals.py:evaluation_has_terminal_policy_action`: whether an evaluation
+/// carries a policy action no approval can lift.
+///
+/// `block` and `sandbox-required` are terminal - a user answering a prompt
+/// cannot turn them into an allow - so the caller skips the approval flow
+/// rather than asking a question whose answer could not take effect. An
+/// unreadable `artifacts` list is not terminal, because nothing in it was read
+/// as a decision; an unknown action normalizes to `require-reapproval`, which
+/// is not terminal and so still reaches the prompt.
+pub fn evaluation_has_terminal_policy_action(evaluation: &Map<String, Value>) -> bool {
+    let Some(Value::Array(artifacts)) = evaluation.get("artifacts") else {
+        return false;
+    };
+    artifacts.iter().any(|item| {
+        let Value::Object(fields) = item else {
+            return false;
+        };
+        matches!(
+            normalize_guard_action(
+                fields.get("policy_action").unwrap_or(&Value::Null),
+                GuardAction::RequireReapproval,
+            ),
+            GuardAction::Block | GuardAction::SandboxRequired
+        )
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -441,10 +505,18 @@ pub fn compose_action_from_signals(
     }
 
     if !risk.is_empty() {
+        // Ties keep the first signal the detector registry emitted, so the
+        // reason names the same detector the retired Python composer named.
         let top = risk
             .iter()
-            .max_by_key(|s| severity_rank(s.severity))
             .copied()
+            .reduce(|best, s| {
+                if severity_rank(s.severity) > severity_rank(best.severity) {
+                    s
+                } else {
+                    best
+                }
+            })
             .unwrap();
         return CompositionResult {
             action: final_action,
@@ -508,6 +580,30 @@ mod tests {
         }
         assert_eq!(GuardAction::Allow.severity(), 0);
         assert_eq!(GuardAction::Block.severity(), 5);
+    }
+
+    #[test]
+    fn terminal_policy_action_is_what_no_approval_can_lift() {
+        let terminal =
+            |value: Value| evaluation_has_terminal_policy_action(value.as_object().unwrap());
+        assert!(terminal(json!({"artifacts": [{"policy_action": "block"}]})));
+        assert!(terminal(json!({
+            "artifacts": [{"policy_action": "allow"}, {"policy_action": "sandbox-required"}]
+        })));
+        // review and require-reapproval still reach the prompt.
+        assert!(!terminal(
+            json!({"artifacts": [{"policy_action": "review"}]})
+        ));
+        assert!(!terminal(json!({
+            "artifacts": [{"policy_action": "require-reapproval"}]
+        })));
+        // An unknown action normalizes to require-reapproval, not to a block.
+        assert!(!terminal(json!({"artifacts": [{"policy_action": "wat"}]})));
+        assert!(!terminal(json!({"artifacts": [{}]})));
+        // Nothing readable was decided, so nothing is terminal.
+        assert!(!terminal(json!({"artifacts": "block"})));
+        assert!(!terminal(json!({"artifacts": ["block"]})));
+        assert!(!terminal(json!({})));
     }
 
     #[test]

@@ -11,6 +11,7 @@ resident is unreachable or returns nothing, ``parse_package_intent`` returns
 from __future__ import annotations
 
 from collections.abc import Mapping
+from functools import partial
 from pathlib import Path
 
 from .command_model import CanonicalCommand
@@ -120,15 +121,30 @@ def extract_package_intent_request(
     workspace: Path | None = None,
     home_dir: Path | None = None,
     guard_home: Path | None = None,
+    environment: Mapping[str, str] | None = None,
 ) -> PackageIntent | None:
+    """Parse the call's commands for package intent.
+
+    ``environment`` is the environment the commands are resolved in, for a
+    caller parsing on behalf of another process: the relay evidence drain runs
+    in the daemon and parses a proxy's call, and the manager a command names
+    depends on the ``PATH`` it was issued under. A caller parsing its own call
+    passes none, and the resident binds the ambient one.
+    """
+
     normalized_tool_name = _normalize_tool_name(tool_name)
+    parse = partial(
+        parse_package_intent,
+        workspace=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
+        environment=environment,
+    )
     if normalized_tool_name in _SHELL_TOOL_NAMES:
         for command_text in _candidate_command_texts(arguments):
-            intent = parse_package_intent(command_text, workspace=workspace, home_dir=home_dir, guard_home=guard_home)
+            intent = parse(command_text)
             if intent is not None:
                 return intent
     if action_envelope_command:
-        return parse_package_intent(
-            action_envelope_command, workspace=workspace, home_dir=home_dir, guard_home=guard_home
-        )
+        return parse(action_envelope_command)
     return None

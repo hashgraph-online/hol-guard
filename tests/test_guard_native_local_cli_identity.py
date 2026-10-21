@@ -70,27 +70,48 @@ def test_failures_are_tracked_but_not_applicability(monkeypatch: pytest.MonkeyPa
     assert failures == ["native_local_cli_identity_unavailable"]
 
 
-def test_block_rule_holds_allowed_command_when_identity_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_no_resident_answer_for_the_local_cli_step_is_the_host_outage(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # Python used to pick the action here: review while a block rule existed,
+    # the action unchanged otherwise. The resident holds an unverifiable grant
+    # for review itself (``an_unreadable_grant_is_unverified`` in Rust); no
+    # answer at all is an outage the hook answers with the host outage
+    # response, as the direct hook path does, whatever the store holds.
     from codex_plugin_scanner.guard import local_cli_hook
+    from codex_plugin_scanner.guard.native_hook_decision import NativeHookDecisionError
 
-    def unavailable(**_kwargs: object) -> None:
-        raise module.LocalCliIdentityUnavailableError("native_local_cli_identity_unavailable")
-
-    monkeypatch.setattr(local_cli_hook, "matching_local_cli_grant", unavailable)
+    monkeypatch.setattr(local_cli_hook, "native_local_cli_hook", lambda *_args, **_kwargs: None)
 
     class Store:
-        def __init__(self, blocks: bool) -> None:
-            self.blocks = blocks
+        guard_home = tmp_path
+        path = tmp_path / "guard.db"
+        guard_source = "local"
 
         def has_local_cli_block_rules(self) -> bool:
-            return self.blocks
+            raise AssertionError("the transport must not probe the store")
 
-    def apply(store: object, action: str) -> str:
-        return local_cli_hook.apply_local_cli_grant(
-            store=store, command="tool", cwd=tmp_path, home_dir=tmp_path, current_action=action
+    for action in ("allow", "warn", "review", "block"):
+        for grant_allowed in (True, False):
+            with pytest.raises(NativeHookDecisionError) as raised:
+                local_cli_hook.local_cli_grant_action(
+                    store=Store(),  # type: ignore[arg-type]
+                    command="tool",
+                    cwd=tmp_path,
+                    home_dir=tmp_path,
+                    current_action=action,  # type: ignore[arg-type]
+                    grant_allowed=grant_allowed,
+                )
+            assert raised.value.code == "native_local_cli_hook_unavailable"
+    # No command launches no CLI: nothing to ask, the action stands.
+    assert (
+        local_cli_hook.local_cli_grant_action(
+            store=Store(),  # type: ignore[arg-type]
+            command=None,
+            cwd=tmp_path,
+            home_dir=tmp_path,
+            current_action="allow",
+            grant_allowed=True,
         )
-
-    assert apply(Store(blocks=True), "allow") == "review"
-    assert apply(Store(blocks=True), "warn") == "review"
-    assert apply(Store(blocks=True), "block") == "block"
-    assert apply(Store(blocks=False), "allow") == "allow"
+        == "allow"
+    )

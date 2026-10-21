@@ -2,14 +2,21 @@
 mod copies;
 #[path = "hooks_path_writes.rs"]
 mod hooks_path;
+#[path = "plan_note_writes.rs"]
+mod plan_notes;
 #[path = "write_target_screens.rs"]
 mod screens;
 use super::read_paths::{
     existing_regular_read_target, expand_home_read_path, resolved_location_allowed,
 };
-pub(super) use copies::safe_copy_arguments;
+pub(super) use copies::{safe_copy_arguments, safe_copy_arguments_into};
+pub(crate) use plan_notes::plan_note_write_sources;
+pub(super) use plan_notes::plan_note_write_target;
 pub(super) use screens::autostart_write_target;
-use screens::{home_spelling_matches_target, shared_library_part};
+use screens::home_execution_control_target;
+pub(super) use screens::home_spelling_matches_target;
+#[cfg(windows)]
+use screens::shared_library_part;
 
 pub(super) fn bounded_file_write_target(
     value: &str,
@@ -65,7 +72,10 @@ pub(super) fn bounded_native_temporary_write_target(
             cdpath_unset: false,
             rustup_override_absent: false,
             npm_config_inert: false,
+            pip_config_inert: false,
             shell_home_matches: false,
+            ripgrep_config_absent: false,
+            psql_environment: Default::default(),
         },
     )
 }
@@ -93,9 +103,26 @@ fn bounded_write_target(
         // `$` never reaches a colon past the drive, such as an NTFS `::$DATA`
         // stream selector, so a literal name always names the file itself.
         || (value.contains('$') && value.char_indices().any(|(at, c)| c == ':' && at > 1))
-        || value.split(['/', '\\']).any(|part| part == "..")
+        || (!literal_names && value.split(['/', '\\']).any(|part| part == ".."))
     {
         return false;
+    }
+    if value.split(['/', '\\']).any(|part| part == "..") {
+        // A host file tool resolves `../notes.md` against its working
+        // directory by spelling, so screen that resolved path, but only when
+        // the filesystem walks `..` to the same place.
+        return parent_relative_write_target(value, home_dir, cwd, &workspace).is_some_and(
+            |resolved| {
+                bounded_write_target(
+                    &resolved,
+                    home_dir,
+                    cwd,
+                    directory,
+                    allow_home,
+                    literal_names,
+                )
+            },
+        );
     }
     if value.starts_with('~') && expand_home_read_path(value, home_dir).is_none() {
         return false;
@@ -115,33 +142,78 @@ fn bounded_write_target(
     let Some(canonical) = canonical else {
         return false;
     };
+    let verified_home = allow_home
+        .then(|| home_dir.and_then(|home| std::fs::canonicalize(home).ok()))
+        .flatten()
+        .filter(|home| {
+            // A filesystem root must never turn into an unrestricted write scope.
+            home.parent().and_then(std::path::Path::parent).is_some()
+                && canonical.starts_with(home)
+                // Normalize only the trusted home-root alias. The suffix
+                // must still resolve exactly, rejecting redirected targets.
+                && home_spelling_matches_target(&target, &canonical, home_dir, home)
+                && !home_execution_control_target(&canonical, home, &workspace)
+        });
+    // A plan note is a document, not harness configuration, so it is the one
+    // thing the harness-directory and hidden-name screens let through.
+    let plan_note = !directory
+        && verified_home
+            .as_deref()
+            .is_some_and(|home| plan_notes::plan_note_path(&canonical, home));
     // Plugins, hooks, settings and instruction files that a harness loads on
     // its next start are reviewed even inside the workspace.
-    if crate::harness_config_names::write_target_protected(supplied, &canonical, &workspace) {
+    if !plan_note
+        && crate::harness_config_names::write_target_protected(supplied, &canonical, &workspace)
+    {
         return false;
     }
-    let inside_verified_home = allow_home
-        && home_dir
-            .and_then(|home| std::fs::canonicalize(home).ok())
-            .is_some_and(|home| {
-                // A filesystem root must never turn into an unrestricted write scope.
-                home.parent().and_then(std::path::Path::parent).is_some()
-                    && canonical.starts_with(&home)
-                    // Normalize only the trusted home-root alias. The suffix
-                    // must still resolve exactly, rejecting redirected targets.
-                    && home_spelling_matches_target(&target, &canonical, home_dir, &home)
-                    && !home_execution_control_target(&canonical, &home, &workspace)
-            });
     (canonical.starts_with(&workspace)
         || super::worktree_writes::same_repository_worktree(&workspace, &canonical)
-        || inside_verified_home)
+        || verified_home.is_some())
         && resolved_location_allowed(&canonical, home_dir, workspace.to_str(), false)
-        && (guard_secure_fs::hidden_read_parts_allowed(&canonical)
+        && (plan_note
+            || guard_secure_fs::hidden_read_parts_allowed(&canonical)
             || screens::plain_dot_scratch_target(&canonical, home_dir))
         // A safe pathname can alias a protected inode through a hard link.
         && ((directory && canonical.is_dir()) || single_link_write_target(&canonical))
         && !autostart_write_target(&canonical)
         && !hooks_path::configured_hooks_write(&canonical, home_dir, workspace.to_str())
+}
+
+/// The absolute path a relative `..` write names, when the cwd's spelling and
+/// the filesystem agree on it. A symlinked cwd makes them differ, and is refused.
+fn parent_relative_write_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    workspace: &std::path::Path,
+) -> Option<String> {
+    let supplied = std::path::Path::new(value);
+    if value.starts_with('~') || supplied.has_root() || supplied.is_absolute() {
+        return None;
+    }
+    let root = cwd?;
+    let base = expand_home_read_path(root, home_dir).unwrap_or_else(|| root.to_owned());
+    let base = std::path::Path::new(&base);
+    if !base.is_absolute() {
+        return None;
+    }
+    let mut lexical = std::path::PathBuf::new();
+    for component in base.join(supplied).components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                if !lexical.pop() || lexical.parent().is_none() {
+                    return None;
+                }
+            }
+            other => lexical.push(other.as_os_str()),
+        }
+    }
+    let physical = super::worktree_writes::canonical_write_target(&workspace.join(supplied))?;
+    (super::worktree_writes::canonical_write_target(&lexical)? == physical)
+        .then(|| lexical.to_str().map(str::to_owned))
+        .flatten()
 }
 
 pub(super) fn safe_file_mutation_arguments(
@@ -305,11 +377,13 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
 }
 
 /// Windows `mktemp -d` (Git Bash `/tmp`) creates its directory in the user's
-/// profile temp folder. Only a directory strictly below the exact
-/// `<home>\AppData\Local\Temp` is admitted, located from the canonical home
-/// rather than the caller-controlled `TEMP`/`TMP`. The profile ACL keeps other
-/// non-administrator users out of that tree, and the exact-spelling checks
-/// reject junctions, short names and case aliases on the way there.
+/// profile temp folder. A file in the exact `<home>\AppData\Local\Temp`, or
+/// in a directory below it, is admitted, located from the canonical home
+/// rather than the caller-controlled `TEMP`/`TMP`. A file directly in that
+/// folder is what Git Bash writes for `/tmp/name`, which the POSIX spelling
+/// already admits. The profile ACL keeps other non-administrator users out of
+/// that tree, and the exact-spelling checks reject junctions, short names and
+/// case aliases on the way there.
 #[cfg(windows)]
 fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -> bool {
     use super::directory_targets::exact_drive_spelling;
@@ -349,7 +423,6 @@ fn bounded_temporary_copy_target(value: &str, context: super::PathContext<'_>) -
         return false;
     };
     if !exact_drive_spelling(parent_text, &parent)
-        || parent == temp_root
         || !parent.starts_with(&temp_root)
         || !parent.is_dir()
         || shared_library_part(&name.to_ascii_lowercase())
@@ -399,43 +472,4 @@ fn single_link_write_target(path: &std::path::Path) -> bool {
         let _ = path;
         false
     }
-}
-
-fn home_execution_control_target(
-    path: &std::path::Path,
-    home: &std::path::Path,
-    workspace: &std::path::Path,
-) -> bool {
-    if path.starts_with(workspace) {
-        return false;
-    }
-    let parts: Vec<String> = path
-        .strip_prefix(home)
-        .ok()
-        .into_iter()
-        .flat_map(std::path::Path::components)
-        .filter_map(|component| match component {
-            std::path::Component::Normal(value) => {
-                Some(value.to_string_lossy().to_ascii_lowercase())
-            }
-            _ => None,
-        })
-        .collect();
-    let shared_library = parts.last().is_some_and(|part| shared_library_part(part))
-        || parts.iter().any(|part| part.ends_with(".framework"));
-    parts.iter().any(|part| {
-        matches!(part.as_str(), "bin" | "appdata" | "site-packages" | "dist-packages")
-            || part.ends_with(".pth")
-            || matches!(part.as_str(), "sitecustomize.py" | "usercustomize.py")
-    }) || shared_library
-        || parts.windows(2).any(|pair| {
-        matches!(
-            pair,
-            [first, second]
-                if first == "library"
-                    && matches!(second.as_str(), "application support" | "application scripts" | "python")
-                    || (first == ".local" && second == "bin")
-                    || (first == ".github" && second == "workflows")
-        )
-    })
 }

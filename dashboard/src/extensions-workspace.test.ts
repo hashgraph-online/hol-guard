@@ -452,6 +452,26 @@ const quickApplyToolbarSource = readFileSync(new URL("./protection-center/compon
 const policyEditingLocksSource = readFileSync(new URL("./protection-center/components/policy-editing-locks.tsx", import.meta.url), "utf8");
 const extensionNavigationSource = readFileSync(new URL("./protection-center/extension-navigation.ts", import.meta.url), "utf8");
 assert.match(workspaceHostSource, /data-testid="extensions-workspace"/);
+// A daemon that cannot prepare its verified catalog still serves the legacy
+// catalog from the registry it holds in memory, so the page says what is
+// reduced beside the list instead of replacing the page with an error.
+assert.match(workspaceHostSource, /data-testid="catalog-preparation-degraded"/);
+assert.match(
+  workspaceHostSource,
+  /role="status"[\s\S]{0,200}data-testid="catalog-preparation-degraded"/,
+  "the degraded catalog notice is a status, not an alert that takes the page away",
+);
+assert.match(workspaceHostSource, /CATALOG_PREPARATION_DEGRADED_MESSAGE/);
+assert.match(
+  workspaceHostSource,
+  /const catalog = reusableCatalogModel\(previous, fresh\);/,
+  "model reuse compares the degraded mode too, so the notice cannot outlive the failure",
+);
+assert.match(
+  workspaceHostSource,
+  /const catalogDegraded = state\.kind === "ready" && state\.catalog\.degraded === CATALOG_PREPARATION_FAILED;/,
+  "the notice is derived from a ready state, so it can never stand in for the list",
+);
 assert.match(workspaceHostSource, /pushExtensionHistory/);
 assert.match(workspaceHostSource, /replaceExtensionHistory/);
 assert.match(extensionNavigationSource, /guardAwareHref/);

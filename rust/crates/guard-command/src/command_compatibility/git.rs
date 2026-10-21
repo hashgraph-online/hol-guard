@@ -10,6 +10,7 @@ pub(crate) use git_allow_scope::{
     repository_routes_verified, runs_configured_program, subcommand_settles_uncertainty,
 };
 use git_hooks_path::hooks_path_names_no_hooks;
+pub(crate) use git_hooks_path::rooted_hooks_inert;
 
 const RULES: &[(&str, &str)] = &[
     ("branch", "command.git.branch"),
@@ -73,23 +74,18 @@ fn bounded_inspection(arguments: &[String]) -> bool {
     if arguments == ["rev-parse", "--show-toplevel"] {
         return true;
     }
-    let [command, mode, patch] = arguments else {
+    let Some((command, rest)) = arguments.split_first() else {
         return false;
     };
-    // These fixed built-ins cannot be replaced by aliases. This admits their
-    // capability attribution only; patch read and workspace proofs remain the
-    // responsibility of the ordinary command decision, not this classifier.
-    command == "apply"
-        && mode == "--check"
-        && !patch.is_empty()
-        && patch.len() <= 4096
-        && !patch.starts_with(['-', '/', '\\'])
-        && patch
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"._-/".contains(&byte))
-        && patch
-            .split('/')
-            .all(|part| !matches!(part, "" | "." | ".."))
+    // These fixed built-ins cannot be replaced by aliases. The check grammar
+    // proves the invocation writes nothing, whichever of its options the
+    // caller spelled. This admits their capability attribution only; patch
+    // read and workspace proofs remain the responsibility of the ordinary
+    // command decision, not this classifier.
+    (command == "apply" && crate::pretool::git_apply_check::is_check_only(rest))
+        // A stash listing and a `show` of one entry print; every other
+        // stash spelling moves work and keeps its workspace attribution.
+        || (command == "stash" && crate::pretool::git_stash_reads::read_form(rest))
 }
 
 /// A staged-index diff that prints to stdout like `git diff HEAD`, which the
@@ -144,6 +140,9 @@ fn read_only_plumbing(arguments: &[String]) -> bool {
     match command.as_str() {
         "rev-parse" | "merge-base" | "show-ref" | "ls-tree" | "for-each-ref" => true,
         "cat-file" => crate::pretool::git_object_reads::read_form(command, rest),
+        // Both listings only print, and their grammars already exclude the
+        // forms that run a configured program; the read proof still decides.
+        "shortlog" | "check-ignore" => crate::pretool::git_listing_reads::read_form(command, rest),
         "rev-list" => !rest.iter().any(|argument| {
             matches!(argument.as_str(), "--output" | "-o") || argument.starts_with("--output=")
         }),
@@ -181,27 +180,27 @@ pub(super) fn inspection_arguments<'a>(
     context: crate::pretool::PathContext<'_>,
 ) -> Option<&'a [String]> {
     let remaining = routed(arguments, context, true)?;
-    matches!(
-        remaining.first().map(String::as_str),
+    let subcommand = remaining.first().map(String::as_str);
+    let admitted = match subcommand {
         Some(
-            "status"
-                | "diff"
-                | "log"
-                | "show"
-                | "branch"
-                | "hash-object"
-                | "rev-parse"
-                | "merge-base"
-                | "ls-files"
-                | "remote"
-                | "worktree"
-                | "config"
-                | "grep"
-                | "ls-tree"
-                | "cat-file"
-        )
-    )
-    .then_some(remaining)
+            "status" | "diff" | "log" | "show" | "blame" | "describe" | "reflog" | "branch"
+            | "hash-object" | "rev-parse" | "merge-base" | "ls-files" | "remote" | "worktree"
+            | "config" | "grep" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list"
+            | "shortlog" | "check-ignore",
+        ) => true,
+        // A tag listing, a clean preview and a patch check only print, but the
+        // same three subcommands also write a tag, remove a file and patch the
+        // tree, so each is admitted only in the spelling its own grammar
+        // proves.
+        Some("tag") => crate::pretool::git_tag_listing::is_listing(&remaining[1..]),
+        Some("clean") => crate::pretool::git_clean_preview::is_dry_run(&remaining[1..]),
+        Some("apply") => crate::pretool::git_apply_check::is_check_only(&remaining[1..]),
+        // `stash` reaches the worktree in every spelling but the two that
+        // print: a listing and a `show` of one entry.
+        Some("stash") => crate::pretool::git_stash_reads::read_form(&remaining[1..]),
+        _ => false,
+    };
+    admitted.then_some(remaining)
 }
 
 pub(super) fn fetch_origin_shaped(arguments: &[String]) -> bool {
@@ -226,6 +225,7 @@ fn routed<'a>(
     let mut index = 0;
     let mut saw_change_directory = false;
     let mut saw_git_dir = false;
+    let mut without_repository = false;
     while let Some(argument) = arguments.get(index) {
         if matches!(
             argument.as_str(),
@@ -239,7 +239,9 @@ fn routed<'a>(
             let boolean = value.to_ascii_lowercase();
             let safe = match key.to_ascii_lowercase().as_str() {
                 "core.fsmonitor" => matches!(boolean.as_str(), "false" | "0" | "no" | "off"),
-                "core.hookspath" => inspection && hooks_path_names_no_hooks(value),
+                "core.hookspath" => {
+                    inspection && hooks_path_names_no_hooks(value, context.cwd, arguments)
+                }
                 "core.quotepath" => matches!(
                     boolean.as_str(),
                     "true" | "false" | "1" | "0" | "yes" | "no" | "on" | "off"
@@ -284,22 +286,40 @@ fn routed<'a>(
         if saw_change_directory && !std::path::Path::new(target).is_absolute() {
             return None;
         }
-        if !crate::pretool::safe_directory_target(target)
-            || !crate::pretool::git_route_within_workspace(target, context)
-        {
+        // A read that discovers no repository below `-C` only prints an
+        // error, so it needs no repository proof. Operations that write still
+        // have to land in a checkout the route proofs admit.
+        if !crate::pretool::safe_directory_target(target) {
             return None;
         }
-        // Like `cd`, an absolute Windows target must be its exact canonical spelling.
+        if !crate::pretool::git_route_within_workspace(target, context) {
+            if !(inspection && crate::pretool::git_route_without_repository(target, context)) {
+                return None;
+            }
+            without_repository = true;
+        }
+        // Like `cd`, an absolute Windows target must be its exact canonical
+        // spelling. A route that only prints `fatal:` is admitted for a
+        // directory that is not there, which has no canonical spelling of its
+        // own, so there the proof holds the deepest name that does exist.
         #[cfg(windows)]
         if std::path::Path::new(target).is_absolute()
-            && !crate::pretool::directory_targets::exact_existing_drive_target(target)
+            && !if without_repository {
+                crate::pretool::directory_targets::exact_drive_target_with_absent_tail(target)
+            } else {
+                crate::pretool::directory_targets::exact_existing_drive_target(target)
+            }
         {
             return None;
         }
         saw_change_directory = true;
         index += 1;
     }
-    arguments.get(index..)
+    let rest = arguments.get(index..)?;
+    if without_repository && crate::pretool::reads_without_repository(rest) {
+        return None;
+    }
+    Some(rest)
 }
 
 #[cfg(test)]

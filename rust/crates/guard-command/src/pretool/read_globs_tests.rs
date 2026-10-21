@@ -55,3 +55,68 @@ fn only_plain_last_component_patterns_are_modelled() {
         assert!(!literal_pattern(pattern), "{pattern}");
     }
 }
+
+/// The body of an unrolled `for` loop reads its variable unquoted, so a name
+/// holding whitespace would reach the program as two arguments rather than as
+/// the path this proof read.
+#[test]
+fn a_match_that_would_split_into_two_words_is_refused() {
+    let root =
+        std::path::Path::new("/tmp").join(format!("guard-glob-split-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let home = root.join("home");
+    let workspace = home.join("project");
+    let source = workspace.join("src");
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::create_dir_all(workspace.join(".git")).unwrap();
+    std::fs::write(source.join("one.ts"), "export {};\n").unwrap();
+    let home = std::fs::canonicalize(&home).unwrap();
+    let workspace = std::fs::canonicalize(&workspace).unwrap();
+    let context = super::super::super::PathContext {
+        home_dir: home.to_str(),
+        cwd: workspace.to_str(),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        super::glob_file_matches("src/*.ts", context),
+        Some(vec!["src/one.ts".to_owned()])
+    );
+    std::fs::write(source.join("two words.ts"), "export {};\n").unwrap();
+    assert_eq!(super::glob_file_matches("src/*.ts", context), None);
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// That same unquoted read expands its word a second time, so a name holding
+/// a glob character names files this proof never read: `src/x[.]pem` clears
+/// the secret-extension check, then `cat $f` reads `src/x.pem`.
+#[test]
+fn a_match_that_would_expand_again_is_refused() {
+    let root =
+        std::path::Path::new("/tmp").join(format!("guard-glob-reglob-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let home = root.join("home");
+    let workspace = home.join("project");
+    let source = workspace.join("src");
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::create_dir_all(workspace.join(".git")).unwrap();
+    std::fs::write(source.join("notes.md"), "notes\n").unwrap();
+    let home = std::fs::canonicalize(&home).unwrap();
+    let workspace = std::fs::canonicalize(&workspace).unwrap();
+    let context = super::super::super::PathContext {
+        home_dir: home.to_str(),
+        cwd: workspace.to_str(),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        super::glob_file_matches("src/*.md", context),
+        Some(vec!["src/notes.md".to_owned()])
+    );
+    std::fs::write(source.join("x.pem"), "secret\n").unwrap();
+    std::fs::write(source.join("x[.]pem"), "decoy\n").unwrap();
+    assert_eq!(super::glob_file_matches("src/x?.?pem", context), None);
+
+    let _ = std::fs::remove_dir_all(&root);
+}

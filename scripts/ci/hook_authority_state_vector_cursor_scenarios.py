@@ -8,7 +8,8 @@ from hook_authority_state_vector_support import (
     T1,
     T2,
     T3,
-    hook_state,
+    cursor_allow_key,
+    cursor_pending_key,
     op,
 )
 
@@ -16,8 +17,8 @@ from hook_authority_state_vector_support import (
 def cursor_scenarios() -> list[tuple[str, list[dict[str, object]]]]:
     conv = "conv-1"
     command = "git push origin main"
-    state_key = hook_state._cursor_pending_shell_state_key(conv, command)
-    allow_key = hook_state._cursor_native_shell_allow_state_key(conv, command)
+    state_key = cursor_pending_key(conv, command)
+    allow_key = cursor_allow_key(conv, command)
     artifact = {"artifact_id": "cursor:runtime:shell:1", "name": "Shell", "harness": "cursor"}
 
     def pending_payload(**extra: object) -> dict[str, object]:
@@ -191,7 +192,7 @@ def cursor_scenarios() -> list[tuple[str, list[dict[str, object]]]]:
                 {
                     "do": "raw_copy",
                     "from": allow_key,
-                    "to": hook_state._cursor_native_shell_allow_state_key(conv, "git status"),
+                    "to": cursor_allow_key(conv, "git status"),
                 },
                 op("cursor_load_allowance", T1, conversation_id=conv, command="git status"),
                 {"do": "key", "present": False},
