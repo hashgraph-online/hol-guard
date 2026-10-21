@@ -938,17 +938,19 @@ jobs:
           css_size=$(du -sh ../src/codex_plugin_scanner/guard/daemon/static/assets/index.css | cut -f1)
           echo "Bundle JS: ${js_size:-unknown}, CSS: ${css_size:-unknown}"
 
-  dashboard-integration:
-    # Drives the committed dashboard bundle against a real, seeded Guard daemon
-    # in Chrome. No API mocks: every screen reads and writes through the daemon.
-    needs: [plan, native-command-evaluators]
+  dashboard-integration-wheel:
+    # Guard serves its extension catalog only from an installed release: a
+    # native wheel whose runtime, command-pack bundle and manifests name one
+    # source commit. The evaluator binaries are shared across commits and carry
+    # no such identity, so build a runtime stamped with this checkout and seal
+    # it into a wheel, in parallel with the evaluator build.
+    needs: [plan]
     if: >-
       !cancelled() &&
-      needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -957,19 +959,104 @@ jobs:
         with:
           python-version: ${{ env.CI_PYTHON_VERSION }}
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
-      - name: Download native command evaluators
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: ./.github/actions/setup-rust
         with:
-          name: pytest-native-command-evaluators
-          path: rust/target/release
-      - uses: ./.github/actions/restore-command-projections
-      - run: |
-          chmod 0755 rust/target/release/guard-command-source rust/target/release/hol-guard-runtime
-          # The source tree bundles neither the runtime nor the source compiler
-          # that prepares the extension catalog. Guard honors the binary
-          # override only in force mode.
-          echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
-          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
+          cache-key: pytest-native-command
+      - name: Install content-addressed compiler cache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.18.0
+      - name: Build the source compiler and a runtime stamped with this checkout
+        env:
+          RUSTC_WORKSPACE_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: "on"
+          SCCACHE_GHA_VERSION: pytest-native-command
+          SCCACHE_GHA_RW_MODE: READ_ONLY
+          SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+        run: |
+          set -euo pipefail
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          # The bundle build names `git rev-parse HEAD`; the runtime must match it.
+          SOURCE_SHA=$(git rev-parse HEAD)
+          HOL_GUARD_PACKAGE_VERSION="$VERSION" HOL_GUARD_BUILD_SHA="$SOURCE_SHA" \
+            cargo build --manifest-path rust/Cargo.toml --locked --release \
+            -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
+      - name: Seal the native wheel
+        env:
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source
+        run: |
+          set -euo pipefail
+          runtime=rust/target/release/hol-guard-runtime
+          compiler=rust/target/release/guard-command-source
+          work="$RUNNER_TEMP/dashboard-wheel"
+          mkdir -p "$work"
+          # Derive the compiler identities the release assembly binds into the
+          # source-compiler manifest.
+          "$compiler" export-trust > contracts/extensions/build-trust-class-map.v1.json
+          "$compiler" export-built > "$work/source-built.json"
+          jq -n \
+            --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
+            --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
+            --slurpfile built "$work/source-built.json" \
+            '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged",validation_base:{catalog:$built[0].catalog,programs:[]}}' \
+            > "$work/source-build.json"
+          "$compiler" compile < "$work/source-build.json" > "$work/source-compiled.json"
+          uv build --wheel --out-dir "$work/pure"
+          uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
+            --wheel "$work/pure/hol_guard-${VERSION}-py3-none-any.whl" \
+            --runtime "$runtime" \
+            --output-dir dashboard-integration-wheel \
+            --version "$VERSION" \
+            --platform-tag manylinux_2_17_x86_64 \
+            --target "$(rustc -vV | awk '/^host:/{print $2}')" \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$("$runtime" capabilities --json | jq -r '.rule_digest')" \
+            --implementation-digest "$(jq -r '.implementation_digest' "$work/source-compiled.json")" \
+            --base-program-digest "$(jq -r '.base_program_digest' "$work/source-compiled.json")"
+          test "$(find dashboard-integration-wheel -maxdepth 1 -name 'hol_guard-*.whl' | wc -l)" -eq 1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dashboard-integration-wheel
+          path: dashboard-integration-wheel/hol_guard-*.whl
+          if-no-files-found: error
+          retention-days: 1
+
+  dashboard-integration:
+    # Drives the committed dashboard bundle against a real, seeded Guard daemon
+    # in Chrome. No API mocks: every screen reads and writes through the daemon,
+    # installed from this checkout's native wheel the way a user installs it.
+    needs: [plan, dashboard-integration-wheel]
+    if: >-
+      !cancelled() &&
+      needs.dashboard-integration-wheel.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          version: "0.9.26"
+          enable-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: dashboard-integration-wheel
+          path: ${{ runner.temp }}/dashboard-integration-wheel
+      - name: Install the wheel into an isolated interpreter
+        run: |
+          set -euo pipefail
+          venv="$RUNNER_TEMP/guard-venv"
+          uv venv --python "$CI_PYTHON_VERSION" "$venv"
+          uv pip install --python "$venv/bin/python" "$RUNNER_TEMP"/dashboard-integration-wheel/hol_guard-*.whl
+          PYTHONPATH= "$venv/bin/python" -c 'import pathlib, codex_plugin_scanner as p; native = pathlib.Path(p.__file__).parent / "_native"; assert (native / "runtime-manifest.json").is_file(), native'
+          echo "DASHBOARD_E2E_PYTHON=$venv/bin/python" >> "$GITHUB_ENV"
+          # The wheel carries its own runtime. Force mode fails the run on a
+          # degraded native route instead of quietly testing a weaker one.
           echo "HOL_GUARD_NATIVE=force" >> "$GITHUB_ENV"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
@@ -1155,7 +1242,7 @@ jobs:
   required:
     name: hol-guard / required
     if: always()
-    needs: [plan, native-workspace, native-command-evaluators, native-offline-previous, native-offline-upgrade, native-gates, quality, coverage, compatibility, scheduling-sensitive, dashboard, dashboard-integration, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
+    needs: [plan, native-workspace, native-command-evaluators, native-offline-previous, native-offline-upgrade, native-gates, quality, coverage, compatibility, scheduling-sensitive, dashboard, dashboard-integration-wheel, dashboard-integration, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -1189,7 +1276,7 @@ jobs:
           # Lane-gated required set: skipped is acceptable only on a data-only
           # plan; failure/cancelled always fails.
           required = ["coverage","compatibility","scheduling-sensitive",
-                      "dashboard","dashboard-integration","cisco-full","pi-exact-continuation","cross-platform",
+                      "dashboard","dashboard-integration-wheel","dashboard-integration","cisco-full","pi-exact-continuation","cross-platform",
                       "windows-native-runtime","windows-shim-admin","windows-packaged-daemon",
                       "macos-native-runtime","macos-skill-identity","macos-gates"]
           missing = [j for j in always_on + required if j not in needs]

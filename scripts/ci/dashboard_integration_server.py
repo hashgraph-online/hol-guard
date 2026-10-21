@@ -142,9 +142,10 @@ def main() -> None:
     guard_home = _fresh_directory(root / "guard-home")
     workspace = _fresh_directory(root / "workspace")
 
-    # Local runs may borrow an installed wheel for its native runtime while
-    # serving this checkout's committed dashboard build. CI imports the source
-    # tree, whose own static directory is already the one under test.
+    # Local runs may borrow a released wheel for its native runtime while
+    # serving this checkout's committed dashboard build. CI installs a wheel
+    # built from this checkout, whose static directory is already the one
+    # under test.
     static_override = os.environ.get("DASHBOARD_E2E_STATIC_DIR")
     if static_override:
         daemon_server._STATIC_DIR = Path(static_override).resolve(strict=True)  # pyright: ignore[reportPrivateUsage]
