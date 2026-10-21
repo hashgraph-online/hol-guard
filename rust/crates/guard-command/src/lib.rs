@@ -874,6 +874,7 @@ pub mod inventory_contract;
 #[cfg(test)]
 mod inventory_contract_tests;
 pub mod inventory_fingerprints;
+pub mod inventory_item_metadata;
 pub mod js_semver;
 pub mod linux_artifact_supply_chain;
 #[cfg(any(unix, windows))]

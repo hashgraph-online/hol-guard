@@ -36,6 +36,13 @@ function preparationSentence(cause: string | undefined, recovery: Recovery): str
       return `${KEPT} A protection pack it needs was withdrawn. Reload this page to pick up the current catalog, then try again.`;
     case "local_storage":
       return `${KEPT} Guard could not read its local protection cache. Try again; if it keeps failing, run \`${recovery.command}\` in ${recovery.terminal}.`;
+    // Not a broken install and not transient: the request is rebuilt from the
+    // same local data every time, so neither reinstalling nor retrying moves
+    // it. Saying "try again" here is what left operators in a loop, and so
+    // would naming a recovery command, because none of them prune the state
+    // the request is built from. The log is the one place that says what grew.
+    case "native_request_too_large":
+      return `${KEPT} Guard's local protection data has grown past what its runtime accepts in one request. Retrying sends the same request again and reinstalling Guard will not change it; the Guard daemon log records the request that grew and how far past the bound it got.`;
     default:
       return `${KEPT} Try again; if it keeps failing, the Guard daemon log records the exact cause.`;
   }
