@@ -56,8 +56,10 @@ test("Protect explains what is failing and gates repair behind the approval pass
   const { home } = await readSeededRuntime(state);
   await page.goto("/protect");
   const recovery = page.locator("#protection-recovery");
-  await expect(recovery.getByText("Restore local protection", { exact: true })).toBeVisible();
-  await expect(recovery.getByRole("button", { name: "Repair protection" })).toBeEnabled();
+  // Where containment is unsupported (Linux), Guard repairs only the layers it
+  // can and says so in the heading and the repair button.
+  await expect(recovery.getByRole("heading", { name: /^(Restore local|Repair supported) protection$/ })).toBeVisible();
+  await expect(recovery.getByRole("button", { name: /^Repair (supported )?protection$/ })).toBeEnabled();
   // Each connected app whose hooks are inactive gets its own repair entry.
   for (const harness of home.inactiveApps) {
     await expect(recovery.getByRole("button", { name: `Open ${APP_LABELS[harness]} repair` })).toBeEnabled();

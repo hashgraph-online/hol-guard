@@ -1,6 +1,7 @@
 import type { Locator } from "@playwright/test";
 
 import { expect, expectNoErrorBoundary, test } from "./fixtures";
+import { escapeRegExp } from "./inbox-helpers";
 import {
   ACTION_LABEL,
   APP_LABEL,
@@ -23,7 +24,9 @@ test.describe("Rules & exceptions against the live daemon", () => {
       const row = rememberedRow(page, rule.title);
       await expect(row, rule.title).toHaveCount(1);
       await expect(row.getByRole("cell", { name: ACTION_LABEL[rule.action], exact: true })).toBeVisible();
-      await expect(row.getByRole("cell", { name: `${APP_LABEL[rule.harness]} ${SCOPE_LABEL[rule.scope]}`, exact: true })).toBeVisible();
+      // The App cell also carries when the rule was last updated.
+      const appCell = new RegExp(`^${escapeRegExp(`${APP_LABEL[rule.harness]} ${SCOPE_LABEL[rule.scope]}`)}(?: .+ ago| just now)?$`);
+      await expect(row.getByRole("cell", { name: appCell })).toBeVisible();
       await expect(row.getByRole("cell", { name: "Remembered on this device" })).toBeVisible();
     }
     await expect(page.getByRole("table", { name: "Remembered policy rules" }).getByRole("row")).toHaveCount(
@@ -36,7 +39,7 @@ test.describe("Rules & exceptions against the live daemon", () => {
     const seed = policySeed(state);
     await page.goto("/policy");
     await expect(
-      page.getByText(`${seed.total} remembered rules · ${seed.allowCount} allow · ${seed.blockCount} block`),
+      page.getByRole("img", { name: `${seed.allowCount} allow rules, ${seed.blockCount} block rules` }),
     ).toBeVisible();
     await expect(policyTab(page, /^Remembered rules/)).toContainText(String(seed.total));
     const filter = page.getByRole("group", { name: "Filter by action" });

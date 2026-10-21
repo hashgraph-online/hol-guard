@@ -185,7 +185,13 @@ test("sorting reorders the queue by risk and by date", async ({ page, state }) =
 
 test("Mark all read clears the unread state of every row", async ({ page, state }) => {
   const seed = inboxSeed(state);
+  // The queue loads its read state after it renders. A click that lands first
+  // is overwritten when that load returns, so wait for it.
+  const readStateLoaded = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/v1/read-state" && response.request().method() === "GET",
+  );
   await page.goto("/inbox");
+  await readStateLoaded;
   await searchQueue(page, SEED_SEARCH);
   // Opening a request reads it, so the selected row is already read.
   await expect(queue(page).getByRole("option", { name: /^Unread request:/ }).first()).toBeVisible();
