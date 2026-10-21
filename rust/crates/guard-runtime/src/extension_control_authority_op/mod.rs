@@ -165,7 +165,7 @@ struct ReadMode {
     allow_migration: bool,
 }
 
-pub(super) enum Read {
+enum Read {
     View(View),
     /// Writer work the caller performs before asking again.
     Action(Value),

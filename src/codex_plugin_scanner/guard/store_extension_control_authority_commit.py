@@ -201,6 +201,10 @@ class ExtensionControlAuthorityCommitMixin:
             )
             key = self._authority_key(required=True)
             assert key is not None
+            # An unknown schema version must refuse the write by name rather
+            # than surface as a generic unavailable authority.
+            with self._connect() as connection:
+                ensure_extension_control_authority_schema(connection)
             commit = {
                 "actor_id": actor_id,
                 "idempotency_key": idempotency_key,
