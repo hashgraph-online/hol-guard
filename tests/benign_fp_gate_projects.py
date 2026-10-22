@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sqlite3
 import sys
 from pathlib import Path
@@ -144,7 +145,11 @@ def _python_toolchain(workspace: Path) -> None:
     _write(workspace / "src" / "fixture_app" / "__init__.py", "VERSION = '0.1.0'\n")
     _write(workspace / "tests" / "test_fixture_app.py", "def test_version():\n    assert True\n")
     venv = workspace / ".venv"
-    _write(venv / "pyvenv.cfg", "home = /usr/bin\nversion = 3.12.3\ninclude-system-site-packages = false\n")
+    base = workspace / ".fixture-python" / "bin" / "python3"
+    base.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(sys.executable, base)
+    base.chmod(0o755)
+    _write(venv / "pyvenv.cfg", f"home = {base.parent}\nversion = 3.12.3\ninclude-system-site-packages = false\n")
     # `pip` and `pip3` come with the environment itself, so a project reads
     # its installed packages through them as readily as it runs its tools.
     for name in ("pytest", "ruff", "mypy", "pip", "pip3"):
@@ -163,8 +168,10 @@ def _python_toolchain(workspace: Path) -> None:
     # `unset -f`, an `alias`/`unalias` pair, command substitutions and
     # `hash -r`. A fixture without them proves nothing about a real venv.
     _write(venv / "bin" / "activate", activate_script(venv))
-    # A venv links its interpreter to the base one; the gate never runs it.
-    (venv / "bin" / "python").symlink_to(sys.executable)
+    # Keep the real executable's bytes and the venv's symlink, but place the
+    # base in the fixture's executable roots. The gate never runs Python; a
+    # link to the host's interpreter otherwise measures the runner's layout.
+    (venv / "bin" / "python").symlink_to(base)
     (venv / "bin" / "python3").symlink_to("python")
 
 

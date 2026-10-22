@@ -1,7 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use guard_command::inventory_fingerprints::fingerprint_mapping;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use tempfile::TempDir;
@@ -139,6 +138,7 @@ fn the_metadata_carries_the_fingerprints_and_never_a_raw_path() {
 #[cfg(unix)]
 mod links {
     use super::*;
+    use guard_command::inventory_fingerprints::fingerprint_mapping;
 
     fn link(target: &Path, at: &Path) {
         if let Some(parent) = at.parent() {

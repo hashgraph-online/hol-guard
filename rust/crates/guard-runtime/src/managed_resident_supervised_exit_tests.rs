@@ -130,3 +130,55 @@ fn immediate_exits_nobody_asked_for_still_open_the_circuit() {
         "an unrequested immediate exit stopped keeping its restart charge"
     );
 }
+
+/// The loop that broke prompts in the field ran between two runtimes, not
+/// one: a desktop bundle and a package install ship different binaries at the
+/// same version, so each retires the other's resident to take the home-wide
+/// owner lock. Their scopes are keyed by runtime digest, so the note one
+/// child leaves must stay in its own scope -- a supervisor reaping a child of
+/// the other digest, even one that happens to carry the same process id,
+/// reads nothing there -- and neither budget may open under the alternation.
+#[test]
+fn two_runtimes_retiring_each_other_keep_their_notes_and_their_budgets_apart() {
+    let root = supervised_exit_fixture("supervised-two-digests");
+    let desktop = "c".repeat(64);
+    let package = "d".repeat(64);
+    let desktop_scope = crate::resident_state::state_scope(&root, &desktop).unwrap();
+    let package_scope = crate::resident_state::state_scope(&root, &package).unwrap();
+
+    // Process ids are reused across the two runtimes on purpose: the scope,
+    // not the id alone, has to keep the notes apart.
+    for serving_child in 1..=6 {
+        drive_supervised_run(&root, &desktop, &desktop_scope, serving_child, true);
+        drive_supervised_run(&root, &package, &package_scope, serving_child, true);
+    }
+
+    let desktop_budget = supervised_exit_budget(&desktop_scope).unwrap();
+    let package_budget = supervised_exit_budget(&package_scope).unwrap();
+    let desktop_spawn = restart_budget::consume(&desktop_scope);
+    let package_spawn = restart_budget::consume(&package_scope);
+    // A note left under one digest is not there for the other's supervisor.
+    requested_stop::record(&desktop_scope, 4_242).unwrap();
+    let package_took_a_desktop_note = requested_stop::take(&package_scope, 4_242);
+    let desktop_took_its_own_note = requested_stop::take(&desktop_scope, 4_242);
+
+    fs::remove_dir_all(&root).unwrap();
+
+    assert_eq!(desktop_budget["attempts"], 0, "desktop stops kept a charge");
+    assert_eq!(package_budget["attempts"], 0, "package stops kept a charge");
+    assert_eq!(desktop_budget["circuit_until_ms"], 0);
+    assert_eq!(package_budget["circuit_until_ms"], 0);
+    assert!(
+        desktop_spawn.is_ok(),
+        "the desktop runtime could not start after the alternation: {desktop_spawn:?}"
+    );
+    assert!(
+        package_spawn.is_ok(),
+        "the package runtime could not start after the alternation: {package_spawn:?}"
+    );
+    assert!(
+        !package_took_a_desktop_note,
+        "a supervisor read a note left under another runtime's digest"
+    );
+    assert!(desktop_took_its_own_note);
+}

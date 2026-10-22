@@ -54,6 +54,8 @@ fn guard_read_only_diagnostics_are_explicitly_benign() {
             "hol-guard approvals list --json",
             "hol-guard approvals retry-hint 0123456789abcdef0123456789abcdef",
             "hol-guard approvals retry-hint req-1 --json",
+            "hol-guard approvals wait req-1 --json",
+            "hol-guard approvals wait req-1 --timeout 0",
             "hol-guard approvals --help",
             "hol-guard approvals list --help",
             "hol-guard approvals --json 2>&1 | head -50",

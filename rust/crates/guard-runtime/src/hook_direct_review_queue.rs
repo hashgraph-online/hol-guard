@@ -62,8 +62,6 @@ const ASK_MODE: &str = "ask";
 const CLAUDE_CODE: &str = "claude-code";
 /// The harness whose hook client rewrites the approval link itself.
 const CURSOR: &str = "cursor";
-/// The harness whose extension resumes after a safe-alternative approval.
-const OMP: &str = "omp";
 /// The mode the daemon records a silent block with.
 const SAFE_ALTERNATIVE_MODE: &str = "safe-alternative";
 /// The silent block's reason when the review gave none.
@@ -235,6 +233,31 @@ fn silent(
         request,
         Map::new(),
     )?;
+    let hint = if retry_reuses_approval {
+        crate::blocked_request_mode::approval_wait_hint_for_home(
+            &stored_id,
+            context.guard_home,
+            context.home_dir,
+        )
+    } else {
+        String::new()
+    };
+    let reason = if hint.is_empty() {
+        reason
+    } else {
+        format!("{reason} {hint}")
+    };
+    // Diagnostics must not crowd the notification out of a hook protocol
+    // that drops extra fields. A compact block preserves the wait command.
+    let unlinked = silent_block(context.harness, result, &reason)
+        .or_else(|| {
+            silent_block(
+                context.harness,
+                &Map::new(),
+                &format!("HOL Guard paused this action. {hint}"),
+            )
+        })
+        .unwrap_or(unlinked);
     // The request is queued now, so a link that cannot be added keeps the
     // unlinked block rather than handing the hook back.
     let linked = approval_url.and_then(|url| {
@@ -252,10 +275,9 @@ fn silent(
         silent_block(context.harness, result, &reason)
     });
     let mut blocked = linked.unwrap_or(unlinked);
-    // The OMP extension waits for this approval in the background and then
-    // asks the agent to run the identical call again. Only a review bound to
-    // that retry gets the handle: approving any other row cannot let it run.
-    if retry_reuses_approval && canonical_harness(context.harness) == OMP {
+    // Extensions can watch the handle; other harnesses see the read-only wait
+    // command in their reason. Only a bound retry gets this notification.
+    if retry_reuses_approval {
         blocked.insert(
             "approval_resume".to_owned(),
             json!({"request_id": stored_id, "poll_path": format!("/v1/requests/{stored_id}")}),

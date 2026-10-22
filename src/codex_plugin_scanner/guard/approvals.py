@@ -1376,6 +1376,7 @@ def wait_for_approval_requests(
     request_ids: list[str],
     timeout_seconds: int,
     poll_interval: float = 0.01,
+    stop_on_missing: bool = False,
 ) -> dict[str, object]:
     if not request_ids:
         return {
@@ -1387,6 +1388,10 @@ def wait_for_approval_requests(
     deadline = time.monotonic() + max(timeout_seconds, 0)
     while True:
         items = [store.get_approval_request(request_id) for request_id in request_ids]
+        if stop_on_missing:
+            missing = [request_id for request_id, item in zip(request_ids, items, strict=True) if item is None]
+            if missing:
+                return {"resolved": False, "missing_request_ids": missing, "items": []}
         resolved_items = [item for item in items if isinstance(item, dict) and item.get("status") == "resolved"]
         pending_ids = [
             request_id

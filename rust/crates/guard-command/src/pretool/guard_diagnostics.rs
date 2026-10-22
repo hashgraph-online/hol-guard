@@ -17,8 +17,9 @@
 //! override, so it cannot point Guard at another home.
 //!
 //! `hol-guard approvals`, `approvals list` and `approvals retry-hint <id>` are
-//! admitted too (`approval_inspection`). They print the approval queue and the
-//! retry hint of a resolved request. Resolving, resuming, opening, unlocking and
+//! admitted too (`approval_inspection`), along with `approvals wait <id>`.
+//! They inspect approval state; waiting observes a decision without consuming it.
+//! Resolving, resuming, opening, unlocking and
 //! clearing approvals are separate subcommands and stay reviewed or blocked. The
 //! bare `approvals` form, like `dashboard`, may open the user's own approval
 //! center once for the next pending request; it resolves nothing. Building the
@@ -89,8 +90,11 @@ fn approval_inspection(words: &[&str]) -> bool {
         | ["approvals", "--json"]
         | ["approvals", "list"]
         | ["approvals", "list", "--json"] => true,
-        ["approvals", "retry-hint", id] | ["approvals", "retry-hint", id, "--json"] => {
-            request_id(id)
+        ["approvals", "retry-hint" | "wait", id]
+        | ["approvals", "retry-hint" | "wait", id, "--json"] => request_id(id),
+        ["approvals", "wait", id, "--timeout", seconds]
+        | ["approvals", "wait", id, "--timeout", seconds, "--json"] => {
+            request_id(id) && seconds.parse::<u16>().is_ok_and(|seconds| seconds <= 600)
         }
         _ => false,
     }
@@ -260,6 +264,9 @@ mod tests {
             "approvals list --json",
             "approvals retry-hint 0123456789abcdef0123456789abcdef",
             "approvals retry-hint req-1 --json",
+            "approvals wait req-1 --json",
+            "approvals wait req-1 --timeout 0",
+            "approvals wait req-1 --timeout 600 --json",
             "approvals --help",
             "approvals list --help",
             "approvals retry-hint --help",
@@ -362,6 +369,10 @@ mod tests {
             "approvals retry-hint req-1 req-2",
             "approvals retry-hint ../req",
             "approvals retry-hint req/1",
+            "approvals wait",
+            "approvals wait req-1 --timeout 601",
+            "approvals wait req-1 --timeout -1",
+            "approvals wait req-1 --home /tmp",
             "list approvals",
             "approve req-1",
         ] {

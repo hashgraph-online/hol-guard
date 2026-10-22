@@ -71,6 +71,7 @@ pub mod pretool_file_copies;
 pub mod pretool_file_mutations;
 pub mod pretool_file_reads;
 pub mod pretool_find_brace_expansion;
+pub mod pretool_find_exec_programs;
 pub mod pretool_find_hidden_home_match;
 pub mod pretool_forged_worktree;
 pub mod pretool_generic;

@@ -45,6 +45,30 @@ fn bridged(session: &Session, harness: &str, command: &str, cwd: &str) -> PreToo
     )
 }
 
+/// The shape Oh My Pi's code mode actually writes: the session-tool wrapper's
+/// own `i` label and `timeout` beside the call's arguments.
+fn bridged_with_timeout(
+    session: &Session,
+    command: &str,
+    cwd: &str,
+    label: Option<&str>,
+) -> PreToolResultV1 {
+    let label = label.map_or(String::new(), |label| {
+        format!("i:{}, ", serde_json::to_string(label).unwrap())
+    });
+    let code = format!(
+        "const r = await tool.bash({{{label}command:{}, cwd:{}, timeout:300}}); display(r);",
+        serde_json::to_string(command).unwrap(),
+        serde_json::to_string(cwd).unwrap(),
+    );
+    evaluate(
+        session,
+        "omp",
+        "eval",
+        json!({"language": "js", "code": code, "title": "Inspect", "timeout": 300, "reset": false}),
+    )
+}
+
 #[test]
 fn bridged_bash_in_a_linked_worktree_matches_the_direct_call() {
     let session = session("omp-eval-cwd-worktree");
@@ -118,4 +142,58 @@ fn pi_bridged_bash_still_accepts_only_the_session_directory() {
     let worktree = session.worktree.to_str().unwrap();
     let result = bridged(&session, "pi", "git status --short --branch", worktree);
     assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
+}
+
+#[test]
+fn a_bridged_timeout_keeps_the_verdict_the_direct_call_gives() {
+    let session = session("omp-eval-timeout");
+    let worktree = session.worktree.to_str().unwrap();
+    for command in ["git status --short --branch", "git log --oneline -3"] {
+        let alone = direct(&session, command, worktree);
+        assert_eq!(alone.minimum_action, "allow", "{command}: {}", alone.reason);
+        let result =
+            bridged_with_timeout(&session, command, worktree, Some("inspect the worktree"));
+        assert_eq!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason
+        );
+        assert_eq!(
+            result.reason_code, "native_omp_eval_bounded_tools",
+            "{command}"
+        );
+    }
+}
+
+#[test]
+fn one_bridged_call_carries_the_reason_the_direct_call_gives() {
+    let session = session("omp-eval-one-call");
+    let worktree = session.worktree.to_str().unwrap();
+    for command in ["rm -rf build", "npm install zod"] {
+        let alone = direct(&session, command, worktree);
+        assert_ne!(alone.minimum_action, "allow", "{command}: {}", alone.reason);
+        let result = bridged_with_timeout(&session, command, worktree, None);
+        // Whatever the direct call's verdict is, the bridge never degrades it
+        // to "not yet supported", which named no reason the person could act
+        // on and left the review without the approval the direct call offers.
+        assert_ne!(
+            result.reason_code, "native_pre_tool_unknown_review",
+            "{command}: {}",
+            result.reason
+        );
+        if matches!(alone.minimum_action.as_str(), "review" | "block") {
+            // The bridge adds nothing to judge, so the program says exactly
+            // what the direct call says.
+            assert_eq!(result.minimum_action, alone.minimum_action, "{command}");
+            assert_eq!(result.reason_code, alone.reason_code, "{command}");
+        } else {
+            // Containment is the inner call's own hook to arrange, so the
+            // program stays bounded and that hook contains the call.
+            assert_eq!(
+                result.reason_code, "native_omp_eval_bounded_tools",
+                "{command}: {}",
+                result.reason
+            );
+        }
+    }
 }
