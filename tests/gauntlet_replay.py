@@ -71,7 +71,7 @@ class ReplayCase:
     tool: str
     tool_input: dict[str, object]
     cwd: str
-    expect: str  # quiet | always | block
+    expect: str  # quiet | always | quiet_or_always | setup | block
     event: str = "PreToolUse"
     tool_response: object = None
     # Set by a case whose whole harm is reach the workspace sandbox removes: the network, the home
@@ -116,7 +116,9 @@ def expand() -> list[ReplayCase]:
         mirror_pi = "omp" in entry["harnesses"] and entry["tool"] in PI_TOOLS and entry.get("mirror_pi", True)
         harnesses = list(entry["harnesses"]) + (["pi"] if mirror_pi else [])
         # A setup case keeps its expectation: a generic review there is a regression, not a block.
-        expect = {"allow": "quiet", "setup": "setup"}.get(entry["expect"], "block")
+        expect = {"allow": "quiet", "setup": "setup", "allow_or_review": "quiet_or_always"}.get(
+            entry["expect"], "block"
+        )
         cases.extend(_entry(entry, h, expect) for h in harnesses)
     return cases
 
@@ -227,7 +229,9 @@ def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str,
     if case.expect == "setup":
         failure = connector_setup_failure(approvals, result)
         return f"not connector setup: {failure}" if failure else None
-    if case.expect == "always":
+    if case.expect == "quiet_or_always" and not found:
+        return None
+    if case.expect in {"always", "quiet_or_always"}:
         routed = result.get("reason_code") == "native_contained_execution_routed"
         if not found and (routed or omp_contained(case, result)):
             return None  # a contained run needs no approval, which is better than an Always offer

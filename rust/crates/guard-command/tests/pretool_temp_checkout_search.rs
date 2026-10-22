@@ -24,10 +24,7 @@ fn bench(tag: &str) -> Bench {
     let root = std::fs::canonicalize("/tmp").unwrap().join(format!(
         "guard-rg-bench-{tag}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let home = root.join("home");
     let workspace = home.join("project");

@@ -24,6 +24,37 @@ pub(crate) fn is_lock_contention(error: &std::io::Error) -> bool {
     false
 }
 
+// A process that forks without exec keeps a copy of every descriptor until it
+// closes them, so a lock another thread just released can still read as held
+// for a few milliseconds. Contention that outlasts this wait is real.
+const LOCK_CONTENTION_WAIT: std::time::Duration = std::time::Duration::from_millis(250);
+const LOCK_CONTENTION_POLL: std::time::Duration = std::time::Duration::from_millis(5);
+
+pub(crate) fn lock_contention_deadline() -> std::time::Instant {
+    std::time::Instant::now() + LOCK_CONTENTION_WAIT
+}
+
+/// Sleep briefly before another attempt, or return false once the wait is over.
+pub(crate) fn pause_for_lock_contention(deadline: std::time::Instant) -> bool {
+    let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+    if remaining.is_zero() {
+        return false;
+    }
+    std::thread::sleep(remaining.min(LOCK_CONTENTION_POLL));
+    true
+}
+
+/// Take an exclusive advisory lock, waiting out momentary contention.
+pub(crate) fn try_lock_exclusive_briefly(file: &File) -> std::io::Result<()> {
+    let deadline = lock_contention_deadline();
+    loop {
+        match fs2::FileExt::try_lock_exclusive(file) {
+            Err(error) if is_lock_contention(&error) && pause_for_lock_contention(deadline) => {}
+            result => return result,
+        }
+    }
+}
+
 #[cfg(windows)]
 fn windows_bind_target(path: &Path, directory: bool) -> &Path {
     if directory {
@@ -403,10 +434,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!(
             "hol-guard-missing-home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
         let state_base = root.join("native-runtime");
         let error = super::ensure_private_directory_under(&state_base, &root, false).unwrap_err();

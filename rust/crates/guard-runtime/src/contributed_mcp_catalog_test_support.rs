@@ -27,6 +27,18 @@ pub(super) fn controls_for(
     optional: &[&str],
     enabled: &[&str],
 ) -> CompiledNativeCommandControls {
+    controls_for_binding(home, lockdown, optional, enabled, |_| {})
+}
+
+/// [`controls_for`] with the control binding edited before it is admitted; the
+/// effective digest is recomputed after the edit.
+pub(super) fn controls_for_binding(
+    home: &Path,
+    lockdown: bool,
+    optional: &[&str],
+    enabled: &[&str],
+    edit: impl FnOnce(&mut NativeCommandControlBindingV1),
+) -> CompiledNativeCommandControls {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let mut selected: BTreeSet<String> = packaged_command_program()
         .unwrap()
@@ -144,6 +156,7 @@ pub(super) fn controls_for(
             "schema_version":"1.0.0","kind":"local-admin","catalog_digest":program.catalog_digest,"global_lockdown":lockdown,
             "controls":enabled.iter().map(|id| json!({"target_kind":"extension","target_id":id,"state":"enabled"})).collect::<Vec<_>>()}]
     })).unwrap();
+    edit(&mut binding);
     binding.effective_digest = binding.compute_effective_digest().unwrap();
     CompiledNativeCommandControls::from_pack_cache(
         &binding,

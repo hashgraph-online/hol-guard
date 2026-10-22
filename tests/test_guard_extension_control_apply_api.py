@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.daemon.extension_control_api import (
     ExtensionControlApiError,
     ExtensionControlApiService,
 )
+from codex_plugin_scanner.guard.native_extension_control import NativeExtensionControlError
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -23,10 +24,17 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
+    ControlState,
+    ControlTarget,
+    ControlTargetKind,
+    ExtensionControl,
     ExtensionControlLayer,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_proof import ExtensionControlProof
-from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
+from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
+    ExtensionControlRuntime,
+    ExtensionControlSnapshotUnavailableError,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 from tests.test_guard_extension_control_api import _mutation_payload, _service
@@ -138,6 +146,52 @@ def test_apply_requires_matching_server_held_proof_and_refreshes_runtime(
     with pytest.raises(ExtensionControlApiError) as mismatch:
         service.apply({**apply_payload, "nonce": "different"})
     assert mismatch.value.code == "proof_mismatch"
+
+
+def test_apply_keeps_its_audit_and_replay_when_the_resident_cannot_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _ApplyingStore(tmp_path / "guard-home")
+    service = _service(cast(GuardStore, store))
+    monkeypatch.setattr(
+        extension_control_api_module,
+        "issue_extension_control_proof",
+        lambda *_args, **_kwargs: cast(ExtensionControlProof, _FakeProof()),
+    )
+    payload = {**_mutation_payload(), "session_nonce": "session-1", "approval_password": "not-persisted"}
+    preview = service.preview(payload)
+    installed = service._runtime.current()
+
+    def unanswered(_view: ExtensionControlAuthorityView) -> object:
+        raise ExtensionControlSnapshotUnavailableError()
+
+    monkeypatch.setattr(service._runtime, "refresh", unanswered)
+    apply_payload = {**payload, "proof_id": preview["proof_id"]}
+    result = service.apply(apply_payload)
+
+    # The commit is durable, so it is reported, audited and replayable; the
+    # daemon's refresh installs the snapshot once the resident answers.
+    assert result["revision"] == 5
+    assert store.commits == 1
+    assert [event[0] for event in store.events] == ["extension_control_authority_changed"]
+    assert service._runtime.current() is installed
+
+    def digest_unanswered(*_args: object, **_kwargs: object) -> str:
+        raise NativeExtensionControlError("native_extension_control_unavailable")
+
+    monkeypatch.setattr(extension_control_api_module, "request_digest", digest_unanswered)
+    assert service.apply(apply_payload) == result
+    assert store.commits == 1
+    assert len(store.events) == 1
+    with pytest.raises(ExtensionControlApiError) as mismatch:
+        service.apply({**apply_payload, "nonce": "different"})
+    assert (mismatch.value.status, mismatch.value.code) == (409, "proof_mismatch")
+    # A reordered object is still the same wire request; transport-only fields
+    # do not participate in committed-response replay.
+    assert service.apply({**dict(reversed(list(apply_payload.items()))), "session_nonce": "retry"}) == result
+    with pytest.raises(ExtensionControlApiError) as invalid:
+        service.apply({**apply_payload, "previous_revision": float("nan")})
+    assert (invalid.value.status, invalid.value.code) == (409, "proof_mismatch")
 
 
 def test_local_apply_does_not_persist_composed_managed_layer(
@@ -275,3 +329,146 @@ def test_local_apply_persists_raw_signed_but_previews_active_managed_layer(
 
     assert store.committed_layers == (raw_signed,)
     assert service.effective()["layers"] == json.loads(layers_to_json((managed_signed,)))
+
+
+def _configurable_permission_id() -> str:
+    return next(item for item in BUILT_IN_COMMAND_EXTENSION_REGISTRY.permissions if item.configurable).permission_id
+
+
+def _disabled_permission_payload() -> dict[str, object]:
+    permission_id = _configurable_permission_id()
+    layer = ExtensionControlLayer(
+        CONTROL_SCHEMA_VERSION,
+        ControlLayerKind.LOCAL_ADMIN,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        False,
+        (ExtensionControl(ControlTarget(ControlTargetKind.PERMISSION, permission_id), ControlState.DISABLED),),
+    )
+    payload = _mutation_payload()
+    payload["layers"] = json.loads(layers_to_json((layer,)))
+    payload.update({"session_nonce": "session-1", "approval_password": "not-persisted"})
+    return payload
+
+
+def _previewed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[_ApplyingStore, ExtensionControlApiService, dict[str, object]]:
+    store = _ApplyingStore(tmp_path / "guard-home")
+    service = _service(cast(GuardStore, store))
+    monkeypatch.setattr(
+        extension_control_api_module,
+        "issue_extension_control_proof",
+        lambda *_args, **_kwargs: cast(ExtensionControlProof, _FakeProof()),
+    )
+    payload = _disabled_permission_payload()
+    preview = service.preview(payload)
+    return store, service, {**payload, "proof_id": preview["proof_id"]}
+
+
+def test_apply_audits_each_changed_target_by_reference_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, service, apply_payload = _previewed(tmp_path, monkeypatch)
+    _ = service.apply(apply_payload)
+
+    targets = cast(list[dict[str, object]], store.events[0][1]["semantic_targets"])
+    assert len(targets) == 1
+    assert targets[0]["kind"] == "permission"
+    assert (targets[0]["before_explicit"], targets[0]["after_explicit"]) == ("inherited", "disabled")
+    reference = str(targets[0]["target_ref"])
+    assert len(reference) == 64
+    assert set(reference) <= set("0123456789abcdef")
+    assert _configurable_permission_id() not in json.dumps(store.events[0][1])
+
+
+def test_apply_commits_nothing_when_the_resident_cannot_project_the_audit_event(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, service, apply_payload = _previewed(tmp_path, monkeypatch)
+
+    def unanswered(*_args: object, **_kwargs: object) -> object:
+        raise NativeExtensionControlError("native_extension_control_unavailable")
+
+    monkeypatch.setattr(extension_control_api_module, "build_extension_control_event_targets", unanswered)
+    with pytest.raises(ExtensionControlApiError) as refused:
+        service.apply(apply_payload)
+
+    assert (refused.value.status, refused.value.code) == (503, "authority_apply_failed")
+    assert store.commits == 0
+    assert store.events == []
+
+
+@pytest.mark.parametrize(
+    "code", ["native_extension_control_too_large", "native_extension_control_invalid_digest_input"]
+)
+def test_apply_names_a_request_the_resident_cannot_digest_a_proof_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, code: str
+) -> None:
+    store, service, apply_payload = _previewed(tmp_path, monkeypatch)
+
+    def undigestable(*_args: object, **_kwargs: object) -> str:
+        raise NativeExtensionControlError(code)
+
+    monkeypatch.setattr(extension_control_api_module, "request_digest", undigestable)
+    with pytest.raises(ExtensionControlApiError) as refused:
+        service.apply(apply_payload)
+
+    assert (refused.value.status, refused.value.code) == (409, "proof_mismatch")
+    assert store.commits == 0
+
+
+def test_apply_reports_an_unreachable_resident_instead_of_a_proof_mismatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, service, apply_payload = _previewed(tmp_path, monkeypatch)
+
+    def unanswered(*_args: object, **_kwargs: object) -> str:
+        raise NativeExtensionControlError("native_extension_control_unavailable")
+
+    monkeypatch.setattr(extension_control_api_module, "request_digest", unanswered)
+    with pytest.raises(ExtensionControlApiError) as refused:
+        service.apply(apply_payload)
+
+    assert (refused.value.status, refused.value.code) == (503, "authority_apply_failed")
+    assert store.commits == 0
+
+
+def test_preview_issues_no_proof_when_the_resident_cannot_digest_the_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _ApplyingStore(tmp_path / "guard-home")
+    service = _service(cast(GuardStore, store))
+    issued: list[object] = []
+    monkeypatch.setattr(
+        extension_control_api_module,
+        "issue_extension_control_proof",
+        lambda *_args, **_kwargs: issued.append(1) or cast(ExtensionControlProof, _FakeProof()),
+    )
+
+    def unanswered(*_args: object, **_kwargs: object) -> str:
+        raise NativeExtensionControlError("native_extension_control_unavailable")
+
+    monkeypatch.setattr(extension_control_api_module, "request_digest", unanswered)
+    payload = _disabled_permission_payload()
+    with pytest.raises(ExtensionControlApiError) as refused:
+        service.preview(payload)
+
+    assert (refused.value.status, refused.value.code) == (503, "native_runtime_unavailable")
+    assert issued == []
+
+
+@pytest.mark.parametrize("number", [float("nan"), float("inf"), -float("inf")])
+def test_preview_rejects_non_finite_extra_layer_input_without_issuing_proof(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, number: float
+) -> None:
+    service = _service(cast(GuardStore, cast(object, _ApplyingStore(tmp_path / "guard-home"))))
+    issued: list[object] = []
+    monkeypatch.setattr(
+        extension_control_api_module,
+        "issue_extension_control_proof",
+        lambda *_args, **_kwargs: issued.append(1) or cast(ExtensionControlProof, cast(object, _FakeProof())),
+    )
+    payload = _disabled_permission_payload()
+    cast(list[dict[str, object]], payload["layers"])[0]["ignored"] = number
+    with pytest.raises(ExtensionControlApiError) as refused:
+        service.preview(payload)
+    assert (refused.value.status, refused.value.code) == (400, "invalid_mutation")
+    assert issued == []

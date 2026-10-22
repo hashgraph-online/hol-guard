@@ -201,6 +201,8 @@ def _resident_request(
             "daemon_route",
             "daemon_handler",
             "extension_control",
+            "extension_allow_hint",
+            "approval_extension_recommendation",
             "hook_authority_state",
             "extension_control_authority",
             "hook_render",

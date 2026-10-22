@@ -11,13 +11,15 @@ import pytest
 
 from codex_plugin_scanner.guard.catalog_delivery import authority, preparation
 from codex_plugin_scanner.guard.catalog_delivery.containers import member
-from codex_plugin_scanner.guard.catalog_delivery.located_store import LocatedStore
-from codex_plugin_scanner.guard.catalog_delivery.metadata_objects import ObjectStore, encoded, entries
+from codex_plugin_scanner.guard.catalog_delivery.metadata_objects import ObjectStore, encoded
 from codex_plugin_scanner.guard.catalog_delivery.pack_archives import pack_objects, parts
 from codex_plugin_scanner.guard.catalog_delivery.pack_store import PackReader
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from tests.delivery_scripts import script
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 from tests.test_extension_delivery_authority import SOURCE, root_value
+
+entries = script("extension_delivery_objects").entries
 
 
 @pytest.fixture
@@ -28,6 +30,7 @@ def delivery(tmp_path, monkeypatch):
     # bridge in test_native_pack_preparation.py, without this fixture.
     namespace = {"__package__": preparation.__package__}
     fixture = Path(__file__).parent / "fixtures/extension-preparation-legacy.py.txt"
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
     exec(compile(fixture.read_text(), str(fixture), "exec"), namespace)
     namespace["PreparedCommandPacks"] = preparation.PreparedCommandPacks
     namespace["UnavailablePackError"] = preparation.UnavailablePackError
@@ -46,8 +49,8 @@ def delivery(tmp_path, monkeypatch):
 
     monkeypatch.setattr(preparation, "prepare", legacy_snapshot)
     monkeypatch.setattr(preparation, "lookup", namespace["lookup"], raising=False)
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
     from extension_delivery_assets import AssetPlan
+    from extension_delivery_located_store import LocatedStore
 
     policy = ObjectStore(tmp_path / "policy")
     plan = AssetPlan(tmp_path / "assets", SOURCE)
@@ -281,8 +284,9 @@ def test_new_discovery_publication_keeps_the_same_enforcement_representation(del
 
 @pytest.mark.parametrize("kind", ["extension", "pack"])
 def test_revoked_selected_policy_never_reaches_native_preparation(delivery, kind):
-    from codex_plugin_scanner.guard.catalog_delivery.revocations import RevokedPackError, revocation_key
+    from codex_plugin_scanner.guard.catalog_delivery.revocations import RevokedPackError
 
+    revocation_key = script("extension_delivery_revocations").revocation_key
     identity = "command.core"
     manifest = delivery.manifests[identity]["sha256"] if kind == "pack" else None
     record = {

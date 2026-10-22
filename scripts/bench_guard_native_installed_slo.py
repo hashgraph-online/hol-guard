@@ -58,7 +58,7 @@ from scripts.native_slo_capacity import (  # noqa: E402, F401
     measure_capacity,
 )
 from scripts.native_slo_contract import SIZE_CLASSES  # noqa: E402
-from scripts.native_slo_failure_reason import annotate_failure_reason  # noqa: E402
+from scripts.native_slo_failure_reason import annotate_failure_reason, exception_chain_summary  # noqa: E402
 from scripts.native_slo_preflight import preflight_operation  # noqa: E402
 from scripts.native_slo_reporting import (  # noqa: E402
     SloMeasurements,
@@ -420,7 +420,11 @@ def main() -> int:
         result = incomplete_slo_result(progress, include_capacity=not args.skip_capacity)
         reason = annotate_failure_reason(result, error)
         detail = f" ({reason})" if reason else ""
-        print(f"native_installed_slo_failed: benchmark aborted{detail}; aggregate report is available", file=sys.stderr)
+        cause = exception_chain_summary(error)
+        print(
+            f"native_installed_slo_failed: benchmark aborted{detail}; cause {cause}; aggregate report is available",
+            file=sys.stderr,
+        )
     rendered = json.dumps(result, indent=2, sort_keys=True)
     if args.json is not None:
         try:

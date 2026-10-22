@@ -5,10 +5,7 @@ use serde_json::json;
 
 #[test]
 fn cwd_compounds_validate_reads_and_one_bounded_write() {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/cwd-compound-fixtures")
         .join(format!("fixture-{}-{nonce}", std::process::id()));
@@ -144,10 +141,7 @@ fn cwd_compound_extension_deny_overrides_safe_neighbor() {
     use guard_command::native_command_program::packaged_command_program;
     use guard_contracts::NativeCommandControlBindingV1;
 
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/cwd-compound-control-fixtures")
         .join(format!("fixture-{}-{nonce}", std::process::id()));

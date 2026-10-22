@@ -19,11 +19,11 @@ use super::{Ctx, View, PROTECTED};
 
 const ACTIVE_STATE_KEY: &str = "managed_controls_active";
 const REVISION_STATE_KEY: &str = "managed_controls_revision";
-const ACTIVATION_SCHEMA: &str = "guard.managed-controls-activation.v1";
-const ACTIVATION_PURPOSE: &str = "managed-controls.activation";
-const REVISION_PURPOSE: &str = "managed-controls.revision";
+pub(super) const ACTIVATION_SCHEMA: &str = "guard.managed-controls-activation.v1";
+pub(super) const ACTIVATION_PURPOSE: &str = "managed-controls.activation";
+pub(super) const REVISION_PURPOSE: &str = "managed-controls.revision";
 
-fn require_key(key: Option<&[u8]>) -> Res<&[u8]> {
+pub(super) fn require_key(key: Option<&[u8]>) -> Res<&[u8]> {
     key.ok_or_else(|| tampered("extension control authentication key missing"))
 }
 
@@ -66,7 +66,7 @@ pub(super) fn revision_from_state(value: &Value, key: &[u8]) -> Res<i64> {
 }
 
 /// `_projection_digest`.
-fn projection_digest(unsigned: &Map<String, Value>) -> Res<String> {
+pub(super) fn projection_digest(unsigned: &Map<String, Value>) -> Res<String> {
     let projection: Map<String, Value> = unsigned
         .iter()
         .filter(|(name, _)| {

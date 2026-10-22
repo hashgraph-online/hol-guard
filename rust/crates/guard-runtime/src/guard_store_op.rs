@@ -315,6 +315,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "find_artifact_inventory_item"
         | "get_artifact_capability"
         | "list_receipts"
+        | "observed_mcp_history"
         | "list_receipts_since_rowid"
         | "latest_receipt_rowid"
         | "get_receipt"
@@ -515,6 +516,7 @@ fn dispatch(
         "count_command_shadow_observations" => privacy::count_shadow(connection),
         "list_command_shadow_observations" => privacy::list_shadow(connection, args),
         "observed_mcp_tool_actions" => observed_mcp::observed_mcp_tool_actions(connection),
+        "observed_mcp_history" => observed_mcp::observed_mcp_history(connection, args),
         "read_local_cli_grant" => local_cli_grants::read_grant(connection, args),
         "read_local_cli_command_catalog" => {
             local_cli_grants::read_command_catalog(connection, args)

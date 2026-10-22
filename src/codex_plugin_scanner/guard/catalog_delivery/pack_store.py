@@ -6,13 +6,16 @@ and native policy admission are separate requirements.
 
 from __future__ import annotations
 
-import hashlib
+import base64
+import errno
 import json
 import os
 import stat
 import tempfile
 from pathlib import Path
 from typing import Any
+
+from .object_native import addressed, objects_read
 
 MAX_OBJECT_BYTES = 64 * 1024
 MAX_BLOB_BYTES = 8 * 1024 * 1024
@@ -41,6 +44,31 @@ def durable_directory(path: Path) -> None:
         os.close(descriptor)
 
 
+def repair_link_count(directory: Path, path: Path, data: bytes) -> None:
+    """Give an object a single link again after an interrupted publication.
+
+    Publication links a complete temporary into place and removes the temporary
+    afterwards, so a crash between those two steps leaves the object with two
+    links. The runtime's bounded reader refuses a file whose link count is not
+    one, which would make a complete, correct object unreadable. The bytes here
+    already compared equal to the object on disk, so republishing them under a
+    fresh inode repairs the link count without changing what the object holds.
+    """
+    if os.stat(path).st_nlink == 1:
+        return
+    with tempfile.NamedTemporaryFile(dir=directory, prefix=".obj-", delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+            stream.close()
+            os.replace(temporary, path)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+
+
 def publish_object(directory: Path, sha256: str, data: bytes) -> bool:
     """Return True for a new object; competing writers expose only complete files."""
     path = directory / f"{sha256}.json"
@@ -58,6 +86,7 @@ def publish_object(directory: Path, sha256: str, data: bytes) -> bool:
             except FileExistsError:
                 if path.is_symlink() or read_object(path) != data:
                     raise ValueError("existing pack cache object failed integrity") from None
+                repair_link_count(directory, path, data)
                 durable_directory(directory)
                 return False
         finally:
@@ -79,153 +108,32 @@ def decode(data: bytes):
     return json.loads(data, object_pairs_hook=unique, parse_constant=nonfinite)
 
 
+def missing_object(directory: Path, sha256: str) -> FileNotFoundError:
+    path = directory / f"{sha256}.json"
+    return FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), str(path))
+
+
 class PackReader:
     def __init__(self, directory: Path):
         self.directory = directory
         self.reads = set()
 
     def blob(self, reference: dict[str, Any], depth: int = 0) -> bytes:
-        if not isinstance(reference, dict) or set(reference) != {"sha256", "length", "expanded_length", "kind"}:
-            raise ValueError("invalid pack object reference")
-        if (
-            depth > 4
-            or not digest(reference["sha256"])
-            or type(reference["length"]) is not int
-            or not 0 < reference["length"] <= MAX_OBJECT_BYTES
-            or type(reference["expanded_length"]) is not int
-            or not 0 < reference["expanded_length"] <= MAX_BLOB_BYTES
-        ):
-            raise ValueError("pack object reference bounds invalid")
-        path = self.directory / f"{reference['sha256']}.json"
-        if path.is_symlink():
-            raise ValueError("pack object must not be a symlink")
-        data = read_object(path)
-        self.reads.add(reference["sha256"])
-        if len(data) != reference["length"] or hashlib.sha256(data).hexdigest() != reference["sha256"]:
-            raise ValueError("pack object integrity invalid")
-        if reference["kind"] == "data":
-            if len(data) != reference["expanded_length"]:
-                raise ValueError("pack expansion length invalid")
-            return data
-        if reference["kind"] != "concat":
-            raise ValueError("pack object kind invalid")
-        value = decode(data)
-        if (
-            not isinstance(value, dict)
-            or set(value) != {"schema", "parts"}
-            or value["schema"] != "guard.pack-concat.v1"
-            or not isinstance(value["parts"], list)
-            or not 0 < len(value["parts"]) <= 64
-        ):
-            raise ValueError("pack concat invalid")
-        parts = []
-        length = 0
-        for part in value["parts"]:
-            # Check declared expansion before retaining any child data.
-            if not isinstance(part, dict) or type(part.get("expanded_length")) is not int:
-                raise ValueError("pack expansion length invalid")
-            length += part["expanded_length"]
-            if not 0 < length <= reference["expanded_length"]:
-                raise ValueError("pack expansion length invalid")
-            parts.append(self.blob(part, depth + 1))
-        if length != reference["expanded_length"]:
-            raise ValueError("pack expansion length invalid")
-        return b"".join(parts)
+        # The runtime reads the cache directory and checks every object against
+        # the length, digest and expansion its reference declares.
+        reply = addressed(
+            "expand",
+            sources=objects_read(self.directory),
+            mode="pack",
+            directory=str(self.directory),
+            reference=reference,
+            depth=depth,
+            invalid="invalid pack object reference",
+        )
+        if "need" in reply:
+            raise missing_object(self.directory, reply["need"][0]["sha256"])
+        self.reads.update(reply["reads"])
+        return base64.b64decode(reply["data"], validate=True)
 
     def json(self, reference: dict[str, Any]):
         return decode(self.blob(reference))
-
-    def verify_release(self, root: dict[str, Any], engine: str, identities: set[str]) -> None:
-        if root.get("engine") != engine:
-            raise ValueError("pack compiler does not match current native implementation")
-        seen = set()
-
-        def pack(identity, reference):
-            manifest = self.json(reference)
-            if (
-                manifest.get("schema") != "guard.command-policy-pack.v1"
-                or manifest.get("extension_id") != identity
-                or manifest.get("engine") != engine
-                or manifest.get("semantic_profile") != "cpython-3.12-ucd15"
-                or not all(
-                    digest(manifest.get(key))
-                    for key in ("source_digest", "trust_digest", "program_digest", "cache_key")
-                )
-            ):
-                raise ValueError("pack manifest identity invalid")
-            program = self.json(manifest["program"])
-            nodes = program.get("nodes")
-            if not isinstance(nodes, dict) or len(nodes) > 16384:
-                raise ValueError("pack program node bounds invalid")
-            for key, reference in nodes.items():
-                node = self.json(reference)
-                encoded = json.dumps(
-                    node, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-                ).encode()
-                if hashlib.sha256(b"hol-guard.native-command-matcher.v1\0" + encoded).hexdigest() != key:
-                    raise ValueError("pack matcher identity invalid")
-                nodes[key] = node
-            claimed = program.pop("program_digest", None)
-            encoded = json.dumps(
-                program, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
-            ).encode()
-            if (
-                claimed != manifest["program_digest"]
-                or program.get("trust_digest") != manifest["trust_digest"]
-                or hashlib.sha256(b"hol-guard.native-command-program.v1\0" + encoded).hexdigest() != claimed
-            ):
-                raise ValueError("pack program identity invalid")
-            for field in ("catalog", "descriptors"):
-                self.json(manifest[field])
-
-        def page(reference, count, prefix):
-            if len(prefix) > 64 or reference.get("expanded_length", MAX_OBJECT_BYTES + 1) > MAX_OBJECT_BYTES:
-                raise ValueError("pack index bounds invalid")
-            value = self.json(reference)
-            if value.get("schema") != "guard.pack-index.v1" or value.get("prefix") != prefix:
-                raise ValueError("pack index identity invalid")
-            if value.get("kind") == "leaf":
-                entries = value.get("entries")
-                if not isinstance(entries, list) or len(entries) != count or not 0 < count <= 64:
-                    raise ValueError("pack index count invalid")
-                previous = ""
-                for identity, target in entries:
-                    if (
-                        not isinstance(identity, str)
-                        or not 0 < len(identity) <= 256
-                        or identity <= previous
-                        or identity in seen
-                        or not hashlib.sha256(identity.encode()).hexdigest().startswith(prefix)
-                    ):
-                        raise ValueError("pack index ownership invalid")
-                    previous = identity
-                    seen.add(identity)
-                    pack(identity, target)
-                return
-            children = value.get("children")
-            if value.get("kind") != "branch" or not isinstance(children, list) or not 0 < len(children) <= 16:
-                raise ValueError("pack index branch invalid")
-            previous = ""
-            total = 0
-            for key, child_count, target in children:
-                if (
-                    not isinstance(key, str)
-                    or len(key) != len(prefix) + 1
-                    or not key.startswith(prefix)
-                    or any(char not in "0123456789abcdef" for char in key)
-                    or key <= previous
-                    or type(child_count) is not int
-                    or child_count <= 0
-                ):
-                    raise ValueError("pack index routing invalid")
-                previous = key
-                total += child_count
-                if total > count:
-                    raise ValueError("pack index count invalid")
-                page(target, child_count, key)
-            if total != count:
-                raise ValueError("pack index count invalid")
-
-        page(root["index"], root["extensions"], "")
-        if seen != identities:
-            raise ValueError("pack index does not match source inventory")

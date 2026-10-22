@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
+from . import lifecycle
 from .activation_store import header_for_store
 
 
+@lifecycle.one_runtime
 def program_authority(store, verifier_key, binding=None):
     """Read only the bounded authenticated header while a publisher holds a lease."""
     header = header_for_store(store, verifier_key)
@@ -18,6 +20,7 @@ def program_authority(store, verifier_key, binding=None):
     return header["program_digest"]
 
 
+@lifecycle.one_runtime
 def capture(store):
     """Materialize cached metadata before acquiring the control mutation lease."""
     from ..native_command_control_binding import load_native_command_program_metadata
@@ -34,6 +37,7 @@ def capture(store):
     return committed.metadata, GeneratedCommandCatalog.from_prepared_packs(committed), committed.record_digest
 
 
+@lifecycle.one_runtime
 def require_current(store, verifier_key, expected_digest):
     """Reject a captured catalog if another process activated a different record."""
     from .activation_store import _row

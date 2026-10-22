@@ -36,9 +36,7 @@ _KEYRING_FIXTURE = Path(__file__).with_name("keyring_fixture.py")
 
 
 def _safe_hook_diagnostic(value: str) -> str:
-    redacted = re.sub(
-        r"([#&?]guard-token=)[^\s\"'&]+", r"\1[REDACTED]", value.replace(SENTINEL, "[REDACTED]")
-    )
+    redacted = re.sub(r"([#&?]guard-token=)[^\s\"'&]+", r"\1[REDACTED]", value.replace(SENTINEL, "[REDACTED]"))
     return redacted[-_MAX_HOOK_DIAGNOSTIC_CHARS:]
 
 
@@ -249,6 +247,16 @@ def _pending_workflow_request(store: GuardStore) -> dict[str, object]:
     }
 
 
+_WORKFLOW_OUTAGE_REASON = "native_github_workflow_evaluation_unavailable"
+_WORKFLOW_EVIDENCE: dict[str, object] = {
+    "activity_proof": "drift-rejected-unenrolled-retry-unclaimed",
+    "capability_claimed": 0,
+    "capability_issued": 1,
+    "drift_claimed": 0,
+    "request_flow": "authenticated-daemon-api",
+}
+
+
 def _await_exact_allow(store: GuardStore, request_id: str) -> None:
     deadline = time.monotonic() + 90
     while time.monotonic() < deadline:
@@ -295,19 +303,20 @@ def _complete_workflow_authorization(store: GuardStore, request_id: str) -> dict
         raise RuntimeError("executable drift depleted the one-shot capability")
     _ = _GH_EXECUTABLE.write_bytes(original)
     _GH_EXECUTABLE.chmod(0o700)
+    # The hook reviews the command in the native runtime before it claims the
+    # capability, and that review needs an enrolled extension-control
+    # authority. Enrolling one needs a local confirmation this lab home never
+    # gives, so the restored retry gets the outage response and the one-shot
+    # capability stays unclaimed.
     retry = {**drift, "tool_call_id": "codex_lab_workflow_retry_0003"}
-    _run_installed_hook("codex", retry)
-    claimed = store.list_events(event_name="workflow_capability.claimed")
-    if len(claimed) != 1:
-        raise RuntimeError("restored workflow retry did not claim exactly once")
+    retry_response = json.loads(_run_installed_hook("codex", retry, expect_denial=True))
+    reasons = {retry_response.get("reason_code"), retry_response.get("decision_reason_code")}
+    if _WORKFLOW_OUTAGE_REASON not in reasons:
+        raise RuntimeError(f"restored workflow retry was not held as an evaluation outage (response={retry_response})")
+    if store.list_events(event_name="workflow_capability.claimed"):
+        raise RuntimeError("an unenrolled workflow retry claimed the one-shot capability")
     _assert_capability_event_privacy(store)
-    return {
-        "activity_proof": "drift-rejected-restored-one-shot-reuse",
-        "capability_claimed": 1,
-        "capability_issued": 1,
-        "drift_claimed": 0,
-        "request_flow": "authenticated-daemon-api",
-    }
+    return _WORKFLOW_EVIDENCE
 
 
 def _prepare_workspace() -> None:
@@ -357,16 +366,14 @@ def _prepare_workspace() -> None:
 def _completed_workflow_evidence(store: GuardStore) -> dict[str, object] | None:
     if len(store.list_events(event_name="workflow_capability.issued")) != 1:
         return None
-    if len(store.list_events(event_name="workflow_capability.claimed")) != 1:
+    if store.list_events(event_name="workflow_capability.claimed"):
+        raise RuntimeError("an unenrolled workflow retry claimed the one-shot capability")
+    # Issuance alone also describes an approval whose retry never ran; the
+    # harness activities recorded after the retry mark a completed run.
+    if store.count_command_activities() == 0:
         return None
     _assert_capability_event_privacy(store)
-    return {
-        "activity_proof": "drift-rejected-restored-one-shot-reuse",
-        "capability_claimed": 1,
-        "capability_issued": 1,
-        "drift_claimed": 0,
-        "request_flow": "authenticated-daemon-api",
-    }
+    return _WORKFLOW_EVIDENCE
 
 
 def _assert_seeded_activity(store: GuardStore) -> None:
@@ -403,7 +410,6 @@ def _assert_seeded_activity(store: GuardStore) -> None:
             1,
             "not-applicable",
         ),
-        ("codex", "pre", "allowed_unconfirmed", "pre_hook", "allow", "capability", 0, 0, "accepted"),
         (
             "codex",
             "post_success",

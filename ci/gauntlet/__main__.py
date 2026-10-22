@@ -136,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
     installed.add_argument(
         "--harness",
         nargs="+",
-        default=["claude-code", "codex", "omp"],
+        default=["claude-code", "codex", "omp", "zcode"],
         help="Harnesses to install and check",
     )
     installed.add_argument(

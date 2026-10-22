@@ -18,7 +18,7 @@ from ci.gauntlet.source_identity import validate_identity
 @pytest.mark.parametrize(
     "path",
     [
-        "rust/crates/guard-command/src/pretool.rs",
+        "rust/crates/guard-command/src/pretool/mod.rs",
         "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py",
         "contracts/guard-hooks.json",
         "ci/gauntlet/evidence.py",
@@ -60,7 +60,7 @@ class MetadataAPI:
 
 def test_renaming_enforcement_out_of_the_scoped_directory_still_requires_evidence():
     """Include previous filenames when deciding whether a renamed file needs evidence."""
-    api = MetadataAPI([{"filename": "retired.txt", "previous_filename": "rust/crates/guard-command/src/pretool.rs"}], 1)
+    api = MetadataAPI([{"filename": "retired.txt", "previous_filename": "rust/crates/guard-command/src/pretool/mod.rs"}], 1)
     initialize_gate(api, {"inputs": {"pr_number": "1", "candidate_sha": "a" * 40}})
     assert api.statuses[0][1] == "pending"
 
@@ -156,7 +156,7 @@ class QualifiedAPI(MetadataAPI):
 
     def __init__(self):
         """Initialize synthetic metadata for a successful source-bound evidence workflow."""
-        super().__init__([{"filename": "rust/crates/guard-command/src/pretool.rs"}], 1)
+        super().__init__([{"filename": "rust/crates/guard-command/src/pretool/mod.rs"}], 1)
         self.state = "success"
         self.conclusion = "success"
         self.path = ".github/workflows/guard-gauntlet-evidence.yml"

@@ -21,8 +21,7 @@ pub fn compiler_info() -> Value {
 }
 
 #[cfg(not(guard_source_bootstrap))]
-static EXPORTED_TRUST_MAP: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/trust-class-map.v1.json"));
+static EXPORTED_TRUST_MAP: &[u8] = guard_command_catalog_data::TRUST_MAP_JSON;
 // The bootstrap shadow lib produces no packaged output; the empty slice keeps
 // `include_bytes!` valid and `export-trust` fails closed like the embedded
 // program and catalog bootstrap paths.
@@ -30,10 +29,7 @@ static EXPORTED_TRUST_MAP: &[u8] =
 static EXPORTED_TRUST_MAP: &[u8] = &[];
 
 #[cfg(not(guard_source_bootstrap))]
-static EXPORTED_BUILD: &[u8] = include_bytes!(concat!(
-    env!("OUT_DIR"),
-    "/native-command-build.v1.json.zst"
-));
+static EXPORTED_BUILD: &[u8] = guard_command_catalog_data::BUILD_JSON_ZST;
 
 fn exported_build_bytes() -> &'static [u8] {
     #[cfg(not(guard_source_bootstrap))]
@@ -43,8 +39,8 @@ fn exported_build_bytes() -> &'static [u8] {
             .get_or_init(|| {
                 crate::packaged_blob::decode(
                     EXPORTED_BUILD,
-                    env!("GUARD_PACKAGED_BUILD_LEN"),
-                    env!("GUARD_PACKAGED_BUILD_SHA256"),
+                    guard_command_catalog_data::BUILD_JSON_LEN,
+                    guard_command_catalog_data::BUILD_JSON_SHA256,
                 )
             })
             .as_ref()

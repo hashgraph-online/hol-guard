@@ -8,10 +8,7 @@ use std::path::{Path, PathBuf};
 const OUTSIDE_ROOTS: &str = "native_workspace_containment_executable_outside_roots";
 
 fn fixture() -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/contained-exec-root-fixtures")
         .join(format!("fixture-{}-{nonce}", std::process::id()));

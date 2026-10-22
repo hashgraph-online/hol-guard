@@ -267,9 +267,10 @@ pub enum ContextDigestKindV1 {
     PackageExecutionContextFromScannerEvidence {
         material: Value,
     },
-    /// Plan signed custom-Extension continuity, record a local override, or
-    /// project stored continuity state. The request carries the store
-    /// snapshot; the answer is in `custom_extension_continuity`.
+    /// Plan signed custom-Extension continuity and answer the commit that
+    /// applies it, record a local override the same way, or project stored
+    /// continuity state. The request carries the store snapshot; the answer is
+    /// in `custom_extension_continuity`.
     CustomExtensionContinuity {
         request: Value,
     },
@@ -535,8 +536,9 @@ pub struct ContextDigestResultV1 {
     /// an identifiable CLI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_cli_identity: Option<LocalCliIdentityV1>,
-    /// `custom_extension_continuity` answer: a plan, a refusal
-    /// (`{"error": message}`), a local override, or public state.
+    /// `custom_extension_continuity` answer: a commit (`writes`,
+    /// `requirements`, and the guards it carries), a refusal
+    /// (`{"error": message}`), a local override commit, or public state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_extension_continuity: Option<Value>,
     /// `managed_controls_policy_fields` answer: `{"ok": projection}` or

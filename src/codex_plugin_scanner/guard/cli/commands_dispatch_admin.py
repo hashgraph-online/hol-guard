@@ -160,6 +160,12 @@ def _run_guard_approvals_command(
 ) -> int:
     store = _require_guard_store(store)
     approvals_command = getattr(args, "approvals_command", None)
+    if approvals_command == "wait":
+        from .approval_wait import run_approval_wait_command
+
+        payload, exit_code = run_approval_wait_command(args, store=store)
+        _emit("approvals", payload, getattr(args, "json", False))
+        return exit_code
     if approvals_command == "open":
         payload, exit_code = run_approval_open_command(args, store=store)
         _emit("approvals", payload, getattr(args, "json", False))

@@ -1,0 +1,792 @@
+{
+ "assert_payload_safe": [
+  {
+   "payload": {
+    "ok": "value"
+   },
+   "safe": true
+  },
+  {
+   "payload": {
+    "token": "redacted"
+   },
+   "safe": true
+  },
+  {
+   "payload": {
+    "token": "abc"
+   },
+   "safe": true
+  },
+  {
+   "payload": {
+    "path": "/Users/someone"
+   },
+   "safe": false
+  },
+  {
+   "payload": {
+    "path": "/usr/share"
+   },
+   "safe": true
+  },
+  {
+   "payload": {
+    "secret": "[REDACTED]"
+   },
+   "safe": true
+  },
+  {
+   "payload": {
+    "value": "ghp_abcdef0123"
+   },
+   "safe": false
+  },
+  {
+   "payload": {
+    "value": "bearer abc"
+   },
+   "safe": false
+  },
+  {
+   "payload": [
+    "safe",
+    "list"
+   ],
+   "safe": true
+  },
+  {
+   "payload": [
+    "/home/someone"
+   ],
+   "safe": false
+  },
+  {
+   "payload": {
+    "nested": {
+     "deep": [
+      "password = hunter2"
+     ]
+    }
+   },
+   "safe": false
+  },
+  {
+   "payload": {
+    "value": "guard_lıve_abc"
+   },
+   "safe": true
+  },
+  {
+   "payload": {
+    "value": "étoken=abc"
+   },
+   "safe": true
+  },
+  {
+   "payload": {
+    "café": "value"
+   },
+   "safe": true
+  },
+  {
+   "payload": {
+    "token": null
+   },
+   "safe": true
+  },
+  {
+   "payload": {
+    "a": 2,
+    "b": 1
+   },
+   "safe": true
+  },
+  {
+   "payload": "plain string payload",
+   "safe": true
+  }
+ ],
+ "safe_json": [
+  {
+   "expected": "plain",
+   "value": "plain"
+  },
+  {
+   "expected": "[REDACTED]",
+   "value": "/Users/someone"
+  },
+  {
+   "expected": 123,
+   "value": 123
+  },
+  {
+   "expected": 12.5,
+   "value": 12.5
+  },
+  {
+   "expected": true,
+   "value": true
+  },
+  {
+   "expected": null,
+   "value": null
+  },
+  {
+   "expected": [],
+   "value": []
+  },
+  {
+   "expected": {},
+   "value": {}
+  },
+  {
+   "expected": [
+    "plain",
+    "[REDACTED]",
+    7
+   ],
+   "value": [
+    "plain",
+    "/tmp/x",
+    7
+   ]
+  },
+  {
+   "expected": {
+    "token": "[REDACTED]"
+   },
+   "value": {
+    "token": "abc"
+   }
+  },
+  {
+   "expected": {
+    "token": {
+     "count": 3,
+     "nested": "[REDACTED]"
+    }
+   },
+   "value": {
+    "token": {
+     "count": 3,
+     "nested": "abc"
+    }
+   }
+  },
+  {
+   "expected": {
+    "credentıal": "[REDACTED]"
+   },
+   "value": {
+    "credentıal": "abc"
+   }
+  },
+  {
+   "expected": {
+    "safe": "[REDACTED]"
+   },
+   "value": {
+    "safe": "guard_lıve_abc"
+   }
+  },
+  {
+   "expected": {
+    "outer": {
+     "safe": "ok",
+     "token": "[REDACTED]"
+    }
+   },
+   "value": {
+    "outer": {
+     "safe": "ok",
+     "token": "abc"
+    }
+   }
+  },
+  {
+   "expected": {
+    "safe": [
+     "[REDACTED]",
+     {
+      "deep": "[REDACTED]"
+     }
+    ]
+   },
+   "value": {
+    "safe": [
+     "ghp_abcdef",
+     {
+      "deep": "bearer xyz"
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "authorization": [
+     "[REDACTED]",
+     "[REDACTED]"
+    ]
+   },
+   "value": {
+    "authorization": [
+     "abc",
+     "def"
+    ]
+   }
+  },
+  {
+   "expected": {
+    "[REDACTED]": "value"
+   },
+   "value": {
+    "/Users/someone": "value"
+   }
+  },
+  {
+   "expected": {
+    "token": true
+   },
+   "value": {
+    "token": true
+   }
+  },
+  {
+   "expected": {
+    "list": [
+     [
+      "[REDACTED]"
+     ]
+    ]
+   },
+   "value": {
+    "list": [
+     [
+      "bearer abc"
+     ]
+    ]
+   }
+  },
+  {
+   "expected": {
+    "present": "present",
+    "redacted": "redacted"
+   },
+   "value": {
+    "present": "present",
+    "redacted": "redacted"
+   }
+  },
+  {
+   "expected": {
+    "a": {
+     "b": {
+      "c": "[REDACTED]"
+     }
+    }
+   },
+   "value": {
+    "a": {
+     "b": {
+      "c": "/etc/passwd"
+     }
+    }
+   }
+  }
+ ],
+ "safe_source_detail": [
+  {
+   "expected": "status=ok, findings=4",
+   "run": {
+    "metadata": {
+     "totalFindings": 4
+    },
+    "status": "ok"
+   }
+  },
+  {
+   "expected": "status=ok, findings=0",
+   "run": {
+    "metadata": {
+     "totalFindings": 0
+    },
+    "status": "ok"
+   }
+  },
+  {
+   "expected": "status=failed",
+   "run": {
+    "metadata": {},
+    "status": "failed"
+   }
+  },
+  {
+   "expected": "status=failed",
+   "run": {
+    "metadata": {
+     "totalFindings": "4"
+    },
+    "status": "failed"
+   }
+  },
+  {
+   "expected": "status=failed",
+   "run": {
+    "metadata": {
+     "totalFindings": 4.0
+    },
+    "status": "failed"
+   }
+  },
+  {
+   "expected": "status=failed, findings=True",
+   "run": {
+    "metadata": {
+     "totalFindings": true
+    },
+    "status": "failed"
+   }
+  },
+  {
+   "expected": "status=failed",
+   "run": {
+    "metadata": {
+     "totalFindings": null
+    },
+    "status": "failed"
+   }
+  },
+  {
+   "expected": "status=failed",
+   "run": {
+    "metadata": [],
+    "status": "failed"
+   }
+  },
+  {
+   "expected": "status=unknown, findings=2",
+   "run": {
+    "metadata": {
+     "totalFindings": 2
+    }
+   }
+  },
+  {
+   "expected": "status=None",
+   "run": {
+    "metadata": {},
+    "status": null
+   }
+  },
+  {
+   "expected": "status=True",
+   "run": {
+    "metadata": {},
+    "status": true
+   }
+  },
+  {
+   "expected": "status=7",
+   "run": {
+    "metadata": {},
+    "status": 7
+   }
+  },
+  {
+   "expected": "status=unknown",
+   "run": {}
+  }
+ ],
+ "sanitize_serializer_string": [
+  {
+   "expected": "plain value",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "plain value"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "token",
+   "parent_sensitive": true,
+   "value": "[REDACTED]"
+  },
+  {
+   "expected": "present",
+   "parent_key": "authorization",
+   "parent_sensitive": false,
+   "value": "present"
+  },
+  {
+   "expected": "present_redacted",
+   "parent_key": "",
+   "parent_sensitive": true,
+   "value": "present_redacted"
+  },
+  {
+   "expected": "redacted",
+   "parent_key": "secret",
+   "parent_sensitive": true,
+   "value": "redacted"
+  },
+  {
+   "expected": "malformed_url_redacted",
+   "parent_key": "password",
+   "parent_sensitive": true,
+   "value": "malformed_url_redacted"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "api_key",
+   "parent_sensitive": false,
+   "value": "harmless"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "apiKey",
+   "parent_sensitive": false,
+   "value": "harmless"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "API-KEY",
+   "parent_sensitive": false,
+   "value": "harmless"
+  },
+  {
+   "expected": "harmless",
+   "parent_key": "apixkey",
+   "parent_sensitive": false,
+   "value": "harmless"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "credential_id",
+   "parent_sensitive": false,
+   "value": "harmless"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "bearerish",
+   "parent_sensitive": false,
+   "value": "harmless"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "name",
+   "parent_sensitive": true,
+   "value": "harmless"
+  },
+  {
+   "expected": "harmless",
+   "parent_key": "name",
+   "parent_sensitive": false,
+   "value": "harmless"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "/Users/someone/project"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "value=/home/someone/x"
+  },
+  {
+   "expected": "prefix/Users/someone",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "prefix/Users/someone"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "(/tmp/thing)"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "{/etc/hosts"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "C:\\Users\\someone"
+  },
+  {
+   "expected": "a\\Users\\someone",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "a\\Users\\someone"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "/var/folders/ab/cd"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "see /mnt/data/file"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "/workspace/app"
+  },
+  {
+   "expected": "/usr/local/bin",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "/usr/local/bin"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "ghp_abcdef0123456789"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "ghs_ABCDEF"
+  },
+  {
+   "expected": "ghx_abcdef",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "ghx_abcdef"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "sk-abc-def_123"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "guard_live_abc-123"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "bearer abc.def"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "Bearer\tabc"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "bearer\u001dabc"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "bearer abc"
+  },
+  {
+   "expected": "bearer",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "bearer"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "token = supersecret"
+  },
+  {
+   "expected": "token: redacted",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "token: redacted"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "token: redactedly"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "api-key=abc"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "access_token:abc"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "refresh-token = abc"
+  },
+  {
+   "expected": "mytoken: abc",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "mytoken: abc"
+  },
+  {
+   "expected": "token:",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "token:"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "token:\u001dabc"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "credentıal",
+   "parent_sensitive": false,
+   "value": "harmless"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "credentİal",
+   "parent_sensitive": false,
+   "value": "harmless"
+  },
+  {
+   "expected": "harmless",
+   "parent_key": "apııkey",
+   "parent_sensitive": false,
+   "value": "harmless"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "guard_lıve_abc"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "apı-key=abc"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "étoken=abc"
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": "x‿token=abc"
+  },
+  {
+   "expected": "",
+   "parent_key": "",
+   "parent_sensitive": false,
+   "value": ""
+  },
+  {
+   "expected": "[REDACTED]",
+   "parent_key": "token",
+   "parent_sensitive": false,
+   "value": ""
+  }
+ ],
+ "sorted_json": [
+  {
+   "expected": "{\"a\": 2, \"b\": 1}",
+   "value": {
+    "a": 2,
+    "b": 1
+   }
+  },
+  {
+   "expected": "{\"nested\": {\"a\": \"x\", \"z\": [1, 2]}}",
+   "value": {
+    "nested": {
+     "a": "x",
+     "z": [
+      1,
+      2
+     ]
+    }
+   }
+  },
+  {
+   "expected": "[\"a\", 1, true, null]",
+   "value": [
+    "a",
+    1,
+    true,
+    null
+   ]
+  },
+  {
+   "expected": "{\"caf\\u00e9\": \"na\\u00efve\"}",
+   "value": {
+    "café": "naïve"
+   }
+  },
+  {
+   "expected": "{\"astral\": \"\\ud83d\\ude00\"}",
+   "value": {
+    "astral": "😀"
+   }
+  },
+  {
+   "expected": "{\"control\": \"tab\\there\"}",
+   "value": {
+    "control": "tab\there"
+   }
+  },
+  {
+   "expected": "{\"float\": 1e+17}",
+   "value": {
+    "float": 1e+17
+   }
+  },
+  {
+   "expected": "{\"float\": 0.1}",
+   "value": {
+    "float": 0.1
+   }
+  },
+  {
+   "expected": "{\"empty\": {}, \"list\": []}",
+   "value": {
+    "empty": {},
+    "list": []
+   }
+  },
+  {
+   "expected": "\"scalar\"",
+   "value": "scalar"
+  }
+ ]
+}

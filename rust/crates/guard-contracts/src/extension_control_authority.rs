@@ -10,7 +10,15 @@
 //! credential store, so the transport reads them and ships them here along
 //! with the clock.
 //!
-//! The op never writes. When a read finds work only a writer may do --
+//! The op never writes. The `commit_plan`, `resume_plan`, `rollback_plan`,
+//! `bootstrap_plan`, `migrate_plan` and `restore_plan` ops decide a writer's
+//! next step -- the checks a commit, bootstrap, catalog migration or
+//! last-good restore must pass, the records it seals, and whether a prepared
+//! transition is resumed, committed or abandoned -- and the caller performs
+//! that step under the exclusive authority lease. `seal_anchor` and
+//! `seal_manifest` seal the anchor and catalog manifest records it stores,
+//! and `seal_managed_revision` and `seal_managed_activation` the managed
+//! controls publication epoch and activation. When a read finds work only a writer may do --
 //! restoring the last-good export, resuming or abandoning a prepared
 //! transition, or committing a catalog migration -- it answers with an
 //! `action` naming that work and the authenticated inputs it needs. The caller
@@ -49,7 +57,10 @@ pub struct ExtensionControlAuthorityRequestV1 {
     pub guard_home: String,
     /// `read`, `read_composed`, `sync_manifest`, `compose_managed`,
     /// `managed_activation`, `managed_revision`, `load_manifest`,
-    /// `validate_chain` or `anchor`.
+    /// `validate_chain`, `history`, `commit_plan`, `resume_plan`,
+    /// `rollback_plan`, `bootstrap_plan`, `migrate_plan`, `restore_plan`,
+    /// `seal_anchor`, `seal_manifest`, `seal_managed_revision`,
+    /// `seal_managed_activation` or `anchor`.
     pub op: String,
     /// Authority authentication key bytes (base64url, no padding); absent
     /// when the credential store holds none.
@@ -95,10 +106,91 @@ pub struct ExtensionControlAuthorityRequestV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<Value>,
     /// `validate_chain`: the committed head to validate up to.
+    /// `resume_plan`: the prepared transition to resume.
+    /// `rollback_plan`: the committed head the prepared transition sits on.
+    /// `seal_anchor`: the revision the anchor pins.
+    /// `seal_managed_revision`: the managed publication epoch to seal.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snapshot_digest: Option<String>,
+    /// `seal_anchor`: `prepared`, `anchored` or `committed`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<String>,
+    /// The caller's clock, as Python's `datetime.now(timezone.utc).isoformat()`
+    /// spells it, for the plan ops and `seal_manifest`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub now: Option<String>,
+    /// `history`: how many prior snapshots to list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i64>,
+    /// `commit_plan`: the mutation the caller's proof was validated against.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<ExtensionControlCommitV1>,
+    /// `migrate_plan`: the rebinding a read's `migrate_catalog` action named.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog_migration: Option<ExtensionControlCatalogMigrationV1>,
+    /// `seal_managed_activation`: the verified policy to activate on the
+    /// authority committed under `catalog_digest`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_activation: Option<ExtensionControlManagedActivationV1>,
+}
+
+/// A verified managed-controls policy and the local authority it activates
+/// on. The resident builds, acknowledges and seals the activation record.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlManagedActivationV1 {
+    /// The signed bundle's `bundleHash`, `bundleVersion`, `workspaceId`,
+    /// `payloadHash`, `issuedAt` and `expiresAt` as received, and `payload`
+    /// carrying only the payload's `metadata`.
+    pub bundle: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authority_mode: Option<String>,
+    /// The policy's signed Cloud layer, when it has one, as `layers_to_json`
+    /// values.
+    pub signed_cloud_layers: Value,
+    pub rule_targets: Value,
+    pub delegated_targets: Value,
+    pub base_revision: i64,
+    pub base_snapshot_digest: String,
+    pub managed_revision: i64,
+    pub negotiated_capabilities: Vec<String>,
+}
+
+/// A catalog migration as the read's `migrate_catalog` action named it: the
+/// committed head it starts from and the layers rebound to `catalog_digest`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlCatalogMigrationV1 {
+    pub previous_revision: i64,
+    pub previous_catalog_digest: String,
+    pub layers: Value,
+    /// Authenticated installed-release replacement of the same active selection.
+    /// Ordinary catalog migrations cannot change the active pack record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed_upgrade: Option<Value>,
+}
+
+/// One requested extension-control commit. The identities are sent as the
+/// caller received them; the resident keys them into private hashes.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlCommitV1 {
+    pub actor_id: String,
+    pub idempotency_key: String,
+    pub nonce: String,
+    pub proof_id: String,
+    /// The digest the commit proof was granted for. The plan recomputes it
+    /// from these layers, identities and `expected_revision` and refuses a
+    /// commit it does not match.
+    pub mutation_digest: String,
+    /// The requested layers, serialized as `layers_to_json` writes them.
+    pub layers_json: String,
+    pub expected_revision: i64,
+    /// The activated command pack record, when the commit activates one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_record_digest: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

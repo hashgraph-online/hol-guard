@@ -33,6 +33,15 @@ const MAX_TARGETS: usize = 256;
 /// Known-bad indicators are delisted upstream; past this, unsynced ones are
 /// no longer trusted. Workspace rules stay in force until replaced.
 const INDICATOR_STALE_AFTER_SECS: u64 = 7 * 24 * 60 * 60;
+const TOO_MANY_DESTINATIONS: &str = "network_too_many_destinations";
+const KNOWN_BAD_HOST: &str = "network_known_bad_host";
+
+/// Whether `reason_code` is one of this overlay's review findings. They match
+/// the synced bundle, so unlike a native "unproven" review they hold the hook
+/// verdict at review before execution.
+pub(crate) fn is_review_finding(reason_code: &str) -> bool {
+    reason_code == TOO_MANY_DESTINATIONS || reason_code == KNOWN_BAD_HOST
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -218,7 +227,7 @@ fn threat_label(threat_type: &str) -> String {
 fn too_many_targets() -> NetworkFinding {
     NetworkFinding {
         floor: "review",
-        reason_code: "network_too_many_destinations",
+        reason_code: TOO_MANY_DESTINATIONS,
         reason: format!(
             "This call names more than {MAX_TARGETS} network destinations, too many to check against your workspace rules. Review before letting this run."
         ),
@@ -271,7 +280,7 @@ fn evaluate(compiled: &Compiled, targets: &[String], now: u64) -> Option<Network
         if let Some(threat_type) = host_indicator(compiled, &parsed.host) {
             review = Some(NetworkFinding {
                 floor: "review",
-                reason_code: "network_known_bad_host",
+                reason_code: KNOWN_BAD_HOST,
                 reason: format!(
                     "{} hosts URLs listed by threat intelligence feeds as {}. Review before letting this run.",
                     parsed.host,
@@ -291,7 +300,18 @@ fn raise(mut result: PreToolResultV1, finding: NetworkFinding) -> PreToolResultV
     ) else {
         return result;
     };
-    if minimum >= floor {
+    if minimum > floor {
+        return result;
+    }
+    if minimum == floor {
+        // A review the edge already raised is provenance the composer settles
+        // before execution. The bundle match holds the review, so it carries
+        // the reason.
+        if floor == ActionFloor::Review {
+            result.explicitly_benign = false;
+            result.reason_code = finding.reason_code.into();
+            result.reason = finding.reason;
+        }
         return result;
     }
     result.minimum_action = finding.floor.into();

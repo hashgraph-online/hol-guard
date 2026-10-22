@@ -494,7 +494,7 @@ fn evaluate_envelope(
         .command
         .as_deref()
         .filter(|_| !search_scope_proven && !apply_patch_proven)
-        .and_then(|command| venv_activation_projection::project(command, context))
+        .and_then(|command| venv_activation_projection::verdict_target(command, context))
     {
         let projected_payload = payload_with_command(
             payload,

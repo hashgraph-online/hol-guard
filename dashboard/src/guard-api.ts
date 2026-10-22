@@ -1100,6 +1100,21 @@ export async function fetchExtensionDiscoveryApi(input: RequestInfo, init?: Requ
   return fetchWithGuardAuth(input, init);
 }
 
+/**
+ * Release archive: the daemon projects hol.org's published feed through the
+ * native runtime and serves it locally. The browser never reaches hol.org
+ * (connect-src stays 'self'), and these two paths are the whole allowlist.
+ */
+export async function fetchReleaseFeedApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    typeof input === "string" &&
+    /^\/v1\/releases\/(?:index|release)(?:\?[A-Za-z0-9=&_.-]*)?$/.test(input);
+  if (!approvedPath) {
+    throw new Error("Invalid release feed API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
 function guardAuthHeaders(): HeadersInit {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};

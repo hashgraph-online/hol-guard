@@ -3,7 +3,6 @@ use super::execution_free;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 fn environment(home: &Path) -> guard_contracts::GuardExecutionEnvironmentV1 {
     guard_contracts::GuardExecutionEnvironmentV1 {
@@ -30,10 +29,7 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = crate::unique_nanos::unique_nanos();
         let root =
             std::env::temp_dir().join(format!("hg-git-tilde-{}-{nonce}", std::process::id()));
         let declared = root.join("declared");

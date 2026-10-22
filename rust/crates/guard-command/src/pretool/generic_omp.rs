@@ -271,6 +271,15 @@ fn contained_selector(value: &str) -> bool {
 pub(super) fn modeled_scalar(tool: &str, key: &str, value: &Value) -> bool {
     let bounded = |value: &Value| value.as_u64().is_some_and(|count| count <= 100_000);
     match (tool, key, value) {
+        // Oh My Pi's session-tool wrapper takes a bounded `timeout` beside
+        // the literal intent label `i`, on every tool it wraps. It bounds how
+        // long the call may run and changes nothing about what runs, so the
+        // standalone form of the call is the same call. Without it every
+        // bridged `tool.bash({i, command, timeout})` — the shape code mode
+        // writes — fell through to the unknown-tool review.
+        (_, "timeout", number @ Value::Number(_)) => bounded(number),
+        // A `null` timeout is the default, like an absent key.
+        (_, "timeout", Value::Null) => true,
         ("grep", "case" | "gitignore", Value::Bool(_)) => true,
         ("grep", "skip", Value::Null) => true,
         ("grep", "skip", number @ Value::Number(_)) => bounded(number),

@@ -168,7 +168,8 @@ pub(crate) fn directive(f: &DirectiveFacts<'_>) -> HookResponseDirectiveV1 {
     } else {
         "fallback_envelope"
     };
-    let mut exit = exit_code(f.canonical, f.action, f.event);
+    let json_exit = exit_code(f.canonical, f.action, f.event);
+    let mut exit = json_exit;
     if route == "render" && after_json == "fallback_envelope" && f.replayed {
         // A replayed decision was recorded upstream; acknowledge without
         // re-blocking the harness.
@@ -195,6 +196,7 @@ pub(crate) fn directive(f: &DirectiveFacts<'_>) -> HookResponseDirectiveV1 {
         queue_approval_request: !early && pre && ask && !f.has_approval_requests_list,
         emitter: emitter(f.canonical).to_owned(),
         exit_code: exit,
+        json_exit_code: json_exit,
         stderr_only_on_nonzero_exit: f.canonical == "grok",
         codex_native_reason: codex_native_reason.to_owned(),
         include_remediation: blocking,

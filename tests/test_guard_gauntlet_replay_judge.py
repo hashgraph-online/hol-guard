@@ -65,6 +65,28 @@ def test_always_needs_a_persistent_allow_in_the_contract() -> None:
     assert judge(_case("always"), asked, [offered]) is None
 
 
+@pytest.mark.parametrize("base_id", ["find-exec-literal-interpreter-argument", "find-exec-escaped-regex-argument"])
+def test_named_find_cases_accept_quiet_work_in_the_replay(base_id: str) -> None:
+    case = next(case for case in expand() if case.base_id == base_id)
+    assert judge(case, _QUIET, []) is None
+
+
+def test_named_child_review_still_requires_always_allow() -> None:
+    asked = {"hookSpecificOutput": {"permissionDecision": "ask"}}
+    once = {"tool_name": "Bash", "always_available": False, "exact_context_token_present": True}
+    offered = {
+        "tool_name": "Bash",
+        "always_available": True,
+        "exact_action_persistence_eligible": True,
+        "exact_context_token_present": True,
+    }
+    case = _case("quiet_or_always")
+    assert judge(case, asked, [offered]) is None
+    assert judge(case, asked, [once]) is not None
+    assert judge(case, {"hookSpecificOutput": {"permissionDecision": "deny"}}, []) is not None
+    assert judge(case, {**_QUIET, "systemMessage": "Guard warning"}, []) is not None
+
+
 def test_attack_must_not_be_allowed() -> None:
     denied = {"hookSpecificOutput": {"permissionDecision": "deny"}}
     assert judge(_case("block"), _QUIET, []) is not None

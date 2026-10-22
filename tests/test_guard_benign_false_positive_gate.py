@@ -392,6 +392,14 @@ def test_benign_agent_work_is_allowed_and_negative_controls_are_not(
         )
         return
     gap = always_gap(_ROWS.get(case.case_id, [])) if _always_expected(case) else []
+    if case.expect == "allow_or_review":
+        # A named child can require approval, but must not lose its executable
+        # review path merely because a literal argument resembles a program.
+        assert _quiet_allow(result, approvals) or (approvals > 0 and not _hard_denied(result, approvals)), description
+        assert _reason(result) not in BUDGET_MISS_REASONS, description
+        review_gap = always_gap(_ROWS.get(case.case_id, [])) if approvals > 0 else []
+        assert not review_gap, f"named child review offers no Always allow: {description}"
+        return
     if case.case_id in _PENDING_FIX:
         _assert_pending(case.case_id, _PENDING_FIX[case.case_id], result, approvals, description)
     else:

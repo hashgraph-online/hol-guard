@@ -317,6 +317,7 @@ def _sent_request(
     monkeypatch: pytest.MonkeyPatch,
     features: tuple[str, ...],
     execution_environment: dict[str, Any] | None = None,
+    **review_kwargs: Any,
 ) -> dict[str, Any]:
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.native_pretool.native_runtime_status",
@@ -343,8 +344,40 @@ def _sent_request(
             cwd=tmp_path / "app-portal",
             home_dir=tmp_path,
             execution_environment=execution_environment,
+            **review_kwargs,
         )
     return sent
+
+
+_EVIDENCE_FEATURES = (
+    "pre-tool-command-authority-v1",
+    "resident-protocol-v2",
+    "pre-tool-extension-evidence-v1",
+)
+
+
+def test_a_caller_that_resolves_extensions_asks_for_their_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent = _sent_request(tmp_path, monkeypatch, _EVIDENCE_FEATURES, extension_evidence=True)
+    assert sent["request"]["extension_evidence"] is True
+
+
+def test_the_enforcing_review_never_asks_for_extension_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent = _sent_request(tmp_path, monkeypatch, _EVIDENCE_FEATURES)
+    assert "extension_evidence" not in sent["request"]
+
+
+def test_an_older_runtime_is_never_sent_the_evidence_field(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent = _sent_request(tmp_path, monkeypatch, _EVIDENCE_FEATURES[:2], extension_evidence=True)
+    assert "extension_evidence" not in sent["request"]
 
 
 def test_pre_tool_request_carries_the_directories_the_command_runs_in(

@@ -306,6 +306,7 @@ def stub_native_hook_json_document(
     event_name: str,
     policy_action: str,
     reason: str,
+    exit_code: Callable[[], int] | None = None,
     envelope: object,
     system_message: str | None = None,
     generic_path: bool = False,
@@ -721,6 +722,12 @@ def observed_directive(case: Case, stdout: str, stderr: str, rc: int) -> dict[st
             _reason_fields(document[3], directive)
         directive["system_message"] = _system_message_kind(document[5])
         if case.json_document_owns:
+            # The stub owns the document route's status, so the recording
+            # carries the exit code the real route took: the harness table,
+            # before the replayed fallback envelope relaxes it to 0.
+            directive["json_exit_code"] = (
+                None if case.canonical == "grok" else _recorded_exit_code(case.canonical, case.action, case.event)
+            )
             return directive
     post = [line for line in out if line[0] == "post_tool"]
     envelope = [line for line in out if line[0] == "envelope"]

@@ -18,7 +18,15 @@ def plan_type(monkeypatch):
     return importlib.import_module("extension_delivery_assets").AssetPlan
 
 
-def test_batched_metadata_uses_one_download_and_checks_each_selected_member(plan_type, monkeypatch, tmp_path):
+@pytest.fixture
+def build_containers(plan_type):
+    # Publishing builds containers without the native runtime installed.
+    return importlib.import_module("extension_delivery_containers")
+
+
+def test_batched_metadata_uses_one_download_and_checks_each_selected_member(
+    plan_type, build_containers, monkeypatch, tmp_path
+):
     plan = plan_type(tmp_path / "assets", "1" * 40)
     one, two = b'{"one":1}', b'{"two":2}'
     first, second = plan.asset(one, "object"), plan.asset(two, "object")
@@ -33,7 +41,7 @@ def test_batched_metadata_uses_one_download_and_checks_each_selected_member(plan
     monkeypatch.setattr(transport, "download", download)
     fetch = transport.cached_fetcher(tmp_path / "cache")
     assert fetch(first, len(one)) == one and fetch(second, len(two)) == two
-    assert len(reads) == 1 and reads[0][1] == containers.METADATA_BYTES
+    assert len(reads) == 1 and reads[0][1] == build_containers.METADATA_BYTES
     with pytest.raises(ValueError, match="length"):
         fetch(first, len(one) + 1)
     assert len(reads) == 2
@@ -45,20 +53,20 @@ def test_batched_metadata_uses_one_download_and_checks_each_selected_member(plan
     assert fetch(second, len(two)) == two and len(reads) == 3
 
 
-def test_containers_split_without_changing_member_or_byte_bounds(plan_type, tmp_path):
+def test_containers_split_without_changing_member_or_byte_bounds(plan_type, build_containers, tmp_path):
     plan = plan_type(tmp_path / "assets", "1" * 40)
-    for number in range(containers.MAX_MEMBERS + 1):
+    for number in range(build_containers.MAX_MEMBERS + 1):
         plan.asset(json.dumps({"entry": number}).encode(), "object")
     assert len(plan.pending) == 2
     counts = []
     for row in plan.pending:
         target = row["location"]
         data = (plan.directory / target["tag"] / target["asset"]).read_bytes()
-        archive, infos = containers.inspect(data, target["asset"])
+        archive, infos = build_containers.inspect(data, target["asset"])
         counts.append(len(infos))
         archive.close()
-        assert len(data) <= containers.METADATA_BYTES
-    assert counts == [containers.MAX_MEMBERS, 1]
+        assert len(data) <= build_containers.METADATA_BYTES
+    assert counts == [build_containers.MAX_MEMBERS, 1]
 
 
 def test_new_container_cannot_publish_unreferenced_bytes(plan_type, tmp_path):

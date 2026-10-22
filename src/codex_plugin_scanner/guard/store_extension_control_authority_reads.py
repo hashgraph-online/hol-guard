@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, cast
 
 from .managed_controls_policy_bundle import MANAGED_CONTROLS_LAST_GOOD_STATE_KEY
 from .native_extension_control_authority import (
-    anchor_from_wire,
     extension_control_authority,
     layers_from_wire,
     manifest_from_wire,
@@ -27,7 +26,6 @@ from .runtime.extension_control_authority import (
 )
 from .runtime.extension_control_contract import ExtensionControlLayer
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
-from .store_extension_control_authority_support import _row_int, _row_str
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -189,6 +187,26 @@ class ExtensionControlAuthorityReadsMixin:
             raise ExtensionControlAuthorityError("invalid managed controls revision state")
         return revision
 
+    def _seal_managed_revision(self, revision: int, *, key: bytes) -> dict[str, object]:
+        """The authenticated managed publication epoch the resident sealed for ``revision``."""
+
+        state = self._extension_control_authority_op("seal_managed_revision", key=key, revision=revision).get("state")
+        if not isinstance(state, dict):
+            raise ExtensionControlAuthorityError("invalid managed controls revision seal")
+        return cast(dict[str, object], state)
+
+    def _seal_managed_activation(
+        self, activation: Mapping[str, object], *, key: bytes, catalog_digest: str
+    ) -> dict[str, object]:
+        """The complete activation the resident built and sealed on the authority under ``catalog_digest``."""
+
+        sealed = self._extension_control_authority_op(
+            "seal_managed_activation", key=key, catalog_digest=catalog_digest, managed_activation=dict(activation)
+        ).get("activation")
+        if not isinstance(sealed, dict):
+            raise ExtensionControlAuthorityError("invalid managed controls activation seal")
+        return cast(dict[str, object], sealed)
+
     def _managed_activation(
         self, state: object, *, key: bytes, catalog_digest: str | None = None
     ) -> tuple[tuple[ExtensionControlLayer, ...], int]:
@@ -346,7 +364,7 @@ class ExtensionControlAuthorityReadsMixin:
             kind = action.get("action")
             if kind == "restore_last_good":
                 with suppress(Exception):
-                    self._restore_last_good_authority(anchor_from_wire(action.get("anchor")), key=key)
+                    self._restore_last_good_authority(key=key)
                 attempted["restore_attempted"] = True
             elif kind == "resume_pending":
                 resumed = self._resume_pending_catalog_migration(action, key=key)
@@ -357,7 +375,6 @@ class ExtensionControlAuthorityReadsMixin:
                 self._roll_back_abandoned_transition(
                     int(cast(int, action["revision"])),
                     snapshot_digest=str(action["snapshot_digest"]),
-                    anchor=anchor_from_wire(action.get("anchor")),
                     key=key,
                 )
                 attempted["rollback_attempted"] = True
@@ -370,24 +387,5 @@ class ExtensionControlAuthorityReadsMixin:
     def _resume_pending_catalog_migration(
         self, action: Mapping[str, object], *, key: bytes
     ) -> ExtensionControlAuthorityView | None:
-        pending = self._pending_transition(int(cast(int, action["revision"])))
-        if pending is None:
-            return None
         with self._connect() as connection:
-            return self._resume_idempotent_transition(
-                connection,
-                pending,
-                current=ExtensionControlAuthorityView(
-                    AuthorityHealth.RECOVERY_REQUIRED,
-                    int(cast(int, action["current_revision"])),
-                    str(action["stored_catalog_digest"]),
-                    (),
-                ),
-                catalog_digest=_row_str(pending, "catalog_digest"),
-                layers_json=_row_str(pending, "layers_json"),
-                actor_hash=_row_str(pending, "actor_id_hash"),
-                idempotency_hash=_row_str(pending, "idempotency_key_hash"),
-                nonce_hash=_row_str(pending, "nonce_hash"),
-                expected_revision=_row_int(pending, "previous_revision"),
-                key=key,
-            )
+            return self._resume_transition(connection, int(cast(int, action["revision"])), key=key)

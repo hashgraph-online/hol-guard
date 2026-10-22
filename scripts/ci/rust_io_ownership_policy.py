@@ -372,7 +372,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_paths.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_runtime_artifacts.py",
         "src/codex_plugin_scanner/guard/runtime/approval_context.py",
-        "src/codex_plugin_scanner/guard/runtime/extension_control_runtime.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_authorization.py",
         "src/codex_plugin_scanner/guard/runtime/mcp_skill_firewall.py",
         "src/codex_plugin_scanner/guard/shims.py",

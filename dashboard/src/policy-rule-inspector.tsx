@@ -8,6 +8,7 @@ import type { GuardPolicyDecision } from "./guard-types";
 import {
   formatPolicyDateTime,
   isCloudManagedPolicy,
+  resolveExactApprovedAction,
   resolvePolicyApprovalRecordLabel,
   resolvePolicyDisplay,
   resolvePolicyEvidenceHref,
@@ -28,6 +29,7 @@ export function PolicyRuleInspector(props: {
   const dialogRef = useRef<HTMLDivElement>(null);
   const display = resolvePolicyDisplay(policy);
   const title = resolvePolicyRowTitle(policy, display);
+  const exactAction = resolveExactApprovedAction(policy);
   const cloudManaged = isCloudManagedPolicy(policy.source);
   const canClear = props.onClear !== undefined && !cloudManaged;
   const folder = resolvePolicyRowFolder(policy);
@@ -127,6 +129,20 @@ export function PolicyRuleInspector(props: {
         <h2 className="mt-3 break-words text-lg font-semibold leading-snug text-brand-dark">{title}</h2>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">{display.rememberSentence}</p>
         {display.kindLine ? <p className="mt-1 text-sm text-slate-500">{display.kindLine}</p> : null}
+
+        {exactAction ? (
+          <div className="mt-4">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
+              {policy.action === "block" ? "Exact action blocked" : "Exact action approved"}
+            </p>
+            <pre className="mt-1.5 max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-slate-900 px-3 py-2.5 font-mono text-xs leading-relaxed text-slate-50">{exactAction}</pre>
+            <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+              {policy.action === "block"
+                ? "This is the exact action this rule blocks. Guard stops it without asking while the rule stands."
+                : "This is the exact action this rule was approved for. Guard repeats it without asking while the rule stands."}
+            </p>
+          </div>
+        ) : null}
 
         <dl className="mt-5 grid grid-cols-1 gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-100 sm:grid-cols-2">
           {[

@@ -39,24 +39,21 @@ const MAX_NODES: usize = 16_384;
 const MAX_DEPTH: usize = 32;
 const MATCH_DETAIL: &str = "Matched bounded structured command constraints.";
 #[cfg(not(guard_source_bootstrap))]
-static EMBEDDED_PROGRAM: &[u8] = include_bytes!(concat!(
-    env!("OUT_DIR"),
-    "/native-command-program.v1.json.zst"
-));
+static EMBEDDED_PROGRAM: &[u8] = guard_command_catalog_data::PROGRAM_JSON_ZST;
 /// SHA-256 hex of the exact packaged program bytes (with trailing newline).
 #[cfg(not(guard_source_bootstrap))]
-pub const PACKAGED_COMMAND_PROGRAM_SHA256: &str = env!("GUARD_PACKAGED_PROGRAM_SHA256");
+pub const PACKAGED_COMMAND_PROGRAM_SHA256: &str = guard_command_catalog_data::PROGRAM_JSON_SHA256;
 #[cfg(guard_source_bootstrap)]
 pub const PACKAGED_COMMAND_PROGRAM_SHA256: &str = "";
 
 /// Program identity without decoding the legacy embedded artifact.
 #[cfg(not(guard_source_bootstrap))]
-pub const PACKAGED_COMMAND_PROGRAM_ID: &str = env!("GUARD_PACKAGED_PROGRAM_ID");
+pub const PACKAGED_COMMAND_PROGRAM_ID: &str = guard_command_catalog_data::PROGRAM_ID;
 #[cfg(guard_source_bootstrap)]
 pub const PACKAGED_COMMAND_PROGRAM_ID: &str = "";
 
 #[cfg(not(guard_source_bootstrap))]
-const DEFAULT_COMMAND_PACK_IDS: &str = env!("GUARD_DEFAULT_COMMAND_PACK_IDS");
+const DEFAULT_COMMAND_PACK_IDS: &str = guard_command_catalog_data::DEFAULT_COMMAND_PACK_IDS;
 #[cfg(guard_source_bootstrap)]
 const DEFAULT_COMMAND_PACK_IDS: &str = "";
 
@@ -74,8 +71,8 @@ pub fn packaged_command_program_bytes() -> &'static [u8] {
             .get_or_init(|| {
                 crate::packaged_blob::decode(
                     EMBEDDED_PROGRAM,
-                    env!("GUARD_PACKAGED_PROGRAM_LEN"),
-                    env!("GUARD_PACKAGED_PROGRAM_SHA256"),
+                    guard_command_catalog_data::PROGRAM_JSON_LEN,
+                    guard_command_catalog_data::PROGRAM_JSON_SHA256,
                 )
             })
             .as_ref()
@@ -337,7 +334,7 @@ fn digest_json_value(domain: &[u8], value: &Value) -> Result<String, &'static st
 // Do not depend on serde_json's selected Map implementation. Build dependencies
 // may enable preserve_order, while the packaged/runtime contract requires
 // recursively sorted object keys and the usual UTF-8 JSON string encoding.
-fn canonical_json_bytes(value: &Value) -> Result<Vec<u8>, serde_json::Error> {
+pub(crate) fn canonical_json_bytes(value: &Value) -> Result<Vec<u8>, serde_json::Error> {
     let mut canonical = value.clone();
     canonical.sort_all_objects();
     serde_json::to_vec(&canonical)

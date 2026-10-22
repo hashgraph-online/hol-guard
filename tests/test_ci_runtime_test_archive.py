@@ -102,6 +102,7 @@ def test_generated_files_are_excluded_without_excluding_authored_fixtures():
     for path in (
         "scripts/ci/native_cache_environment.py",
         "rust/rust-toolchain.toml",
+        "rust/crates/guard-runtime/src/lib.rs",
         "rust/crates/guard-runtime/src/main.rs",
         "rust/crates/guard-runtime/testdata/case.json",
         "tests/fixtures/authority/vectors.json",

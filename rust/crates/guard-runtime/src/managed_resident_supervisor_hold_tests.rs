@@ -2,7 +2,6 @@ use super::*;
 use std::fs;
 use std::sync::mpsc;
 use std::thread;
-use std::time::SystemTime;
 
 /// A held scope is proved by a stop that gives up, so these tests use a bound
 /// of their own rather than sleeping out `SUPERVISOR_QUIESCE_TIMEOUT`, which
@@ -15,10 +14,7 @@ fn test_scope(label: &str) -> (PathBuf, PathBuf) {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-supervisor-hold-{label}-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     crate::resident_state::ensure_private_directory(&root, true)
         .expect("test root should be created");

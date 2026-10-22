@@ -1103,7 +1103,7 @@
     "leading_flags_and_operands"
    ],
    "native_replacements": [
-    "rust/crates/guard-command/src/command_structured_matchers.rs",
+    "rust/crates/guard-command/src/command_structured_matchers/mod.rs",
     "rust/crates/guard-command/src/native_command_program_evaluation.rs"
    ]
   },
@@ -2009,6 +2009,89 @@
    "native_replacements": [
     "rust/crates/guard-command/src/extension_trust.rs",
     "rust/crates/guard-runtime/src/extension_control_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/extension_allow_hint.py",
+   "source_sha256": "f49e29976dca12ba9f66d46e883f136b033618af21c4c0fdc193fd5c14cd2c88",
+   "forbidden_symbols": [
+    "MAX_HINT_PERMISSIONS",
+    "evaluate_command",
+    "already_enabled",
+    "relied_permission_ids",
+    "allows"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-contracts/src/extension_allow_hint.rs",
+    "rust/crates/guard-runtime/src/extension_allow_hint_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/daemon/approval_extension_recommendation.py",
+   "source_sha256": "3eca7867e90f6a70a18078b299443f253f65dae7cacc4fcceb7d71b6f3febd71",
+   "forbidden_symbols": [
+    "CAUTION_RISK_CLASSES",
+    "_bounded",
+    "_caution_reason",
+    "_hint_ids",
+    "_layer_states"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-contracts/src/approval_extension_recommendation.rs",
+    "rust/crates/guard-runtime/src/approval_extension_recommendation_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/daemon/extension_control_api.py",
+   "source_sha256": "8fa482660f01babb2cad8f8f25ec88dc53675b6e9604062511d5f1a17fc2e688",
+   "forbidden_symbols": [
+    "_canonicalize_extension_ids",
+    "_semantic_event_targets",
+    "_validate_authority_mutability"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-contracts/src/extension_control_mutation.rs",
+    "rust/crates/guard-contracts/src/extension_control_prepared.rs",
+    "rust/crates/guard-runtime/src/extension_control_mutation_op.rs",
+    "rust/crates/guard-runtime/src/extension_control_prepared_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/daemon/extension_control_prepared.py",
+   "source_sha256": "565ccd1483c36d6f6ff4e4cb6b065576ce02853135c617f851d7ba0e8b7e0f24",
+   "forbidden_symbols": [
+    "_REQUEST_FIELDS",
+    "request_digest"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-contracts/src/extension_control_prepared.rs",
+    "rust/crates/guard-runtime/src/extension_control_prepared_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/catalog_delivery/transport.py",
+   "source_sha256": "37fdf670e06a68b2501e39b415fdacf3d640cd7f3b5c8aa28d09756f53722c80",
+   "forbidden_symbols": [
+    "HOSTS",
+    "_RETRY_DELAYS",
+    "_RETRY_STATUS",
+    "_check_url",
+    "_retriable",
+    "require_source_ancestor"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/pack_lifecycle/release_transport.rs",
+    "rust/crates/guard-runtime/src/pack_lifecycle/tests/ancestry.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/catalog_delivery/selection.py",
+   "source_sha256": "9426fcfa53ff125d6bac6d75c21c5e3a27c23188f9d1280a1c840b3e75cfedb1",
+   "forbidden_symbols": [
+    "PUBLICATION"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/pack_lifecycle/release_transport/selector.rs"
    ]
   }
  ]

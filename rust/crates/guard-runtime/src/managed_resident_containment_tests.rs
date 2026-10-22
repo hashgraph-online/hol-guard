@@ -1,16 +1,12 @@
 use super::*;
 use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn abort_reaps_child_and_reports_state_discovery_failure_after_deadline() {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-abort-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&root).expect("test directory should be created");
     let invalid_scope = root.join("not-a-directory");

@@ -64,8 +64,20 @@ fn uncertain_git_attribution_requires_review_instead_of_a_hard_block() {
 #[test]
 fn assignment_prefixes_keep_the_native_floor_instead_of_an_evaluation_block() {
     let binding = binding_with_layers(serde_json::json!([]));
+    // A plain scalar under an ordinary name before a proven listing is a
+    // value that listing reads for itself, so it carries the listing's allow.
+    let ordinary = evaluate(&binding, "X=1 ls");
+    assert_eq!(ordinary.minimum_action, "allow");
+    assert_eq!(
+        ordinary
+            .command_extensions
+            .as_ref()
+            .unwrap()
+            .evaluation_error,
+        None
+    );
+    // A path value, and a command the proofs do not reach, stay on the floor.
     for command in [
-        "X=1 ls",
         "TODO_FILE=/tmp/todo.json ./todo.py list",
         "NODE_ENV=test node --test",
     ] {

@@ -26,6 +26,7 @@ from codex_plugin_scanner.guard.native_policy_snapshot import (
     derive_native_policy_verifier_key,
     provision_native_policy_verifier_key,
 )
+from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.store import GuardStore
 
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
@@ -99,10 +100,21 @@ def _request(
 ) -> bytes:
     runtime_identity = hashlib.sha256(runtime.read_bytes()).hexdigest()
     rule_digest = _rule_digest(runtime)
+    # Reading the store answers through a resident that this process starts in
+    # root/native-runtime, the state directory the tests drive. When the test
+    # has not started a resident there yet, stop that one so the test begins
+    # from an empty state directory with no resident owned by pytest. A test
+    # that already keeps residents there (a handoff) is left as it arranged.
+    state_dir = root / "native-runtime"
+    fresh = not _state_files(state_dir)
     # The store mints its policy integrity key here, and refuses to mint one
     # once a native verifier key is already on disk. Bind before provisioning.
     command_extensions, policy_master = _command_controls(root)
     provision_native_policy_verifier_key(root, policy_master)
+    if fresh:
+        closed = close_native_residents(root)
+        assert closed
+        assert not _state_files(state_dir)
     policy_snapshot = build_policy_snapshot_v3(
         config={
             "mode": "enforce",

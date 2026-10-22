@@ -290,10 +290,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!(
             "guard-rustfmt-settings-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
+            crate::unique_nanos::unique_nanos(),
         ));
         let directory = root.join(".rustup");
         std::fs::create_dir_all(&directory).unwrap();

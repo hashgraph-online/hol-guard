@@ -65,10 +65,7 @@ struct TempTree(std::path::PathBuf);
 
 impl TempTree {
     fn new() -> Self {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
+        let nanos = crate::unique_nanos::unique_nanos();
         let path =
             std::env::temp_dir().join(format!("hol-guard-bun-cwd-{nanos}-{}", std::process::id()));
         std::fs::create_dir_all(&path).expect("temp tree");

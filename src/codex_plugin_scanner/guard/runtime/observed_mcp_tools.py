@@ -212,8 +212,11 @@ def discover_observed_mcp_tools(
     # Native receipts deliberately omit tool names. Paused native requests
     # retain the display label, so they are also a discovery source; resolving
     # a request must not make its connector disappear from the picker.
-    records = store.list_approval_requests(status=None, limit=MAX_OBSERVED_MCP_RECEIPTS)
-    receipts = store.list_receipts(limit=MAX_OBSERVED_MCP_RECEIPTS)
+    # The resident projects both histories to the tool label, the harness and
+    # the timestamps parsed below. Reading whole approval rows and whole
+    # receipts here encoded a long history past the native response cap, and
+    # the scan failed rather than discovering connectors.
+    records, receipts = store.observed_mcp_history(limit=MAX_OBSERVED_MCP_RECEIPTS)
     observed = tools_from_receipts(records, configured) + tools_from_receipts(receipts, configured)
     # Replay records each connector at its own history time, so it can age
     # out and stays forgotten until the harness uses it again.

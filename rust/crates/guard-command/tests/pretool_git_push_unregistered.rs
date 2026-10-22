@@ -3,6 +3,9 @@
 //!
 //! This binary never calls `install_git_push_verdict`. The other push tests
 //! share one process-wide `OnceLock`, so this check has to run alone.
+#[path = "../../../test_support/unique_nanos.rs"]
+mod unique_nanos;
+
 use guard_command::pretool::{evaluate_pre_tool_envelope_with_execution_context, PathContext};
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -13,10 +16,7 @@ fn home() -> PathBuf {
         .join(format!(
             "unregistered-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let home = root.join("home");
     std::fs::create_dir_all(home.join("ready")).unwrap();

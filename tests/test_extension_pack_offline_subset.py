@@ -25,7 +25,7 @@ from tests.native_activation_support import compiled_lifecycle as compiled_lifec
 from tests.native_activation_support import subset_store
 from tests.test_extension_pack_preparation import delivery as delivery
 
-KEY = b"offline-subset-authority-fixture!!"
+KEY = b"offline-subset-authority-fixture"
 
 
 def committed(delivery, selected):

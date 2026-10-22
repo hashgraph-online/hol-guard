@@ -209,7 +209,9 @@ fn strip_prefixes(
             if !(literal_word(chars, token) || reviewed && private_temp_word(chars, token)) {
                 return None;
             }
-            if !inert_assignment(name, value) {
+            if !(inert_assignment(name, value)
+                || !reviewed && ordinary_project_setting(name, value))
+            {
                 search_path::review(setting.as_deref_mut(), &mut required, name, value, context)?;
             }
         } else if token.value == "env" || token.value == "/usr/bin/env" {
@@ -298,7 +300,9 @@ fn strip_env_options(
         } else if value.starts_with('-') {
             return None;
         } else if let Some((name, assigned)) = assignment(token) {
-            if !inert_assignment(name, assigned) {
+            if !(inert_assignment(name, assigned)
+                || setting.is_none() && ordinary_project_setting(name, assigned))
+            {
                 search_path::review(setting.as_deref_mut(), required, name, assigned, context)?;
             }
         } else {
@@ -407,6 +411,16 @@ fn inert_assignment(name: &str, value: &str) -> bool {
     // Any program may read any other name, so other settings are reviewed
     // through the projection instead of passing as inert.
     false
+}
+
+/// An ordinary project setting carries a value the command reads for itself.
+/// The shared screen keeps every family that can redirect what runs — lookup,
+/// loading, configuration, a home, a credential, the trust anchor and the
+/// endpoint — out of this branch, and a plain scalar cannot spell a path or
+/// an option for the program to act on. A reviewed projection still names
+/// such a setting, so this widening belongs to the proof side alone.
+fn ordinary_project_setting(name: &str, value: &str) -> bool {
+    plain_scalar(value) && crate::command_compatibility::environment::ordinary_setting_name(name)
 }
 
 fn plain_scalar(value: &str) -> bool {

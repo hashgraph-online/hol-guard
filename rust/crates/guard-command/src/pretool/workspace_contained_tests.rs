@@ -259,7 +259,7 @@ fn commands_with_network_privilege_or_escape_stay_at_review() {
         "npm init vite",
         "npm publish",
         "npm run build && npm install zod",
-        "pip list",
+        "pip install requests",
         "cargo build",
     ] {
         assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");

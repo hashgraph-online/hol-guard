@@ -139,6 +139,8 @@ class StorePolicyIntegrityAdminMixin:
                 "artifact_hash": _optional_text(item.get("artifact_hash")),
                 "workspace": _optional_text(item.get("workspace")),
                 "reason": _optional_text(item.get("reason")),
+                "action": _optional_text(item.get("action")),
+                "updated_at": _optional_text(item.get("updated_at")),
             }
             for item in items
         ]

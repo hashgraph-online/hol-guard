@@ -23,6 +23,7 @@ from ..skill_directory_identity import (
     inspect_skill_directory,
     skill_directory_identity_metadata,
 )
+from ..stable_guard_cli import guard_cli_launcher
 from . import hermes_runtime_hooks
 from .adapter_safe_output import write_text_at_authorized_path
 from .adapter_state_integrity import authenticate_adapter_state
@@ -486,7 +487,7 @@ def _overlay_servers(
     for server_key, server in source_configs.items():
         overlay_name = _overlay_name(server_key, server, names_in_use)
         overlay[overlay_name] = {
-            "command": str(Path(sys.executable)),
+            "command": str(Path(guard_cli_launcher())),
             "args": _mcp_proxy_command(context=context, server_key=server_key),
             "transport": "stdio",
             "metadata": {

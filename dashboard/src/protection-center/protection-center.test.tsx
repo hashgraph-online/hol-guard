@@ -24,6 +24,9 @@ import { deriveProtectionStatus } from "./model/protection-presentation";
 import { CustomExtensionsSection } from "./custom-extensions-section";
 import type { LocalCliItem } from "../local-cli-api";
 import { LocalCliDetail } from "./local-clis-panel";
+import { CustomExtensionReviewModal } from "./local-cli-review-modal";
+import { FRESH_TOTP_REQUIRED_MESSAGE, isFreshTotpRequired } from "./local-cli-panel-copy";
+import { LocalCliApiError } from "../local-cli-api";
 
 assert.equal(PROTECTION_TERMS.navigation, "Extensions");
 assert.equal(PROTECTION_TERMS.pageTitle, "Extensions");
@@ -333,6 +336,35 @@ const customMixed = renderToStaticMarkup(createElement(CustomExtensionsSection, 
 assert.match(customMixed, /Needs review · 1/);
 assert.match(customMixed, /Reviewed · 1/);
 assert.doesNotMatch(customMixed, /custom-extensions-empty/);
+
+// A recent authenticator proof lasts about a minute and can lapse while the
+// save dialog is open. Once a save is refused for a missing code, the dialog
+// must show the code field again instead of "recently confirmed" (#5594).
+const recentTotpGate = {
+  enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null,
+  locked_until: null, fail_closed: false, strict_all_decisions: false,
+  totp_enabled: true, totp_pending: false, totp_recent_satisfied: true,
+};
+const saveDialog = (requireFreshTotp: boolean) => renderToStaticMarkup(createElement(CustomExtensionReviewModal, {
+  item: { ...baseCustomExtension, state: "allowed" },
+  nextState: "allowed",
+  commandChanges: [],
+  providerUpdates: [],
+  busy: false,
+  error: requireFreshTotp ? FRESH_TOTP_REQUIRED_MESSAGE : null,
+  approvalGate: recentTotpGate,
+  requireFreshTotp,
+  onCancel: () => undefined,
+  onConfirm: () => undefined,
+}));
+assert.match(saveDialog(false), /Recently confirmed with your authenticator/);
+assert.doesNotMatch(saveDialog(false), /Authenticator code/);
+assert.match(saveDialog(true), /Authenticator code/);
+assert.match(saveDialog(true), /inputMode="numeric"|inputmode="numeric"/);
+assert.doesNotMatch(saveDialog(true), /Recently confirmed with your authenticator/);
+assert.equal(isFreshTotpRequired(new LocalCliApiError("approval_gate_totp_required", "TOTP code is required.")), true);
+assert.equal(isFreshTotpRequired(new LocalCliApiError("revision_conflict", "Changed.")), false);
+assert.equal(isFreshTotpRequired(new Error("TOTP code is required.")), false);
 
 // One MCP server configured in two apps is two rows. Each names its app
 // beside the server name, and the status line stays whole.

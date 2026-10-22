@@ -30,6 +30,10 @@ fn inert_prefixes_are_removed_in_place() {
             "git status && rg -n 'a b' src | head -5",
         ),
         ("TZ=\"UTC\" date", "date"),
+        // An ordinary project setting carries a value the command reads for
+        // itself; the screen above keeps every steering family reviewed.
+        ("NODE_ENV=test node --test", "node --test"),
+        ("env NODE_ENV=test ls", "ls"),
     ] {
         assert_eq!(project(command).as_deref(), Some(expected), "{command}");
     }
@@ -42,9 +46,8 @@ fn commands_without_inert_prefix_are_not_projected() {
         "git status && rg x",
         "echo FOO=1",
         "ls >FOO=1",
-        // Any program may read an unknown name; it is reviewed, not inert.
+        // A name the shell itself reads is never ordinary, so it is reviewed.
         "REPORT_WINDOW=7d ls",
-        "NODE_ENV=test node --test",
     ] {
         assert_eq!(project(command), None, "{command}");
     }

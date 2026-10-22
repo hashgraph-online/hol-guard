@@ -131,19 +131,19 @@
    "body": "932641bbbcc7"
   },
   {
-   "verdict": "windows-unsupported",
-   "note": "The `pwd`-literal chain proof requires the agent's user to own the checkout and its `.git`; there is no POSIX uid to compare on Windows, so ownership is never proven and the chain stays reviewed. Tightening it would mean an ACL read Guard does not make yet.",
+   "verdict": "other-platform",
+   "note": "Windows reads the owner's SID through `guard_runtime_windows_process::owned_by_current_user`, so this arm is left for a target that is neither Unix nor Windows: it has no ownership primitive at all, ownership is never proven, and the chain stays reviewed.",
    "file": "rust/crates/guard-command/src/pretool/chain_literals_pwd.rs",
    "item": "fn owned(_: &Path) -> bool",
-   "cfg": "not(unix)",
+   "cfg": "not(any(unix, windows))",
    "body": "ca2728a0b3e0"
   },
   {
-   "verdict": "windows-unsupported",
-   "note": "The same proof walks to the repository root only while the device number stays the same, so a mount crossed mid-walk ends it. `st_dev` has no Windows counterpart Guard reads today, so the walk never starts and the chain stays reviewed.",
+   "verdict": "other-platform",
+   "note": "Windows tells volumes apart by hashing the canonical path's own volume prefix, so this arm is left for a target that is neither Unix nor Windows: with no device number and no volume prefix to read, the walk never starts and the chain stays reviewed.",
    "file": "rust/crates/guard-command/src/pretool/chain_literals_pwd.rs",
    "item": "fn filesystem(_: &Path) -> Option<u64>",
-   "cfg": "not(unix)",
+   "cfg": "not(any(unix, windows))",
    "body": "80936b2804b3"
   },
   {
@@ -651,6 +651,14 @@
    "body": "ebd8edea7ef4"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Correct platform difference: non-Unix builds bind 'launch_identity' to launch_identity_stub.rs, which mirrors the Unix module's API and reports launch identity as non-reusable, matching the local_supply_chain handling of package approvals. On Unix the real launch_identity.rs arm is selected and compiled by this crate's host build; the stub is exercised by the Windows producer compile, so both arms are built in CI.",
+   "file": "rust/crates/guard-command-build/src/lib.rs",
+   "item": "pub mod launch_identity",
+   "cfg": "not(unix)",
+   "body": "4fe305074d18"
+  },
+  {
    "verdict": "other-platform",
    "note": "Windows opens a handle-bound directory in its own arm; elsewhere `Unsupported` fails closed, so no containment claims a bound filesystem it does not have.",
    "file": "rust/crates/guard-contained-process/src/bound_fs/directory.rs",
@@ -1116,11 +1124,11 @@
   },
   {
    "verdict": "windows-equivalent",
-   "note": "Unix serves over a unix socket; the else arm serves the authenticated loopback transport that the Windows build advertises as `authenticated-loopback-resident-v1`. Both are real transports.",
+   "note": "Unix serves over a unix socket; the else arm serves the authenticated loopback transport that the Windows build advertises as `authenticated-loopback-resident-v1`. Both are real transports. The requested-stop note the block leaves afterwards is written the same way on either arm.",
    "file": "rust/crates/guard-runtime/src/managed_resident.rs",
    "item": "fn serve_managed -- cfg! expression",
    "cfg": "unix",
-   "body": "ea871725d1f8"
+   "body": "e0bcc9f4d23c"
   },
   {
    "file": "rust/crates/guard-runtime/src/managed_resident_lease_identity.rs",

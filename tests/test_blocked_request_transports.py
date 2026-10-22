@@ -106,7 +106,7 @@ def test_default_denial_command_activity_is_unprompted(tmp_path, capsys):
     assert_silent_review_recorded(store)
 
 
-def test_local_package_denial_preserves_receipt_without_queue(tmp_path):
+def test_local_package_denial_preserves_receipt_and_exposes_decision_wait(tmp_path):
     context = _context(tmp_path)
     payload = _pending_package_payload()
     original_receipt = deepcopy(payload["receipt"])
@@ -124,7 +124,9 @@ def test_local_package_denial_preserves_receipt_without_queue(tmp_path):
     assert payload["policy_action"] == "block"
     assert payload["receipt"] == original_receipt
     assert "Current package policy" in payload["review_hint"]
-    assert "safe, permitted alternative" in payload["review_hint"]
+    request_id = store.list_approval_requests(status="pending")[0]["request_id"]
+    assert f"hol-guard approvals wait {request_id} --json" in payload["review_hint"]
+    assert payload["approval_resume"]["request_id"] == request_id
     assert payload["approval_requests"] == []
     assert_silent_review_recorded(store)
 
@@ -146,7 +148,7 @@ def test_local_package_malformed_config_stays_blocked(tmp_path):
     )
     assert payload["policy_action"] == "block"
     assert payload["receipt"] == original_receipt
-    assert "safe, permitted alternative" in payload["review_hint"]
+    assert "hol-guard approvals wait" in payload["review_hint"]
     assert payload["approval_requests"] == []
     assert_silent_review_recorded(store)
 

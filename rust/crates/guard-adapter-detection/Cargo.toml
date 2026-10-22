@@ -1,0 +1,16 @@
+[package]
+name = "guard-adapter-detection"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# Harness detection algorithms behind a narrow host port. The runtime owns the
+# request, inventory orchestration, skill discovery and the kind result; a leaf
+# detector owns its parsing and artifact discovery only.
+[dependencies]
+guard-runtime-pyjson = { path = "../guard-runtime-pyjson" }
+serde_json = { workspace = true, features = ["raw_value"] }
+
+[lints]
+workspace = true

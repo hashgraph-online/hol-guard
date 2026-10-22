@@ -30,6 +30,11 @@ from .native_store_policy import _payload
 # served, so the facts are asked for under that feature: a runtime without it
 # omits the fact the hook now reads. It ships with ``hook-artifact-facts-v1``.
 HOOK_ARTIFACT_FACTS_FEATURE = HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE
+# A request that asks for ``content_sha256`` is asked under the feature that
+# answers it, so a runtime that would return the facts without the digest is
+# unavailable to the caller that needs one rather than silently quiet. A
+# caller that asks for no digest keeps the feature above.
+HOOK_ARTIFACT_FACTS_CONTENT_HASH_FEATURE = "hook-artifact-facts-content-hash-v1"
 _REQUEST_SCHEMA = "guard-hook-artifact-facts-request.v1"
 _RESULT_SCHEMA = "guard-hook-artifact-facts-result.v1"
 _TIMEOUT_SECONDS = 10.0
@@ -75,31 +80,87 @@ def native_hook_artifact_facts(
     return answers
 
 
+def _wire_artifact(artifact: Mapping[str, object]) -> dict[str, object]:
+    """One artifact as the resident reads it.
+
+    A caller that wants the digest its saved approvals are keyed by passes
+    ``hash_metadata``: the metadata the artifact carried when that identity was
+    fixed, which a hook stamps its runtime posture onto before asking for these
+    facts. Only the difference between the two goes on the wire, as
+    ``metadata_stamp``; sending the pre-stamp metadata whole would carry a
+    second full copy of a field with no size bound of its own, and a command
+    long enough to reach the metadata would push an otherwise acceptable
+    request past the envelope limit and leave the hook with no facts at all.
+    The identity fields the digest covers are sent unredacted, because that
+    hash redacts the arguments and the url itself.
+
+    Every field is named on every entry, including the identity ones a caller
+    that wants no digest leaves empty. The resident binds its reply to the
+    digest of the request as it parsed it, so an entry that omitted a field the
+    contract serializes would be answered under a digest this side never
+    computed and the reply would read as unbound.
+    """
+
+    entry: dict[str, object] = {
+        "artifact_type": artifact["artifact_type"],
+        "metadata": dict(cast("Mapping[str, object]", artifact.get("metadata") or {})),
+        "configured_override": artifact.get("configured_override"),
+        "args": list(cast("Sequence[str]", artifact.get("args") or ())),
+    }
+    for field in ("artifact_id", "name", "harness", "source_scope", "config_path"):
+        entry[field] = str(artifact.get(field) or "")
+    for field in ("command", "url", "transport", "publisher"):
+        value = artifact.get(field)
+        entry[field] = value if isinstance(value, str) else None
+    hash_metadata = artifact.get("hash_metadata")
+    if hash_metadata is not None:
+        entry["metadata_stamp"] = _metadata_stamp(
+            cast("Mapping[str, object]", entry["metadata"]),
+            cast("Mapping[str, object]", hash_metadata),
+        )
+    return entry
+
+
+def _metadata_stamp(metadata: Mapping[str, object], identity: Mapping[str, object]) -> dict[str, object]:
+    """What the caller stamped onto ``identity`` to reach ``metadata``.
+
+    The resident drops ``added`` from the metadata it was sent and puts
+    ``replaced`` back to recover the metadata the digest covers, so the two
+    differ on the wire by the keys the stamp touched rather than by a whole
+    copy. A key the stamp dropped is restored by ``replaced`` as well, since
+    putting a key back is the same operation whether or not it is still there.
+    """
+
+    return {
+        "added": sorted(key for key in metadata if key not in identity),
+        "replaced": {key: value for key, value in identity.items() if key not in metadata or metadata[key] != value},
+    }
+
+
 def _facts_for_batch(
     artifacts: Sequence[Mapping[str, object]],
     home: Path,
 ) -> list[dict[str, object]]:
     """Ask the resident about one batch the contract is willing to accept."""
 
+    entries = [_wire_artifact(artifact) for artifact in artifacts]
     wire: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"hook-artifact-facts-{uuid4().hex}",
-        "artifacts": [
-            {
-                "artifact_type": artifact["artifact_type"],
-                "metadata": dict(cast("Mapping[str, object]", artifact.get("metadata") or {})),
-                "configured_override": artifact.get("configured_override"),
-            }
-            for artifact in artifacts
-        ],
+        "artifacts": entries,
     }
+    required_feature = (
+        HOOK_ARTIFACT_FACTS_CONTENT_HASH_FEATURE
+        if any("metadata_stamp" in entry for entry in entries)
+        else HOOK_ARTIFACT_FACTS_FEATURE
+    )
     try:
         response = _resident_request(
             operation="hook_artifact_facts",
             request=wire,
             guard_home=home,
             timeout_seconds=_TIMEOUT_SECONDS,
-            required_feature=HOOK_ARTIFACT_FACTS_FEATURE,
+            required_feature=required_feature,
             response_schema=_RESULT_SCHEMA,
             max_request_bytes=_MAX_REQUEST_BYTES,
             record_success=False,

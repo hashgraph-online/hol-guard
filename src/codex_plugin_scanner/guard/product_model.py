@@ -211,6 +211,12 @@ LOCAL_ROUTE_OWNERSHIP = (
     RouteOwnership(route="/audit", persona=("solo", "security_lead"), auth_required=True, writes_state=True),
     RouteOwnership(route="/policy", persona=("solo", "team_manager"), auth_required=True, writes_state=True),
     RouteOwnership(route="/feed-health", persona=("solo", "team_manager"), auth_required=True, writes_state=True),
+    RouteOwnership(
+        route="/releases",
+        persona=("vibe_coder", "solo"),
+        auth_required=True,
+        writes_state=False,
+    ),
     RouteOwnership(route="/settings", persona=("solo",), auth_required=True, writes_state=True),
     RouteOwnership(
         route="/protection/repair",

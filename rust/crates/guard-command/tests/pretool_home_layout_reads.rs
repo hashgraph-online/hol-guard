@@ -65,10 +65,7 @@ pub(crate) fn layout(name: &str) -> Layout {
     let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
         "home-layout-{name}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let cleanup = fixture::FixtureCleanup(root.clone());
     let home = root.join("home");

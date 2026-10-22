@@ -118,9 +118,22 @@ def test_native_identity_changes_for_code_but_not_portable_fixture_snapshots(tmp
     inputs = {
         "rust/Cargo.toml": "[workspace]\n",
         "rust/Cargo.lock": "version = 4\n",
+        "rust/build_support/command_identity.rs": "// reviewed build identity\n",
+        "rust/build_support/command_source_inputs.v2.json": json.dumps(
+            {
+                "schema": "guard.command-source-inputs.v2",
+                "identity_domain": "hol-guard.native-source-implementation.v2",
+                "files": [
+                    "build_support/command_identity.rs",
+                    "build_support/command_source_inputs.v2.json",
+                ],
+                "crates": ["example"],
+            }
+        ),
         "rust/crates/example/Cargo.toml": "[package]\n",
         "rust/crates/example/src/lib.rs": "pub fn current() {}\n",
-        "rust/build_support/command_identity.rs": "// reviewed build identity\n",
+        "rust/crates/unlisted/Cargo.toml": "[package]\n",
+        "rust/crates/unlisted/src/lib.rs": "pub fn outside() {}\n",
         "tests/fixtures/command-source-example.v1.json": "{}\n",
     }
     for name, content in inputs.items():
@@ -130,6 +143,8 @@ def test_native_identity_changes_for_code_but_not_portable_fixture_snapshots(tmp
     monkeypatch.setattr(builder, "ROOT", tmp_path)
     original = builder.implementation_digest()
     (tmp_path / "tests/fixtures/command-source-example.v1.json").write_text('{"changed":true}\n')
+    assert builder.implementation_digest() == original
+    (tmp_path / "rust/crates/unlisted/src/lib.rs").write_text("pub fn moved() {}\n")
     assert builder.implementation_digest() == original
     (tmp_path / "rust/crates/example/src/lib.rs").write_text("pub fn changed() {}\n")
     assert builder.implementation_digest() != original

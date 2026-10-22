@@ -18,7 +18,11 @@ from typing import TYPE_CHECKING
 
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from ..runtime.extension_allow_hint import compute_extension_allow_hint, connector_setup_hint
+from ..runtime.extension_allow_hint import (
+    compute_extension_allow_hint,
+    connector_setup_hint,
+    hint_authority_admitted,
+)
 from ..runtime.extension_control_authority import ExtensionControlAuthorityView
 from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from ..runtime.native_command_evaluation import NativeCommandEvaluation, review_command_native
@@ -254,7 +258,7 @@ def _native_review_extension_allow_hint(
         return None
     snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(view)
     budget = _remaining_budget(deadline)
-    if snapshot.authority_failure is not None or budget < _MIN_NATIVE_BUDGET_SECONDS:
+    if not hint_authority_admitted(snapshot) or budget < _MIN_NATIVE_BUDGET_SECONDS:
         return None
     cwd = _launch_cwd(payload, workspace)
     # The hint re-reviews the same command the hook just decided, so it reads
@@ -271,6 +275,7 @@ def _native_review_extension_allow_hint(
         execution_environment=stamped if isinstance(stamped, Mapping) else None,
         timeout_seconds=budget,
         record_health=False,
+        admit_unenrolled=True,
     )
     if reviewed is None or (deadline is not None and _remaining_budget(deadline) <= 0):
         return None
@@ -281,6 +286,7 @@ def _native_review_extension_allow_hint(
         command=command,
         cwd=cwd,
         home_dir=home_dir,
+        guard_home=guard_home,
         deadline=None if deadline is None else deadline - _SAFETY_MARGIN_SECONDS,
     )
 
@@ -293,6 +299,7 @@ def hint_for_reviewed_command(
     command: str,
     cwd: Path | None,
     home_dir: Path | None,
+    guard_home: Path | None = None,
     deadline: float | None = None,
 ) -> dict[str, object] | None:
     """Return the hint when the fresh evidence is exactly what Rust paused on."""
@@ -316,6 +323,7 @@ def hint_for_reviewed_command(
         native_evidence=reviewed.payload,
         cwd=cwd,
         home_dir=home_dir,
+        guard_home=guard_home,
         deadline=deadline,
     )
 
@@ -325,11 +333,10 @@ def live_approval_extension_allow_hint(
     *,
     guard_home: Path,
     snapshot: ExtensionControlRuntimeSnapshot,
-    registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
 ) -> dict[str, object] | None:
     """Derive an advisory extension allow hint on read for a pending command review without a stored hint."""
 
-    if approval.get("status") != "pending" or snapshot.authority_failure is not None:
+    if approval.get("status") != "pending" or not hint_authority_admitted(snapshot):
         return None
     envelope = approval.get("action_envelope_json")
     if isinstance(envelope, Mapping) and envelope.get("action_type") not in (None, "shell_command"):
@@ -364,6 +371,7 @@ def live_approval_extension_allow_hint(
             extension_control_snapshot=snapshot,
             timeout_seconds=0.35,
             record_health=False,
+            admit_unenrolled=True,
         )
     except Exception:
         return None
@@ -376,8 +384,8 @@ def live_approval_extension_allow_hint(
         native_evidence=reviewed.payload,
         cwd=cwd,
         home_dir=Path.home(),
+        guard_home=guard_home,
         deadline=time.monotonic() + _MAX_NATIVE_BUDGET_SECONDS,
-        registry=registry,
     )
 
 

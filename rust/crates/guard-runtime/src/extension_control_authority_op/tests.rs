@@ -22,7 +22,7 @@ use super::records::{
 
 static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
 pub(super) const KEY: [u8; 32] = [7u8; 32];
-const AT: &str = "2026-10-21T00:00:00+00:00";
+pub(super) const AT: &str = "2026-10-21T00:00:00+00:00";
 const TARGET: &str = "command.npm.install";
 
 pub(super) fn catalog(byte: char) -> String {
@@ -30,8 +30,8 @@ pub(super) fn catalog(byte: char) -> String {
 }
 
 pub(super) struct Home {
-    root: PathBuf,
-    db: Connection,
+    pub(super) root: PathBuf,
+    pub(super) db: Connection,
 }
 
 fn root() -> PathBuf {
@@ -58,12 +58,16 @@ impl Home {
                 actor_id_hash text not null, idempotency_key_hash text not null, nonce_hash text not null,
                 catalog_digest text not null, layers_json text not null, snapshot_json text not null,
                 snapshot_digest text not null, snapshot_mac text not null, transition_json text not null,
-                transition_digest text not null, transition_mac text not null, created_at text not null);
+                transition_digest text not null, transition_mac text not null, created_at text not null,
+                committed_at text);
              create table extension_control_catalog_manifest (
                 catalog_digest text primary key, manifest_json text not null, record_json text not null,
                 record_digest text not null, record_mac text not null, recorded_at text not null);
              create table sync_state (state_key text primary key, payload_json text not null);
-             create table guard_events (event_name text not null, payload_json text not null);",
+             create table guard_events (event_name text not null, payload_json text not null);
+             create table extension_control_authority_proof (
+                proof_id_hash text primary key, mutation_digest text not null,
+                transition_revision integer not null, reserved_at text not null, consumed_at text);",
         )
         .unwrap();
         Self { root, db }
@@ -94,6 +98,17 @@ impl Home {
         layers: &[ExtensionControlLayer],
         phase: &str,
     ) -> String {
+        self.commit_bound(revision, catalog_digest, layers, phase, None)
+    }
+
+    pub(super) fn commit_bound(
+        &self,
+        revision: i64,
+        catalog_digest: &str,
+        layers: &[ExtensionControlLayer],
+        phase: &str,
+        retained_pack: Option<&str>,
+    ) -> String {
         let layers_json = layers_to_json(layers).unwrap();
         let previous_digest = if revision == 1 {
             catalog('0')
@@ -106,13 +121,16 @@ impl Home {
                 )
                 .unwrap()
         };
-        let snapshot = object(json!({
+        let mut snapshot = object(json!({
             "revision": revision,
             "catalog_digest": catalog_digest,
             "layers_json": layers_json,
             "previous_digest": previous_digest,
             "committed_at": AT,
         }));
+        if let Some(pack) = retained_pack {
+            snapshot.insert("command_pack_record_digest".to_owned(), json!(pack));
+        }
         let (snapshot_json, snapshot_digest, snapshot_mac) =
             authenticated_record(&snapshot, &KEY, SNAPSHOT_PURPOSE).unwrap();
         let hashes = [
@@ -137,7 +155,7 @@ impl Home {
         self.db
             .execute(
                 "insert into extension_control_authority_transition values
-                 (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     revision,
                     revision - 1,
@@ -153,7 +171,8 @@ impl Home {
                     transition_json,
                     transition_digest,
                     transition_mac,
-                    AT
+                    AT,
+                    (phase == "committed").then_some(AT)
                 ],
             )
             .unwrap();
@@ -211,7 +230,7 @@ pub(super) fn object(value: Value) -> Map<String, Value> {
     map
 }
 
-fn anchor(revision: i64, snapshot_digest: &str, phase: &str) -> String {
+pub(super) fn anchor(revision: i64, snapshot_digest: &str, phase: &str) -> String {
     let payload =
         object(json!({ "revision": revision, "snapshot_digest": snapshot_digest, "phase": phase }));
     let (record, digest, mac) = authenticated_record(&payload, &KEY, ANCHOR_PURPOSE).unwrap();

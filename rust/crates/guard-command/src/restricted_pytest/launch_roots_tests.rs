@@ -256,3 +256,143 @@ fn the_sealed_system_program_directories_are_reachable() {
     assert!(outside(&root, "planted", tools.to_str().unwrap()));
     let _ = fs::remove_dir_all(&root);
 }
+
+/// The mode every fixture directory of a sealed tree is given. A grant
+/// requires that no account but this user or root can write any directory
+/// involved, and `create_dir_all` applies the process umask, so under a
+/// group-writable umask such as `002` the fixtures would otherwise be
+/// rejected for a reason the test is not about.
+const SEALED_MODE: u32 = 0o755;
+
+/// `path`, created with every directory it adds at or below `base` writable
+/// by its owner alone.
+fn sealed_dirs(base: &Path, path: &Path) {
+    fs::create_dir_all(path).unwrap();
+    for ancestor in path.ancestors().take_while(|dir| dir.starts_with(base)) {
+        fs::set_permissions(ancestor, fs::Permissions::from_mode(SEALED_MODE)).unwrap();
+    }
+}
+
+/// A scratch root under the build directory rather than the shared temporary
+/// directory. A tool directory is only granted when every directory above it
+/// is this user's or root's and no other account can write it, and `/tmp` is
+/// world-writable, so a tree built there can never be accepted. The build
+/// directory itself is sealed too, since the umask cargo created it under is
+/// not this test's to choose.
+fn sealed_scratch() -> PathBuf {
+    let build = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target");
+    let root = build.join("guard-launch-roots-sealed").join(format!(
+        "{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    ));
+    let _ = fs::remove_dir_all(&root);
+    sealed_dirs(&build, &root.join("workspace"));
+    root.canonicalize().unwrap()
+}
+
+/// Whether `program` is unreachable with `root` as the caller's HOME, so the
+/// answer does not depend on the account the tests run under.
+fn outside_at_home(root: &Path, program: &str, search_path: &str) -> bool {
+    let workspace = root.join("workspace");
+    launches_outside_exec_roots(
+        [(program, vec![Some(workspace.clone())])],
+        search_path,
+        Some(root),
+        &workspace,
+    )
+}
+
+#[test]
+fn a_tool_directory_inside_an_installed_package_tree_is_reachable() {
+    // The layout a harness puts on the agent shell's PATH: a vendored
+    // directory inside a platform package, named by the harness rather than
+    // `bin` or `shims`, holding the tool it wants always found.
+    let root = sealed_scratch();
+    let vendored = root.join(
+        "node_modules/@vendor/harness-cli-linux-x64/vendor/x86_64-unknown-linux-gnu/cli-path",
+    );
+    sealed_dirs(&root, &vendored);
+    tool(&vendored.join("rg"), "#!/bin/sh\nexit 0\n");
+    let search_path = format!("{}:/usr/bin:/bin", vendored.display());
+
+    assert!(!outside_at_home(&root, "rg", &search_path));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_link_directory_of_an_installed_package_tree_reaches_the_package_it_names() {
+    // `node_modules/.bin` holds links into the packages beside it, so the
+    // directory on PATH is not where the program it names actually lives.
+    let root = sealed_scratch();
+    let package = root.join("node_modules/harness-cli/bin");
+    let links = root.join("node_modules/.bin");
+    sealed_dirs(&root, &package);
+    sealed_dirs(&root, &links);
+    tool(&package.join("rg"), "#!/bin/sh\nexit 0\n");
+    std::os::unix::fs::symlink(package.join("rg"), links.join("rg")).unwrap();
+    let search_path = format!("{}:/usr/bin:/bin", links.display());
+
+    assert!(!outside_at_home(&root, "rg", &search_path));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_package_another_account_can_write_grants_no_tree() {
+    // The links in a `.bin` directory resolve into the packages beside it,
+    // so those directories are where the run would execute from. Sealing the
+    // directory on PATH says nothing about them: when one is writable by
+    // another account, that account picks the program, and the tree is not
+    // granted at all.
+    let root = sealed_scratch();
+    let package = root.join("node_modules/harness-cli/bin");
+    let links = root.join("node_modules/.bin");
+    sealed_dirs(&root, &package);
+    sealed_dirs(&root, &links);
+    tool(&package.join("rg"), "#!/bin/sh\nexit 0\n");
+    std::os::unix::fs::symlink(package.join("rg"), links.join("rg")).unwrap();
+    let search_path = format!("{}:/usr/bin:/bin", links.display());
+    assert!(!outside_at_home(&root, "rg", &search_path));
+
+    fs::set_permissions(&package, fs::Permissions::from_mode(0o775)).unwrap();
+    assert!(outside_at_home(&root, "rg", &search_path));
+    // The package directory itself, not only the link target's own file.
+    fs::set_permissions(&package, fs::Permissions::from_mode(SEALED_MODE)).unwrap();
+    let parent = package.parent().unwrap().to_path_buf();
+    fs::set_permissions(&parent, fs::Permissions::from_mode(0o775)).unwrap();
+    assert!(outside_at_home(&root, "rg", &search_path));
+
+    fs::set_permissions(&parent, fs::Permissions::from_mode(SEALED_MODE)).unwrap();
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_directory_outside_any_package_tree_is_still_unreachable() {
+    // The grant is the installed dependency tree, not every sealed directory
+    // the caller happens to put on PATH.
+    let root = sealed_scratch();
+    let loose = root.join("vendor/cli-path");
+    sealed_dirs(&root, &loose);
+    tool(&loose.join("rg"), "#!/bin/sh\nexit 0\n");
+    let search_path = format!("{}:/usr/bin:/bin", loose.display());
+
+    assert!(outside_at_home(&root, "rg", &search_path));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_package_tree_inside_the_workspace_grants_no_root_of_its_own() {
+    // The workspace is already executable inside the sandbox; a dependency
+    // tree below it must not widen the grant to anything above the workspace.
+    let root = sealed_scratch();
+    let links = root.join("workspace/node_modules/.bin");
+    let outer = root.join("node_modules/escaped/bin");
+    sealed_dirs(&root, &links);
+    sealed_dirs(&root, &outer);
+    tool(&outer.join("rg"), "#!/bin/sh\nexit 0\n");
+    std::os::unix::fs::symlink(outer.join("rg"), links.join("rg")).unwrap();
+    let search_path = format!("{}:/usr/bin:/bin", links.display());
+
+    assert!(outside_at_home(&root, "rg", &search_path));
+    let _ = fs::remove_dir_all(&root);
+}

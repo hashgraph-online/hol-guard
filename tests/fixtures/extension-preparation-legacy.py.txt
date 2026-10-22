@@ -17,13 +17,14 @@ from ..extension_builder.native_source_compiler import check_pack_cache
 from ..native_command_control_binding import NativeCommandProgramMetadata
 from . import lifecycle
 from .located_store import LocatedStore
-from .metadata_objects import ObjectStore, encoded, entries
+from .metadata_objects import ObjectStore, encoded
 from .cache_io import Lease, stage_archive
 from .pack_store import PackReader, durable_directory, read_object
-from .policy_lookup import lookup
 from .preparation_authority import publication
-from .revocations import check as check_revocation
 from .transport import cached_fetcher
+from extension_delivery_objects import entries
+from extension_delivery_policy_lookup import lookup
+from extension_delivery_revocations import check as check_revocation
 
 IDENTITY = re.compile(r"command\.[a-z0-9]+(?:[.-][a-z0-9]+)*")
 MAX_SELECTED = 32768

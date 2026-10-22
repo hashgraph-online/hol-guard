@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.daemon.native_review_allow_hint import hint_for_reviewed_command
 from codex_plugin_scanner.guard.hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -17,8 +19,15 @@ from tests.native_command_test_support import project_native_review_fixture, rea
 _UNSTAMPED = object()
 
 
-def _hint(command: str, tmp_path: Path, *, controls=(), native_result_override: dict[str, object] | None = None):
-    fixture = real_native_review_fixture(command, cwd=tmp_path, home_dir=tmp_path, controls=controls)
+def _hint(
+    command: str,
+    tmp_path: Path,
+    *,
+    controls=(),
+    native_result_override: dict[str, object] | None = None,
+    **fixture_options,
+):
+    fixture = real_native_review_fixture(command, cwd=tmp_path, home_dir=tmp_path, controls=controls, **fixture_options)
     reviewed = project_native_review_fixture(fixture, cwd=tmp_path, home_dir=tmp_path)
     native_result = {**fixture.payload, **(native_result_override or {})}
     return fixture, hint_for_reviewed_command(
@@ -52,6 +61,63 @@ def test_docker_version_format_hints_docker_sensitive_permission(tmp_path: Path)
     assert hint["catalog_digest"] == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     assert validated_extension_allow_hint(hint) == hint
     assert "Server.Version" not in repr(hint)
+
+
+_NEVER_ENROLLED = {"health": AuthorityHealth.UNENROLLED, "never_enrolled": True}
+_HINT_TARGETS = ("permission_ids", "rule_ids", "extension_ids", "relied_permission_ids")
+
+
+@pytest.mark.parametrize("command", ["docker context ls", "git fetch origin main"])
+def test_a_never_enrolled_device_is_hinted_what_enrolling_unlocks(tmp_path: Path, command: str) -> None:
+    fixture, hint = _hint(command, tmp_path, **_NEVER_ENROLLED)
+    _enrolled, enrolled_hint = _hint(command, tmp_path)
+
+    # A fresh install pauses these on packaged protection, before any authority
+    # exists. The hint names what the same Allow unlocks once it is enrolled.
+    assert fixture.snapshot.awaiting_enrollment
+    assert fixture.payload["reason_code"] == "native_command_review_required"
+    assert hint is not None and enrolled_hint is not None
+    assert {key: hint[key] for key in _HINT_TARGETS} == {key: enrolled_hint[key] for key in _HINT_TARGETS}
+    assert validated_extension_allow_hint(hint) == hint
+
+
+def test_docker_context_ls_on_a_fresh_install_names_the_docker_permission(tmp_path: Path) -> None:
+    _fixture, hint = _hint("docker context ls", tmp_path, **_NEVER_ENROLLED)
+
+    assert hint is not None
+    assert hint["permission_ids"] == ["command.container-runtime.permission.docker-sensitive"]
+    assert hint["extension_ids"] == ["command.container-runtime"]
+
+
+@pytest.mark.parametrize(
+    "health",
+    [
+        AuthorityHealth.UNENROLLED,
+        AuthorityHealth.TAMPERED,
+        AuthorityHealth.RECOVERY_REQUIRED,
+        AuthorityHealth.DEGRADED_UNACKNOWLEDGED,
+    ],
+)
+def test_a_lost_or_damaged_authority_is_not_hinted(tmp_path: Path, health: AuthorityHealth) -> None:
+    # Unenrolled with controls is an authority that was lost, not a new one.
+    fixture, hint = _hint("docker context ls", tmp_path, health=health)
+
+    assert not fixture.snapshot.awaiting_enrollment
+    assert hint is None
+
+
+def test_only_the_advisory_hint_reviews_a_never_enrolled_device(monkeypatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime import native_command_evaluation as module
+
+    fixture = real_native_review_fixture("docker context ls", cwd=tmp_path, home_dir=tmp_path, **_NEVER_ENROLLED)
+    reached: list[str] = []
+    monkeypatch.setattr(module, "review_pre_tool_native", lambda command, **_kwargs: reached.append(command))
+
+    options = {"guard_home": tmp_path, "extension_control_snapshot": fixture.snapshot, "record_health": False}
+    assert module.native_command_review("docker context ls", **options) is None
+    assert reached == []
+    assert module.native_command_review("docker context ls", admit_unenrolled=True, **options) is None
+    assert reached == ["docker context ls"]
 
 
 def test_github_unknown_hints_unknown_permission(tmp_path: Path) -> None:
@@ -208,6 +274,7 @@ def test_queue_hint_is_advisory_and_keeps_the_hook_route(monkeypatch, tmp_path: 
     assert hint["permission_ids"] == ["command.git.permission.unverified-fetch"]
     assert route == "native_resident"
     assert calls[0]["record_health"] is False
+    assert calls[0]["admit_unenrolled"] is True
     assert 0 < float(calls[0]["timeout_seconds"]) <= 0.5  # type: ignore[arg-type]
 
 

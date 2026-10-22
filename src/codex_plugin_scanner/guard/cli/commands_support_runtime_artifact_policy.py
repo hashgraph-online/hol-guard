@@ -36,6 +36,20 @@ def artifact_fact_risk_classes(facts: Mapping[str, object]) -> list[str]:
     return cast("list[str]", classes)
 
 
+def artifact_fact_content_hash(facts: Mapping[str, object]) -> str:
+    """The digest the resident hashed the artifact to.
+
+    A saved approval is keyed by this value, so a missing or empty answer is
+    no answer: the hook fails closed rather than keying a decision by a digest
+    this side computed.
+    """
+
+    digest = facts.get("content_sha256")
+    if not isinstance(digest, str) or not digest:
+        raise HookArtifactFactsUnavailableError
+    return digest
+
+
 def artifact_fact_skip_native_floor(facts: Mapping[str, object]) -> bool:
     """Whether the resident says the native command floor is skipped.
 
@@ -86,6 +100,7 @@ def runtime_policy_artifact_facts_batch(
     artifacts: Sequence[tuple[GuardArtifact, str]],
     *,
     guard_home: Path | None = None,
+    hash_metadata: Sequence[Mapping[str, object] | None] | None = None,
 ) -> list[dict[str, object]]:
     """Return the resident's facts for each ``(artifact, harness)`` pair.
 
@@ -96,21 +111,49 @@ def runtime_policy_artifact_facts_batch(
 
     One evaluation's artifacts are asked for together, so reading facts costs
     the hook a single resident round trip however many artifacts it holds.
+
+    ``hash_metadata`` names, per artifact, the metadata whose digest keys a
+    saved approval for it; the resident answers ``content_sha256`` for each
+    artifact given one. A hook stamps its runtime posture onto the artifact's
+    metadata after fixing that identity, so the identity metadata is passed
+    rather than re-read from the artifact here.
     """
 
+    if hash_metadata is not None and len(hash_metadata) != len(artifacts):
+        raise ValueError("hash_metadata must name one entry per artifact")
+    identity_metadata = tuple(hash_metadata) if hash_metadata is not None else (None,) * len(artifacts)
+    entries: list[dict[str, object]] = []
+    for (artifact, harness), identity in zip(artifacts, identity_metadata, strict=True):
+        entry: dict[str, object] = {
+            "artifact_type": artifact.artifact_type,
+            "metadata": artifact.metadata,
+            "configured_override": _typed_text(
+                config.resolve_action_override(
+                    _canonical_harness_name(harness), artifact.artifact_id, artifact.publisher
+                )
+            ),
+        }
+        if identity is not None:
+            # The digest is taken over the artifact's identity, so the fields
+            # it covers ride along only for the caller that asked for one.
+            entry.update(
+                {
+                    "artifact_id": artifact.artifact_id,
+                    "name": artifact.name,
+                    "harness": artifact.harness,
+                    "source_scope": artifact.source_scope,
+                    "config_path": artifact.config_path,
+                    "command": artifact.command,
+                    "args": list(artifact.args),
+                    "url": artifact.url,
+                    "transport": artifact.transport,
+                    "publisher": artifact.publisher,
+                    "hash_metadata": identity,
+                }
+            )
+        entries.append(entry)
     return native_hook_artifact_facts(
-        [
-            {
-                "artifact_type": artifact.artifact_type,
-                "metadata": artifact.metadata,
-                "configured_override": _typed_text(
-                    config.resolve_action_override(
-                        _canonical_harness_name(harness), artifact.artifact_id, artifact.publisher
-                    )
-                ),
-            }
-            for artifact, harness in artifacts
-        ],
+        entries,
         guard_home=guard_home if guard_home is not None else config.guard_home,
     )
 

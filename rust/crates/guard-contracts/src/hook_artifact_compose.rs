@@ -234,6 +234,16 @@ pub struct PolicyArtifactFactsV1 {
     /// need not read the artifact to decide whether to ask for the floor.
     #[serde(default)]
     pub skip_native_floor: bool,
+    /// The digest a saved approval for this artifact is keyed by, present
+    /// only when the caller asked the facts op for it.
+    ///
+    /// No composition reads this: it is the artifact's approval identity, not
+    /// a fact a verdict turns on. It rides with the facts because the caller
+    /// that needs the digest is the hook that already asks for them, and a
+    /// second request for one SHA-256 would put the resident on the hook's
+    /// critical path again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_sha256: Option<String>,
 }
 
 impl PolicyArtifactFactsV1 {

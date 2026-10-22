@@ -7,6 +7,7 @@ import {
   HiMiniInbox,
   HiMiniInformationCircle,
   HiMiniPuzzlePiece,
+  HiMiniRocketLaunch,
   HiMiniShieldCheck,
   HiMiniSquares2X2,
 } from "react-icons/hi2";
@@ -124,6 +125,15 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
     view: "evidence",
     group: "manage",
     icon: HiMiniDocumentText,
+  },
+  {
+    href: "/releases",
+    label: "Releases",
+    shortLabel: "Releases",
+    description: "Published versions and what each one changed",
+    view: "releases",
+    group: "support",
+    icon: HiMiniRocketLaunch,
   },
   {
     href: "/about",
