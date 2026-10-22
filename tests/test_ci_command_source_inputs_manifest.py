@@ -30,6 +30,30 @@ def _crate_manifest(crate: str) -> dict:
     return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
+def _dependency_tables(manifest: dict, sections: tuple[str, ...]) -> list[dict]:
+    """Every dependency table in a manifest, per-target ones included.
+
+    Cargo also accepts a path dependency under `target.<cfg>.dependencies`, so a
+    walk that reads only the top-level tables misses a platform-gated crate and
+    leaves it out of the fingerprint.
+    """
+    tables: list[dict] = []
+    for section in sections:
+        table = manifest.get(section)
+        if isinstance(table, dict):
+            tables.append(table)
+    targets = manifest.get("target")
+    if isinstance(targets, dict):
+        for gated in targets.values():
+            if not isinstance(gated, dict):
+                continue
+            for section in sections:
+                table = gated.get(section)
+                if isinstance(table, dict):
+                    tables.append(table)
+    return tables
+
+
 def _production_closure() -> set[str]:
     """Normal and build path-dependency closure; dev-only crates stay out."""
     seen: set[str] = set()
@@ -40,8 +64,8 @@ def _production_closure() -> set[str]:
             continue
         seen.add(crate)
         manifest = _crate_manifest(crate)
-        for section in ("dependencies", "build-dependencies"):
-            for spec in manifest.get(section, {}).values():
+        for table in _dependency_tables(manifest, ("dependencies", "build-dependencies")):
+            for spec in table.values():
                 path = spec.get("path") if isinstance(spec, dict) else None
                 if not path:
                     continue
@@ -273,8 +297,9 @@ def test_scoped_host_lib_mounts_stay_inside_the_closure() -> None:
 def _path_dependencies(crate: str) -> set[str]:
     manifest = _crate_manifest(crate)
     names = set()
-    for section in ("dependencies", "build-dependencies", "dev-dependencies"):
-        for dep_name, spec in manifest.get(section, {}).items():
+    sections = ("dependencies", "build-dependencies", "dev-dependencies")
+    for table in _dependency_tables(manifest, sections):
+        for dep_name, spec in table.items():
             if isinstance(spec, dict) and "path" in spec:
                 names.add(dep_name)
     return names
@@ -289,30 +314,74 @@ def test_catalog_data_crate_has_no_path_back_to_the_facade() -> None:
     assert "guard-command-catalog-data" not in host_paths
 
 
-def test_python_mirror_follows_the_manifest(tmp_path) -> None:
+MANIFEST_RELATIVE = "build_support/command_source_inputs.v2.json"
+
+
+def _fake_workspace(root: Path, domain: str) -> Path:
+    """Rebuild the manifest's shape under `root` with placeholder crate sources.
+
+    The manifest written here leaves itself out of `files`, so two workspaces
+    built with different domains differ by the domain alone.
+    """
+    manifest = _manifest()
+    manifest["identity_domain"] = domain
+    manifest["files"] = [
+        relative for relative in manifest["files"] if relative != MANIFEST_RELATIVE
+    ]
+    workspace = root / "rust"
+    workspace.mkdir(parents=True)
+    (workspace / "Cargo.toml").write_text("[workspace]\n", encoding="utf-8")
+    (workspace / "Cargo.lock").write_text("version = 4\n", encoding="utf-8")
+    for relative in manifest["files"]:
+        target = workspace / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            (WORKSPACE / relative).read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    manifest_path = workspace / MANIFEST_RELATIVE
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    for crate in manifest["crates"]:
+        directory = workspace / "crates" / crate
+        directory.mkdir(parents=True)
+        (directory / "Cargo.toml").write_text("[package]\n", encoding="utf-8")
+    for crate, relatives in manifest.get("crate_files", {}).items():
+        directory = workspace / "crates" / crate
+        (directory / "Cargo.toml").parent.mkdir(parents=True, exist_ok=True)
+        (directory / "Cargo.toml").write_text("[package]\n", encoding="utf-8")
+        for relative in relatives:
+            target = directory / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("fn fake() {}\n", encoding="utf-8")
+    return root
+
+
+def test_python_mirror_follows_the_manifest() -> None:
     """The maintainer-side digest mirror consumes the same checked-in manifest."""
     from scripts.core_command_build_inputs import implementation_digest
 
     digest = implementation_digest(ROOT)
     assert len(digest) == 64 and all(c in "0123456789abcdef" for c in digest)
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-    manifest["identity_domain"] = "hol-guard.native-source-implementation.mutated"
-    fake = tmp_path / "rust"
-    fake.mkdir()
-    (fake / "Cargo.toml").write_text("[workspace]\n", encoding="utf-8")
-    (fake / "Cargo.lock").write_text("version = 4\n", encoding="utf-8")
-    for relative in manifest["files"]:
-        source = WORKSPACE / relative
-        target = fake / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
-    (fake / "build_support" / "command_source_inputs.v2.json").write_text(json.dumps(manifest), encoding="utf-8")
-    for crate in manifest["crates"]:
-        (fake / "crates" / crate).mkdir(parents=True)
-        (fake / "crates" / crate / "Cargo.toml").write_text("[package]\n", encoding="utf-8")
-    for crate, relatives in manifest.get("crate_files", {}).items():
-        for relative in relatives:
-            target = fake / "crates" / crate / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text("fn fake() {}\n", encoding="utf-8")
-    assert implementation_digest(tmp_path) != digest
+
+
+def test_mirror_digest_covers_every_declared_input(tmp_path) -> None:
+    """Editing any declared source moves the digest."""
+    from scripts.core_command_build_inputs import implementation_digest
+
+    domain = _manifest()["identity_domain"]
+    root = _fake_workspace(tmp_path / "sources", domain)
+    before = implementation_digest(root)
+    crate, relatives = next(iter(_manifest()["crate_files"].items()))
+    edited = root / "rust" / "crates" / crate / relatives[0]
+    edited.write_text("fn fake() { let _ = 1; }\n", encoding="utf-8")
+    assert implementation_digest(root) != before
+
+
+def test_identity_domain_separates_otherwise_identical_sources(tmp_path) -> None:
+    """Same files, same bytes; only the declared domain differs."""
+    from scripts.core_command_build_inputs import implementation_digest
+
+    domain = _manifest()["identity_domain"]
+    first = _fake_workspace(tmp_path / "first", domain)
+    second = _fake_workspace(tmp_path / "second", f"{domain}.mutated")
+    assert implementation_digest(first) != implementation_digest(second)
