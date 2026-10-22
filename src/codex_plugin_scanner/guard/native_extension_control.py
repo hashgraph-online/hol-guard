@@ -72,6 +72,26 @@ PREVIEW_LIMIT_CODES: Final = frozenset(
 )
 
 
+# Why the resident refuses a local mutation (`EXTENSION_CONTROL_MUTATION_*` in
+# `guard-contracts`). A refusal describes the draft, so it is a normal reply;
+# a code outside this set is a reply this client cannot interpret.
+MUTATION_REFUSAL_CODES: Final = frozenset(
+    {
+        "layer_limit_exceeded",
+        "layer_control_limit_exceeded",
+        "control_limit_exceeded",
+        "unknown_extension",
+        "unknown_permission",
+        "duplicate_control_target",
+        "catalog_conflict",
+        "managed_layer_mutation",
+        "immutable_extension",
+        "immutable_permission",
+        "invalid_mutation",
+    }
+)
+
+
 class NativeExtensionControlError(RuntimeError):
     """No authoritative answer; ``code`` says why, for diagnostics only."""
 
@@ -134,6 +154,14 @@ class ScenarioAnswer:
 
     global_lockdown: bool
     items: tuple[ControlAnswer, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class MutationVerdict:
+    """The resident's judgement of a mutation: why it is refused, or its canonical layers."""
+
+    refusal: str | None
+    layers: tuple[ExtensionControlLayer, ...]
 
 
 def _invalid() -> RuntimeError:
@@ -471,6 +499,176 @@ def preview_control_mutation(
         lambda payload: render(payload["preview"], _invalid),
         operation=_PREVIEW_OPERATION,
     )
+
+
+def _mutation_registry_wire(
+    registry: CommandSafetyExtensionRegistry,
+    overlay: Iterable[Any],
+) -> dict[str, object]:
+    return {
+        "extensions": [
+            {"extension_id": extension.extension_id, "aliases": list(extension.aliases), "required": extension.required}
+            for extension in registry.extensions
+        ],
+        "permissions": [
+            {"permission_id": permission.permission_id, "configurable": permission.configurable}
+            for permission in registry.permissions
+        ],
+        "overlay": [
+            {
+                "extension_id": extension.extension_id,
+                "required": extension.required,
+                "permissions": [
+                    {"permission_id": permission.permission_id, "configurable": permission.configurable}
+                    for permission in extension.permissions
+                ],
+            }
+            for extension in overlay
+        ],
+    }
+
+
+_LAYER_FIELDS: Final = {
+    "schema_version": str,
+    "kind": str,
+    "catalog_digest": str,
+    "global_lockdown": bool,
+    "controls": list,
+}
+
+
+def _layer(value: object) -> ExtensionControlLayer:
+    fields = _shape(value, _LAYER_FIELDS)
+    controls: list[ExtensionControl] = []
+    for raw in fields["controls"]:
+        entry = _shape(raw, {"target_kind": str, "target_id": str, "state": str})
+        try:
+            target = ControlTarget(ControlTargetKind(entry["target_kind"]), entry["target_id"])
+            controls.append(ExtensionControl(target, ControlState(entry["state"])))
+        except ValueError:
+            raise _invalid() from None
+    try:
+        return ExtensionControlLayer(
+            fields["schema_version"],
+            ControlLayerKind(fields["kind"]),
+            fields["catalog_digest"],
+            fields["global_lockdown"],
+            tuple(controls),
+        )
+    except ValueError:
+        raise _invalid() from None
+
+
+def _same_layer(asked: ExtensionControlLayer, answered: ExtensionControlLayer) -> bool:
+    """Whether ``answered`` is ``asked`` with only extension ids renamed."""
+
+    return (
+        (asked.schema_version, asked.kind, asked.catalog_digest, asked.global_lockdown)
+        == (answered.schema_version, answered.kind, answered.catalog_digest, answered.global_lockdown)
+        and len(asked.controls) == len(answered.controls)
+        and all(
+            (before.target.kind, before.state) == (after.target.kind, after.state)
+            and (before.target.kind is ControlTargetKind.EXTENSION or before.target.target_id == after.target.target_id)
+            for before, after in zip(asked.controls, answered.controls, strict=True)
+        )
+    )
+
+
+def _refusal(payload: dict[str, Any]) -> str | None:
+    refusal = payload["refusal"]
+    if refusal is not None and refusal not in MUTATION_REFUSAL_CODES:
+        raise _invalid()
+    return refusal
+
+
+def _mutation_verdict(payload: dict[str, Any], asked: Sequence[ExtensionControlLayer]) -> MutationVerdict:
+    refusal = _refusal(payload)
+    layers = tuple(_layer(raw) for raw in payload["layers"])
+    # A refusal carries no layers; an acceptance carries the asked layers.
+    if len(layers) != (len(asked) if refusal is None else 0):
+        raise _invalid()
+    if not all(_same_layer(before, after) for before, after in zip(asked, layers, strict=False)):
+        raise _invalid()
+    return MutationVerdict(refusal, layers)
+
+
+_REFUSAL_FIELDS: Final = {"refusal": _OPT_STR}
+_MUTATION_FIELDS: Final = {"refusal": _OPT_STR, "layers": list}
+
+
+def _ask_refusal(query: dict[str, object], guard_home: Path | None) -> str | None:
+    """Ask a query whose answer is only the reason it refuses, if it does."""
+
+    if _wire_bytes(query) > _MAX_BATCH_BYTES:
+        raise _too_large()
+    return _ask(query, guard_home, _REFUSAL_FIELDS, _refusal)
+
+
+def _ask_mutation(
+    query: dict[str, object],
+    guard_home: Path | None,
+    asked: Sequence[ExtensionControlLayer],
+) -> MutationVerdict:
+    if _wire_bytes(query) > _MAX_BATCH_BYTES:
+        raise _too_large()
+    return _ask(query, guard_home, _MUTATION_FIELDS, lambda payload: _mutation_verdict(payload, asked))
+
+
+def mutation_bounds(
+    layers: Sequence[ExtensionControlLayer],
+    *,
+    guard_home: Path | None = None,
+) -> str | None:
+    """The reason ``layers`` break the bounds of one mutation, or ``None`` when they stay within them."""
+
+    query: dict[str, object] = {"kind": "mutation_bounds", "layers": [_layer_wire(layer) for layer in layers]}
+    return _ask_refusal(query, guard_home)
+
+
+def validate_mutation(
+    registry: CommandSafetyExtensionRegistry,
+    overlay: Iterable[Any],
+    *,
+    catalog_digest: str,
+    requested_catalog_digest: str,
+    current_layers: Sequence[ExtensionControlLayer],
+    layers: Sequence[ExtensionControlLayer],
+    guard_home: Path | None = None,
+) -> MutationVerdict:
+    """Whether ``layers`` may replace ``current_layers`` against the catalog served as ``catalog_digest``.
+
+    ``overlay`` is the request-local extension metadata consulted after
+    ``registry``. An accepted verdict carries ``layers`` with every extension
+    target named by its canonical id.
+    """
+
+    query: dict[str, object] = {
+        "kind": "mutation_validate",
+        "registry": _mutation_registry_wire(registry, overlay),
+        "catalog_digest": catalog_digest,
+        "requested_catalog_digest": requested_catalog_digest,
+        "current_layers": [_layer_wire(layer) for layer in current_layers],
+        "layers": [_layer_wire(layer) for layer in layers],
+    }
+    return _ask_mutation(query, guard_home, layers)
+
+
+def mutability_validate(
+    registry: CommandSafetyExtensionRegistry,
+    current_layers: Sequence[ExtensionControlLayer],
+    layers: Sequence[ExtensionControlLayer],
+    *,
+    guard_home: Path | None = None,
+) -> str | None:
+    """The reason ``layers`` change the managed layer or an immutable control of ``current_layers``, if they do."""
+
+    query: dict[str, object] = {
+        "kind": "mutability_validate",
+        "registry": _mutation_registry_wire(registry, ()),
+        "current_layers": [_layer_wire(layer) for layer in current_layers],
+        "layers": [_layer_wire(layer) for layer in layers],
+    }
+    return _ask_refusal(query, guard_home)
 
 
 def resolve_extension_controls(

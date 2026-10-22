@@ -233,13 +233,15 @@ def test_the_client_budgets_add_up_the_resident_budgets_they_wait_for() -> None:
     assert native_extension_control_authority._TIMEOUT_SECONDS == timeouts.AUTHORITY_ROUND_TIMEOUT_S
     assert store_extension_control_authority_reads._MAX_READ_ROUNDS == timeouts.AUTHORITY_READ_ROUNDS
     assert native_extension_control._TIMEOUT_SECONDS == timeouts.COMPOSE_TIMEOUT_S
+    assert native_extension_control._TIMEOUT_SECONDS == timeouts.MUTATION_TIMEOUT_S
     assert native_extension_control._PREVIEW_TIMEOUT_SECONDS == timeouts.SEMANTIC_PREVIEW_TIMEOUT_S
     assert store_extension_control_authority_commit._MAX_COMMIT_ROUNDS == timeouts.COMMIT_PLAN_ROUNDS
 
     read = timeouts.AUTHORITY_ROUND_TIMEOUT_S * timeouts.AUTHORITY_READ_ROUNDS
     assert read == timeouts.AUTHORITY_READ_TIMEOUT_S
-    # A preview: two authority reads, the composition and the semantic preview.
-    assert 2 * read + 5.0 + 15.0 <= timeouts.PREVIEW_REQUEST_TIMEOUT_S
+    # A preview: two authority reads, the three mutation asks, the composition and the semantic preview.
+    assert timeouts.PREVIEW_MUTATION_ASKS == 3
+    assert 2 * read + 3 * 5.0 + 5.0 + 15.0 <= timeouts.PREVIEW_REQUEST_TIMEOUT_S
     # An apply: its authority reads, the semantic preview and the commit rounds.
     assert 4 * read + 15.0 + 4 * 10.0 <= timeouts.APPLY_REQUEST_TIMEOUT_S
     assert timeouts.APPLY_REQUEST_TIMEOUT_S >= timeouts.PREVIEW_REQUEST_TIMEOUT_S

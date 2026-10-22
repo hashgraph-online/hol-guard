@@ -25,15 +25,24 @@ AUTHORITY_READ_TIMEOUT_S: Final = AUTHORITY_ROUND_TIMEOUT_S * AUTHORITY_READ_ROU
 # (``native_extension_control``).
 COMPOSE_TIMEOUT_S: Final = 5.0
 SEMANTIC_PREVIEW_TIMEOUT_S: Final = 15.0
+# One mutation ask (``native_extension_control``): a preview makes three in turn,
+# for the draft's bounds, its validation and what the prepared candidate lets it change.
+MUTATION_TIMEOUT_S: Final = 5.0
+PREVIEW_MUTATION_ASKS: Final = 3
 # The most rounds one commit plans (``store_extension_control_authority_commit``).
 COMMIT_PLAN_ROUNDS: Final = 4
 # Loopback transport, the daemon's own work and the answer.
 TRANSPORT_MARGIN_S: Final = 10.0
 
 # A preview reads the authority twice (the snapshot it builds on, and the read
-# that confirms nothing moved), composes the proposed layers and previews them.
+# that confirms nothing moved), asks the resident to judge the draft, composes
+# the proposed layers and previews them.
 PREVIEW_REQUEST_TIMEOUT_S: Final = (
-    2 * AUTHORITY_READ_TIMEOUT_S + COMPOSE_TIMEOUT_S + SEMANTIC_PREVIEW_TIMEOUT_S + TRANSPORT_MARGIN_S
+    2 * AUTHORITY_READ_TIMEOUT_S
+    + PREVIEW_MUTATION_ASKS * MUTATION_TIMEOUT_S
+    + COMPOSE_TIMEOUT_S
+    + SEMANTIC_PREVIEW_TIMEOUT_S
+    + TRANSPORT_MARGIN_S
 )
 # An apply reads the authority for its snapshot, for the managed binding and for
 # the current layers inside the commit, and for the composed view after it; it

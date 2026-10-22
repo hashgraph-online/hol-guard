@@ -181,6 +181,27 @@ fn decide(request: &ExtensionControlRequestV1) -> Result<ExtensionControlPayload
                 proposed_layers,
             )?,
         }),
+        ExtensionControlQueryV1::MutationBounds { layers } => {
+            Ok(crate::extension_control_mutation_op::bounds(layers))
+        }
+        ExtensionControlQueryV1::MutationValidate {
+            registry,
+            catalog_digest,
+            requested_catalog_digest,
+            current_layers,
+            layers,
+        } => crate::extension_control_mutation_op::validate(
+            registry,
+            catalog_digest,
+            requested_catalog_digest,
+            current_layers,
+            layers,
+        ),
+        ExtensionControlQueryV1::MutabilityValidate {
+            registry,
+            current_layers,
+            layers,
+        } => crate::extension_control_mutation_op::mutability(registry, current_layers, layers),
     }
 }
 
