@@ -95,6 +95,48 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.54.0](https://github.com/hashgraph-online/hol-guard/compare/v3.53.0...v3.54.0) (2026-10-22)
+
+
+### Features
+
+* **dashboard:** add a Releases tab showing every published version and what it changed ([#5588](https://github.com/hashgraph-online/hol-guard/issues/5588)) ([20ee8c4](https://github.com/hashgraph-online/hol-guard/commit/20ee8c44d1a7c6385d328b601e0d2b7a9574f79c))
+* **extensions:** decide the Extensions allow hint in the native resident ([#5591](https://github.com/hashgraph-online/hol-guard/issues/5591)) ([8ec95c8](https://github.com/hashgraph-online/hol-guard/commit/8ec95c8d9acd9454da3b23169ae53a99dd628753))
+* **hook:** decide the JSON document's exit status in the native runtime ([#5564](https://github.com/hashgraph-online/hol-guard/issues/5564)) ([2e5ab3f](https://github.com/hashgraph-online/hol-guard/commit/2e5ab3f1204b628c8cb2a91b7fd12c1b0fe4e556))
+* **inventory:** port the serializer half of the inventory redaction seam ([#5524](https://github.com/hashgraph-online/hol-guard/issues/5524)) ([68894da](https://github.com/hashgraph-online/hol-guard/commit/68894da860886d7bcd5b30ed2f36d30d1fc95c7e))
+* **mcp:** add obsidian-kanban MCP server contribution and trust binding ([#5631](https://github.com/hashgraph-online/hol-guard/issues/5631)) ([56bef0e](https://github.com/hashgraph-online/hol-guard/commit/56bef0e89ee67e8f80a7e6edbd4c739ed23ff911))
+* **native:** compute the extension-control semantic preview in the resident ([#5573](https://github.com/hashgraph-online/hol-guard/issues/5573)) ([ebe86c2](https://github.com/hashgraph-online/hol-guard/commit/ebe86c26ec6d369607bff59af054e6d4f553a467))
+* **native:** seal the managed-controls activation and publication epoch in the resident ([#5572](https://github.com/hashgraph-online/hol-guard/issues/5572)) ([4e6f900](https://github.com/hashgraph-online/hol-guard/commit/4e6f90000fd3ae09c4e2693fd0e1c959096bdf32))
+* **native:** spell the artifact approval key in the resident ([#5587](https://github.com/hashgraph-online/hol-guard/issues/5587)) ([a78d7f0](https://github.com/hashgraph-online/hol-guard/commit/a78d7f0883b27f678ed372396c454d5362f0303a))
+
+
+### Bug Fixes
+
+* **catalog:** drop the npx-only flag from the uvx example in the command oracle ([#5603](https://github.com/hashgraph-online/hol-guard/issues/5603)) ([4904077](https://github.com/hashgraph-online/hol-guard/commit/4904077f44ee036d2e0cae2ada5934c2a871c023))
+* **catalog:** reuse verified catalog object reads so extension publication meets its deadline ([#5622](https://github.com/hashgraph-online/hol-guard/issues/5622)) ([a62a8fd](https://github.com/hashgraph-online/hol-guard/commit/a62a8fda5090e3f475bf745c1b4117646b99674b))
+* **ci:** measure soak RSS growth after the worker pool fills ([#5627](https://github.com/hashgraph-online/hol-guard/issues/5627)) ([437c6be](https://github.com/hashgraph-online/hol-guard/commit/437c6be2b6623b1bc305b67e4601a571e164de4c))
+* **ci:** pin the Gauntlet image to Node.js 22.23.4 ([#5582](https://github.com/hashgraph-online/hol-guard/issues/5582)) ([638043d](https://github.com/hashgraph-online/hol-guard/commit/638043dcd1ece7f3dccbb7078aa3ce9aa40a3ea9))
+* clear the macOS and Windows nightly test failures ([#5602](https://github.com/hashgraph-online/hol-guard/issues/5602)) ([985a290](https://github.com/hashgraph-online/hol-guard/commit/985a2905c792efc541fdadc9835c5b4651f0461b))
+* **command:** keep a write beside a Git listing reviewable instead of blocked ([#5585](https://github.com/hashgraph-online/hol-guard/issues/5585)) ([5209ba9](https://github.com/hashgraph-online/hol-guard/commit/5209ba9dfddce1e034c36e6cb402d64c881fd9ec))
+* **command:** keep pip listings quiet when the session exports XDG_CONFIG_HOME ([#5595](https://github.com/hashgraph-online/hol-guard/issues/5595)) ([2fc981e](https://github.com/hashgraph-online/hol-guard/commit/2fc981e80bc249a0ab642b47d069b189823062ff))
+* **command:** run a Python package listing inside the workspace sandbox ([#5600](https://github.com/hashgraph-online/hol-guard/issues/5600)) ([6aba200](https://github.com/hashgraph-online/hol-guard/commit/6aba2009686b57f1e8343e0a5b7babadb4171e57))
+* **dashboard:** ask for a code when an extension save outlives a recent proof ([#5597](https://github.com/hashgraph-online/hol-guard/issues/5597)) ([055f046](https://github.com/hashgraph-online/hol-guard/commit/055f04682a0b5ee10c0c14e7163aaf26d8873ed4)), closes [#5594](https://github.com/hashgraph-online/hol-guard/issues/5594)
+* **dashboard:** ask hol.org for the page of releases it will actually send ([#5609](https://github.com/hashgraph-online/hol-guard/issues/5609)) ([230b6a2](https://github.com/hashgraph-online/hol-guard/commit/230b6a2634d466cc96abc92c342bab4e247608b3))
+* **extensions:** keep connector discovery working on a long history ([#5596](https://github.com/hashgraph-online/hol-guard/issues/5596)) ([52da7a6](https://github.com/hashgraph-online/hol-guard/commit/52da7a6132ab643030de160c1e0f00f28dc223b4))
+* **extensions:** read an installed authoring context through one verified runtime ([#5613](https://github.com/hashgraph-online/hol-guard/issues/5613)) ([4d57462](https://github.com/hashgraph-online/hol-guard/commit/4d57462fdba6c40e726308b909c0d1b8771f764c))
+* **gauntlet:** judge a declared benign exit and a proven contained rerun as the results they are ([#5583](https://github.com/hashgraph-online/hol-guard/issues/5583)) ([87b5be4](https://github.com/hashgraph-online/hol-guard/commit/87b5be49878f601e720689642bf6ab1cea475295))
+* **gauntlet:** judge the two benign native cases by what the host and redactor actually write ([#5635](https://github.com/hashgraph-online/hol-guard/issues/5635)) ([a5b4001](https://github.com/hashgraph-online/hol-guard/commit/a5b4001ea37d93c3d84208ce0a77d998012aaa8b))
+* **guard:** hold commands that reach a known-bad host for review ([#5557](https://github.com/hashgraph-online/hol-guard/issues/5557)) ([7410859](https://github.com/hashgraph-online/hol-guard/commit/74108590f6b2b5a7947193f447bd775959ff1da0))
+* **guard:** name the exact approved action on remembered rules ([#5576](https://github.com/hashgraph-online/hol-guard/issues/5576)) ([2fb0e18](https://github.com/hashgraph-online/hol-guard/commit/2fb0e18d6e2d0b6bb5d8cac943c8283f8cbc2d2c))
+* **hook:** the resident hashes the artifact a saved approval is keyed by ([#5546](https://github.com/hashgraph-online/hol-guard/issues/5546)) ([5aae859](https://github.com/hashgraph-online/hol-guard/commit/5aae859011c2eb37ba10b0e0baeb94f1897cd572))
+* **native:** contain a run whose tool directory sits in an installed package tree ([#5593](https://github.com/hashgraph-online/hol-guard/issues/5593)) ([a1a0a8a](https://github.com/hashgraph-online/hol-guard/commit/a1a0a8ada6afd25bcee6cbed8c4bfebc5ff91cfa))
+* **native:** stop charging a requested resident shutdown to the crash-loop budget ([#5621](https://github.com/hashgraph-online/hol-guard/issues/5621)) ([734eec6](https://github.com/hashgraph-online/hol-guard/commit/734eec6f58eb3806285b5a8024ea5b792948ecd9))
+
+
+### Documentation
+
+* **changelog:** correct two garbled release-note lines ([#5590](https://github.com/hashgraph-online/hol-guard/issues/5590)) ([4522ca6](https://github.com/hashgraph-online/hol-guard/commit/4522ca6ce25974e892024c9b289c255ba3d20386))
+
 ## [3.53.0](https://github.com/hashgraph-online/hol-guard/compare/v3.52.0...v3.53.0) (2026-10-21)
 
 

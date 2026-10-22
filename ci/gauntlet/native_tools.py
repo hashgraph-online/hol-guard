@@ -12,6 +12,7 @@ from typing import Any
 from .catalog import Scenario
 from .command_outputs import _text
 from .input_evidence import post_input_matches
+from .parent_fixtures import PARENT_DIRECTORY, PARENT_WORKSPACE_CASE
 from .proofs import _edit_path, _path
 from .review_fixtures import (
     GITHUB_LOOKUP_CASE,
@@ -423,7 +424,7 @@ def _background_read_error(calls: list[dict[str, Any]], *, require_steps: bool =
                 # start-result label. A free-standing word such as "job"
                 # is not the process ID and must never satisfy a selector.
                 start_id = re.compile(
-                    r"(?:background\s+job|job[_\s]+id|process[_\s]+id)"
+                    r"(?:background(?:ed)?(?:\s+as)?\s+job|job[_\s]+id|process[_\s]+id)"
                     r"\s*[:=#]?\s*([A-Za-z0-9_]+(?:[.-][A-Za-z0-9_]+)*)",
                     re.IGNORECASE,
                 )
@@ -595,11 +596,22 @@ def native_tools_scope_error(
             return "delegated work used an unexpected tool"
     if any(call["name"] not in allowed for call in calls if call["id"] not in set(delegated) | bridged):
         return "the model used a tool outside the scenario"
-    # Evidence names the fixture root `{{fixture}}`; the catalog spells it `{{root}}` so
-    # the prompt a model reads does not frame ordinary work as a fixture.
-    listed = {command.replace("{{root}}", "{{fixture}}") for command in scenario.commands}
+    def spelled(command: object) -> object:
+        if not isinstance(command, str):
+            return command
+        # Evidence names the fixture root `{{fixture}}`; the catalog spells it `{{root}}` so
+        # the prompt a model reads does not frame ordinary work as a fixture.
+        command = command.replace("{{root}}", "{{fixture}}")
+        # The parent-search session starts in the directory holding the repository, so the
+        # redactor writes that prefix as the workspace while the catalog spells it below
+        # the home. Both sides resolve to one path; compare them under one spelling.
+        if scenario.id == PARENT_WORKSPACE_CASE:
+            command = command.replace("{{home}}/" + PARENT_DIRECTORY, "{{workspace}}")
+        return command
+
+    listed = {spelled(command) for command in scenario.commands}
     for call in calls:
-        if call["name"] == "bash" and call["args"].get("command") not in listed:
+        if call["name"] == "bash" and spelled(call["args"].get("command")) not in listed:
             return "the model ran a shell command the scenario did not list"
     if scenario.id == WORKTREE_CASE and (scope := _linked_worktree_error(calls, require_steps=False)):
         return scope
@@ -632,7 +644,7 @@ def native_tools_scope_error(
         return scope
     if not set(scenario.required_tools) <= {call["name"] for call in calls}:
         return "the model did not use every tool the scenario names"
-    ran = {call["args"].get("command") for call in calls if call["name"] == "bash"}
+    ran = {spelled(call["args"].get("command")) for call in calls if call["name"] == "bash"}
     if listed - ran:
         return "the model skipped a listed shell command"
     if scenario.id == SESSION_SHELL_CASE and not guard_denied:
