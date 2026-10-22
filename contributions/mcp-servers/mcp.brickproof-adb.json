@@ -3,7 +3,7 @@
   "id": "mcp.brickproof-adb",
   "version": "1.0.0",
   "name": "brickproof-adb",
-  "description": "Lets an agent operate your own Android devices over ADB: screen, input, installs and package changes. Reading the device stays automatic; input, installs, package changes, file pushes, shell and connecting new devices are reviewed. The server adds its own guard rails: dry run by default, a protected set read off the device, a network guard and one-call rollback. Off until you turn it on.",
+  "description": "Lets an agent operate your own Android devices over ADB: screen, input, installs and package changes. Reading the device stays automatic; input, installs, package changes, file transfers, shell and connecting new devices are reviewed. The server adds its own guard rails: dry run by default, a protected set read off the device, a network guard and one-call rollback. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -38,7 +38,7 @@
     { "name": "adb_uninstall", "state": "review" },
     { "name": "adb_app", "state": "review" },
     { "name": "adb_push", "state": "review" },
-    { "name": "adb_pull", "state": "inherit" },
+    { "name": "adb_pull", "state": "review" },
     { "name": "other", "state": "review" }
   ],
   "referenceUrls": [
