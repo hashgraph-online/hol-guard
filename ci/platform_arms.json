@@ -652,7 +652,7 @@
   },
   {
    "verdict": "windows-unsupported",
-   "note": "Correct platform difference: non-Unix builds bind 'launch_identity' to launch_identity_stub.rs, which mirrors the Unix module's API and reports launch identity as non-reusable, matching the local_supply_chain handling of package approvals. Off Unix the real launch_identity.rs arm is selected and compiled by this crate's host build; the stub is exercised by the Windows producer compile, so both arms are built in CI.",
+   "note": "Correct platform difference: non-Unix builds bind 'launch_identity' to launch_identity_stub.rs, which mirrors the Unix module's API and reports launch identity as non-reusable, matching the local_supply_chain handling of package approvals. On Unix the real launch_identity.rs arm is selected and compiled by this crate's host build; the stub is exercised by the Windows producer compile, so both arms are built in CI.",
    "file": "rust/crates/guard-command-build/src/lib.rs",
    "item": "pub mod launch_identity",
    "cfg": "not(unix)",
