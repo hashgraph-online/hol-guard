@@ -98,6 +98,20 @@ fn crate_file_inputs(root: &Path, name: &str, entries: &Value, files: &mut Vec<P
         "command source inputs crate_files name"
     );
     let directory = root.join("crates").join(name);
+    // A crate named here contributes only the sources listed, but the compiler
+    // built from it still reads its own manifest and build script. Leaving
+    // those out lets a dependency feature or an entrypoint change alter the
+    // producer while the identity stays put, and a stale pack is then reused.
+    let manifest = directory.join("Cargo.toml");
+    assert!(
+        manifest.is_file(),
+        "command source inputs crate_files crate manifest"
+    );
+    files.push(manifest);
+    let build = directory.join("build.rs");
+    if build.is_file() {
+        files.push(build);
+    }
     for entry in entries
         .as_array()
         .expect("command source inputs crate_files")

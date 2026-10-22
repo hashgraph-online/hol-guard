@@ -170,6 +170,15 @@ def implementation_digest(root) -> str:
         if not isinstance(entries, list):
             raise ValueError("invalid command source inputs crate_files")
         crate = workspace / "crates" / name
+        # The listed sources are only part of what builds this crate: its own
+        # manifest and build script decide what the producer compiles to, so
+        # they belong in the identity as they do for a whole-crate entry.
+        manifest_file = crate / "Cargo.toml"
+        if manifest_file.is_symlink() or not manifest_file.is_file():
+            raise ValueError("invalid native implementation input")
+        paths.add(manifest_file)
+        if (crate / "build.rs").is_file():
+            paths.add(crate / "build.rs")
         for relative in entries:
             if (
                 not isinstance(relative, str)
