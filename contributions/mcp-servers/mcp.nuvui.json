@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.nuvui",
+  "version": "1.0.0",
+  "name": "NuvUI MCP",
+  "description": "The docs, rules, blocks, charts and design tokens of nuvui, an open-source React UI library, for coding agents. Answers can be scoped to the version a project has installed. Every tool only reads public documentation and needs no key or account, so each keeps Guard's usual handling. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.Nuvraxis",
+    "displayName": "Nuvraxis",
+    "url": "https://github.com/Nuvraxis"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0F172A"
+  },
+  "homepage": "https://nuvui.nuvraxis.com",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://nuvui.nuvraxis.com/mcp",
+    "serverNames": [
+      "nuvui"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read"
+  ],
+  "tools": [
+    {
+      "name": "get_rules",
+      "state": "inherit"
+    },
+    {
+      "name": "search_docs",
+      "state": "inherit"
+    },
+    {
+      "name": "list_components",
+      "state": "inherit"
+    },
+    {
+      "name": "list_guides",
+      "state": "inherit"
+    },
+    {
+      "name": "get_page",
+      "state": "inherit"
+    },
+    {
+      "name": "list_blocks",
+      "state": "inherit"
+    },
+    {
+      "name": "get_block",
+      "state": "inherit"
+    },
+    {
+      "name": "list_charts",
+      "state": "inherit"
+    },
+    {
+      "name": "get_chart",
+      "state": "inherit"
+    },
+    {
+      "name": "get_tokens",
+      "state": "inherit"
+    },
+    {
+      "name": "get_changes",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://nuvui.nuvraxis.com/docs/mcp",
+    "https://github.com/Nuvraxis/nuvui",
+    "https://github.com/Nuvraxis/nuvui/tree/main/apps/mcp"
+  ],
+  "saferAlternatives": [
+    "All eleven tools are read-only and say so in their MCP annotations (readOnlyHint). None writes to an account, sends a message or runs code, so none needs Review.",
+    "The server takes no key or sign-in. What leaves the project is only each call's arguments, such as a search query or the @nuvui/* versions from package.json.",
+    "Answers are nuvui's public documentation. Treat them as reference for writing code, not as instructions to follow."
+  ]
+}
