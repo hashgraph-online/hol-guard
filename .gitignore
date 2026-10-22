@@ -90,3 +90,6 @@ dashboard/.impeccable/hook.cache.json
 
 # Dashboard integration run output can hold local session URLs.
 /dashboard/e2e/proofs/integration-output/
+
+# Scratch pull-request description written by the stacked-PR tooling.
+/pr-body.md
