@@ -99,6 +99,15 @@ pub struct CatalogPermission {
     pub typed_capabilities: Vec<String>,
     pub description: String,
     pub deprecated: bool,
+    /// Display metadata; absent from older pack catalogs.
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub risk_tier: String,
+    #[serde(default)]
+    pub example_command: Option<String>,
+    #[serde(default)]
+    pub family: Option<String>,
 }
 
 /// One extension's metadata — `GeneratedCommandExtension`.
@@ -109,6 +118,9 @@ pub struct CatalogExtension {
     pub source: String,
     pub required: bool,
     pub trust_class: String,
+    /// Display name; absent from older pack catalogs.
+    #[serde(default)]
+    pub name: String,
     #[serde(default)]
     pub aliases: Vec<String>,
     /// `dependencies` — resolver extension-closure input.

@@ -442,7 +442,11 @@ class _HeadlessRoutes:
 
             hint = live_approval_extension_allow_hint(approval, guard_home=store.guard_home, snapshot=snapshot)
         payload = with_approval_extension_recommendation(
-            {**approval, "extension_allow_hint": hint}, registry=registry, snapshot=snapshot, include=True
+            {**approval, "extension_allow_hint": hint},
+            registry=registry,
+            snapshot=snapshot,
+            include=True,
+            guard_home=store.guard_home,
         )
         from ..approval_gate import public_config
         from .approval_connector_recommendation import safe_connector_recommendation

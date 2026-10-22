@@ -8,7 +8,6 @@ from ..native_command_control_authority_io import require_exclusive_command_cont
 from ..native_command_control_authority_store import _key
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..runtime.extension_control_authority import (
-    TRANSITION_PURPOSE,
     ExtensionControlAuthorityError,
     authenticated_record,
     verify_authenticated_record,
@@ -102,22 +101,17 @@ def reserve(store, connection, draft, *, control_revision, snapshot_digest, cata
     )
 
 
-def finish(store, connection, transition):
+def finish(store, connection, transition, *, expected_pack):
     """Install packs in the same transaction as the anchored control snapshot.
+
+    ``expected_pack`` is the command-pack record digest the authenticated
+    transition binds, as the resident verified it (None when it binds none).
 
     A recovered anchored transition was approved and admitted while fresh.
     It may finish offline after expiry, just as an already committed active
     snapshot remains usable offline. Unanchored reservations grant no authority.
     """
     authority_key = store._authority_key(required=True)
-    control = verify_authenticated_record(
-        transition["transition_json"],
-        expected_digest=transition["transition_digest"],
-        expected_mac=transition["transition_mac"],
-        key=authority_key,
-        purpose=TRANSITION_PURPOSE,
-    )
-    expected_pack = control.get("command_pack_record_digest")
     row = (
         None
         if not _exists(connection)

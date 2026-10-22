@@ -5,6 +5,8 @@ use serde_json::Value;
 
 mod approval_contracts;
 pub use approval_contracts::*;
+mod approval_extension_recommendation;
+pub use approval_extension_recommendation::*;
 mod approval_gate;
 pub use approval_gate::*;
 mod approval_reuse;

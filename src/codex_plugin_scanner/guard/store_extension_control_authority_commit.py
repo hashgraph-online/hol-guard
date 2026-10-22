@@ -32,7 +32,7 @@ from .runtime.extension_control_proof import (
     validate_extension_control_proof,
 )
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
-from .store_extension_control_authority_support import _now, _plan_int, _plan_map, _plan_record
+from .store_extension_control_authority_support import _now, _plan_int, _plan_map, _plan_pack_digest, _plan_record
 
 # A commit re-reads at most once to roll back another request's abandoned
 # transition and once after abandoning its own; the resident decides each round.
@@ -230,7 +230,14 @@ class ExtensionControlAuthorityCommitMixin:
                 revision = _plan_int(plan, "revision")
                 proof_hash = str(_plan_map(plan, "hashes")["proof"])
                 with self._connect() as connection:
-                    resumed = self._apply_resumed_transition(connection, outcome, revision, current=current, key=key)
+                    resumed = self._apply_resumed_transition(
+                        connection,
+                        outcome,
+                        revision,
+                        current=current,
+                        key=key,
+                        pack_record_digest=_plan_pack_digest(plan),
+                    )
                     if resumed is not None:
                         consumed_at = _now()
                         if plan.get("proof_recorded") is not True:
@@ -346,7 +353,12 @@ class ExtensionControlAuthorityCommitMixin:
                 pending = connection.execute(
                     "select * from extension_control_authority_transition where revision=?", (revision,)
                 ).fetchone()
-                finish(self, connection, pending)
+                finish(
+                    self,
+                    connection,
+                    pending,
+                    expected_pack=pack_activation.digest if pack_activation is not None else None,
+                )
                 connection.execute(
                     "update extension_control_authority_transition set phase = ? where revision = ?",
                     (AuthorityPhase.ANCHORED.value, revision),

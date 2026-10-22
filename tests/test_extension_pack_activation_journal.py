@@ -70,7 +70,13 @@ def journal(delivery):
         "transition_mac": mac,
     }
     return SimpleNamespace(
-        store=store, connection=connection, anchor=anchor, prepared=prepared, draft=draft, transition=transition
+        store=store,
+        connection=connection,
+        anchor=anchor,
+        prepared=prepared,
+        draft=draft,
+        transition=transition,
+        pack=draft.digest,
     )
 
 
@@ -99,7 +105,7 @@ def test_packless_transition_does_not_add_an_exclusive_lease_requirement(journal
     data, digest, mac = authenticated_record({}, key=b"a" * 32, purpose=TRANSITION_PURPOSE)
     transition = {**journal.transition, "transition_json": data, "transition_digest": digest, "transition_mac": mac}
     with hold_command_control_authority_lock(journal.store.guard_home, shared=True):
-        activation_journal.finish(journal.store, journal.connection, transition)
+        activation_journal.finish(journal.store, journal.connection, transition, expected_pack=None)
 
 
 def test_published_object_entry_is_durable_for_both_new_and_competing_writers(tmp_path, monkeypatch):
@@ -128,7 +134,7 @@ def test_reservation_fences_old_writers_but_keeps_the_authenticated_legacy_basel
     assert value.connection.execute("select version from extension_control_schema_migration").fetchone()[0] == 6
     with hold_command_control_authority_lock(value.store.guard_home), value.connection:
         with pytest.raises(NativePolicySnapshotError, match="unanchored"):
-            activation_journal.finish(value.store, value.connection, value.transition)
+            activation_journal.finish(value.store, value.connection, value.transition, expected_pack=value.pack)
         activation_journal.abandon(value.connection, 1)
     assert activation_store.read(value.store) is None
     assert value.connection.execute("select count(*) from extension_command_pack_pending").fetchone()[0] == 0
@@ -144,11 +150,11 @@ def test_anchored_recovery_installs_with_controls_atomically_and_needs_no_fetch(
     monkeypatch.setattr("time.time", lambda: 9000000)
     with hold_command_control_authority_lock(value.store.guard_home):
         with pytest.raises(RuntimeError, match="crash"), value.connection:
-            activation_journal.finish(value.store, value.connection, value.transition)
+            activation_journal.finish(value.store, value.connection, value.transition, expected_pack=value.pack)
             raise RuntimeError("crash before control snapshot commit")
         assert activation_store.read(value.store) is None
         with value.connection:
-            activation_journal.finish(value.store, value.connection, value.transition)
+            activation_journal.finish(value.store, value.connection, value.transition, expected_pack=value.pack)
     assert activation_store.read(value.store).metadata == value.prepared.metadata
     assert value.connection.execute("select count(*) from extension_command_pack_pending").fetchone()[0] == 0
 
@@ -160,7 +166,7 @@ def test_missing_reservation_cannot_commit_pack_bound_controls(journal):
         value.connection,
         pytest.raises(NativePolicySnapshotError, match="transition_missing"),
     ):
-        activation_journal.finish(value.store, value.connection, value.transition)
+        activation_journal.finish(value.store, value.connection, value.transition, expected_pack=value.pack)
 
 
 def test_reservation_is_bound_to_the_exact_control_snapshot(journal):
@@ -174,7 +180,7 @@ def test_reservation_is_bound_to_the_exact_control_snapshot(journal):
         value.connection,
         pytest.raises(NativePolicySnapshotError, match="transition_mismatch"),
     ):
-        activation_journal.finish(value.store, value.connection, value.transition)
+        activation_journal.finish(value.store, value.connection, value.transition, expected_pack=value.pack)
 
 
 def previous_writer_pending(value):
@@ -248,6 +254,7 @@ def previous_writer_pending(value):
         transition_digest=control[1],
         transition_mac=control[2],
     )
+    value.pack = digest
     value.anchor.current = AuthorityAnchor(1, next_snapshot[1], AuthorityPhase.ANCHORED)
     backend = MemorySecretStore()
     backend.set_secret("anchor", anchor_to_json(value.anchor.current, key=b"a" * 32))
@@ -270,12 +277,12 @@ def test_previous_writer_pending_migrates_then_resumes_without_reset(journal, re
     monkeypatch.setattr("time.time", lambda: 9000000)
     with hold_command_control_authority_lock(value.store.guard_home):
         with pytest.raises(RuntimeError, match="crash"), value.connection:
-            activation_journal.finish(value.store, value.connection, value.transition)
+            activation_journal.finish(value.store, value.connection, value.transition, expected_pack=value.pack)
             raise RuntimeError("crash before SQL commit")
         assert lifecycle_store.read(value.store) == record
         assert activation_store.read(value.store) is None
         with value.connection:
-            activation_journal.finish(value.store, value.connection, value.transition)
+            activation_journal.finish(value.store, value.connection, value.transition, expected_pack=value.pack)
     assert activation_store.read(value.store).metadata == value.prepared.metadata
     assert lifecycle_store.read(value.store) == record
     assert value.connection.execute("select count(*) from extension_command_pack_pending").fetchone()[0] == 0
@@ -304,6 +311,6 @@ def test_previous_writer_recovery_rejects_damaged_evidence_without_changing_cont
         value.connection,
         pytest.raises(ValueError, match="pack_lifecycle"),
     ):
-        activation_journal.finish(value.store, value.connection, value.transition)
+        activation_journal.finish(value.store, value.connection, value.transition, expected_pack=value.pack)
     assert tuple(value.connection.iterdump()) == before
     assert activation_store.read(value.store) is None

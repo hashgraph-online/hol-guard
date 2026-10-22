@@ -14,10 +14,25 @@ impl std::ops::Deref for Fixture {
     }
 }
 
+/// macOS keeps the per-user temporary directory under `/private/var`, a
+/// system root the location screen refuses for an interpreter outside the
+/// working directory. A fixture there would have its base interpreter refused
+/// for where the test put it rather than for what it is, so POSIX fixtures
+/// live under `/tmp` on every platform.
+#[cfg(unix)]
+fn fixture_parent() -> std::path::PathBuf {
+    std::path::PathBuf::from("/tmp")
+}
+
+#[cfg(not(unix))]
+fn fixture_parent() -> std::path::PathBuf {
+    std::env::temp_dir()
+}
+
 fn root(name: &str) -> Fixture {
     let holder = tempfile::Builder::new()
         .prefix(&format!("venv-program-{name}-"))
-        .tempdir()
+        .tempdir_in(fixture_parent())
         .unwrap();
     let root = holder.path();
     std::fs::create_dir_all(root.join("project/.venv/bin")).unwrap();

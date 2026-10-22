@@ -17,6 +17,7 @@ from typing import NamedTuple, TextIO, TypedDict
 
 from ..cli.update_commands import build_guard_update_status_payload
 from ..windows_paths import windows_process_is_running
+from .atomic_replace import replace_file
 
 _DASHBOARD_UPDATE_LOCK = "dashboard-update.lock"
 _DASHBOARD_UPDATE_OUTCOME = "dashboard-update-outcome.json"
@@ -108,14 +109,13 @@ def write_desktop_update_request(guard_home: Path, *, latest_version: str) -> Pa
     temporary = request_path.with_name(
         f"{request_path.name}.tmp-{os.getpid()}-{threading.get_ident()}-{secrets.token_hex(4)}"
     )
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    flags |= getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     file_descriptor = os.open(temporary, flags, 0o600)
     try:
         with os.fdopen(file_descriptor, "w", encoding="utf-8") as handle:
             handle.write(json.dumps(payload))
-        os.replace(temporary, request_path)
+        # Waits out a concurrent writer or reader holding the file on Windows.
+        replace_file(temporary, request_path)
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise

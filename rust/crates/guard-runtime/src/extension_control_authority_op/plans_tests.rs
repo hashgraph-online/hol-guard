@@ -3,7 +3,9 @@ use rusqlite::params;
 use serde_json::{json, Value};
 
 use super::layers::{layers_from_json, layers_to_json};
-use super::records::{private_hash, verify_record, SNAPSHOT_PURPOSE, TRANSITION_PURPOSE};
+use super::records::{
+    authenticated_record, private_hash, verify_record, SNAPSHOT_PURPOSE, TRANSITION_PURPOSE,
+};
 use super::tests::{anchor, catalog, local, run, Home, AT, KEY};
 use crate::extension_control_proof::{mutation_digest, Mutation};
 
@@ -250,6 +252,53 @@ fn a_retry_resumes_its_own_prepared_transition() {
     ));
     assert_eq!(resumed["plan"]["outcome"], json!("commit_pending"));
     assert_eq!(resumed["plan"]["revision"], json!(2));
+    assert_eq!(resumed["plan"]["command_pack_record_digest"], Value::Null);
+}
+
+/// Reseals the prepared transition at `revision` so it binds `pack`.
+fn bind_pack(home: &Home, revision: i64, pack: Value) {
+    let text: String = home
+        .db
+        .query_row(
+            "select transition_json from extension_control_authority_transition where revision = ?",
+            params![revision],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let Value::Object(mut transition) = serde_json::from_str(&text).unwrap() else {
+        unreachable!("a sealed transition is an object");
+    };
+    transition.retain(|name, _| name != "authority_schema_version" && name != "purpose");
+    transition.insert("command_pack_record_digest".to_owned(), pack);
+    let (json, digest, mac) = authenticated_record(&transition, &KEY, TRANSITION_PURPOSE).unwrap();
+    home.db
+        .execute(
+            "update extension_control_authority_transition \
+             set transition_json = ?, transition_digest = ?, transition_mac = ? where revision = ?",
+            params![json, digest, mac, revision],
+        )
+        .unwrap();
+}
+
+#[test]
+fn resume_plan_names_the_pack_record_the_authenticated_transition_binds() {
+    let home = Home::new();
+    home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    home.commit(2, &catalog('a'), &[local(&catalog('a'))], "prepared");
+    let request = || ExtensionControlAuthorityRequestV1 {
+        anchor_json: Some(anchor(2, &snapshot_digest(&home, 2), "anchored")),
+        revision: Some(2),
+        ..home.request("resume_plan", &catalog('a'))
+    };
+    bind_pack(&home, 2, json!("p".repeat(64)));
+    let plan = &run(&request())["plan"];
+    assert_eq!(plan["outcome"], json!("commit_pending"));
+    assert_eq!(plan["command_pack_record_digest"], json!("p".repeat(64)));
+    bind_pack(&home, 2, json!(7));
+    assert_eq!(
+        refusal(&run(&request())),
+        "idempotent transition authentication mismatch"
+    );
 }
 
 #[test]

@@ -22,6 +22,7 @@ from .runtime.extension_control_authority import (
 from .store_extension_control_authority_support import (
     _ExtensionControlAuthoritySupportMixin,
     _now,
+    _plan_pack_digest,
     _row_int,
     _row_str,
 )
@@ -51,11 +52,14 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         *,
         current: ExtensionControlAuthorityView | None,
         key: bytes,
+        pack_record_digest: str | None = None,
     ) -> ExtensionControlAuthorityView | None:
         """Apply the resident's verdict on a prepared transition.
 
         ``abandon`` removes the prepared row and returns None; every other
         outcome finishes the transition and returns the view it left.
+        ``pack_record_digest`` is the pack record the resident found the
+        authenticated transition binds.
         """
 
         self._invalidate_native_extension_control_policy()
@@ -87,7 +91,7 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         if outcome not in _RESUMED_OUTCOMES:
             raise ExtensionControlAuthorityError("invalid extension control authority plan")
         if outcome == "commit_pending":
-            self._commit_pending_transition(connection, row)
+            self._commit_pending_transition(connection, row, pack_record_digest)
         elif outcome == "mark_committed":
             _ = connection.execute(
                 "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
@@ -113,7 +117,14 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         plan = self._authority_plan("resume_plan", key=key, revision=revision)
         if plan["outcome"] == "absent":
             return None
-        return self._apply_resumed_transition(connection, str(plan["outcome"]), revision, current=None, key=key)
+        return self._apply_resumed_transition(
+            connection,
+            str(plan["outcome"]),
+            revision,
+            current=None,
+            key=key,
+            pack_record_digest=_plan_pack_digest(plan),
+        )
 
     def _roll_back_abandoned_transition(self, revision: int, *, snapshot_digest: str, key: bytes) -> bool:
         """Discard a prepared transition the vault anchor never moved past.
@@ -184,11 +195,13 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
                 raise ExtensionControlAuthorityError("invalid extension control history")
             return cast(list[dict[str, object]], history)
 
-    def _commit_pending_transition(self, connection: sqlite3.Connection, row: sqlite3.Row) -> None:
+    def _commit_pending_transition(
+        self, connection: sqlite3.Connection, row: sqlite3.Row, pack_record_digest: str | None
+    ) -> None:
         self._validate_serialized_layers(_row_str(row, "layers_json"))
         from .catalog_delivery.activation_journal import finish
 
-        finish(self, connection, row)
+        finish(self, connection, row, expected_pack=pack_record_digest)
         _ = connection.execute(
             """
             update extension_control_authority_snapshot

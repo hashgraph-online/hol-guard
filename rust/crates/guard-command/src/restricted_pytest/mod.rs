@@ -254,5 +254,5 @@ pub(crate) use workspace_linux::available as linux_workspace_sandbox_available;
 mod parity_tests;
 use executables::*;
 use paths::*;
-use toolchains::workspace_exec_roots;
+use toolchains::{is_package_tree, workspace_exec_roots};
 use validation::*;

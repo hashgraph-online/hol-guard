@@ -11,9 +11,9 @@ use serde_json::{json, Map, Value};
 
 use super::layers::{layers_from_json, validate_serialized_layers};
 use super::records::{
-    authenticated_record, degraded, fields_match, private_hash, query_row, row_int, row_py_int,
-    row_str, row_text, tampered, verify_record, Anchor, Fault, Phase, Res, Row, SNAPSHOT_PURPOSE,
-    TRANSITION_PURPOSE,
+    authenticated_record, degraded, field, fields_match, private_hash, query_row, row_int,
+    row_py_int, row_str, row_text, tampered, verify_record, Anchor, Fault, Phase, Res, Row,
+    SNAPSHOT_PURPOSE, TRANSITION_PURPOSE,
 };
 use super::{Ctx, View, PROTECTED, RECOVERY_REQUIRED};
 use crate::extension_control_proof::{mutation_digest, Mutation};
@@ -126,8 +126,15 @@ impl Ctx<'_> {
         )
     }
 
-    /// `_resume_idempotent_transition`, up to the writes it performs.
-    fn resume(&self, row: &Row, expected: &Expected, current: Option<&View>) -> Res<Resume> {
+    /// `_resume_idempotent_transition`, up to the writes it performs, with
+    /// the command-pack record digest the authenticated transition binds
+    /// (null when it binds none).
+    fn resume(
+        &self,
+        row: &Row,
+        expected: &Expected,
+        current: Option<&View>,
+    ) -> Res<(Resume, Value)> {
         let key = self.require_key()?;
         validate_serialized_layers(&expected.layers_json)?;
         if row_int(row, "previous_revision")? != expected.expected_revision
@@ -182,6 +189,10 @@ impl Ctx<'_> {
         ) {
             return Err(tampered("idempotent transition authentication mismatch"));
         }
+        let pack = field(&transition, "command_pack_record_digest").clone();
+        if !(pack.is_null() || pack.is_string()) {
+            return Err(tampered("idempotent transition authentication mismatch"));
+        }
         let sealed_snapshot = verify_record(
             &row_str(row, "snapshot_json")?,
             &snapshot_digest,
@@ -211,22 +222,23 @@ impl Ctx<'_> {
             && anchor.phase == Phase::Committed
             && phase == Phase::Prepared.as_str()
         {
-            return Ok(Resume::Abandon);
+            return Ok((Resume::Abandon, pack));
         }
         if anchor.revision == revision
             && anchor.snapshot_digest == snapshot_digest
             && matches!(anchor.phase, Phase::Anchored | Phase::Committed)
         {
-            return Ok(if snapshot_revision == previous_revision {
+            let outcome = if snapshot_revision == previous_revision {
                 Resume::CommitPending
             } else if phase != Phase::Committed.as_str() {
                 Resume::MarkCommitted
             } else {
                 Resume::Finish
-            });
+            };
+            return Ok((outcome, pack));
         }
         if current.is_some_and(|view| view.health == PROTECTED && view.revision == revision) {
-            return Ok(Resume::Current);
+            return Ok((Resume::Current, pack));
         }
         Err(tampered("idempotent transition state mismatch"))
     }
@@ -241,10 +253,13 @@ impl Ctx<'_> {
         let Some(row) = self.pending_transition(revision)? else {
             return Ok(plan("absent", Map::new()));
         };
-        let outcome = self.resume(&row, &Expected::of_row(&row)?, None)?;
+        let (outcome, pack) = self.resume(&row, &Expected::of_row(&row)?, None)?;
         Ok(plan(
             outcome.as_str(),
-            Map::from_iter([("revision".to_owned(), json!(revision))]),
+            Map::from_iter([
+                ("revision".to_owned(), json!(revision)),
+                ("command_pack_record_digest".to_owned(), pack),
+            ]),
         ))
     }
 
@@ -285,7 +300,7 @@ impl Ctx<'_> {
         }
         match Expected::of_row(&pending).and_then(|expected| self.resume(&pending, &expected, None))
         {
-            Ok(Resume::Abandon) => Ok(plan(
+            Ok((Resume::Abandon, _)) => Ok(plan(
                 "abandon",
                 Map::from_iter([("revision".to_owned(), json!(revision + 1))]),
             )),
@@ -368,11 +383,12 @@ impl Ctx<'_> {
                 nonce_hash: nonce_hash.clone(),
                 expected_revision: commit.expected_revision,
             };
-            let outcome = self.resume(replay, &expected, Some(&current))?;
+            let (outcome, pack) = self.resume(replay, &expected, Some(&current))?;
             return Ok(plan(
                 outcome.as_str(),
                 Map::from_iter([
                     ("revision".to_owned(), json!(row_int(replay, "revision")?)),
+                    ("command_pack_record_digest".to_owned(), pack),
                     ("proof_recorded".to_owned(), json!(proof.is_some())),
                     ("hashes".to_owned(), hashes),
                 ]),

@@ -367,6 +367,15 @@ def _plan_int(plan: dict[str, object], name: str) -> int:
     return value
 
 
+def _plan_pack_digest(plan: dict[str, object]) -> str | None:
+    """The command-pack record digest the resident found the transition binds."""
+
+    value = plan.get("command_pack_record_digest")
+    if value is not None and not isinstance(value, str):
+        raise ExtensionControlAuthorityError("invalid extension control authority plan")
+    return value
+
+
 def _plan_map(plan: dict[str, object], name: str) -> dict[str, object]:
     value = plan.get(name)
     if not isinstance(value, dict):

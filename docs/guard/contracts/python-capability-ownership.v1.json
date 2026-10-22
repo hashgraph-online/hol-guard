@@ -2025,6 +2025,21 @@
     "rust/crates/guard-contracts/src/extension_allow_hint.rs",
     "rust/crates/guard-runtime/src/extension_allow_hint_op.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/daemon/approval_extension_recommendation.py",
+   "source_sha256": "3eca7867e90f6a70a18078b299443f253f65dae7cacc4fcceb7d71b6f3febd71",
+   "forbidden_symbols": [
+    "CAUTION_RISK_CLASSES",
+    "_bounded",
+    "_caution_reason",
+    "_hint_ids",
+    "_layer_states"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-contracts/src/approval_extension_recommendation.rs",
+    "rust/crates/guard-runtime/src/approval_extension_recommendation_op.rs"
+   ]
   }
  ]
 }
