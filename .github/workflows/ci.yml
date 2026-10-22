@@ -155,6 +155,11 @@ jobs:
     name: Rust workspace (${{ matrix.check }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Only main test jobs share the warmer's lock. PRs and Clippy stay parallel.
+    concurrency:
+      group: ${{ github.ref == 'refs/heads/main' && matrix.check != 'clippy' && format('trusted-rust-tests-{0}', github.sha) || format('rust-workspace-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.check) }}
+      queue: max
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -185,6 +190,7 @@ jobs:
           cache-key: ci-workspace-${{ matrix.check }}
           cache-fallback-key: ${{ matrix.check != 'clippy' && 'ci-workspace-test' || '' }}
           components: clippy
+          normalize-toolchains: "true"
       - name: Install content-addressed compiler cache
         if: matrix.check != 'clippy' && steps.runtime-archive.outputs.cache-hit != 'true'
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
@@ -222,13 +228,7 @@ jobs:
           fi
       - name: Provision the Linux test linker
         if: matrix.check != 'clippy' && steps.runtime-archive.outputs.cache-hit != 'true'
-        # The checked test wrapper links with lld. Reuse the runner's linker
-        # when present instead of refreshing apt for an installed tool.
-        run: |
-          if ! command -v ld.lld >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends lld
-          fi
+        run: bash scripts/ci/setup_test_linker.sh
       - uses: ./.github/actions/setup-bubblewrap
         if: matrix.check != 'clippy'
       - name: Archive the complete runtime test build
@@ -239,17 +239,7 @@ jobs:
           github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           CARGO_CHECK: ${{ matrix.check }}
-        run: |
-          case "$CARGO_CHECK" in
-            test-core) archive_packages=(--locked --workspace --exclude guard-command --exclude hol-guard-runtime --all-targets) ;;
-            test-command) archive_packages=(--locked --package guard-command --all-targets) ;;
-            test-runtime-1) archive_packages=(--locked --package hol-guard-runtime --all-targets) ;;
-            *) echo "Unsupported archive check" >&2; exit 64 ;;
-          esac
-          nextest_bin="$(python3 scripts/ci/install_nextest.py)"
-          PATH="$nextest_bin:$PATH" cargo nextest archive --manifest-path rust/Cargo.toml \
-            "${archive_packages[@]}" \
-            --archive-file "$RUNNER_TEMP/runtime-test-archive.tar.zst" --zstd-level 1
+        run: bash scripts/ci/archive_rust_tests.sh "$CARGO_CHECK"
       - name: Validate the locked Rust workspace
         env:
           CARGO_CHECK: ${{ matrix.check }}
@@ -659,10 +649,11 @@ jobs:
             export GUARD_PYTEST_UNDER_COVERAGE=1
             coverage_args=(--cov --cov-branch --cov-report=)
           fi
+          # Standard public Linux runners provide four CPU cores.
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json \
             uv run --no-sync python scripts/ci/run_projection_shard.py "$shard_file" -- \
             -p pytest_duration_report "@$shard_file" --tb=short --durations=10 \
-            -n 2 --dist loadfile --max-worker-restart 0 \
+            -n 4 --dist loadfile --max-worker-restart 0 \
             --reruns 1 --reruns-delay 2 \
             --deselect tests/test_guard_benign_false_positive_gate.py \
             --deselect tests/test_guard_gauntlet_replay_gate.py \

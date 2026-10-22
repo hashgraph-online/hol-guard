@@ -53,9 +53,9 @@ def test_failed_activation_transaction_rolls_back_the_new_writer_floor():
 
 
 def test_activation_v2_fences_the_actual_schema5_writer_without_hiding_v1():
-    source = (Path(__file__).parent / "fixtures/extension-control-schema-v5.py.txt").read_text()
+    fixture = Path(__file__).parent / "fixtures/extension-control-schema-v5.py.txt"
     scope = {"__name__": "codex_plugin_scanner.guard._v5_schema_fixture", "__package__": "codex_plugin_scanner.guard"}
-    exec(compile(source, "extension-control-schema-v5.py.txt", "exec"), scope)
+    exec(compile(fixture.read_text(), str(fixture), "exec"), scope)
     old = scope["ensure_extension_control_authority_schema"]
     connection = sqlite3.connect(":memory:")
     old(connection, activate_packs=True)

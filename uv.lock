@@ -1274,7 +1274,7 @@ wheels = [
 
 [[package]]
 name = "hol-guard"
-version = "3.54.0" # x-release-please-version
+version = "3.55.1" # x-release-please-version
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },

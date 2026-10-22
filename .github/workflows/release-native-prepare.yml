@@ -5,6 +5,8 @@ on:
     paths:
       - .github/workflows/release-native-prepare.yml
       - scripts/release/prepared_native.py
+      - scripts/release/native_cache_key.py
+      - scripts/ci/native_cache_environment.py
       - rust/**
       - contracts/**
       - contributions/command-sources/**
@@ -25,10 +27,9 @@ on:
         default: false
 permissions:
   contents: read
-# Main pushes only warm the trusted compiler caches; they upload nothing that a
-# release consumes. A newer main push therefore replaces a superseded warm run.
-# Publish calls compile their own exact-SHA binaries in a per-run group, so a
-# push can never cancel a release compilation.
+# Main pushes prepare exact-source binaries as well as compiler objects.
+# A newer main push replaces a superseded warm run, while publish calls keep
+# their own workflow group and validate the requested source and version.
 concurrency:
   group: ${{ github.event_name == 'push' && format('release-native-prepare-{0}', github.ref) || format('release-native-prepare-call-{0}', github.run_id) }}
   cancel-in-progress: ${{ github.event_name == 'push' }}
@@ -39,6 +40,12 @@ jobs:
     # publish.yml. Their caches stay read-only (see save-if and SCCACHE_GHA_RW_MODE).
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
+    concurrency:
+      # Stable publish calls and main preparation share work for one source and
+      # target. Alpha/canary versions keep separate groups and cache identities.
+      group: release-native-build-${{ inputs.source_sha || github.sha }}-${{ matrix.target }}-${{ (inputs.fast_codegen == true || github.event_name == 'pull_request') && inputs.version || 'release' }}
+      cancel-in-progress: false
+      queue: max
     strategy:
       fail-fast: false
       matrix:
@@ -125,20 +132,47 @@ jobs:
           echo "HOL_GUARD_BUILD_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
       - name: Verify release enrollment root
         run: python scripts/ci/native_approval_contract_gate.py --root . --require-release-root
-      - name: Install pinned Rust target
+      - name: Identify exact release binaries
+        id: native-identity
         if: env.UNSHIPPED_TARGET != 'true'
+        shell: bash
+        run: |
+          identity="$(python -m scripts.release.native_cache_key)"
+          echo "build-id=$identity" >> "$GITHUB_OUTPUT"
+          echo "PREPARED_NATIVE_BUILD_ID=$identity" >> "$GITHUB_ENV"
+      - name: Restore exact release binaries
+        id: native-cache
+        if: env.UNSHIPPED_TARGET != 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: prepared-native
+          # No fallback: a source, version, target, root, image or flag change
+          # requires fresh binaries. The existing cleanup retains this family.
+          key: release-native-binaries-v1-${{ matrix.target }}-${{ inputs.fast_codegen == true && 'fast' || 'release' }}-${{ steps.native-identity.outputs.build-id }}
+      - name: Verify restored native release inputs
+        if: env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/release/prepared_native.py install --directory prepared-native
+          if [[ "$CROSS_COMPILED" != "true" ]]; then
+            python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"
+            "$RUNTIME" self-test --json
+          fi
+      - name: Install pinned Rust target
+        if: env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           rustup toolchain install 1.88.0 --profile minimal
           rustup default 1.88.0
           rustup target add "$RUST_TARGET"
       - name: Install Linux static toolchain
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.native-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends musl-tools
       - name: Cache trusted release compilation
-        if: env.UNSHIPPED_TARGET != 'true'
+        if: env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true'
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
           prefix-key: release-native-v1${{ inputs.fast_codegen == true && '-fast' || '' }}
@@ -152,12 +186,12 @@ jobs:
           # main alpha dispatches (never pull requests) may populate.
           save-if: ${{ (github.event_name == 'push' || inputs.fast_codegen == true) && github.ref == 'refs/heads/main' }}
       - name: Install content-addressed compiler cache
-        if: env.UNSHIPPED_TARGET != 'true'
+        if: env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true'
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
         with:
           version: v0.18.0
       - name: Compile canonical release inputs
-        if: env.UNSHIPPED_TARGET != 'true'
+        if: env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true'
         shell: bash
         env:
           # Only workspace members are wrapped; third-party crates come from rust-cache.
@@ -190,6 +224,16 @@ jobs:
           fi
           python scripts/release/prepared_native.py pack --directory prepared-native
           "$SCCACHE_PATH" --show-stats
+      - name: Save verified release binaries
+        if: >-
+          env.UNSHIPPED_TARGET != 'true' &&
+          steps.native-cache.outputs.cache-hit != 'true' &&
+          (github.event_name == 'push' || inputs.fast_codegen == true) &&
+          github.ref == 'refs/heads/main'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: prepared-native
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
       - name: Upload exact-run binaries
         if: >-
           env.UNSHIPPED_TARGET != 'true' &&

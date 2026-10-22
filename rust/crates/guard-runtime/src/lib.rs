@@ -478,6 +478,7 @@ mod pack_lifecycle;
 mod pack_preparation;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
+mod command_pack_record_op;
 #[allow(dead_code)]
 mod hook_evidence_activity;
 #[allow(dead_code)]

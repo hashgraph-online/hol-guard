@@ -16,6 +16,8 @@ def digest(path: Path) -> str:
 
 def transfer(directory: Path, *, install: bool) -> None:
     expected = {"source_sha": os.environ["SOURCE_SHA"], "version": os.environ["VERSION"]}
+    if build_id := os.environ.get("PREPARED_NATIVE_BUILD_ID"):
+        expected["build_id"] = build_id
     paths = {key: Path(os.environ[key]) for key in ("RUNTIME", "SOURCE_COMPILER")}
     manifest = directory / "identity.json"
     if install:

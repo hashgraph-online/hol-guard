@@ -12,6 +12,9 @@ use std::path::Path;
 
 const REFUSED: &str = "installed command pack upgrade is not authorized";
 
+#[path = "installed_upgrade_legacy.rs"]
+mod legacy;
+
 fn hash(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
@@ -75,9 +78,6 @@ impl Ctx<'_> {
                 return Err(tampered(REFUSED));
             }
         }
-        if field(&payload, "command_pack_record_digest") != &evidence["previous"]["digest"] {
-            return Err(tampered(REFUSED));
-        }
         let policy_key = crate::policy_store::read_verifier_key(
             &Path::new(&self.request.guard_home).join("native-runtime"),
         )
@@ -85,6 +85,13 @@ impl Ctx<'_> {
         let directory = Path::new(&self.request.guard_home).join("native-runtime/command-packs");
         let previous_open = open(&evidence["previous"], &policy_key, &directory)?;
         let candidate_open = open(&evidence["candidate"], &policy_key, &directory)?;
+        legacy::validate_predecessor(
+            &payload,
+            &evidence["previous"]["digest"],
+            &previous_open,
+            &stored_catalog,
+            &directory,
+        )?;
         if previous_open["selected"] != candidate_open["selected"] {
             return Err(tampered("installed command pack upgrade changed selection"));
         }

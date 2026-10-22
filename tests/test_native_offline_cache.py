@@ -141,9 +141,24 @@ def packaged(tmp_path_factory):
 def complete(packaged):
     authority, base, report = packaged
     directory = base / "cache"
-    plan = offline.prefetch(authority, directory)
+    batch_sizes = []
+    run_bounded = bridge._run_bounded
+
+    def count_batches(arguments, payload, **kwargs):
+        result = run_bounded(arguments, payload, **kwargs)
+        if arguments[1:] == ["pack-lifecycle", "--stdin"]:
+            request = json.loads(payload)
+            if request.get("kind") == "object" and request.get("operation") == "installed-batch":
+                batch_sizes.append(len(request["items"]))
+        return result
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(bridge, "_run_bounded", count_batches)
+        plan = offline.prefetch(authority, directory)
     assert plan["complete"] and plan["extensions"] == report["extensions"]
     assert len(plan["archives"]) > 512
+    assert batch_sizes and len(batch_sizes) < sum(batch_sizes)
+    print(json.dumps({"native_object_batches": len(batch_sizes), "native_object_reads": sum(batch_sizes)}))
     print(json.dumps({"offline_plan": {k: v if k not in {"objects", "archives"} else len(v) for k, v in plan.items()}}))
     return authority, directory, plan
 

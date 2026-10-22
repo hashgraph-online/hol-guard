@@ -21,6 +21,7 @@ from ..extension_builder.native_source_compiler import NativeSourceCompilerError
 from . import lifecycle
 from .authority import decode
 from .object_native import CONTAINER_STRUCTURE, addressed
+from .object_native import call as call_object
 
 MANIFEST = "command-pack-bundle.v1.json"
 PREFIX = "codex_plugin_scanner/guard/contracts/data/extensions/command-pack-bundle/"
@@ -201,6 +202,29 @@ class VerifiedInstalledBundle:
     def preparation_fetch(self):
         """Fetch for the current native preparation; each member is checked natively."""
         return lambda location, maximum: self._fetch(location, maximum)
+
+    def fetch_objects(self, references):
+        """Transport bounded native object batches; archive fetches stay separate."""
+        for start in range(0, len(references), 64):
+            batch = references[start : start + 64]
+            root = checked_path(_package() / ASSETS, anchor=_installation_root())
+            try:
+                reply = call_object(
+                    "installed-batch",
+                    root=str(root),
+                    source=self.source_sha,
+                    items=[{"target": location, "length": length} for location, length in batch],
+                )
+            except ValueError as error:
+                if str(error) == CONTAINER_STRUCTURE:
+                    raise ValueError("installed bundle container invalid") from error
+                raise
+            for (location, maximum), item in zip(batch, reply["items"], strict=True):
+                if "data" in item:
+                    yield base64.b64decode(item["data"], validate=True)
+                else:
+                    # Whole assets still use the existing checked read path.
+                    yield self.fetch(location, maximum)
 
     def _fetch(self, target_location: dict[str, Any], max_bytes: int) -> bytes:
         base = _package() / ASSETS
