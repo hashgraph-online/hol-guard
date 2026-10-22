@@ -20,8 +20,7 @@ use crate::native_command_program::packaged_command_program;
 use crate::workspace_inventory::python_strip;
 
 #[cfg(not(guard_source_bootstrap))]
-static EMBEDDED_CATALOG: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/command-catalog.v1.json.zst"));
+static EMBEDDED_CATALOG: &[u8] = guard_command_catalog_data::CATALOG_JSON_ZST;
 
 /// The verified-at-build catalog bytes, for read-only projections such as
 /// [`crate::catalog_read_model`] that need fields this module does not type.
@@ -36,8 +35,8 @@ pub(crate) fn embedded_catalog_bytes() -> &'static [u8] {
             .get_or_init(|| {
                 crate::packaged_blob::decode(
                     EMBEDDED_CATALOG,
-                    env!("GUARD_PACKAGED_CATALOG_LEN"),
-                    env!("GUARD_PACKAGED_CATALOG_SHA256"),
+                    guard_command_catalog_data::CATALOG_JSON_LEN,
+                    guard_command_catalog_data::CATALOG_JSON_SHA256,
                 )
             })
             .as_ref()

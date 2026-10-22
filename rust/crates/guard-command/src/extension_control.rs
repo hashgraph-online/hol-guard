@@ -19,6 +19,10 @@ use serde::{Deserialize, Serialize};
 
 use super::effect_decision::{DecisionBasis, DecisionFactor, DecisionFactorSource, GuardAction};
 
+// Spelled out because `guard-command-build` reads this file through a
+// `#[path]` of its own, which resolves a child module beside this file
+// rather than in the directory named after it.
+#[path = "extension_control/prepared.rs"]
 mod prepared;
 
 pub use prepared::{ControlClosure, PreparedControls};

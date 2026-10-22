@@ -104,7 +104,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "if" not in native_steps[upload_index]
 
     for planner, executor, version, env_name, count, width in (
-        ("native-command-evaluators", "coverage", "3.12", "CI_PYTHON_VERSION", 64, 3),
+        ("native-command-evaluators", "coverage", "3.12", "CI_PYTHON_VERSION", 128, 3),
     ):
         plan_job = jobs[planner]
         execution_job = jobs[executor]

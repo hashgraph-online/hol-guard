@@ -256,7 +256,7 @@ def _pretool_gate() -> None:
     runtime = "\n".join(
         _read(path)
         for path in (
-            Path("rust/crates/guard-runtime/src/main.rs"),
+            Path("rust/crates/guard-runtime/src/lib.rs"),
             Path("rust/crates/guard-runtime/src/resident_protocol.rs"),
         )
     )
@@ -307,7 +307,7 @@ def _policy_and_identity_gate() -> None:
     runtime = "\n".join(
         _read(path)
         for path in (
-            Path("rust/crates/guard-runtime/src/main.rs"),
+            Path("rust/crates/guard-runtime/src/lib.rs"),
             Path("rust/crates/guard-runtime/src/resident_protocol.rs"),
         )
     )

@@ -193,7 +193,7 @@ pub fn fancy_find_group_all(
 /// `shlex.join(args)`.
 pub fn shlex_join(args: &[String]) -> String {
     args.iter()
-        .map(|arg| crate::command_launcher_floors::shlex_quote(arg))
+        .map(|arg| crate::shlex_quote(arg))
         .collect::<Vec<_>>()
         .join(" ")
 }

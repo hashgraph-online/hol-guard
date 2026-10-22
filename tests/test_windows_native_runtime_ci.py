@@ -66,7 +66,7 @@ def _build_script_inputs() -> list[str]:
     """Collect the manifest and explicit source/trust records embedded by build.rs."""
     manifest = "contracts/extensions/core-defaults.v1.json"
     entries = json.loads((ROOT / manifest).read_text(encoding="utf-8"))["entries"]
-    script = (ROOT / "rust/crates/guard-command/build.rs").read_text(encoding="utf-8")
+    script = (ROOT / "rust/crates/guard-command-catalog-data/build.rs").read_text(encoding="utf-8")
     assert manifest in script
     assert "sources(root, &entries, true)" in script
     assert "sources(root, &entries, false)" in script
@@ -183,7 +183,7 @@ def test_windows_shim_admin_lane_replays_vectors_and_runs_the_native_op() -> Non
         in vector["run"]
     )
     assert (
-        "cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime shim_op"
+        "cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib shim_op"
         in native_op["run"]
     )
     child_tree = next(
@@ -225,14 +225,14 @@ def test_windows_partition_union_keeps_every_original_cargo_contract() -> None:
             "guard-command --test pretool_windows_git_toplevel",
         ],
         "native-op": [
-            "hol-guard-runtime --bin hol-guard-runtime shim_op",
-            "hol-guard-runtime --bin hol-guard-runtime direct_lane_input_tests",
-            "hol-guard-runtime --bin hol-guard-runtime storage_gate",
-            "hol-guard-runtime --bin hol-guard-runtime daemon_storage_hold",
-            "hol-guard-runtime --bin hol-guard-runtime windows_expanded_home",
+            "hol-guard-runtime --lib shim_op",
+            "hol-guard-runtime --lib direct_lane_input_tests",
+            "hol-guard-runtime --lib storage_gate",
+            "hol-guard-runtime --lib daemon_storage_hold",
+            "hol-guard-runtime --lib windows_expanded_home",
             "guard-runtime-windows-process --test process_liveness",
-            "hol-guard-runtime --bin hol-guard-runtime managed_owner_lock",
-            "hol-guard-runtime --bin hol-guard-runtime owner_release",
+            "hol-guard-runtime --lib managed_owner_lock",
+            "hol-guard-runtime --lib owner_release",
         ],
         "mcp": [
             "guard-runtime-windows-process --test child_tree",

@@ -15,9 +15,11 @@ tempfile = "3.10"
 base64.workspace = true
 caseless.workspace = true
 mailparse.workspace = true
+guard-command-catalog-data = { path = "../guard-command-catalog-data" }
 guard-scanner = { path = "../guard-scanner" }
 guard-secure-fs = { path = "../guard-secure-fs" }
 guard-contracts = { path = "../guard-contracts" }
+guard-hook-payload = { path = "../guard-hook-payload" }
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
 regex.workspace = true
 fancy-regex.workspace = true
@@ -52,12 +54,8 @@ nix = { workspace = true, features = ["user"] }
 rustix.workspace = true
 
 [build-dependencies]
-guard-command-build = { path = "../guard-command-build" }
-hex.workspace = true
-ruzstd.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-zstd.workspace = true
 
 [dev-dependencies]
 tempfile = "3.10"

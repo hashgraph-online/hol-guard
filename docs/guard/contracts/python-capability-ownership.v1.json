@@ -1103,7 +1103,7 @@
     "leading_flags_and_operands"
    ],
    "native_replacements": [
-    "rust/crates/guard-command/src/command_structured_matchers.rs",
+    "rust/crates/guard-command/src/command_structured_matchers/mod.rs",
     "rust/crates/guard-command/src/native_command_program_evaluation.rs"
    ]
   },

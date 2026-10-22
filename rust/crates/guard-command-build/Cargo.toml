@@ -11,14 +11,17 @@ autoexamples = false
 autobenches = false
 
 # Build-dependency only. Compile the exact production compiler implementation,
-# but without its packaged default. No copied lowering or admission algorithm.
+# but without its packaged default. The scoped lib root at src/lib.rs reaches
+# only the catalog-compiler modules, path-mounted from guard-command/src, so
+# unrelated production edits stay out of this unit and the shared identity.
+# No copied lowering or admission algorithm.
 [lib]
-path = "../guard-command/src/lib.rs"
 test = false
 doctest = false
 bench = false
 
 [dependencies]
+guard-hook-payload = { path = "../guard-hook-payload" }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 tempfile = "3.10"
 base64 = "=0.22.1"
@@ -60,6 +63,7 @@ nix = { version = "0.31.3", features = ["process", "signal", "user"] }
 rustix = { version = "1.1.5", features = ["fs"] }
 
 [build-dependencies]
+serde_json = "1.0.143"
 sha2 = "0.10.9"
 
 # Do not run the production test harness a second time against a bootstrap

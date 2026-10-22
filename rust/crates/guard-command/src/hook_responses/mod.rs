@@ -497,5 +497,5 @@ fn is_benign_allow(result: &Object) -> bool {
 }
 
 #[cfg(test)]
-#[path = "hook_responses_tests.rs"]
+#[path = "../hook_responses_tests.rs"]
 mod tests;

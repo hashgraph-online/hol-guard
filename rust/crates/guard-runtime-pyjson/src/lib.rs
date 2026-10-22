@@ -18,7 +18,7 @@ const MAX_DEPTH: usize = 900;
 const MAX_INT_DIGITS: usize = 4300;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum PyVal {
+pub enum PyVal {
     Null,
     Bool(bool),
     /// Canonical decimal digits, as `str(int(text))` renders them.
@@ -30,7 +30,7 @@ pub(crate) enum PyVal {
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum JsonFailure {
+pub enum JsonFailure {
     /// `json.JSONDecodeError`: the text is not JSON.
     Syntax,
     /// Input CPython raises a non-`JSONDecodeError` exception on.
@@ -42,7 +42,7 @@ pub(crate) enum JsonFailure {
 }
 
 impl PyVal {
-    pub(crate) fn get(&self, key: &str) -> Option<&PyVal> {
+    pub fn get(&self, key: &str) -> Option<&PyVal> {
         match self {
             PyVal::Dict(entries) => entries
                 .iter()
@@ -52,21 +52,21 @@ impl PyVal {
         }
     }
 
-    pub(crate) fn as_str(&self) -> Option<&str> {
+    pub fn as_str(&self) -> Option<&str> {
         match self {
             PyVal::Str(text) => Some(text),
             _ => None,
         }
     }
 
-    pub(crate) fn as_dict(&self) -> Option<&[(String, PyVal)]> {
+    pub fn as_dict(&self) -> Option<&[(String, PyVal)]> {
         match self {
             PyVal::Dict(entries) => Some(entries),
             _ => None,
         }
     }
 
-    pub(crate) fn as_list(&self) -> Option<&[PyVal]> {
+    pub fn as_list(&self) -> Option<&[PyVal]> {
         match self {
             PyVal::List(items) => Some(items),
             _ => None,
@@ -74,7 +74,7 @@ impl PyVal {
     }
 
     /// `bool(value)`.
-    pub(crate) fn truthy(&self) -> bool {
+    pub fn truthy(&self) -> bool {
         match self {
             PyVal::Null => false,
             PyVal::Bool(flag) => *flag,
@@ -87,7 +87,7 @@ impl PyVal {
     }
 
     /// `str(value)` for `str`, `int`, `float` and `bool`; `None` otherwise.
-    pub(crate) fn scalar_text(&self) -> Option<String> {
+    pub fn scalar_text(&self) -> Option<String> {
         match self {
             PyVal::Str(text) => Some(text.clone()),
             PyVal::Bool(true) => Some("True".to_owned()),
@@ -99,7 +99,7 @@ impl PyVal {
     }
 
     /// The JSON value carried on the wire; a non-finite float has no JSON form.
-    pub(crate) fn to_json(&self) -> Option<Value> {
+    pub fn to_json(&self) -> Option<Value> {
         Some(match self {
             PyVal::Null => Value::Null,
             PyVal::Bool(flag) => Value::Bool(*flag),
@@ -124,7 +124,7 @@ impl PyVal {
 
     /// An injective rendering with sorted keys: two values render equally
     /// exactly when `json.dumps(sort_keys=True)` renders them equally.
-    pub(crate) fn canonical_key(&self) -> String {
+    pub fn canonical_key(&self) -> String {
         let mut out = String::new();
         self.write_key(&mut out);
         out
@@ -169,7 +169,7 @@ impl PyVal {
 
 /// CPython `repr(float)`: shortest round-trip digits, fixed notation for a
 /// decimal exponent in `-4..16`, scientific otherwise.
-pub(crate) fn float_repr(number: f64) -> String {
+pub fn float_repr(number: f64) -> String {
     if number.is_nan() {
         return "nan".to_owned();
     }
@@ -211,25 +211,25 @@ pub(crate) fn float_repr(number: f64) -> String {
     }
 }
 
-pub(crate) fn parse(text: &str) -> Result<PyVal, JsonFailure> {
+pub fn parse(text: &str) -> Result<PyVal, JsonFailure> {
     parse_with(text, false, char::REPLACEMENT_CHARACTER)
 }
 
 /// A noncharacter standing in for a lone surrogate in a value, for callers
 /// that must tell the text CPython keeps (and cannot later encode) from a
 /// genuine U+FFFD.
-pub(crate) const LONE_SURROGATE_MARK: char = '\u{fdd0}';
+pub const LONE_SURROGATE_MARK: char = '\u{fdd0}';
 
 /// Parse like [`parse`], decoding a lone surrogate escape in a value to
 /// [`LONE_SURROGATE_MARK`] instead of U+FFFD.
-pub(crate) fn parse_marking_lone_surrogates(text: &str) -> Result<PyVal, JsonFailure> {
+pub fn parse_marking_lone_surrogates(text: &str) -> Result<PyVal, JsonFailure> {
     parse_with(text, false, LONE_SURROGATE_MARK)
 }
 
 /// Parse like an `object_pairs_hook` that rejects a repeated key: the failure
 /// surfaces when the object closes, so a later syntax error in the same
 /// object still wins.
-pub(crate) fn parse_unique(text: &str) -> Result<PyVal, JsonFailure> {
+pub fn parse_unique(text: &str) -> Result<PyVal, JsonFailure> {
     parse_with(text, true, char::REPLACEMENT_CHARACTER)
 }
 
@@ -241,25 +241,25 @@ fn parse_with(text: &str, unique: bool, lone_surrogate: char) -> Result<PyVal, J
 /// [`parse_mapping_lone_surrogates`]: U+D800..=U+DFFF become
 /// U+F0000..=U+F07FF, so a value or key keeps one distinct character per
 /// surrogate CPython would keep.
-pub(crate) const SURROGATE_PLANE_BASE: u32 = 0xF0000;
+pub const SURROGATE_PLANE_BASE: u32 = 0xF0000;
 
 /// Whether `character` lies in the range lone surrogates map onto.
-pub(crate) fn in_surrogate_plane(character: char) -> bool {
+pub fn in_surrogate_plane(character: char) -> bool {
     (SURROGATE_PLANE_BASE..SURROGATE_PLANE_BASE + 0x800).contains(&(character as u32))
 }
 
 /// A parse in which every lone surrogate escape, in a key or a value, maps
 /// onto [`SURROGATE_PLANE_BASE`] instead of being replaced or refused.
-pub(crate) struct SurrogateMapped {
-    pub(crate) value: PyVal,
+pub struct SurrogateMapped {
+    pub value: PyVal,
     /// At least one lone surrogate was mapped.
-    pub(crate) mapped: bool,
+    pub mapped: bool,
     /// The text already held a character in the mapped range, so a mapped
     /// character can no longer be told from a genuine one.
-    pub(crate) collision: bool,
+    pub collision: bool,
 }
 
-pub(crate) fn parse_mapping_lone_surrogates(text: &str) -> Result<SurrogateMapped, JsonFailure> {
+pub fn parse_mapping_lone_surrogates(text: &str) -> Result<SurrogateMapped, JsonFailure> {
     let raw_collision = text.chars().any(in_surrogate_plane);
     let (value, parser_state) =
         parse_parser(Parser::new(text, false, char::REPLACEMENT_CHARACTER, true))?;

@@ -23,7 +23,7 @@ env:
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
   # Balance the complete suite across parallel runners. Keep this independent
   # of a fixed organization-wide runner count; scheduling capacity can change.
-  CI_PYTEST_COVERAGE_SHARDS: "64"
+  CI_PYTEST_COVERAGE_SHARDS: "128"
   UV_HTTP_TIMEOUT: "300"
   CI_UV_CACHE_DEPENDENCY_GLOB: |
     pyproject.toml
@@ -1190,7 +1190,12 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: macos-latest
-    timeout-minutes: 15
+    # Raised 15 -> 25 for the one-time cold crate-graph compile on this branch:
+    # the new catalog-data/host-build crates have no main-seeded sccache
+    # entries and PR runs read the compiler cache read-only, so a PR build
+    # measures ~19 min until main seeds the namespace. The cap stays a hang
+    # guard at roughly 2x the warm duration.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:

@@ -1,6 +1,6 @@
 //! Static Cline tool/event/key tables.
 
-pub(crate) const EVENT_NAMES: &[(&str, &str)] = &[
+pub const EVENT_NAMES: &[(&str, &str)] = &[
     ("pretooluse", "PreToolUse"),
     ("pretool", "PreToolUse"),
     ("tool_call", "PreToolUse"),
@@ -98,7 +98,7 @@ pub(crate) const ACTION_BEARING_KEYS: &[&str] = &[
     "packages",
     "executable",
 ];
-pub(crate) const PATH_KEYS: &[&str] = &[
+pub const PATH_KEYS: &[&str] = &[
     "path",
     "paths",
     "file",

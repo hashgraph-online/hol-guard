@@ -141,7 +141,7 @@ jobs:
           fi
           grep -q "def review_pre_tool_native(" src/codex_plugin_scanner/guard/native_pretool.py
           grep -q 'command == "pre-tool"' rust/crates/guard-runtime/src/runtime_cli.rs
-          grep -q "pub fn evaluate_pre_tool" rust/crates/guard-command/src/pretool.rs
+          grep -q "pub fn evaluate_pre_tool" rust/crates/guard-command/src/pretool/mod.rs
           uv run --no-sync python scripts/ci/rust_pretool_no_python_gate.py --root .
           uv run --no-sync python - <<'PY'
           from pathlib import Path
@@ -152,7 +152,7 @@ jobs:
           if 'currently supported Python reference backend remains authoritative' in native:
               raise SystemExit('Python authority declaration remains')
           cargo = Path('rust/crates/guard-runtime/Cargo.toml').read_text()
-          runtime = Path('rust/crates/guard-runtime/src/main.rs').read_text()
+          runtime = Path('rust/crates/guard-runtime/src/lib.rs').read_text()
           if 'guard-policy-snapshot' not in cargo:
               raise SystemExit('policy snapshot dependency missing')
           if 'PolicySnapshot' not in runtime and 'policy_snapshot' not in runtime:

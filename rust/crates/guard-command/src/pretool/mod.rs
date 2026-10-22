@@ -159,13 +159,13 @@ mod stdin_filters;
 mod symlink_writes;
 mod version_probes;
 #[cfg(test)]
-#[path = "pretool/workspace_contained_runner_tests.rs"]
+#[path = "workspace_contained_runner_tests.rs"]
 mod workspace_contained_runner_tests;
 #[cfg(test)]
-#[path = "pretool/workspace_contained_sibling_tests.rs"]
+#[path = "workspace_contained_sibling_tests.rs"]
 mod workspace_contained_sibling_tests;
 #[cfg(test)]
-#[path = "pretool/workspace_contained_tests.rs"]
+#[path = "workspace_contained_tests.rs"]
 mod workspace_contained_tests;
 mod worktree_add;
 mod worktree_maintenance;
@@ -1133,7 +1133,7 @@ fn evaluate_single_command(
 }
 
 #[cfg(test)]
-#[path = "pretool/for_loop_tests.rs"]
+#[path = "for_loop_tests.rs"]
 mod for_loop_tests;
 #[cfg(test)]
 mod tests;
