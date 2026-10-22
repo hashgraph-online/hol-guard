@@ -31,19 +31,19 @@
   "tools": [
     {
       "name": "wire_read",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "wire_search",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "wire_feed",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "wire_research",
-      "state": "inherit"
+      "state": "review"
     },
     {
       "name": "wire_status",
