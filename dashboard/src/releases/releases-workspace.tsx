@@ -52,6 +52,29 @@ function LoadingNotice({ label }: { label: string }) {
   );
 }
 
+/** The detail panel's own shape while it loads, so switching releases moves
+ * the page as little as the content will. */
+function DetailSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Reading this release"
+      className="guard-surface-in space-y-6 rounded-xl border border-brand-dark/10 bg-white p-4 sm:p-6"
+    >
+      <div className="space-y-2.5">
+        <div className="h-7 w-56 rounded-lg bg-brand-dark/[0.07]" />
+        <div className="h-4 w-72 rounded bg-brand-dark/[0.05]" />
+      </div>
+      <div className="max-w-[68ch] space-y-2.5">
+        {[100, 94, 88, 62].map((width) => (
+          <div key={width} className="h-4 rounded bg-brand-dark/[0.05]" style={{ width: `${width}%` }} />
+        ))}
+      </div>
+      <div className="h-11 w-full rounded-xl bg-brand-dark/[0.04]" />
+    </div>
+  );
+}
+
 /**
  * The release archive: every published Guard version, what each one changed,
  * and who is verified to have changed it. The daemon reads hol.org on this
@@ -185,16 +208,20 @@ export function ReleasesWorkspace({ installedVersion }: { installedVersion?: str
       ) : null}
 
       {indexState.kind === "ready" && indexState.index.releases.length > 0 ? (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
-          <ReleaseArchiveList
-            index={indexState.index}
-            selectedSlug={selectedSlug}
-            installedSlug={installed?.slug ?? null}
-            onSelect={handleSelect}
-            onPage={setPage}
-          />
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
+          {/* The rail scrolls on its own so the reader keeps their place in
+              the history while reading a release that runs long. */}
+          <div className="flex max-h-[32rem] flex-col overflow-hidden rounded-xl border border-brand-dark/10 bg-white lg:sticky lg:top-4 lg:max-h-[calc(100vh-8rem)]">
+            <ReleaseArchiveList
+              index={indexState.index}
+              selectedSlug={selectedSlug}
+              installedSlug={installed?.slug ?? null}
+              onSelect={handleSelect}
+              onPage={setPage}
+            />
+          </div>
           <div ref={detailHeadingRef} className="min-w-0">
-            {detailState.kind === "loading" ? <LoadingNotice label="Reading this release…" /> : null}
+            {detailState.kind === "loading" ? <DetailSkeleton /> : null}
             {detailState.kind === "failed" ? (
               <FailureNotice
                 failure={detailState.failure}
@@ -203,7 +230,12 @@ export function ReleasesWorkspace({ installedVersion }: { installedVersion?: str
                 }
               />
             ) : null}
-            {detailState.kind === "ready" ? <ReleaseDetailPanel detail={detailState.detail} /> : null}
+            {detailState.kind === "ready" ? (
+              <ReleaseDetailPanel
+                detail={detailState.detail}
+                isInstalled={installed?.slug === detailState.detail.slug}
+              />
+            ) : null}
           </div>
         </div>
       ) : null}

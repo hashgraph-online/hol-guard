@@ -235,4 +235,85 @@ const detail: ReleaseDetail = {
   assert.match(workspace, /\}, \[page, reloadToken\]\);/, "the archive read pages, nothing else");
 }
 
+// hol.org publishes the Markdown a maintainer wrote. The panel renders it as
+// structure, and never as markup: no path from upstream bytes to innerHTML.
+{
+  const markup = renderToStaticMarkup(
+    createElement(ReleaseDetailPanel, {
+      detail: {
+        ...detail,
+        sourceNotes: {
+          scope: "exact_release",
+          text: [
+            "## Fixes",
+            "",
+            "- **runtime**: retire the shim ([#5496](https://github.com/hashgraph-online/hol-guard/pull/5496))",
+            "",
+            "## Install",
+            "",
+            "```bash",
+            "hol-guard update --alpha",
+            "```",
+            "",
+            "<img src=x onerror=alert(1)>",
+          ].join("\n"),
+        },
+      },
+    }),
+  );
+  assert.match(markup, /<h5[^>]*>(<span>)?Fixes</, "a heading is a heading");
+  assert.match(markup, /<li[^>]*>.*<strong[^>]*>(<span>)?runtime</s, "a list item with bold text");
+  assert.match(
+    markup,
+    /href="https:\/\/github.com\/hashgraph-online\/hol-guard\/pull\/5496"/,
+    "the link resolves",
+  );
+  assert.match(markup, /<pre[^>]*>.*hol-guard update --alpha/s, "a fenced command is a code block");
+  assert.ok(!markup.includes("<img src=x"), "upstream HTML never becomes markup");
+  assert.match(markup, /&lt;img src=x onerror=alert\(1\)&gt;/, "it survives as its own text");
+  // The same release is not told three times over: the derived list is there,
+  // one disclosure away, rather than repeating the notes down the page.
+  assert.match(markup, /<details[^>]*>/, "the itemised list is collapsed behind the notes");
+}
+
+// Asked for a release the reader has installed, the panel says so.
+{
+  const markup = renderToStaticMarkup(
+    createElement(ReleaseDetailPanel, { detail, isInstalled: true }),
+  );
+  assert.match(markup, /Running here/);
+}
+
+// Notes published for the whole series describe the series, so this release's
+// own summary and its documented changes stay on the page beside them.
+{
+  const markup = renderToStaticMarkup(
+    createElement(ReleaseDetailPanel, {
+      detail: {
+        ...detail,
+        summary: "Extensions are now the first thing you see.",
+        changes: [
+          ...detail.changes,
+          {
+            id: "doc-1",
+            kind: "other" as const,
+            summary: "Documented change: the sidebar groups extensions first.",
+            evidenceUrl: null,
+          },
+        ],
+        sourceNotes: {
+          scope: "train_overview",
+          text: "## 3.53 series\n\n- Rolling notes for the series.",
+        },
+      },
+    }),
+  );
+  assert.match(markup, /Extensions are now the first thing you see\./, "the release summary survives series notes");
+  assert.match(markup, /the sidebar groups extensions first/, "a documented change is the only record of this version");
+  assert.ok(
+    !markup.includes("Itemised changes"),
+    "series notes do not speak for this release, so the change list is not collapsed behind them",
+  );
+}
+
 console.log("releases-ui.test.tsx passed");
