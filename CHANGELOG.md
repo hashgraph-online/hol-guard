@@ -95,6 +95,24 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.55.1](https://github.com/hashgraph-online/hol-guard/compare/v3.55.0...v3.55.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* **native:** read a glob that names no directory ([#5624](https://github.com/hashgraph-online/hol-guard/issues/5624)) ([959374c](https://github.com/hashgraph-online/hol-guard/commit/959374c00df8f0527d103f246b4a47404a775357))
+* **runtime:** migrate authenticated legacy command packs ([4e8e409](https://github.com/hashgraph-online/hol-guard/commit/4e8e409dea03fd59fd2a03b286d59403764cd332))
+
+
+### Performance Improvements
+
+* **ci:** shard bundled MCP decision cases by package ([cf8c636](https://github.com/hashgraph-online/hol-guard/commit/cf8c6366b4b86c968d933909afefc224a5e5559b))
+* **ci:** stabilize Rust caches and reuse package test builds ([2554a11](https://github.com/hashgraph-online/hol-guard/commit/2554a110fc90020d59adb81ce8dc1c2c4e955c79))
+* **ci:** use every allocated core for pytest shards ([ff6380e](https://github.com/hashgraph-online/hol-guard/commit/ff6380e107be311d139359ed57563572f2005ed4))
+* **extensions:** answer the publisher's pack-record and active-security reads in the resident ([#5666](https://github.com/hashgraph-online/hol-guard/issues/5666)) ([3dff9e8](https://github.com/hashgraph-online/hol-guard/commit/3dff9e8d753348828f05779983b6dfaba674f2f5))
+* **native:** batch metadata fetches and reuse container reads ([#5669](https://github.com/hashgraph-online/hol-guard/issues/5669)) ([e132595](https://github.com/hashgraph-online/hol-guard/commit/e132595ccd1f3739d6179cca1272a642d483f25c))
+* **release:** reuse verified native binaries before compiling ([4d65cb2](https://github.com/hashgraph-online/hol-guard/commit/4d65cb20dbc46435dc77e64f50e7295eaa800c20))
+
 ## [3.55.0](https://github.com/hashgraph-online/hol-guard/compare/v3.54.0...v3.55.0) (2026-10-22)
 
 
