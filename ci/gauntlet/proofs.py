@@ -152,10 +152,13 @@ def guard_inventory(
         post = [row for row in bound if row["event"] == "PostToolUse"]
         if len(pre) != 1 or len(post) > 1:
             return {}, "missing or duplicate native pre/post response"
+        if call["id"] in contained:
+            # Checked before the input comparison: a containment rewrite deliberately runs a
+            # different command line, and contained_core already bound that wrapper, its post
+            # response and its result to the input Guard reviewed.
+            continue
         if not input_matches(call["name"], call["args"], pre[0]["input"]):
             return {}, "host execution differs from the input reviewed by Guard"
-        if call["id"] in contained:
-            continue
         if post and not post_input_matches(call["name"], pre[0]["input"], post[0]["input"], call.get("result")):
             return {}, "native pre/post tool inputs disagree"
         if pre[0]["decision"] == "allow" and len(post) != 1:

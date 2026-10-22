@@ -22,7 +22,7 @@ import { customExtensionContinuityView } from "../managed-controls/custom-extens
 import { commandPermissionChanges, mcpCatalogCopy, mcpToolCanReceiveDirectAllow, rebaseCommandDraft } from "./mcp-catalog-state";
 import { McpProviderActions, type ProviderActionDraft } from "./mcp-provider-actions";
 import { ProviderWorkflows } from "./provider-workflows";
-import { bulkPolicyCopy, connectorGroupOutcomeCopy, continuityCopy, customExtensionStateLabel, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, mcpPermissionStatusLabel, nativePublicationMessage, randomToken, SUGGESTED_RULES_NOTICE } from "./local-cli-panel-copy";
+import { bulkPolicyCopy, connectorGroupOutcomeCopy, continuityCopy, customExtensionStateLabel, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, FRESH_TOTP_REQUIRED_MESSAGE, isFreshTotpRequired, mcpPermissionStatusLabel, nativePublicationMessage, randomToken, SUGGESTED_RULES_NOTICE } from "./local-cli-panel-copy";
 import { connectorGroupOutcome, connectorSetupMatch, customExtensionDisplayName, hasSuggestedRules, prefillSuggestedStates, type ConnectorSetupLink } from "./custom-extension-profile";
 import { ConnectorSetupBanner } from "./connector-setup-banner";
 import { CustomExtensionReviewModal } from "./local-cli-review-modal";
@@ -63,6 +63,7 @@ export function LocalCliDetail(props: {
   const catalogController = useRef<AbortController | null>(null);
   useEffect(() => () => catalogController.current?.abort(), []);
   const [error, setError] = useState<string | null>(null);
+  const [freshTotpRequired, setFreshTotpRequired] = useState(false);
   const added = props.item.state !== "unset";
   const commandChanges = commandPermissionChanges(props.item.commands, commands);
   const commandsDirty = commandChanges.length > 0;
@@ -89,6 +90,7 @@ export function LocalCliDetail(props: {
   }, [props.item]);
   const setupMatch = props.setupLink ? connectorSetupMatch(props.item, props.setupLink) : null;
   const openPending = useCallback(async (state: LocalCliState, fromSetupLink = false) => {
+    setFreshTotpRequired(false);
     await refreshApprovalGate();
     setRecommended(fromSetupLink);
     setPending(state);
@@ -173,7 +175,13 @@ export function LocalCliDetail(props: {
       await refreshApprovalGate();
       setPending(null);
     } catch (caught) {
-      setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not update this custom extension.");
+      if (isFreshTotpRequired(caught)) {
+        setFreshTotpRequired(true);
+        await refreshApprovalGate().catch(() => undefined);
+        setError(FRESH_TOTP_REQUIRED_MESSAGE);
+      } else {
+        setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not update this custom extension.");
+      }
     } finally {
       setBusy(false);
     }
@@ -435,6 +443,7 @@ export function LocalCliDetail(props: {
           busy={busy}
           error={error}
           approvalGate={resolvedApprovalGate}
+          requireFreshTotp={freshTotpRequired}
           onCancel={clearPending}
           onConfirm={confirmChange}
         />

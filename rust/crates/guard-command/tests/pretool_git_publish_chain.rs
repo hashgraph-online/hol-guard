@@ -2,6 +2,9 @@
 //! A `&&` chain that commits work, pushes it and opens a pull request runs
 //! without review only when every step keeps the proof it has on its own.
 //! This binary registers a push verdict, so it runs in its own process.
+#[path = "../../../test_support/unique_nanos.rs"]
+mod unique_nanos;
+
 #[path = "support/git_helper_fixture.rs"]
 #[allow(dead_code)]
 mod git_helper_fixture;
@@ -87,10 +90,7 @@ fn repository(label: &str) -> Repository {
     let home = std::fs::canonicalize(base).unwrap().join(format!(
         "guard-git-publish-{label}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let cleanup = FixtureCleanup(home.clone());
     let primary = home.join("org/app");

@@ -343,3 +343,5 @@ fn an_unreadable_layer_is_a_bound_error_naming_the_layer() {
 mod boundary;
 #[path = "extension_control_op_resolve_tests.rs"]
 mod resolve;
+#[path = "extension_control_op_snapshot_tests.rs"]
+mod snapshot;

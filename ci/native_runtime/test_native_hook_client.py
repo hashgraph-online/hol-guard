@@ -227,8 +227,10 @@ def test_native_hook_client_rejects_self_authenticated_forged_state(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
+    # Build the request first: its store read must not meet the forged state.
+    request = _request(runtime, state_dir.parent)
     _write_forged_state(runtime, state_dir)
-    response = _invoke(runtime, state_dir, _request(runtime, state_dir.parent))
+    response = _invoke(runtime, state_dir, request)
     assert response["authority"] == "rust"
     assert _result(response)["minimum_action"] == "allow"
     assert len(_state_files(state_dir)) == 1

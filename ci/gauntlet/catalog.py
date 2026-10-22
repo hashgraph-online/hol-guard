@@ -54,6 +54,15 @@ class Scenario:
     path: str | None = None
     required_tools: tuple[str, ...] = ()
     profiles: tuple[str, ...] = ("core",)
+    # Listed commands whose own nonzero host exit is the documented answer the prompt asks the
+    # model to report: an empty search, a directory that is not a checkout, a malformed sed
+    # script. Each must be one of this scenario's ``commands``, so the declaration can never
+    # excuse a command the author did not review. It exempts nothing else: an undeclared
+    # failure, and any failure that follows a Guard deny, keeps its ordinary judgement.
+    benign_exit_commands: tuple[str, ...] = ()
+    # Whether this protection case accepts Guard's own contained route as the stop it expects.
+    # Only a ``sandbox-required`` deny whose rewrite ``contained_core`` proves end to end counts.
+    contained_ok: bool = False
 
     def render(self, values: dict[str, str]) -> Scenario:
         """Expand fixture placeholders without evaluating code."""
@@ -76,6 +85,8 @@ class Scenario:
             expand(self.path) if self.path is not None else None,
             self.required_tools,
             self.profiles,
+            tuple(expand(c, command=True) for c in self.benign_exit_commands),
+            self.contained_ok,
         )
 
 
@@ -98,24 +109,34 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
         if not isinstance(row, dict):
             raise ValueError("scenario must be an object")
         required = {"id", "expectation", "oracle", "prompt"}
-        allowed = required | {"commands", "path", "required_tools", "profiles"}
+        allowed = required | {
+            "commands",
+            "path",
+            "required_tools",
+            "profiles",
+            "benign_exit_commands",
+            "contained_ok",
+        }
         if not required <= row.keys() or row.keys() - allowed:
             raise ValueError("scenario has missing or unknown fields")
         if any(not isinstance(row[name], str) or not row[name] for name in required):
             raise ValueError("scenario scalar fields must be nonempty strings")
         if row.get("path") is not None and (not isinstance(row["path"], str) or not row["path"]):
             raise ValueError("scenario path must be a nonempty string or null")
-        for name in ("commands", "required_tools", "profiles"):
+        for name in ("commands", "required_tools", "profiles", "benign_exit_commands"):
             if name in row and (
                 not isinstance(row[name], list) or any(not isinstance(value, str) or not value for value in row[name])
             ):
                 raise ValueError("scenario lists must contain nonempty strings")
+        if "contained_ok" in row and type(row["contained_ok"]) is not bool:
+            raise ValueError("scenario contained_ok must be a boolean")
         scenario = Scenario(
             **{
                 **row,
                 "commands": tuple(row.get("commands", ())),
                 "required_tools": tuple(row.get("required_tools", ())),
                 "profiles": tuple(row.get("profiles", ("core",))),
+                "benign_exit_commands": tuple(row.get("benign_exit_commands", ())),
             }
         )
         if scenario.id in ids or re.fullmatch(r"[a-z][a-z0-9-]{0,79}", scenario.id) is None:
@@ -143,6 +164,14 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "connector-tool",
         }:
             raise ValueError(f"unknown oracle: {scenario.oracle}")
+        if scenario.benign_exit_commands and (
+            scenario.expectation != "allow"
+            or len(set(scenario.benign_exit_commands)) != len(scenario.benign_exit_commands)
+            or not set(scenario.benign_exit_commands) <= set(scenario.commands)
+        ):
+            raise ValueError("a benign nonzero exit may only be declared once, for a listed command of an allow case")
+        if scenario.contained_ok and (scenario.expectation != "block" or scenario.oracle != "blocked-command"):
+            raise ValueError("only a single-command protection case may accept Guard's contained route")
         if (
             scenario.oracle in {"blocked-command", "blocked-extension", "blocked-package", "home-copy-task"}
             and len(scenario.commands) != 1

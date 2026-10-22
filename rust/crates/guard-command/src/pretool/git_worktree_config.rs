@@ -17,6 +17,8 @@ pub(super) struct ConfigFacts {
     /// A hook manager's hooks directory below the repository root (Husky
     /// writes `core.hooksPath=.husky/_` into the repository configuration).
     pub(super) repository_hooks_path: Option<String>,
+    /// Every `remote.<name>.fetch` refspec, by remote name as Git spells it.
+    pub(super) remote_fetch: Vec<(String, String)>,
 }
 
 /// `Some(None)` when a setting could run a program or redirect the checkout,
@@ -43,6 +45,11 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
         }
         let record = records.next()?;
         let (key, value) = record.split_once('\n')?;
+        if let Some(remote) = remote_fetch_name(key) {
+            facts
+                .remote_fetch
+                .push((remote.to_owned(), value.to_owned()));
+        }
         let key = key.to_ascii_lowercase();
         match scope {
             "unknown" if past_system => return None,
@@ -134,6 +141,17 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
         }
     }
     Some(Some(facts))
+}
+
+/// The remote a `remote.<name>.fetch` key names. Git compares the section and
+/// variable without case and the remote name exactly.
+fn remote_fetch_name(key: &str) -> Option<&str> {
+    let lower = key.to_ascii_lowercase();
+    if !lower.starts_with("remote.") || !lower.ends_with(".fetch") {
+        return None;
+    }
+    key.get("remote.".len()..key.len() - ".fetch".len())
+        .filter(|name| !name.is_empty())
 }
 
 fn display_pager_setting(key: &str) -> bool {
@@ -405,9 +423,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!(
             "guard-worktree-prefix-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |elapsed| elapsed.as_nanos())
+            crate::unique_nanos::unique_nanos()
         ));
         let exec_path = root.join("usr/libexec/git-core");
         fs::create_dir_all(&exec_path).expect("exec path");

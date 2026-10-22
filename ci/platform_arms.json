@@ -131,19 +131,19 @@
    "body": "932641bbbcc7"
   },
   {
-   "verdict": "windows-unsupported",
-   "note": "The `pwd`-literal chain proof requires the agent's user to own the checkout and its `.git`; there is no POSIX uid to compare on Windows, so ownership is never proven and the chain stays reviewed. Tightening it would mean an ACL read Guard does not make yet.",
+   "verdict": "other-platform",
+   "note": "Windows reads the owner's SID through `guard_runtime_windows_process::owned_by_current_user`, so this arm is left for a target that is neither Unix nor Windows: it has no ownership primitive at all, ownership is never proven, and the chain stays reviewed.",
    "file": "rust/crates/guard-command/src/pretool/chain_literals_pwd.rs",
    "item": "fn owned(_: &Path) -> bool",
-   "cfg": "not(unix)",
+   "cfg": "not(any(unix, windows))",
    "body": "ca2728a0b3e0"
   },
   {
-   "verdict": "windows-unsupported",
-   "note": "The same proof walks to the repository root only while the device number stays the same, so a mount crossed mid-walk ends it. `st_dev` has no Windows counterpart Guard reads today, so the walk never starts and the chain stays reviewed.",
+   "verdict": "other-platform",
+   "note": "Windows tells volumes apart by hashing the canonical path's own volume prefix, so this arm is left for a target that is neither Unix nor Windows: with no device number and no volume prefix to read, the walk never starts and the chain stays reviewed.",
    "file": "rust/crates/guard-command/src/pretool/chain_literals_pwd.rs",
    "item": "fn filesystem(_: &Path) -> Option<u64>",
-   "cfg": "not(unix)",
+   "cfg": "not(any(unix, windows))",
    "body": "80936b2804b3"
   },
   {
@@ -803,28 +803,28 @@
    "body": "13e1ea33df13"
   },
   {
+   "verdict": "other-platform",
+   "note": "Windows resolves the workspace in its own arm (`codex_hook_bridge_contain_windows.rs`); this stub is reached only on a platform Guard does not ship for, where `None` keeps the command reviewed because there is no sink.",
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_contain.rs",
    "item": "fn resolved_workspace(_value: &str) -> Option<String>",
-   "verdict": "windows-unsupported",
-   "note": "No contained workspace is resolved off Unix, so the Codex bridge does not route a command into a sink.",
-   "cfg": "not(unix)",
+   "cfg": "not(any(unix, windows))",
    "body": "0c258e1c7d46"
   },
   {
+   "verdict": "other-platform",
+   "note": "Windows writes the snapshot under the profile's `AppData\\Local\\Temp` in its own arm; elsewhere `None` writes nothing, so the call keeps its review.",
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_contain.rs",
    "item": "fn write_snapshot(_serialized: &[u8]) -> Option<PathBuf>",
-   "verdict": "windows-unsupported",
-   "note": "No snapshot is written off Unix; paired with `resolved_workspace` above.",
-   "cfg": "not(unix)",
+   "cfg": "not(any(unix, windows))",
    "body": "36ec584876e3"
   },
   {
+   "verdict": "other-platform",
+   "note": "Windows sets `SYSTEMROOT`, `PATH` and `USERPROFILE` for the version probe in its own arm above; elsewhere `false` skips the probe, so updated input is never assumed to be applied.",
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_contain_codex.rs",
-   "item": "pub(super) fn codex_applies_updated_input(_executable: &Path, _deadline: Instant) -> bool",
-   "verdict": "windows-unsupported",
-   "note": "The Codex version probe does not run off Unix, so updated input is never assumed to be applied. Fails closed.",
-   "cfg": "not(unix)",
-   "body": "b832d51abbbb"
+   "item": "fn probe_environment(_command: &mut std::process::Command) -> bool",
+   "cfg": "not(any(unix, windows))",
+   "body": "60598db7948f"
   },
   {
    "file": "rust/crates/guard-runtime/src/codex_thread_continue_op.rs",
@@ -1116,11 +1116,11 @@
   },
   {
    "verdict": "windows-equivalent",
-   "note": "Unix serves over a unix socket; the else arm serves the authenticated loopback transport that the Windows build advertises as `authenticated-loopback-resident-v1`. Both are real transports.",
+   "note": "Unix serves over a unix socket; the else arm serves the authenticated loopback transport that the Windows build advertises as `authenticated-loopback-resident-v1`. Both are real transports. The requested-stop note the block leaves afterwards is written the same way on either arm.",
    "file": "rust/crates/guard-runtime/src/managed_resident.rs",
    "item": "fn serve_managed -- cfg! expression",
    "cfg": "unix",
-   "body": "ea871725d1f8"
+   "body": "e0bcc9f4d23c"
   },
   {
    "file": "rust/crates/guard-runtime/src/managed_resident_lease_identity.rs",

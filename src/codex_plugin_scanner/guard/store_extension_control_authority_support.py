@@ -6,10 +6,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import hmac
 import sqlite3
 import sys
-from collections.abc import Generator, Mapping
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -20,19 +19,16 @@ from typing import Final, cast
 from .edge_events import build_policy_event
 from .extension_control_events import extension_control_change_payload
 from .native_extension_control import NativeExtensionControlError, compose_control_layers
+from .native_extension_control_authority import anchor_from_wire
 from .runtime.extension_control_authority import (
     AuthorityAnchor,
     AuthorityHealth,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
-    anchor_from_json,
-    anchor_to_json,
     layers_from_json,
 )
 from .runtime.extension_control_contract import (
     ControlLayerKind,
-    ControlState,
-    ExtensionControl,
     ExtensionControlLayer,
 )
 from .store_base import (
@@ -75,43 +71,6 @@ def _require_composable(layers: tuple[ExtensionControlLayer, ...]) -> None:
         raise NativeCommandControlAuthorityUnavailableError(shared=True) from error
     if composed.failures:
         raise ExtensionControlAuthorityError("invalid extension control layers")
-
-
-def preserve_migrated_extension_control(
-    control: ExtensionControl,
-    *,
-    previous_manifest: Mapping[str, str],
-    current_manifest: Mapping[str, str],
-) -> bool:
-    """Keep disabled controls and unchanged/unknown enabled allows across catalog upgrades."""
-
-    key_name = f"{control.target.kind.value}:{control.target.target_id}"
-    if key_name not in current_manifest:
-        return False
-    previous_fingerprint = previous_manifest.get(key_name)
-    return control.state is ControlState.DISABLED or previous_fingerprint in {None, current_manifest[key_name]}
-
-
-def preserve_managed_extension_control(
-    control: ExtensionControl,
-    *,
-    previous_manifest: Mapping[str, str],
-    current_manifest: Mapping[str, str],
-) -> bool:
-    """Keep managed state only with an authenticated prior contract match.
-
-    Unlike local-admin migration, a missing previous manifest is intentionally
-    treated as no match so an enabled cloud allow fails closed until refreshed.
-    """
-
-    key_name = f"{control.target.kind.value}:{control.target.target_id}"
-    current_fingerprint = current_manifest.get(key_name)
-    if current_fingerprint is None:
-        # Keep unknown targets visible so the resolver emits its fail-closed error.
-        return True
-    if control.state is ControlState.DISABLED:
-        return True
-    return previous_manifest.get(key_name) == current_fingerprint
 
 
 class _ExtensionControlAuthoritySupportMixin:
@@ -179,12 +138,29 @@ class _ExtensionControlAuthoritySupportMixin:
             raise ExtensionControlAuthorityError("invalid extension control authentication key")
         return key
 
+    def _read_anchor_json(self) -> str | None:
+        """The anchor exactly as the credential store holds it, unverified."""
+
+        return self._secret_store().get_secret(self._anchor_ref())
+
     def _read_anchor(self, *, key: bytes) -> AuthorityAnchor | None:
-        value = self._secret_store().get_secret(self._anchor_ref())
-        return None if value is None else anchor_from_json(value, key=key)
+        value = self._read_anchor_json()
+        if value is None:
+            return None
+        reply = self._extension_control_authority_op("anchor", key=key, anchor_json=value)
+        return anchor_from_wire(reply.get("anchor"))
 
     def _write_and_verify_anchor(self, anchor: AuthorityAnchor, *, key: bytes) -> None:
-        encoded = anchor_to_json(anchor, key=key)
+        sealed = self._extension_control_authority_op(
+            "seal_anchor",
+            key=key,
+            revision=anchor.revision,
+            snapshot_digest=anchor.snapshot_digest,
+            phase=anchor.phase.value,
+        ).get("anchor_json")
+        if not isinstance(sealed, str):
+            raise ExtensionControlAuthorityError("invalid extension control anchor seal")
+        encoded = sealed
         self._secret_store().set_secret(self._anchor_ref(), encoded)
         observed = self._secret_store().get_secret(self._anchor_ref())
         if observed != encoded:
@@ -380,10 +356,38 @@ def _row_int(row: sqlite3.Row, name: str) -> int:
     return value
 
 
-def _private_hash(value: str, *, key: bytes, purpose: str) -> str:
-    framed = b"hol-guard.extension-control.private-ref.v1\x00" + purpose.encode("ascii")
-    return hmac.new(key, framed + b"\x00" + value.encode("utf-8"), hashlib.sha256).hexdigest()
-
-
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _plan_int(plan: dict[str, object], name: str) -> int:
+    value = plan.get(name)
+    if type(value) is not int:
+        raise ExtensionControlAuthorityError("invalid extension control authority plan")
+    return value
+
+
+def _plan_pack_digest(plan: dict[str, object]) -> str | None:
+    """The command-pack record digest the resident found the transition binds."""
+
+    value = plan.get("command_pack_record_digest")
+    if value is not None and not isinstance(value, str):
+        raise ExtensionControlAuthorityError("invalid extension control authority plan")
+    return value
+
+
+def _plan_map(plan: dict[str, object], name: str) -> dict[str, object]:
+    value = plan.get(name)
+    if not isinstance(value, dict):
+        raise ExtensionControlAuthorityError("invalid extension control authority plan")
+    return cast(dict[str, object], value)
+
+
+def _plan_record(plan: dict[str, object], name: str) -> tuple[str, str, str]:
+    """The ``json``, ``digest`` and ``mac`` of a record the resident sealed."""
+
+    record = _plan_map(plan, name)
+    sealed = (record.get("json"), record.get("digest"), record.get("mac"))
+    if not all(isinstance(part, str) for part in sealed):
+        raise ExtensionControlAuthorityError("invalid extension control authority plan")
+    return cast(tuple[str, str, str], sealed)

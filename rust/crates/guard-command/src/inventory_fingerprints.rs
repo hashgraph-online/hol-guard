@@ -173,7 +173,28 @@ fn write_python_string(value: &str, output: &mut String) {
     output.push('"');
 }
 
-fn write_python_json(value: &Value, output: &mut String) {
+/// CPython's `(item_separator, key_separator)` pair.
+#[derive(Debug, Clone, Copy)]
+pub struct JsonSeparators {
+    /// Written between array items and between object entries.
+    pub item: &'static str,
+    /// Written between an object key and its value.
+    pub key: &'static str,
+}
+
+/// `json.dumps(..., separators=(",", ":"))` — the digest encoding.
+pub const COMPACT_SEPARATORS: JsonSeparators = JsonSeparators {
+    item: ",",
+    key: ":",
+};
+
+/// `json.dumps(...)` with no `indent` and no explicit `separators`.
+pub const DEFAULT_SEPARATORS: JsonSeparators = JsonSeparators {
+    item: ", ",
+    key: ": ",
+};
+
+fn write_python_json(value: &Value, separators: JsonSeparators, output: &mut String) {
     match value {
         Value::Null => output.push_str("null"),
         Value::Bool(true) => output.push_str("true"),
@@ -204,9 +225,9 @@ fn write_python_json(value: &Value, output: &mut String) {
             output.push('[');
             for (index, item) in items.iter().enumerate() {
                 if index > 0 {
-                    output.push(',');
+                    output.push_str(separators.item);
                 }
-                write_python_json(item, output);
+                write_python_json(item, separators, output);
             }
             output.push(']');
         }
@@ -217,22 +238,31 @@ fn write_python_json(value: &Value, output: &mut String) {
             keys.sort();
             for (index, key) in keys.iter().enumerate() {
                 if index > 0 {
-                    output.push(',');
+                    output.push_str(separators.item);
                 }
                 write_python_string(key, output);
-                output.push(':');
-                write_python_json(entries.get(*key).unwrap_or(&Value::Null), output);
+                output.push_str(separators.key);
+                write_python_json(
+                    entries.get(*key).unwrap_or(&Value::Null),
+                    separators,
+                    output,
+                );
             }
             output.push('}');
         }
     }
 }
 
+/// `json.dumps(value, sort_keys=True, separators=..., ensure_ascii=True)`.
+pub fn python_json(value: &Value, separators: JsonSeparators) -> String {
+    let mut encoded = String::new();
+    write_python_json(value, separators, &mut encoded);
+    encoded
+}
+
 /// `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)`.
 pub fn python_compact_json(value: &Value) -> String {
-    let mut encoded = String::new();
-    write_python_json(value, &mut encoded);
-    encoded
+    python_json(value, COMPACT_SEPARATORS)
 }
 
 /// `fingerprint_text(value)`.

@@ -52,6 +52,25 @@ fn a_contained_execute_keeps_the_deadline_its_own_timeout_earns() {
 }
 
 #[test]
+fn an_extension_control_preview_keeps_the_deadline_python_grants_it() {
+    // Python asks fifteen seconds for a semantic preview and five for a plain
+    // composition or resolution; the ceiling must not cut the former to nine.
+    assert_eq!(
+        client_timeout(br#"{"operation":"extension_control","deadline_budget_ms":15000}"#),
+        Duration::from_secs(15)
+    );
+    assert_eq!(
+        client_timeout(br#"{"operation":"extension_control","deadline_budget_ms":5000}"#),
+        Duration::from_secs(5)
+    );
+    // The ceiling still bounds a larger ask.
+    assert_eq!(
+        client_timeout(br#"{"operation":"extension_control","deadline_budget_ms":999999}"#),
+        Duration::from_secs(15)
+    );
+}
+
+#[test]
 fn client_deadline_is_bounded() {
     assert_eq!(
         client_timeout(br#"{"deadline_budget_ms":999999}"#),

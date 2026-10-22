@@ -280,6 +280,41 @@ fn a_terminal_pre_tool_edge_cannot_be_relaxed_to_review() {
 }
 
 #[test]
+fn a_network_protection_review_floors_before_execution() {
+    for reason_code in ["network_known_bad_host", "network_too_many_destinations"] {
+        let review = json!({
+            "decision": "deny",
+            "policy_action": "review",
+            "minimum_action": "review",
+            "reason_code": reason_code,
+        });
+        assert_eq!(
+            native_edge_floor(&edge("PreToolUse", review), None),
+            Some(GuardAction::Review),
+            "{reason_code}"
+        );
+    }
+    // A higher edge action than the network review keeps its own tier.
+    let reapproval = json!({
+        "policy_action": "require-reapproval",
+        "minimum_action": "review",
+        "reason_code": "network_known_bad_host",
+    });
+    assert_eq!(
+        native_edge_floor(&edge("PreToolUse", reapproval), None),
+        Some(GuardAction::RequireReapproval)
+    );
+    // Any other review-tier edge verdict is still provenance before execution.
+    let unproven = json!({
+        "decision": "deny",
+        "policy_action": "review",
+        "minimum_action": "review",
+        "reason_code": "native_command_unproven",
+    });
+    assert_eq!(native_edge_floor(&edge("PreToolUse", unproven), None), None);
+}
+
+#[test]
 fn the_package_evaluator_owns_command_control_failures_but_not_secret_denies() {
     let failure = |package_request| {
         edge(

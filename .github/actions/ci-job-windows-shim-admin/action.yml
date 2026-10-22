@@ -64,6 +64,7 @@ runs:
         $PSNativeCommandUseErrorActionPreference = $true
         cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test pretool_windows_drive_path_writes
         cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test pretool_windows_sibling_repository_writes
+        cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test pretool_windows_git_toplevel
     - name: Install and report shims through the native op on Windows
       if: inputs.shim-gate == 'native-op'
       shell: pwsh

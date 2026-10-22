@@ -24,12 +24,17 @@ from pathlib import Path
 from ..codex_hook_launch_runtime import isolated_guard_cli_command
 from ..native_hook_containment_route import ContainmentSink, native_containment_sink
 
+_FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+
 
 def cleanup_stale_zcode_requests() -> None:
     """Reclaim abandoned private snapshots after a full day, never follow links."""
-    if os.name != "posix":
-        return
     cutoff = time.time() - 86_400
+    if os.name != "posix":
+        root = _request_root()
+        if root is not None:
+            cleanup_stale_windows_requests(Path(root), cutoff)
+        return
     try:
         with os.scandir(tempfile.gettempdir()) as entries:
             for index, entry in enumerate(entries):
@@ -59,6 +64,37 @@ def cleanup_stale_zcode_requests() -> None:
                         os.unlink("request.json", dir_fd=descriptor)
                     finally:
                         os.close(descriptor)
+                    os.rmdir(entry.path)
+                except OSError:
+                    continue
+    except OSError:
+        pass
+
+
+def cleanup_stale_windows_requests(root: Path, cutoff: float) -> None:
+    """Remove only a plain directory holding a plain request file, never a
+    reparse point at either level."""
+    try:
+        with os.scandir(root) as entries:
+            for index, entry in enumerate(entries):
+                if index >= 4096:
+                    break
+                if not entry.name.startswith("hol-guard-contained-test-"):
+                    continue
+                try:
+                    directory = os.lstat(entry.path)
+                    request_path = os.path.join(entry.path, "request.json")
+                    request = os.lstat(request_path)
+                    if (
+                        not stat.S_ISDIR(directory.st_mode)
+                        or not stat.S_ISREG(request.st_mode)
+                        or getattr(directory, "st_file_attributes", 0) & _FILE_ATTRIBUTE_REPARSE_POINT
+                        or getattr(request, "st_file_attributes", 0) & _FILE_ATTRIBUTE_REPARSE_POINT
+                        or directory.st_mtime > cutoff
+                        or request.st_mtime > cutoff
+                    ):
+                        continue
+                    os.unlink(request_path)
                     os.rmdir(entry.path)
                 except OSError:
                     continue

@@ -205,34 +205,31 @@ fn skill_document_evidence_matches_python() {
     }
 }
 
+/// The bounded roots a source-of-truth inspection may reach. A workspace is
+/// inspected as the workspace even when it sits inside the home directory, so
+/// its root stays ahead of the home root.
 #[test]
-fn safe_roots_match_python() {
-    for case in cases("safe_roots") {
-        let home = PathBuf::from(text(&case["home_dir"]));
-        let workspace = case["workspace_dir"].as_str().map(PathBuf::from);
-        let expected: Vec<PathBuf> = case["roots"]
-            .as_array()
-            .expect("roots is an array")
-            .iter()
-            .map(|root| PathBuf::from(text(root)))
-            .collect();
+fn a_workspace_root_precedes_the_home_root() {
+    let home = Path::new("/home/user");
+    for (workspace, expected) in [
+        (None, vec![home.to_path_buf()]),
+        (
+            Some("/home/user/project"),
+            vec![PathBuf::from("/home/user/project"), home.to_path_buf()],
+        ),
+        (
+            Some("/srv/work"),
+            vec![PathBuf::from("/srv/work"), home.to_path_buf()],
+        ),
+        (
+            Some("/home/user"),
+            vec![home.to_path_buf(), home.to_path_buf()],
+        ),
+    ] {
         assert_eq!(
-            safe_roots_for_inspection(&home, workspace.as_deref()),
+            safe_roots_for_inspection(home, workspace.map(Path::new)),
             expected,
-            "safe roots for {:?}",
-            case["home_dir"],
+            "safe roots for {workspace:?}",
         );
     }
-}
-
-/// A workspace inside the home directory has to be inspected as the workspace,
-/// so its root stays ahead of the home root.
-#[test]
-fn workspace_root_precedes_the_home_root() {
-    let home = Path::new("/home/user");
-    let workspace = Path::new("/home/user/project");
-    assert_eq!(
-        safe_roots_for_inspection(home, Some(workspace)),
-        vec![workspace.to_path_buf(), home.to_path_buf()],
-    );
 }

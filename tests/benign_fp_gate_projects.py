@@ -145,7 +145,9 @@ def _python_toolchain(workspace: Path) -> None:
     _write(workspace / "tests" / "test_fixture_app.py", "def test_version():\n    assert True\n")
     venv = workspace / ".venv"
     _write(venv / "pyvenv.cfg", "home = /usr/bin\nversion = 3.12.3\ninclude-system-site-packages = false\n")
-    for name in ("pytest", "ruff", "mypy"):
+    # `pip` and `pip3` come with the environment itself, so a project reads
+    # its installed packages through them as readily as it runs its tools.
+    for name in ("pytest", "ruff", "mypy", "pip", "pip3"):
         script = venv / "bin" / name
         _write(script, f"#!/bin/sh\nexec echo '{name}'\n")
         script.chmod(0o755)
@@ -225,19 +227,30 @@ def host_tool_path(home: Path, search_path: str) -> str:
     executes from, so the gate would be measuring that host's package layout rather than the command
     a model ran. The synthetic connector CLIs install into ``~/.local/bin``, which a real login
     shell has on PATH; it goes first so the fixture CLI, not a host program, is the one a grant was
-    recorded for.
+    recorded for. ``uv`` is there for the same reason as SQLite: a runner installs it wherever its
+    own setup put it, often a directory the sandbox executes nothing from, so a stand-in sits in
+    the Cargo bin directory a developer's own ``uv`` resolves from and the gate measures the
+    command rather than the runner's layout.
     """
     stand_in = "#!/bin/sh\nexit 0\n"
     bun = home / ".bun" / "bin"
     node = home / ".nvm" / "versions" / "node" / "v25.2.1" / "bin"
     sqlite = home / ".asdf" / "installs" / "sqlite" / "3.46.1" / "bin"
-    tools = ((bun, ("bun",)), (node, ("node", "npm", "npx", "yarn")), (sqlite, ("sqlite3",)))
+    cargo = home / ".cargo" / "bin"
+    tools = (
+        (bun, ("bun",)),
+        (node, ("node", "npm", "npx", "yarn")),
+        (sqlite, ("sqlite3",)),
+        (cargo, ("uv",)),
+    )
     for directory, names in tools:
         for name in names:
             _write(directory / name, stand_in)
             (directory / name).chmod(0o755)
     local_bin = home / ".local" / "bin"
-    return os.pathsep.join([str(local_bin), str(node), str(sqlite), search_path, str(bun)])
+    return os.pathsep.join(
+        [str(local_bin), str(node), str(sqlite), str(cargo), search_path, str(bun)]
+    )
 
 
 def _application_database(path: Path) -> None:

@@ -289,3 +289,19 @@ def test_linux_does_not_take_an_unofficial_codex_name(monkeypatch):
     parents = {"/proc/40/stat": "40 (codex-evil) S 30 1 1", "/proc/30/stat": "30 (node) S 1 1 1"}
     monkeypatch.setattr(route.Path, "read_text", lambda self, **_kwargs: parents[str(self)])
     assert route.launching_codex_executable() is None
+
+
+def test_windows_ancestor_walk_rejects_a_reused_parent_id(monkeypatch):
+    from codex_plugin_scanner.guard.adapters import codex_contained_tests_windows as walk
+
+    monkeypatch.setattr(walk.sys, "platform", "win32")
+    monkeypatch.setattr(walk.os, "getpid", lambda: 30)
+    monkeypatch.setattr(walk, "_parents", lambda: {30: 20, 20: 10, 10: 0})
+    monkeypatch.setattr(walk, "_image_path", lambda pid: Path("codex.exe" if pid == 10 else "shell.exe"))
+    starts = {30: 300, 20: 200, 10: 100}
+    monkeypatch.setattr(walk, "_start_time", starts.get)
+    assert walk.windows_codex_ancestor(lambda name: name == "codex.exe", 6) is not None
+    starts[10] = 250
+    assert walk.windows_codex_ancestor(lambda name: name == "codex.exe", 6) is None
+    starts[10] = None
+    assert walk.windows_codex_ancestor(lambda name: name == "codex.exe", 6) is None

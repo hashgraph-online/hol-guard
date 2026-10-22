@@ -61,6 +61,23 @@ pub(super) fn safe_read_target(argument: &str) -> bool {
     true
 }
 
+/// The lexical floor a path-spelled word shares with every read screen: a
+/// bounded length, no shell metacharacter or glob, and no parent component.
+///
+/// A caller that proves its own target, rather than asking whether the path
+/// may be read, still owes the shell's own reading of the word. `..` stays
+/// refused here even though the read screens admit a parent component that
+/// canonicalizing resolves, because nothing downstream re-reads the spelling.
+pub(super) fn bounded_path_spelling(value: &str) -> bool {
+    value == value.trim()
+        && !value.is_empty()
+        && value.len() <= 4096
+        && !value.contains([
+            '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '{', '}', '[', ']',
+        ])
+        && !value.split(['/', '\\']).any(|part| part == "..")
+}
+
 /// Share canonical path-risk checks between structured reads and shell reads.
 /// Absolute/home-relative targets must resolve; sensitive symlink destinations
 /// stay guarded. Unresolved relative targets retain the legacy lexical floor.

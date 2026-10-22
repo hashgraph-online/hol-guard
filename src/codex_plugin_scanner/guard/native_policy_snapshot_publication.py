@@ -7,6 +7,7 @@ import sqlite3
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, cast
 
+from .catalog_delivery import lifecycle
 from .native_command_control_authority_io import hold_command_control_authority_lock
 from .native_policy_snapshot_codec import _strict_json_loads_v3
 from .native_policy_snapshot_constants import (
@@ -23,16 +24,9 @@ from .native_policy_snapshot_direct_lane import (
     local_cli_block_rules_present,
     with_direct_hook_state,
 )
-from .native_policy_snapshot_direct_lane_review import (
-    recheckable_review_facts,
-    review_facts_bound,
-    with_review_facts,
-)
+from .native_policy_snapshot_direct_lane_review import recheckable_review_facts, review_facts_bound, with_review_facts
 from .native_policy_snapshot_direct_lane_saved import refresh_integrity_state, with_saved_decision_state
-from .native_policy_snapshot_direct_lane_structured import (
-    bound_structured_output_view,
-    with_structured_output_view,
-)
+from .native_policy_snapshot_direct_lane_structured import bound_structured_output_view, with_structured_output_view
 from .native_policy_snapshot_harness_postures import (
     HARNESS_POSTURES_BINDING_KEY,
     valid_harness_postures,
@@ -235,6 +229,9 @@ class NativePolicySnapshotPublicationMixin:
         if revive_due:
             publisher._start_resident_revival()
 
+    # Every authenticated read in one attempt shares a single verified runtime
+    # instead of verifying and copying it again for each read.
+    @lifecycle.one_runtime
     def _publish_once(self, *, renew_after_generation: int | None = None) -> None:
         publisher = cast("NativePolicySnapshotPublisher", self)
         with publisher._condition:

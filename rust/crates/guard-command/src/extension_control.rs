@@ -19,6 +19,10 @@ use serde::{Deserialize, Serialize};
 
 use super::effect_decision::{DecisionBasis, DecisionFactor, DecisionFactorSource, GuardAction};
 
+mod prepared;
+
+pub use prepared::{ControlClosure, PreparedControls};
+
 /// `CONTROL_SCHEMA_VERSION` (extension_control_contract.py:12).
 pub const CONTROL_SCHEMA_VERSION: &str = "1.0.0";
 
@@ -608,7 +612,8 @@ fn resolution(
 /// `resolve_extension_controls` (:69-146).
 ///
 /// `authority_failure` mirrors the Python kwarg; `registry` is `None` to model
-/// `CATALOG_UNAVAILABLE` (Python `isinstance` check).
+/// `CATALOG_UNAVAILABLE` (Python `isinstance` check). Callers that ask about
+/// many ids against the same layers prepare them once (`PreparedControls`).
 #[allow(clippy::too_many_arguments)]
 pub fn resolve_extension_controls(
     layers: &[ExtensionControlLayer],
@@ -619,133 +624,11 @@ pub fn resolve_extension_controls(
     observations: &[String],
     authority_failure: Option<ResolverFailureCode>,
 ) -> ControlResolution {
-    // `islice(layers, MAX_CONTROL_LAYERS + 1)` — bound before expansion.
-    let layer_slice: Vec<ExtensionControlLayer> = layers
-        .iter()
-        .take(MAX_CONTROL_LAYERS + 1)
-        .cloned()
-        .collect();
-    let layer_values = expand_legacy_dns_layers(&layer_slice);
-    let composed = compose_control_layers(&layer_values);
-    let mut failures: BTreeSet<ControlResolverFailure> =
-        composed.failures.iter().copied().collect();
-
-    if let Some(failure) =
-        authority_failure.filter(|_| surface != ControlSurface::TrustedLocalProof)
-    {
-        failures.insert(ControlResolverFailure::new(failure, None));
-    }
-
-    let input_limit_exceeded = layer_values.len() > MAX_CONTROL_LAYERS
-        || layer_values
-            .iter()
-            .any(|l| l.controls.len() > MAX_CONTROLS_PER_LAYER)
-        || extension_ids.len() > MAX_RESOLUTION_IDS
-        || permission_ids.len() > MAX_RESOLUTION_IDS
-        || observations.len() > MAX_OBSERVATIONS
-        || extension_ids
-            .iter()
-            .chain(permission_ids.iter())
-            .chain(observations.iter())
-            .any(|v| v.len() > MAX_INPUT_TEXT_LENGTH);
-
-    if input_limit_exceeded {
-        failures.insert(ControlResolverFailure::new(
-            ResolverFailureCode::InputLimitExceeded,
-            None,
-        ));
-        let truncated: Vec<String> = observations
-            .iter()
-            .take(MAX_OBSERVATIONS)
-            .cloned()
-            .collect();
-        return resolution(composed, failures, truncated, None);
-    }
-
-    // `type(surface) is not ControlSurface` is unrepresentable in Rust (typed
-    // enum); Python's guard is a runtime isinstance check — no-op here.
-    let registry = match registry {
-        None => {
-            failures.insert(ControlResolverFailure::new(
-                ResolverFailureCode::CatalogUnavailable,
-                None,
-            ));
-            return resolution(composed, failures, observations.to_vec(), None);
-        }
-        Some(r) => r,
-    };
-
-    for layer in &layer_values {
-        if layer.catalog_digest != registry.catalog_digest() {
-            failures.insert(ControlResolverFailure::new(
-                ResolverFailureCode::CatalogDigestMismatch,
-                Some(layer.kind),
-            ));
-        }
-        validate_layer_targets(layer, registry, &mut failures);
-    }
-
-    let mut expanded_extensions = extension_closure(registry, extension_ids, &mut failures);
-    let expanded_permissions = permission_closure(registry, permission_ids, &mut failures);
-    // Expand each resolved permission's owning extension into the extension set.
-    for permission_id in expanded_permissions.clone() {
-        if let Some(permission) = registry.permission(&permission_id) {
-            expanded_extensions.extend(extension_closure(
-                registry,
-                &[permission.extension_id],
-                &mut failures,
-            ));
-        }
-    }
-
-    if !failures.is_empty() {
-        return resolution(composed, failures, observations.to_vec(), None);
-    }
-    if composed.global_lockdown && !TRUSTED_LOCKDOWN_SURFACES.contains(&surface) {
-        return resolution(
-            composed,
-            failures,
-            observations.to_vec(),
-            Some("control.global-lockdown"),
-        );
-    }
-    if expanded_extensions
-        .iter()
-        .any(|id| composed.state_for(ControlTargetKind::Extension, id) == ControlState::Disabled)
-    {
-        return resolution(
-            composed,
-            failures,
-            observations.to_vec(),
-            Some("control.disabled-extension"),
-        );
-    }
-    if expanded_permissions
-        .iter()
-        .any(|id| composed.state_for(ControlTargetKind::Permission, id) == ControlState::Disabled)
-    {
-        return resolution(
-            composed,
-            failures,
-            observations.to_vec(),
-            Some("control.disabled-permission"),
-        );
-    }
-    let explicitly_enabled_permission_ids: Vec<String> = permission_ids
-        .iter()
-        .filter(|id| has_explicit_enabled_permission(&composed, id))
-        .cloned()
-        .collect();
-    let mut sorted_enabled = explicitly_enabled_permission_ids;
-    sorted_enabled.sort();
-    ControlResolution {
-        composed,
-        blocked: false,
-        factors: Vec::new(),
-        failures: Vec::new(),
-        observations: observations.to_vec(),
-        explicitly_enabled_permission_ids: sorted_enabled,
-    }
+    PreparedControls::new(layers, registry, surface, authority_failure).resolve(
+        extension_ids,
+        permission_ids,
+        observations,
+    )
 }
 
 #[cfg(test)]

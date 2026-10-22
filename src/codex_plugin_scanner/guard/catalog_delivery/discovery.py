@@ -21,6 +21,7 @@ from ..file_identity import full_stat_identity
 from ..native_resident_client import native_resident_client_request
 from ..native_runtime import _isolated_environment, native_runtime_status
 from ..strict_json_pairs import unique_json_object
+from . import lifecycle
 from .authority import VerifiedDistribution
 
 CAPABILITY = "catalog-prepare-v1"
@@ -136,7 +137,10 @@ def prepare_discovery(guard_home: Path, authority, *, fetch=None) -> DiscoveryHa
     """Forward verified factory bytes; preparation runs outside hook decisions."""
     token = _transport.set([])
     try:
-        return _prepare_discovery(guard_home, authority, fetch=fetch)
+        # A preparation asks for up to 64 members per batch. One session verifies
+        # and copies the runtime once for all of them.
+        with lifecycle.session():
+            return _prepare_discovery(guard_home, authority, fetch=fetch)
     finally:
         _transport.reset(token)
 

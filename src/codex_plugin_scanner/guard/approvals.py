@@ -463,7 +463,9 @@ def apply_approval_resolution(
     from .native_bash_review_preflight import require_verified_bash_review
 
     require_verified_bash_review(store, request, require_execution=action == "allow" or persist_policy is True)
-    resolved_at = now or _now()
+    from .store_base import _canonical_utc_timestamp
+
+    resolved_at = _canonical_utc_timestamp(now or _now())
     temporary_mcp_selection: TemporaryMcpGrantSelection | None = None
     if (mcp_grant_target is None) != (mcp_grant_duration is None):
         raise ValueError("incomplete_temporary_mcp_approval")
@@ -1984,8 +1986,9 @@ def bulk_allow_read_only_once(
     now: str | None = None,
 ) -> dict[str, object]:
     from .approval_gate import public_config
+    from .store_base import _canonical_utc_timestamp
 
-    resolved_at = now or _now()
+    resolved_at = _canonical_utc_timestamp(now or _now())
     gate = public_config(store.guard_home, now=resolved_at)
     if not gate.enabled or not gate.configured:
         raise ValueError("bulk_approve_gate_required")

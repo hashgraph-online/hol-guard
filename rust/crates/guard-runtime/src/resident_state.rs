@@ -39,7 +39,8 @@ pub(crate) use resident_state_files::{
 };
 #[allow(unused_imports)]
 pub(crate) use resident_state_files::{
-    ensure_private_directory_under, is_lock_contention, private_file, private_lock_file,
+    ensure_private_directory_under, is_lock_contention, lock_contention_deadline,
+    pause_for_lock_contention, private_file, private_lock_file, try_lock_exclusive_briefly,
 };
 
 const STATE_SCHEMA: &str = "hol-guard-resident-state.v3";

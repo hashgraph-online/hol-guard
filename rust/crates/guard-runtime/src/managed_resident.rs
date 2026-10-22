@@ -35,6 +35,10 @@ mod owner_lock;
 pub(crate) use owner_lock::ManagedOwnerLock;
 #[path = "managed_resident_exit.rs"]
 mod exit_record;
+#[path = "resident_private_file.rs"]
+mod private_file;
+#[path = "resident_requested_stop.rs"]
+mod requested_stop;
 #[path = "resident_failure_log.rs"]
 mod resident_failure_log;
 #[path = "resident_state_retirement.rs"]
@@ -265,7 +269,7 @@ pub(crate) fn serve_managed(
         );
     }
     let (policy_store, token, owner_alive) = startup?;
-    if cfg!(unix) {
+    let served = if cfg!(unix) {
         managed_resident_transport::serve_unix_managed(
             (&scope, &owner_lock),
             policy_store,
@@ -285,7 +289,17 @@ pub(crate) fn serve_managed(
             token,
             owner_alive,
         )
+    };
+    // The serve loops end on a `shutdown` operation by returning, so a
+    // requested stop reaches the supervisor as a clean exit and nothing else.
+    // Leave the note here, where the reason is still known, named after this
+    // process so the supervisor that reaps it reads this run's note and no
+    // other, and does not charge a stop it was asked for to the crash-loop
+    // budget.
+    if served.is_ok() && shutdown_requested() {
+        let _ = requested_stop::record(&scope, std::process::id());
     }
+    served
 }
 
 pub(crate) fn supervise_managed(
@@ -345,6 +359,10 @@ pub(crate) fn supervise_managed_for_owner(
         let mut child = child
             .spawn()
             .map_err(|_| "native_resident_spawn_failed".to_owned())?;
+        // Held across the wait: it is how the exit record tells this child's
+        // requested-stop note from one left by a run this supervisor did not
+        // start.
+        let child_process_id = child.id();
         let stderr_record = exit_record::capture_resident_stderr(&mut child);
         let mut liveness_writer = child
             .stdin
@@ -370,7 +388,13 @@ pub(crate) fn supervise_managed_for_owner(
         let ran_for = started.elapsed();
         child_done.store(true, Ordering::Release);
         let _ = watcher.join();
-        exit_record::record_supervised_run(supervised, stderr_record, status, ran_for);
+        exit_record::record_supervised_run(
+            supervised,
+            stderr_record,
+            status,
+            ran_for,
+            child_process_id,
+        );
         if status.success() {
             Ok(())
         } else {

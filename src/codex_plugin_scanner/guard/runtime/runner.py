@@ -3609,9 +3609,34 @@ def _receipt_sync_cursor_rowid(store: GuardStore) -> int | None:
     return None
 
 
+def _receipt_sync_window_floor(receipts: list[dict[str, object]]) -> int | None:
+    """Return the rowid just below the oldest receipt in a newest-first page."""
+
+    rowids = [
+        value
+        for value in (item.get("receipt_rowid") for item in receipts)
+        if isinstance(value, int) and not isinstance(value, bool)
+    ]
+    if not rowids:
+        return None
+    return max(min(rowids) - 1, 0)
+
+
 def _receipt_sync_rows_for_upload(store: GuardStore, *, cursor_rowid: int | None) -> list[dict[str, object]]:
     if cursor_rowid is None:
-        return store.list_receipts(limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
+        # The first page reads its window in rowid order rather than newest
+        # first, because the cursor saved after it is the highest rowid it
+        # uploaded. A newest-first page that the store shortened would drop its
+        # oldest rows below that cursor, where no later page looks for them.
+        # The window starts at the oldest receipt the newest page names, not at
+        # an arithmetic distance below the latest rowid: cleanup leaves gaps in
+        # the rowids, and an interval that wide can hold far fewer receipts than
+        # a page while the cursor still moves past every one it skipped.
+        newest = store.list_receipts(limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
+        first_after = _receipt_sync_window_floor(newest)
+        if first_after is None:
+            return newest
+        return store.list_receipts_since_rowid(after_rowid=first_after, limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
     latest_rowid = store.latest_receipt_rowid()
     if latest_rowid is None:
         return []
@@ -3655,7 +3680,12 @@ def _receipt_sync_rows_with_command_detail_backfill(
         if isinstance(receipt_rowid, int):
             backfill_rowids.append(receipt_rowid)
     next_before_rowid = min(backfill_rowids) if backfill_rowids else before_rowid
-    complete = len(backfill_rows) < _RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT
+    # Only an empty page ends the backfill. A page can come back short because
+    # the store shortened it to a size the runtime can reply with, and reading
+    # that as the end would leave every older receipt without its command
+    # detail for good. Each page moves `before_rowid` down, so the walk still
+    # finishes.
+    complete = not backfill_rows
     return merged, {
         "level": redaction_level,
         "updated_at": synced_at,
@@ -4212,13 +4242,16 @@ def _sync_extension_catalog_from_runtime_handshake(
         return result
 
     summary, upload = prepare_extension_catalog_handshake(
+        guard_home=guard_home,
         runtime_sync_url=runtime_sync_url,
         runtime_response=runtime_response,
         session_payload=session_payload,
         catalog_factory=lambda generated_at: (
             build_v1_catalog_from_view(observed_view(session_payload, guard_home))
             if "extensionCatalogViewDigest" in session_payload
-            else build_builtin_extension_catalog_wire(guard_version=__version__, generated_at=generated_at)
+            else build_builtin_extension_catalog_wire(
+                guard_version=__version__, generated_at=generated_at, guard_home=guard_home
+            )
         ),
         fallback_generated_at=_now(),
     )
@@ -4244,8 +4277,8 @@ def _sync_extension_catalog_from_runtime_handshake(
     digest = session_payload.get("extensionCatalogDigest")
     if not isinstance(digest, str):
         raise RuntimeError("Invalid Extension catalog handshake response")
-    _validate_extension_catalog_sync_response(response, expected_digest=digest)
-    return summary
+    unverified = _validate_extension_catalog_sync_response(response, expected_digest=digest, guard_home=guard_home)
+    return summary if unverified is None else unverified
 
 
 def _cloud_local_identity_payload(*, observed_at: str) -> dict[str, object]:

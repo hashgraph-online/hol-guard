@@ -315,7 +315,9 @@ class AdapterSession:
     """One private daemon and workspace, with deterministic resident cleanup."""
 
     def __init__(self, runtime: Path) -> None:
-        self.temporary = tempfile.TemporaryDirectory(prefix="hol-guard-slo-")
+        # A resident that is still exiting can leave files behind for a moment;
+        # a leftover scratch directory must not discard a finished measurement.
+        self.temporary = tempfile.TemporaryDirectory(prefix="hol-guard-slo-", ignore_cleanup_errors=True)
         # Keep the synthetic paths canonical. macOS may expose ``/tmp`` as
         # ``/private/tmp`` after the daemon validates a hook workspace; using
         # one spelling avoids registering the same workspace twice and

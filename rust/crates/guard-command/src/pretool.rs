@@ -119,6 +119,7 @@ mod pytest_contained;
 mod tool_bin_listing;
 mod trailing_group;
 mod trusted_location;
+mod venv_program_path;
 pub(crate) use git_routes::{
     git_dir_route_within_scope, git_route_within_workspace, git_route_without_repository,
     reads_without_repository,
@@ -266,13 +267,78 @@ pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
 /// A Git alias, hook or config value can carry a program the parser never
 /// models; any argument naming Guard, other than a commit message, keeps the
 /// native decision.
+///
+/// The repository `gh` selects with `--repo` or `-R` is not such an argument:
+/// `owner/name` names a repository on the GitHub host, never a local file,
+/// program or process, so a repository called `hol-guard` keeps the Allow.
 fn names_guard_outside_message(segment: &crate::CommandSegmentV1) -> bool {
+    let selectors = github_repository_values(segment);
     arguments_outside_message(segment).any(|argument| {
+        if selectors
+            .iter()
+            .any(|selector| std::ptr::eq(*selector, argument))
+        {
+            return false;
+        }
         let lowered = argument.to_ascii_lowercase();
         ["hol-guard", "plugin-guard", ".hol-guard"]
             .iter()
             .any(|needle| lowered.contains(needle))
     })
+}
+
+/// The `owner/name` values `gh` provably reads as its `--repo` selector.
+///
+/// A `--repo` that follows a flag taking a value is that flag's value, so
+/// `gh gist create --desc --repo .hol-guard/receipts.json` uploads the Guard
+/// path. A selector only counts when the token before it cannot take it as a
+/// value, and never after `--`, where every argument is positional.
+fn github_repository_values(segment: &crate::CommandSegmentV1) -> Vec<&String> {
+    if crate::command_compatibility::basename(segment) != "gh" {
+        return Vec::new();
+    }
+    let arguments = &segment.arguments;
+    let merge = arguments.len() > 1 && arguments[0] == "pr" && arguments[1] == "merge";
+    let free = |flag: usize| flag == 0 || !takes_next_value(&arguments[flag - 1], merge);
+    let mut values = Vec::new();
+    for (index, argument) in arguments.iter().enumerate() {
+        if argument == "--" {
+            break;
+        }
+        let value = match argument.strip_prefix("--repo=") {
+            Some(value) => free(index).then_some(value),
+            None if index > 0 && matches!(arguments[index - 1].as_str(), "--repo" | "-R") => {
+                free(index - 1).then_some(argument.as_str())
+            }
+            None => None,
+        };
+        if value.is_some_and(crate::command_compatibility::github_repository_selector) {
+            values.push(argument);
+        }
+    }
+    values
+}
+
+/// Whether `gh` could read the argument after `token` as `token`'s value.
+/// Only `gh pr merge`'s boolean flags are known not to.
+fn takes_next_value(token: &str, merge: bool) -> bool {
+    const MERGE_BOOLEANS: [&str; 11] = [
+        "--squash",
+        "-s",
+        "--merge",
+        "-m",
+        "--rebase",
+        "-r",
+        "--auto",
+        "--admin",
+        "--disable-auto",
+        "--delete-branch",
+        "-d",
+    ];
+    token.len() > 1
+        && token.starts_with('-')
+        && !(token.starts_with("--") && token.contains('='))
+        && !(merge && MERGE_BOOLEANS.contains(&token))
 }
 
 /// A glob or brace pattern, other than a commit message, that the shell or a

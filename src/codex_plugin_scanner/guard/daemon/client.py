@@ -18,6 +18,7 @@ from typing import TypeGuard, cast
 from urllib.parse import urlsplit
 
 from ..runtime.extension_control_limits import MAX_DAEMON_CATALOG_RESPONSE_BYTES, MAX_DAEMON_GET_RESPONSE_BYTES
+from .extension_control_timeouts import APPLY_REQUEST_TIMEOUT_S, PREVIEW_REQUEST_TIMEOUT_S
 from .manager import (
     clear_guard_daemon_state,
     ensure_guard_daemon,
@@ -255,13 +256,23 @@ class GuardSurfaceDaemonClient:
         return self._post("/v1/extension-controls/acknowledge-degraded", payload)
 
     def preview_extension_controls(self, payload: dict[str, object]) -> dict[str, object]:
-        return self._post("/v1/extension-controls/preview", payload)
+        return self._post(
+            "/v1/extension-controls/preview",
+            payload,
+            timeout=PREVIEW_REQUEST_TIMEOUT_S,
+            max_bytes=MAX_DAEMON_CATALOG_RESPONSE_BYTES,
+        )
 
     def inspect_command(self, payload: dict[str, object]) -> dict[str, object]:
         return self._post("/v1/extension-controls/inspect", payload)
 
     def apply_extension_controls(self, payload: dict[str, object]) -> dict[str, object]:
-        return self._post("/v1/extension-controls/apply", payload)
+        return self._post(
+            "/v1/extension-controls/apply",
+            payload,
+            timeout=APPLY_REQUEST_TIMEOUT_S,
+            max_bytes=MAX_DAEMON_CATALOG_RESPONSE_BYTES,
+        )
 
     def containment_health(self) -> dict[str, object]:
         response = self._get("/v1/runtime/containment-health", timeout=5.0)
@@ -408,7 +419,12 @@ class GuardSurfaceDaemonClient:
         payload: dict[str, object],
         *,
         timeout: float = _DEFAULT_REQUEST_TIMEOUT_S,
+        max_bytes: int | None = None,
     ) -> dict[str, object]:
+        # A socket timeout bounds each wait, not the call, so a daemon sending a
+        # byte at a time could hold it open. With ``max_bytes`` the body, an HTTP
+        # error's included, is read under one monotonic deadline and size cap.
+        deadline = time.monotonic() + timeout
         request = urllib.request.Request(
             f"{self.daemon_url}{path}",
             data=json.dumps(payload).encode("utf-8"),
@@ -420,9 +436,14 @@ class GuardSurfaceDaemonClient:
         )
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                return self._decode_json_response(response.read().decode("utf-8"))
+                body = (
+                    response.read()
+                    if max_bytes is None
+                    else self._read_response_with_deadline(response, deadline=deadline, max_bytes=max_bytes)
+                )
+                return self._decode_json_response(body.decode("utf-8"))
         except urllib.error.HTTPError as error:
-            raise self._http_request_error(error) from error
+            raise self._http_request_error(error, deadline=None if max_bytes is None else deadline) from error
         except GuardDaemonRequestError:
             raise
         except UnicodeDecodeError as error:

@@ -440,11 +440,13 @@ class _HeadlessRoutes:
         if hint is None:
             from .native_review_allow_hint import live_approval_extension_allow_hint
 
-            hint = live_approval_extension_allow_hint(
-                approval, guard_home=store.guard_home, snapshot=snapshot, registry=registry
-            )
+            hint = live_approval_extension_allow_hint(approval, guard_home=store.guard_home, snapshot=snapshot)
         payload = with_approval_extension_recommendation(
-            {**approval, "extension_allow_hint": hint}, registry=registry, snapshot=snapshot, include=True
+            {**approval, "extension_allow_hint": hint},
+            registry=registry,
+            snapshot=snapshot,
+            include=True,
+            guard_home=store.guard_home,
         )
         from ..approval_gate import public_config
         from .approval_connector_recommendation import safe_connector_recommendation

@@ -21,10 +21,18 @@ mod policy_view;
 mod projection;
 #[path = "cloud_catalog_sync.rs"]
 pub mod sync;
+#[path = "cloud_catalog_wire_v1.rs"]
+pub mod wire_v1;
 pub use policy::select_policy_metadata;
 #[cfg(test)]
 #[path = "cloud_catalog_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "cloud_catalog_wire_v1_sync_tests.rs"]
+mod wire_v1_sync_tests;
+#[cfg(test)]
+#[path = "cloud_catalog_wire_v1_tests.rs"]
+mod wire_v1_tests;
 
 pub const CAPABILITY: &str = "cloud-catalog-producer-v2";
 pub const MAX_ENTRY: usize = 1_000_000;
@@ -91,9 +99,10 @@ impl Observation {
     }
 }
 fn timestamp(s: &str) -> bool {
-    // Same strict Gregorian RFC3339 timestamp contract as Cloud.
+    // Same strict Gregorian RFC3339 timestamp contract as Cloud. ASCII digits
+    // only: `\d` would admit any Unicode decimal digit.
     let re = regex::Regex::new(
-        r"^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-](\d{2}):(\d{2}))$",
+        r"^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.[0-9]+)?(Z|[+-]([0-9]{2}):([0-9]{2}))$",
     )
     .unwrap();
     let Some(c) = re.captures(s) else {
@@ -292,6 +301,13 @@ fn flush(
 pub fn evaluate(request: &Value) -> Value {
     if request["action"] == "policy_view" {
         return policy_view::evaluate(request);
+    }
+    // Stateless Cloud v1 wire projection/validation/digest; no guard home state.
+    if request["action"]
+        .as_str()
+        .is_some_and(|action| action.starts_with("v1_"))
+    {
+        return wire_v1::evaluate(request);
     }
     static DRAFTS: OnceLock<Mutex<Vec<(String, Builder)>>> = OnceLock::new();
     let result = (|| -> Result<Value> {

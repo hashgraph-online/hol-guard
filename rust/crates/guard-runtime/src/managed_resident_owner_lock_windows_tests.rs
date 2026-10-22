@@ -3,15 +3,11 @@
 fn managed_owner_lock_allows_overlapping_private_directory_binds() {
     use crate::managed_resident::acquire_managed_owner_lock;
     use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     let home = std::env::temp_dir().join(format!(
         "hol-guard-managed-owner-bind-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&home).unwrap();
     let root = home.join("native-runtime");
@@ -31,15 +27,11 @@ fn managed_owner_lock_allows_overlapping_private_directory_binds() {
 fn managed_owner_lock_reports_windows_contention_as_busy() {
     use crate::managed_resident::acquire_managed_owner_lock;
     use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     let home = std::env::temp_dir().join(format!(
         "hol-guard-managed-owner-busy-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&home).unwrap();
     let root = home.join("native-runtime");

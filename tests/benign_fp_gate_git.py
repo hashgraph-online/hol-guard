@@ -57,6 +57,9 @@ def _session_worktree(org: Path, home: Path) -> None:
     _git(portal, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main", home=home)
     # An existing branch no worktree has checked out, for `git worktree add <path> <branch>`.
     _git(portal, "branch", "feat/discovery-review", home=home)
+    # A branch fetched from origin but never checked out, which `git worktree add
+    # <path> <name>` creates locally tracking origin.
+    _git(portal, "update-ref", "refs/remotes/origin/feat/remote-only-review", "HEAD", home=home)
     (portal / ".deploy-production.lock.d").mkdir()
     # Installed, gitignored test runner whose `.bin` shim agents list from another checkout.
     _node_package(portal, "vitest", _NODE_PACKAGES["vitest"])

@@ -341,10 +341,7 @@ mod tests {
         let mut root = Workspace(std::env::temp_dir().join(format!(
             "guard-linked-write-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
+            crate::unique_nanos::unique_nanos(),
         )));
         std::fs::create_dir(&root.0).unwrap();
         root.0 = root.0.canonicalize().unwrap();
@@ -468,10 +465,7 @@ mod tests {
         let mut root = Workspace(std::env::temp_dir().join(format!(
             "guard-linked-parent-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
+            crate::unique_nanos::unique_nanos(),
         )));
         std::fs::create_dir_all(&root.0).unwrap();
         root.0 = root.0.canonicalize().unwrap();

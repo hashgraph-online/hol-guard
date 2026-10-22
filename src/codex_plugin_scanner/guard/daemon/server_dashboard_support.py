@@ -308,6 +308,7 @@ class _DashboardSupportRoutes:
             "/audit",
             "/policy",
             "/feed-health",
+            "/releases",
             "/settings",
             "/about",
             "/protection/repair",

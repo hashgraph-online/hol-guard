@@ -1268,5 +1268,9 @@ mod prefix_tests;
 mod expansion_tests;
 
 #[cfg(test)]
+#[path = "native_command_unmodeled_tree_group_tests.rs"]
+mod tree_group_tests;
+
+#[cfg(test)]
 #[path = "native_command_unmodeled_substitution_tests.rs"]
 mod substitution_tests;

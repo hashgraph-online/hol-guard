@@ -13,10 +13,7 @@ struct TempDir(PathBuf);
 
 impl TempDir {
     fn new(label: &str) -> Self {
-        let elapsed = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let elapsed = crate::unique_nanos::unique_nanos();
         let path = std::env::temp_dir().join(format!(
             "hg-evidence-journal-{label}-{}-{elapsed}",
             std::process::id()

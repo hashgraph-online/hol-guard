@@ -222,13 +222,6 @@ EVIDENCE_CASES: list[tuple[dict[str, object], object]] = [
     ({"contentEvidence": {"contentHash": DIGEST}}, f"sha256:{DIGEST}"),
 ]
 
-SAFE_ROOT_CASES: list[tuple[str, str | None]] = [
-    ("/home/user", None),
-    ("/home/user", "/home/user/project"),
-    ("/home/user", "/srv/work"),
-    ("/home/user", "/home/user"),
-]
-
 
 def main() -> None:
     document = {
@@ -238,9 +231,7 @@ def main() -> None:
             "returns, so the Rust port is pinned to observed behaviour."
         ),
         "python_version": ".".join(str(part) for part in sys.version_info[:3]),
-        "item_kind": [
-            {"artifact_type": value, "kind": metadata_module._item_kind(value)} for value in ARTIFACT_TYPES
-        ],
+        "item_kind": [{"artifact_type": value, "kind": metadata_module._item_kind(value)} for value in ARTIFACT_TYPES],
         "canonical_content_hash": [
             {"value": value, "canonical": metadata_module._canonical_inventory_content_hash(value)}
             for value in CANONICAL_HASHES
@@ -275,25 +266,9 @@ def main() -> None:
             {
                 "metadata": metadata,
                 "primary_content_hash": primary,
-                "bound": metadata_module._bind_skill_document_evidence(
-                    metadata, primary_content_hash=primary
-                ),
+                "bound": metadata_module._bind_skill_document_evidence(metadata, primary_content_hash=primary),
             }
             for metadata, primary in EVIDENCE_CASES
-        ],
-        "safe_roots": [
-            {
-                "home_dir": home,
-                "workspace_dir": workspace,
-                "roots": [
-                    str(root)
-                    for root in metadata_module._safe_roots_for_inspection(
-                        home_dir=Path(home),
-                        workspace_dir=Path(workspace) if workspace is not None else None,
-                    )
-                ],
-            }
-            for home, workspace in SAFE_ROOT_CASES
         ],
     }
     target = REPO_ROOT / "rust/crates/guard-command/testdata/inventory_item_metadata_parity.json"

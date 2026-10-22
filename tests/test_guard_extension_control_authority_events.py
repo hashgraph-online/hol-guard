@@ -241,3 +241,20 @@ def test_authenticated_history_fails_closed_on_tampered_transition(tmp_path: Pat
             catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
             limit=20,
         )
+
+
+@pytest.mark.parametrize("limit", [0, 51])
+def test_history_refuses_out_of_range_limit_before_reading_authority(
+    tmp_path: Path, limit: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _store(tmp_path, MemorySecretStore())
+
+    def unexpected_read(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("history read the authority for an invalid limit")
+
+    monkeypatch.setattr(store, "_read_extension_control_authority_locked", unexpected_read)
+    with pytest.raises(ExtensionControlAuthorityError, match="invalid extension control history limit"):
+        store.list_extension_control_authority_history(
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            limit=limit,
+        )

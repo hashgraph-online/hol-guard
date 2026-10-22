@@ -127,6 +127,92 @@ pub struct NativeCommandControlBindingV1 {
     pub active_security_digest: Option<String>,
 }
 
+/// The extension-control state a runtime snapshot digest covers.
+pub struct RuntimeSnapshot<'a> {
+    pub catalog_digest: &'a str,
+    pub health: &'a str,
+    pub revision: u64,
+    pub managed_revision: u64,
+    pub layers: &'a [NativeExtensionControlLayerV1],
+    pub active_security_digest: Option<&'a str>,
+}
+
+/// The digest that identifies one extension-control runtime snapshot: layers
+/// ordered by kind and controls by target, framed as
+/// `schema NUL length NUL canonical-json`. It is the same digest the Python
+/// runtime snapshot carried. Every accepted identifier is ASCII, so the
+/// canonical UTF-8 and `ensure_ascii` encodings, and their lengths, coincide;
+/// a snapshot naming anything else is refused rather than digested differently.
+pub fn runtime_snapshot_digest(snapshot: &RuntimeSnapshot<'_>) -> Result<String, &'static str> {
+    let mut layers = snapshot.layers.to_vec();
+    layers.sort_by(|left, right| left.kind.cmp(&right.kind));
+    for layer in &mut layers {
+        layer.controls.sort_by(|left, right| {
+            (&left.target_kind, &left.target_id).cmp(&(&right.target_kind, &right.target_id))
+        });
+    }
+    let mut value = serde_json::json!({
+        "catalog_digest": snapshot.catalog_digest,
+        "health": snapshot.health,
+        "layers": layers,
+        "managed_revision": snapshot.managed_revision,
+        "revision": snapshot.revision,
+        "schema_version": RUNTIME_SCHEMA,
+    });
+    if let Some(security) = snapshot.active_security_digest {
+        value["active_security_digest"] = security.into();
+    }
+    let canonical =
+        serde_json::to_vec(&value).map_err(|_| "native_command_control_encoding_failed")?;
+    if !canonical.is_ascii() {
+        return Err("native_command_control_encoding_failed");
+    }
+    let mut digest = Sha256::new();
+    digest.update(RUNTIME_SCHEMA.as_bytes());
+    digest.update(b"\0");
+    digest.update(canonical.len().to_string().as_bytes());
+    digest.update(b"\0");
+    digest.update(canonical);
+    Ok(hex::encode(digest.finalize()))
+}
+
+/// Checks the layers a runtime snapshot or binding carries: a valid catalog
+/// digest, at most one layer per kind, every layer on that catalog, and
+/// bounded, unique, well-formed controls. A snapshot that fails here could
+/// never be bound, so it is not given a digest either.
+pub fn validate_snapshot_layers(
+    catalog_digest: &str,
+    layers: &[NativeExtensionControlLayerV1],
+) -> Result<(), &'static str> {
+    if !valid_digest(catalog_digest) || layers.len() > 2 {
+        return Err("native_command_control_binding_invalid");
+    }
+    let mut kinds = BTreeSet::new();
+    for layer in layers {
+        if layer.schema_version != "1.0.0"
+            || !matches!(layer.kind.as_str(), "local-admin" | "signed-cloud")
+            || !kinds.insert(&layer.kind)
+            || layer.catalog_digest != catalog_digest
+            || layer.controls.len() > 512
+        {
+            return Err("native_command_control_layer_invalid");
+        }
+        let mut targets = BTreeSet::new();
+        for control in &layer.controls {
+            if !matches!(control.target_kind.as_str(), "extension" | "permission")
+                || !matches!(control.state.as_str(), "enabled" | "disabled")
+                || !valid_target(&control.target_id)
+                || control.target_id.contains(".permission.")
+                    != (control.target_kind == "permission")
+                || !targets.insert((&control.target_kind, &control.target_id))
+            {
+                return Err("native_command_control_target_invalid");
+            }
+        }
+    }
+    Ok(())
+}
+
 fn valid_digest(value: &str) -> bool {
     value.len() == 64
         && value
@@ -181,29 +267,7 @@ impl NativeCommandControlBindingV1 {
         {
             return Err("native_command_control_binding_invalid");
         }
-        let mut kinds = BTreeSet::new();
-        for layer in &self.layers {
-            if layer.schema_version != "1.0.0"
-                || !matches!(layer.kind.as_str(), "local-admin" | "signed-cloud")
-                || !kinds.insert(&layer.kind)
-                || layer.catalog_digest != self.catalog_digest
-                || layer.controls.len() > 512
-            {
-                return Err("native_command_control_layer_invalid");
-            }
-            let mut targets = BTreeSet::new();
-            for control in &layer.controls {
-                if !matches!(control.target_kind.as_str(), "extension" | "permission")
-                    || !matches!(control.state.as_str(), "enabled" | "disabled")
-                    || !valid_target(&control.target_id)
-                    || control.target_id.contains(".permission.")
-                        != (control.target_kind == "permission")
-                    || !targets.insert((&control.target_kind, &control.target_id))
-                {
-                    return Err("native_command_control_target_invalid");
-                }
-            }
-        }
+        validate_snapshot_layers(&self.catalog_digest, &self.layers)?;
         if self.effective_digest != self.compute_effective_digest()? {
             return Err("native_command_control_digest_mismatch");
         }
@@ -211,35 +275,13 @@ impl NativeCommandControlBindingV1 {
     }
 
     pub fn compute_effective_digest(&self) -> Result<String, &'static str> {
-        // This reproduces the existing Python runtime snapshot digest. Every
-        // accepted identifier is ASCII, so canonical UTF-8 and ensure_ascii
-        // encodings coincide and their framed lengths are identical.
-        let mut layers = self.layers.clone();
-        layers.sort_by(|left, right| left.kind.cmp(&right.kind));
-        for layer in &mut layers {
-            layer.controls.sort_by(|left, right| {
-                (&left.target_kind, &left.target_id).cmp(&(&right.target_kind, &right.target_id))
-            });
-        }
-        let mut value = serde_json::json!({
-            "catalog_digest": self.catalog_digest,
-            "health": self.health,
-            "layers": layers,
-            "managed_revision": self.managed_revision,
-            "revision": self.revision,
-            "schema_version": RUNTIME_SCHEMA,
-        });
-        if let Some(security) = &self.active_security_digest {
-            value["active_security_digest"] = security.clone().into();
-        }
-        let canonical =
-            serde_json::to_vec(&value).map_err(|_| "native_command_control_encoding_failed")?;
-        let mut digest = Sha256::new();
-        digest.update(RUNTIME_SCHEMA.as_bytes());
-        digest.update(b"\0");
-        digest.update(canonical.len().to_string().as_bytes());
-        digest.update(b"\0");
-        digest.update(canonical);
-        Ok(hex::encode(digest.finalize()))
+        runtime_snapshot_digest(&RuntimeSnapshot {
+            catalog_digest: &self.catalog_digest,
+            health: &self.health,
+            revision: self.revision,
+            managed_revision: self.managed_revision,
+            layers: &self.layers,
+            active_security_digest: self.active_security_digest.as_deref(),
+        })
     }
 }

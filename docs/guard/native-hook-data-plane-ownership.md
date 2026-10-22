@@ -143,15 +143,60 @@ counts, hashes, and booleans. They exclude raw payloads, source, commands,
 prompts, content, secrets, tokens, and paths. The `workspace_bound` boolean may
 record that a workspace was present without disclosing its name or location.
 
-The Extensions allow hint is advisory presentation, not a decision: whether a
-paused review may carry an "enable this permission" hint is gated by one
-intentional mirror of the resident's `allow_hint_candidate` check in the
-Python control plane (`native_review_allow_hint._definite_review_binding` and
-`extension_allow_hint`). All three state the same rule — the pause must be
-the extension review itself (`native_command_review_required`) — and the
-recorded vectors in `rust/crates/guard-runtime/testdata/hook_direct_review/`
-pin the resident and daemon copies together. The settle proofs and the
-counterfactual that verifies a hint before it is stored remain Rust-owned.
+The Extensions allow hint is advisory presentation, not a decision, and the
+resident owns it. The `extension_allow_hint` resident op
+(`rust/crates/guard-runtime/src/extension_allow_hint_op.rs`) re-runs the same
+command evaluation `command_effect_decide` uses, under the resident's own
+admitted control snapshot, with hypothetical enabled permissions, then keeps
+only the permissions the allow needs. It offers a hint only when the pause is
+the extension review itself (`native_command_review_required`), so a fixed
+PreTool floor never gets one. Python
+(`native_extension_allow_hint.py`) builds the query from the evidence the review
+already holds and shape-checks the answer; with no resident there is no hint
+and no Python recomputation. The one remaining mirror is the cheap gate that
+decides whether a paused review is worth asking about at all (not under an
+authority failure, held for review, and the extension review itself rather than
+a fixed floor): `compute_extension_allow_hint`, the resident's
+`allow_hint_candidate` check and `native_review_allow_hint._definite_review_binding`
+state the same rule, the resident stays authoritative, and the recorded vectors in
+`rust/crates/guard-runtime/testdata/hook_direct_review/` pin the resident and
+daemon copies together. The settle proofs and the counterfactual that verifies a
+hint before it is stored are Rust-owned.
+
+The recommendation shown with a pending review is that stored hint re-checked
+on every read, and the resident owns it too. The
+`approval_extension_recommendation` resident op
+(`rust/crates/guard-runtime/src/approval_extension_recommendation_op.rs`) answers
+null when the hint no longer applies: it was recorded under another catalog, a
+named permission is gone or no longer configurable, a global lockdown or a
+disabled control blocks it, or a permission the queue-time check relied on has
+since been turned off. Otherwise it lists the permissions still to enable, marks
+the ones that call for a caution, and reports `authority_unavailable` unless the
+control authority is protected. Its second query names which risk classes call
+for a caution, which the connector recommendation uses. The op reads the
+lease-free admitted catalog and refuses a caller whose registry digest names a
+different catalog. The Python module (`approval_extension_recommendation.py`)
+only validates the stored hint, builds the wire view of the control layers it
+already holds, and shape-checks the answer; with no resident there is no
+recommendation and no Python evaluation.
+
+What a local Extension control draft may change is the resident's too. Three
+`extension_control` queries (`mutation_bounds`, `mutation_validate` and
+`mutability_validate`,
+`rust/crates/guard-runtime/src/extension_control_mutation_op.rs`) answer the
+checks a draft passes before it is previewed or committed: the layer and control
+counts one authority holds, the canonical id of every extension target (an alias
+resolves to its extension and two controls for one extension are refused), the
+catalog the draft and each of its layers is bound to, the targets the catalog
+knows, and the controls a local draft may not touch (the managed layer, a
+required extension and a permission the catalog fixes; a legacy control already
+in place is kept and dropping one is always allowed). The catalog is consulted
+before the request-local metadata overlay, by the same rules the Python lookup
+used. A refusal describes the draft, so it is an `ok` reply carrying a reason
+code and the daemon API maps the code to its HTTP status; only a request the
+resident cannot read is an error. Python (`ExtensionControlApiService`) parses
+the layers, asks, and builds the mutation from the canonical layers it gets
+back; with no resident there is no mutation and no Python validation.
 
 ## Harness route inventory
 

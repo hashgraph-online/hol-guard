@@ -45,6 +45,11 @@ pub(crate) fn github_arguments_are_read_only(arguments: &[String], text: &str) -
     github::arguments_are_read_only(arguments, text)
 }
 
+/// A `gh --repo` value that names a GitHub repository as `owner/name`.
+pub(crate) fn github_repository_selector(value: &str) -> bool {
+    github::repository_selector(value)
+}
+
 pub(crate) fn git_inspection_arguments<'a>(
     arguments: &'a [String],
     context: crate::pretool::PathContext<'_>,

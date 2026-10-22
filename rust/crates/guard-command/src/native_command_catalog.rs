@@ -10,12 +10,14 @@
 //! the catalog to the live [`NativeCommandProgram`] and provides the same
 //! normalized lookup surface (`get`, `get_rule`, `permission`, …).
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
 
 use serde::Deserialize;
 
 use crate::native_command_program::packaged_command_program;
+use crate::workspace_inventory::python_strip;
 
 #[cfg(not(guard_source_bootstrap))]
 static EMBEDDED_CATALOG: &[u8] =
@@ -98,6 +100,15 @@ pub struct CatalogPermission {
     pub typed_capabilities: Vec<String>,
     pub description: String,
     pub deprecated: bool,
+    /// Display metadata; absent from older pack catalogs.
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub risk_tier: String,
+    #[serde(default)]
+    pub example_command: Option<String>,
+    #[serde(default)]
+    pub family: Option<String>,
 }
 
 /// One extension's metadata — `GeneratedCommandExtension`.
@@ -108,6 +119,9 @@ pub struct CatalogExtension {
     pub source: String,
     pub required: bool,
     pub trust_class: String,
+    /// Display name; absent from older pack catalogs.
+    #[serde(default)]
+    pub name: String,
     #[serde(default)]
     pub aliases: Vec<String>,
     /// `dependencies` — resolver extension-closure input.
@@ -250,10 +264,20 @@ impl CommandCatalog {
     }
 
     /// Resolve an extension by `extension_id` or any of its `aliases`
-    /// (GeneratedCommandCatalog.get).
+    /// (GeneratedCommandCatalog.get). Like the Python lookup, the query is
+    /// stripped (`str.strip`, which also drops U+001C..U+001F) and lowercased
+    /// first; an already-normalized id skips the allocation.
     pub fn get(&self, extension_id: &str) -> Option<&CatalogExtension> {
+        let stripped = python_strip(extension_id);
+        let normalized = if stripped.len() == extension_id.len()
+            && !extension_id.chars().any(char::is_uppercase)
+        {
+            Cow::Borrowed(extension_id)
+        } else {
+            Cow::Owned(stripped.to_lowercase())
+        };
         self.by_extension_id
-            .get(extension_id)
+            .get(normalized.as_ref())
             .map(|index| &self.extensions[*index])
     }
 

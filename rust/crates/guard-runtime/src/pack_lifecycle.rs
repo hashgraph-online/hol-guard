@@ -5,10 +5,13 @@ use serde_json::{json, Value};
 use std::collections::BTreeSet;
 
 mod current;
+mod distribution;
 mod floor;
 mod installed_asset;
+pub(crate) mod location;
 mod migration;
 mod offline;
+mod record;
 mod release;
 mod selection;
 #[cfg(test)]
@@ -129,11 +132,17 @@ pub(super) fn evaluate(input: &Value) -> Result<Value, String> {
     if input["kind"] == "installed-asset" {
         return installed_asset::fetch(input);
     }
+    if input["kind"] == "object" {
+        return crate::delivery_object::evaluate(input);
+    }
     if input["kind"] == "preparation" {
         return crate::pack_preparation::evaluate(input);
     }
     if input["kind"] == "offline" {
         return offline::evaluate(input);
+    }
+    if input["kind"] == "distribution" {
+        return distribution::evaluate(input);
     }
     if input["kind"] == "active-security" {
         return crate::active_pack_security::evaluate(input);
@@ -198,6 +207,9 @@ pub(super) fn evaluate(input: &Value) -> Result<Value, String> {
     let key = hex::decode(key).map_err(|_| "pack_lifecycle_key_invalid")?;
     if key.len() != 32 {
         return Err("pack_lifecycle_key_invalid".into());
+    }
+    if kind == "record" {
+        return record::evaluate(input, &key);
     }
     if kind == "migrate" {
         return migration::migrate(input, &key);
@@ -334,8 +346,11 @@ pub(super) fn evaluate(input: &Value) -> Result<Value, String> {
     }
 }
 
+/// The request is held to the stdin frame every runtime subcommand reads. Each
+/// operation bounds its own fields, and a signed provenance statement within
+/// its bound can grow past a smaller frame once its quotes are escaped.
 pub(super) fn run(bytes: &[u8]) -> Result<Value, String> {
-    if bytes.len() > 1024 * 1024 {
+    if bytes.len() > crate::MAX_NATIVE_REQUEST_BYTES {
         return Err("pack_lifecycle_request_too_large".into());
     }
     let input: Value = serde_json::from_slice(bytes).map_err(|_| "pack_lifecycle_invalid")?;

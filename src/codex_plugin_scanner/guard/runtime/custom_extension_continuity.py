@@ -1,10 +1,12 @@
 """Apply signed Cloud custom-Extension settings to exact local identities only.
 
 The native runtime validates the signed observation (v1 or the device-bound
-v2), checks it is monotonic, and plans every authority update, receipt and
-continuity state. Python only reads the store snapshot the plan needs and
-commits the plan in one store transaction. When the resident cannot answer,
-nothing is applied: preparing and local mutations raise
+v2), checks it is monotonic, and answers the whole commit: every authority
+update, receipt and continuity state, which sync-state records are written, the
+protected-authority and capability requirements, and the observation guard each
+update carries. Python only reads the store snapshot the plan needs, checks the
+shape of the answer, and runs the commit in one store transaction. When the
+resident cannot answer, nothing is applied: preparing and local mutations raise
 ``CustomExtensionContinuityError`` and the public state reads as empty.
 """
 
@@ -29,22 +31,21 @@ CUSTOM_EXTENSION_CONTINUITY_STATE_KEY = "custom_extension_continuity"
 CUSTOM_EXTENSION_CONTINUITY_LAST_GOOD_STATE_KEY = "custom_extension_continuity_last_good"
 CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY = "custom_extension_continuity_local_removals"
 
-_V2_CAPABILITY = "custom-extension-continuity.v2"
 _LOCAL_KEYS = ("identity_hash", "kind", "name", "example_label", "interpreter_name", "observed_count", "surface")
-_PLAN_KEYS = frozenset(
-    {
-        "error",
-        "authority_updates",
-        "events",
-        "observation_preconditions",
-        "state",
-        "state_item_order",
-        "write_last_good",
-        "removals",
-        "v2",
-    }
+_PREPARE_KEYS = frozenset(
+    {"error", "authority_updates", "events", "observation_preconditions", "writes", "requirements"}
 )
-_LOCAL_MUTATION_KEYS = frozenset({"removals", "active", "active_item_order", "event", "observation_precondition"})
+_LOCAL_COMMIT_KEYS = frozenset({"writes", "event", "observation_precondition"})
+_WRITE_KEYS = frozenset({"stores", "payload", "item_order"})
+_REQUIREMENT_KEYS = frozenset({"protected_authority", "capability"})
+# The resident names a record by role; each role is the sync-state key that holds it.
+_STATE_KEYS = {
+    "state": CUSTOM_EXTENSION_CONTINUITY_STATE_KEY,
+    "last_good": CUSTOM_EXTENSION_CONTINUITY_LAST_GOOD_STATE_KEY,
+    "removals": CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY,
+}
+_PREPARE_ROLES = frozenset({"state", "last_good", "removals"})
+_LOCAL_ROLES = frozenset({"state", "removals"})
 _IDENTITY_KEYS = ("cli_id", "name", "kind", "identity_hash", "example_label", "interpreter_name")
 
 
@@ -115,33 +116,17 @@ def prepare_verified_custom_extension_continuity(
         "locals": [_local_request(item) for item in locals_],
     }
     answer = _plan_with_details(store, request, {str(item["cli_id"]) for item in locals_})
-    state = answer["state"]
     updates = answer["authority_updates"]
     events = answer["events"]
     observation_preconditions = answer["observation_preconditions"]
-    v2 = answer["v2"]
-    if (
-        not isinstance(state, dict)
-        or not isinstance(updates, list)
-        or not isinstance(events, list)
-        or not isinstance(observation_preconditions, dict)
-        or not isinstance(v2, bool)
-        or not isinstance(answer["write_last_good"], bool)
-    ):
+    if not isinstance(updates, list) or not isinstance(events, list) or not isinstance(observation_preconditions, dict):
         raise _malformed()
     for update in updates:
         cli_id = update.get("cli_id") if isinstance(update, dict) else None
         if not isinstance(cli_id, str) or observation_preconditions.get(cli_id) is None:
             raise _malformed()
-    state = _ordered_items(state, answer["state_item_order"])
-    sync_payloads: dict[str, Mapping[str, object]] = {CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: state}
-    if answer["write_last_good"]:
-        sync_payloads[CUSTOM_EXTENSION_CONTINUITY_LAST_GOOD_STATE_KEY] = state
-    planned_removals = answer["removals"]
-    if planned_removals is not None:
-        if not isinstance(planned_removals, dict):
-            raise _malformed()
-        sync_payloads[CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY] = planned_removals
+    sync_payloads = _sync_payloads(answer["writes"], allowed=_PREPARE_ROLES, required="state")
+    protected_authority, capability = _requirements(answer["requirements"])
     mutation = CustomExtensionContinuityMutation(
         expected_revision=authority_revision,
         authority_updates=tuple(_authority_update(update) for update in updates),
@@ -153,10 +138,10 @@ def prepare_verified_custom_extension_continuity(
             CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY: removals,
         },
         observation_preconditions=observation_preconditions,
-        requires_protected_extension_authority=v2,
-        required_negotiated_capability=_V2_CAPABILITY if v2 else None,
+        requires_protected_extension_authority=protected_authority,
+        required_negotiated_capability=capability,
     )
-    return mutation, state
+    return mutation, sync_payloads[CUSTOM_EXTENSION_CONTINUITY_STATE_KEY]
 
 
 def continuity_state_for_local_items(store: GuardStore, *, now: str) -> dict[str, dict[str, object]]:
@@ -214,18 +199,9 @@ def record_local_custom_extension_mutation(
             "removals": raw,
             "local": None if local is None else _local_request(local),
         },
-        _LOCAL_MUTATION_KEYS,
+        _LOCAL_COMMIT_KEYS,
     )
-    removals = answer["removals"]
-    updated_active = answer["active"]
-    if not isinstance(removals, dict) or (updated_active is not None and not isinstance(updated_active, dict)):
-        raise _malformed()
-    sync_payloads: dict[str, Mapping[str, object]] = {}
-    if updated_active is not None:
-        sync_payloads[CUSTOM_EXTENSION_CONTINUITY_STATE_KEY] = _ordered_items(
-            updated_active, answer["active_item_order"]
-        )
-    sync_payloads[CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY] = removals
+    sync_payloads = _sync_payloads(answer["writes"], allowed=_LOCAL_ROLES, required="removals")
     try:
         return store.apply_custom_extension_continuity_transaction(
             expected_revision=expected_revision,
@@ -297,7 +273,7 @@ def _plan_with_details(store: GuardStore, request: dict[str, object], local_ids:
 
     details: dict[str, object] = {}
     for _ in range(len(local_ids) + 1):
-        answer = _native_continuity(store, {**request, "details": details}, _PLAN_KEYS, allow_need_details=True)
+        answer = _native_continuity(store, {**request, "details": details}, _PREPARE_KEYS, allow_need_details=True)
         wanted = answer.get("need_details")
         if wanted is None:
             return answer
@@ -339,6 +315,47 @@ def _ordered_items(state: dict[str, object], order: object) -> dict[str, object]
     ):
         raise _malformed()
     return {**state, "items": {key: items[key] for key in order}}
+
+
+def _sync_payloads(writes: object, *, allowed: frozenset[str], required: str) -> dict[str, dict[str, object]]:
+    """Map the writes the native answer names onto the sync-state keys they are stored under."""
+
+    if not isinstance(writes, list):
+        raise _malformed()
+    payloads: dict[str, dict[str, object]] = {}
+    for write in writes:
+        if not isinstance(write, dict) or set(write) != _WRITE_KEYS:
+            raise _malformed()
+        stores, payload, order = write["stores"], write["payload"], write["item_order"]
+        if (
+            not isinstance(stores, list)
+            or not stores
+            or not isinstance(payload, dict)
+            or not all(isinstance(role, str) and role in allowed for role in stores)
+            or len(set(stores)) != len(stores)
+        ):
+            raise _malformed()
+        # The removals record is written alone and has no item order; every state record keeps one.
+        removals_only = stores == ["removals"]
+        if ("removals" in stores and not removals_only) or removals_only == (order is not None):
+            raise _malformed()
+        stored = payload if removals_only else _ordered_items(payload, order)
+        for role in stores:
+            if _STATE_KEYS[role] in payloads:
+                raise _malformed()
+            payloads[_STATE_KEYS[role]] = stored
+    if _STATE_KEYS[required] not in payloads:
+        raise _malformed()
+    return payloads
+
+
+def _requirements(requirements: object) -> tuple[bool, str | None]:
+    if not isinstance(requirements, dict) or set(requirements) != _REQUIREMENT_KEYS:
+        raise _malformed()
+    protected_authority, capability = requirements["protected_authority"], requirements["capability"]
+    if not isinstance(protected_authority, bool) or not (capability is None or isinstance(capability, str)):
+        raise _malformed()
+    return protected_authority, capability
 
 
 def _authority_update(update: object) -> tuple[UnlistedCliIdentity, str, Mapping[str, LocalCliCommandState]]:

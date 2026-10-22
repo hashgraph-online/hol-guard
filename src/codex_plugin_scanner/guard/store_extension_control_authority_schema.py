@@ -7,6 +7,7 @@ import sqlite3
 from typing import Final, cast
 
 from .runtime.extension_control_authority import ExtensionControlAuthorityError
+from .store_extension_control_authority_epoch import ensure_extension_control_authority_epoch
 
 EXTENSION_CONTROL_SCHEMA_VERSION: Final = 4
 PACK_ACTIVATION_SCHEMA_VERSION: Final = 5
@@ -196,4 +197,5 @@ def ensure_extension_control_authority_schema(
             archive_id text primary key,
             reservations_json text not null
         )""")
+    ensure_extension_control_authority_epoch(connection)
     return True

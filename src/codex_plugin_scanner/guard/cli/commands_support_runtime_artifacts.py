@@ -372,6 +372,7 @@ def _hook_runtime_artifact_with_native(
                         native_evidence=native_review.payload,
                         cwd=workspace,
                         home_dir=home_dir,
+                        guard_home=guard_home,
                     )
                     if native_review is not None and raw_command_text is not None
                     else None

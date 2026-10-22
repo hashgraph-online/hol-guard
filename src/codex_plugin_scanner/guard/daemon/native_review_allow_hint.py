@@ -281,6 +281,7 @@ def _native_review_extension_allow_hint(
         command=command,
         cwd=cwd,
         home_dir=home_dir,
+        guard_home=guard_home,
         deadline=None if deadline is None else deadline - _SAFETY_MARGIN_SECONDS,
     )
 
@@ -293,6 +294,7 @@ def hint_for_reviewed_command(
     command: str,
     cwd: Path | None,
     home_dir: Path | None,
+    guard_home: Path | None = None,
     deadline: float | None = None,
 ) -> dict[str, object] | None:
     """Return the hint when the fresh evidence is exactly what Rust paused on."""
@@ -316,6 +318,7 @@ def hint_for_reviewed_command(
         native_evidence=reviewed.payload,
         cwd=cwd,
         home_dir=home_dir,
+        guard_home=guard_home,
         deadline=deadline,
     )
 
@@ -325,7 +328,6 @@ def live_approval_extension_allow_hint(
     *,
     guard_home: Path,
     snapshot: ExtensionControlRuntimeSnapshot,
-    registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
 ) -> dict[str, object] | None:
     """Derive an advisory extension allow hint on read for a pending command review without a stored hint."""
 
@@ -376,8 +378,8 @@ def live_approval_extension_allow_hint(
         native_evidence=reviewed.payload,
         cwd=cwd,
         home_dir=Path.home(),
+        guard_home=guard_home,
         deadline=time.monotonic() + _MAX_NATIVE_BUDGET_SECONDS,
-        registry=registry,
     )
 
 

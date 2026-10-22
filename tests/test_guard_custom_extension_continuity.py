@@ -451,7 +451,13 @@ def test_native_outage_applies_nothing_and_hides_public_state(tmp_path: Path, mo
     assert continuity_state_for_local_items(store, now=_NOW) == {}
 
 
+def _state_write(state: dict[str, object], order: object, *roles: str) -> dict[str, object]:
+    return {"stores": list(roles or ("state",)), "payload": state, "item_order": order}
+
+
 def _fake_plan(monkeypatch, homes: list[object] | None = None, **overrides: object) -> None:
+    """Answer every resident call with a prepared commit, as the native runtime shapes it."""
+
     from codex_plugin_scanner.guard.runtime import custom_extension_continuity
 
     answer: dict[str, object] = {
@@ -459,11 +465,8 @@ def _fake_plan(monkeypatch, homes: list[object] | None = None, **overrides: obje
         "authority_updates": [],
         "events": [],
         "observation_preconditions": {},
-        "state": {"items": {}},
-        "state_item_order": [],
-        "write_last_good": False,
-        "removals": None,
-        "v2": False,
+        "writes": [_state_write({"items": {}}, [])],
+        "requirements": {"protected_authority": False, "capability": None},
         **overrides,
     }
 
@@ -501,7 +504,7 @@ def test_native_item_order_must_name_each_item_once(tmp_path: Path, monkeypatch,
     store = GuardStore(tmp_path / "guard-home")
     identity = _identity()
     _observe(store, identity)
-    _fake_plan(monkeypatch, state={"items": {"a": {}}}, state_item_order=order)
+    _fake_plan(monkeypatch, writes=[_state_write({"items": {"a": {}}}, order)])
     with pytest.raises(CustomExtensionContinuityError, match="malformed"):
         _ = apply_verified_custom_extension_continuity(store, _bundle(identity), now=_NOW)
 

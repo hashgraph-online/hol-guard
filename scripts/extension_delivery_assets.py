@@ -9,13 +9,9 @@ import zipfile
 from pathlib import Path
 
 from extension_artifact_bundle import source_sha
+from extension_delivery_containers import MAX_MEMBERS, METADATA_BYTES, POLICY_BYTES
 
-from codex_plugin_scanner.guard.catalog_delivery.containers import (
-    MAX_MEMBERS,
-    METADATA_BYTES,
-    POLICY_BYTES,
-    location,
-)
+from codex_plugin_scanner.guard.catalog_delivery.containers import location
 
 # Two slots of the 256-asset release inventory are reserved for the signed
 # distribution root and its provenance bundle, which every data release

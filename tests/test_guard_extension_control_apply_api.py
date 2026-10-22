@@ -26,7 +26,10 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControlLayer,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_proof import ExtensionControlProof
-from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
+from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
+    ExtensionControlRuntime,
+    ExtensionControlSnapshotUnavailableError,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 from tests.test_guard_extension_control_api import _mutation_payload, _service
@@ -138,6 +141,37 @@ def test_apply_requires_matching_server_held_proof_and_refreshes_runtime(
     with pytest.raises(ExtensionControlApiError) as mismatch:
         service.apply({**apply_payload, "nonce": "different"})
     assert mismatch.value.code == "proof_mismatch"
+
+
+def test_apply_keeps_its_audit_and_replay_when_the_resident_cannot_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = _ApplyingStore(tmp_path / "guard-home")
+    service = _service(cast(GuardStore, store))
+    monkeypatch.setattr(
+        extension_control_api_module,
+        "issue_extension_control_proof",
+        lambda *_args, **_kwargs: cast(ExtensionControlProof, _FakeProof()),
+    )
+    payload = {**_mutation_payload(), "session_nonce": "session-1", "approval_password": "not-persisted"}
+    preview = service.preview(payload)
+    installed = service._runtime.current()
+
+    def unanswered(_view: ExtensionControlAuthorityView) -> object:
+        raise ExtensionControlSnapshotUnavailableError()
+
+    monkeypatch.setattr(service._runtime, "refresh", unanswered)
+    apply_payload = {**payload, "proof_id": preview["proof_id"]}
+    result = service.apply(apply_payload)
+
+    # The commit is durable, so it is reported, audited and replayable; the
+    # daemon's refresh installs the snapshot once the resident answers.
+    assert result["revision"] == 5
+    assert store.commits == 1
+    assert [event[0] for event in store.events] == ["extension_control_authority_changed"]
+    assert service._runtime.current() is installed
+    assert service.apply(apply_payload) == result
+    assert store.commits == 1
 
 
 def test_local_apply_does_not_persist_composed_managed_layer(

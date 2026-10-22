@@ -24,7 +24,7 @@ use guard_policy_snapshot::digest_bytes;
 
 // The resident owns its guard-home scope. Capture one authenticated generation
 // and hold its mutation lease across the entire single or batch evaluation.
-fn with_store<T>(
+pub(crate) fn with_store<T>(
     store: Option<&crate::policy_store::PolicySnapshotStore>,
     evaluate: impl FnOnce(Option<&CompiledNativeCommandControls>) -> Result<T, String>,
 ) -> Result<T, String> {
@@ -198,9 +198,29 @@ fn evaluate_with_read_floors(
     request: &CommandEffectRequestV1,
     controls: Option<&CompiledNativeCommandControls>,
 ) -> Result<serde_json::Value, String> {
+    use guard_command::command_evaluation_controls::to_wire_payload;
+
+    evaluate_composite(request, controls).map(|evaluated| to_wire_payload(&evaluated.evaluation))
+}
+
+/// One composed evaluation with the catalog it was judged against.
+pub(crate) struct EvaluatedCommand {
+    pub(crate) evaluation: guard_command::CompositeCommandEvaluation,
+    pub(crate) registry: std::sync::Arc<guard_command::native_command_catalog::CommandCatalog>,
+    /// Whether the control snapshot's health reports an authority failure.
+    pub(crate) authority_failure: bool,
+}
+
+/// Evaluate one request into its typed composition. The wire op serializes it;
+/// the allow-hint op reads the matches and re-runs it under a counterfactual
+/// overlay, so both judge a command by exactly the same rules.
+pub(crate) fn evaluate_composite(
+    request: &CommandEffectRequestV1,
+    controls: Option<&CompiledNativeCommandControls>,
+) -> Result<EvaluatedCommand, String> {
     use std::path::Path;
 
-    use guard_command::command_evaluation_controls::to_wire_payload;
+    use guard_command::command_evaluation_controls::authority_failure_for_health;
     use guard_command::command_shell_read_factors::shell_read_floor_factors;
     use guard_command::{
         canonical_command::CanonicalCommand,
@@ -250,7 +270,7 @@ fn evaluate_with_read_floors(
         request.cwd.as_deref().map(Path::new),
         request.home_dir.as_deref().map(Path::new),
     );
-    guard_command::evaluate_command(CommandEvaluationInput {
+    let evaluation = guard_command::evaluate_command(CommandEvaluationInput {
         command: &command,
         native_extension_evidence: &request.native_extension_evidence,
         registry: &registry,
@@ -260,13 +280,20 @@ fn evaluate_with_read_floors(
         workflow_authorization: workflow_authorization.as_ref(),
         read_factors,
     })
-    .map(|evaluation| to_wire_payload(&evaluation))
     .map_err(|code| {
         if code.starts_with("native_") {
             code.to_owned()
         } else {
             format!("native_command_effect_{code}")
         }
+    })?;
+    // The evaluator accepted the health, so an unreadable one cannot reach here;
+    // treat it as a failure all the same.
+    let authority_failure = !matches!(authority_failure_for_health(&binding.health), Ok(None));
+    Ok(EvaluatedCommand {
+        evaluation,
+        registry,
+        authority_failure,
     })
 }
 

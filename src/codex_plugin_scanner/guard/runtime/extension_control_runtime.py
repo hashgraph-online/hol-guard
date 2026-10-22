@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import threading
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
@@ -11,16 +10,33 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 
+from ..native_command_control_authority_io import NativeCommandControlAuthorityUnavailableError
 from .extension_control_authority import AuthorityHealth, ExtensionControlAuthorityView
 from .extension_control_contract import ExtensionControlLayer, ResolverFailureCode
 
-_RUNTIME_SNAPSHOT_SCHEMA = "guard.extension-control-runtime-snapshot.v1"
 _NO_CONTROL_DIGEST = hashlib.sha256(b"hol.guard.extension-control:none:v1").hexdigest()
+# Names a snapshot the resident gave no digest for. It is framed differently
+# from every runtime snapshot digest, so no binding can ever match it.
+_UNANSWERED_DIGEST = hashlib.sha256(b"hol.guard.extension-control:unanswered:v1").hexdigest()
 _MAX_PROTECTED_FLOORS = 32
 _ACTIVE_SNAPSHOT: ContextVar[ExtensionControlRuntimeSnapshot | None] = ContextVar(
     "guard_extension_control_runtime_snapshot",
     default=None,
 )
+
+
+class ExtensionControlSnapshotUnavailableError(NativeCommandControlAuthorityUnavailableError):
+    """The resident gave no digest, so no snapshot was built.
+
+    Like a lease timeout, this says the authority was not read, never that it
+    is unhealthy, so a caller keeps the snapshot it already holds.
+    """
+
+    code = "native_extension_control_snapshot_unavailable"
+
+    def __init__(self) -> None:
+        super().__init__(shared=True)
+        self.args = ("The native runtime did not answer for the extension control snapshot digest.",)
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,27 +64,51 @@ class ExtensionControlRuntimeSnapshot:
 
     @classmethod
     def from_authority_view(cls, view: ExtensionControlAuthorityView) -> ExtensionControlRuntimeSnapshot:
-        payload = {
-            "catalog_digest": view.catalog_digest,
-            "health": view.health.value,
-            "layers": sorted(
-                (_layer_payload(layer) for layer in view.layers),
-                key=lambda item: str(item["kind"]),
-            ),
-            "revision": view.revision,
-            "managed_revision": view.managed_revision,
-            "schema_version": _RUNTIME_SNAPSHOT_SCHEMA,
-        }
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-        framed = f"{_RUNTIME_SNAPSHOT_SCHEMA}\x00{len(canonical)}\x00{canonical}"
+        """The snapshot of ``view``, identified by the digest the resident computes.
+
+        The resident checks the same digest when it installs a command-control
+        binding, so computing it there leaves one definition of it.
+        """
+
+        from ..native_extension_control import NativeExtensionControlError, snapshot_digest
+
+        try:
+            digest = snapshot_digest(
+                catalog_digest=view.catalog_digest,
+                health=view.health.value,
+                revision=view.revision,
+                managed_revision=view.managed_revision,
+                layers=view.layers,
+            )
+        except NativeExtensionControlError as error:
+            raise ExtensionControlSnapshotUnavailableError() from error
         return cls(
             health=view.health,
             revision=view.revision,
             catalog_digest=view.catalog_digest,
-            effective_digest=hashlib.sha256(framed.encode("utf-8")).hexdigest(),
+            effective_digest=digest,
             layers=view.layers,
             managed_revision=view.managed_revision,
             unread=view.unread,
+        )
+
+    @classmethod
+    def unanswered(cls, catalog_digest: str) -> ExtensionControlRuntimeSnapshot:
+        """The snapshot a daemon starts on when the resident cannot digest its view.
+
+        It carries no layers and is marked unread, like a view the daemon could
+        not read, so every hook fails closed and nothing acknowledges degraded
+        mode off it. Its digest matches no binding, and the next refresh that
+        the resident answers replaces it.
+        """
+
+        return cls(
+            health=AuthorityHealth.DEGRADED_UNACKNOWLEDGED,
+            revision=0,
+            catalog_digest=catalog_digest,
+            effective_digest=_UNANSWERED_DIGEST,
+            layers=(),
+            unread=True,
         )
 
     @property
@@ -89,9 +129,15 @@ class ExtensionControlRuntime:
 
     def __init__(self, initial: ExtensionControlAuthorityView) -> None:
         self._lock = threading.Lock()
-        self._snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(initial)
+        try:
+            self._snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(initial)
+        except ExtensionControlSnapshotUnavailableError:
+            # Refusing to start would take the hook worker down with the
+            # daemon, and a daemon that is not there protects nothing.
+            self._snapshot = ExtensionControlRuntimeSnapshot.unanswered(initial.catalog_digest)
+        started = self._snapshot
         self._highest_protected_revision = (
-            (initial.revision, initial.managed_revision) if initial.health is AuthorityHealth.PROTECTED else (0, 0)
+            (started.revision, started.managed_revision) if started.health is AuthorityHealth.PROTECTED else (0, 0)
         )
         # One floor digest per catalog. A view read for another catalog is a
         # different projection of the same authority, not a second authority
@@ -101,8 +147,8 @@ class ExtensionControlRuntime:
         # check, and this daemon alternates routinely: it rebinds whenever an
         # activation lands. The revision floor below still applies to all.
         self._protected_floors: OrderedDict[str, tuple[tuple[int, int], str]] = OrderedDict()
-        if initial.health is AuthorityHealth.PROTECTED:
-            self._record_floor_locked(self._snapshot)
+        if started.health is AuthorityHealth.PROTECTED:
+            self._record_floor_locked(started)
 
     def current(self) -> ExtensionControlRuntimeSnapshot:
         with self._lock:

@@ -104,6 +104,10 @@ name = "pretool_windows_sibling_repository_writes"
 path = "tests/pretool_windows_sibling_repository_writes.rs"
 
 [[test]]
+name = "pretool_windows_git_toplevel"
+path = "tests/pretool_windows_git_toplevel.rs"
+
+[[test]]
 name = "pretool_worktree_cd_windows"
 path = "tests/pretool_worktree_cd_windows.rs"
 

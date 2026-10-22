@@ -494,7 +494,7 @@ fn evaluate_envelope(
         .command
         .as_deref()
         .filter(|_| !search_scope_proven && !apply_patch_proven)
-        .and_then(|command| venv_activation_projection::project(command, context))
+        .and_then(|command| venv_activation_projection::verdict_target(command, context))
     {
         let projected_payload = payload_with_command(
             payload,
@@ -924,23 +924,21 @@ fn evaluate_envelope(
     // build and the read-only Node tools (lint, typecheck and format checks)
     // in an AppContainer, for harnesses whose shell runs a sink command
     // written for it: Claude Code (Git Bash) and the Pi family (a bash
-    // implementation) take the POSIX-quoted one for all of them, Codex a
-    // PowerShell one for the Python profile only. Only harnesses that rewrite
-    // into the contained sink get the receipt; others would see a bare deny.
-    let windows_contained = match contained_test_reason {
-        Some("native_python_eval_readonly_containment_required") => {
-            matches!(harness, "claude-code" | "codex" | "omp" | "oh-my-pi" | "pi")
-        }
-        Some(
-            "native_node_build_output_containment_required"
-            | "native_node_tool_readonly_containment_required"
-            | "native_node_eval_readonly_containment_required"
-            | "native_pytest_readonly_containment_required",
-        ) => {
-            matches!(harness, "claude-code" | "omp" | "oh-my-pi" | "pi")
-        }
-        _ => false,
-    };
+    // implementation) take the POSIX-quoted one, Codex a PowerShell one. The
+    // sink command names only the profile, so every profile routes the same
+    // way. Only harnesses that rewrite into the contained sink get the
+    // receipt; others would see a bare deny.
+    let windows_contained =
+        matches!(
+            contained_test_reason,
+            Some(
+                "native_python_eval_readonly_containment_required"
+                    | "native_node_build_output_containment_required"
+                    | "native_node_tool_readonly_containment_required"
+                    | "native_node_eval_readonly_containment_required"
+                    | "native_pytest_readonly_containment_required"
+            )
+        ) && matches!(harness, "claude-code" | "codex" | "omp" | "oh-my-pi" | "pi");
     if (cfg!(target_os = "macos") || (cfg!(windows) && windows_contained))
         && event == "PreToolUse"
         && matches!(

@@ -198,7 +198,7 @@ def test_discovery_lists_omp_connector_when_its_server_is_configured(
         {"harness": "omp", "raw_command_text": "tool:mcp__truenas_pilot_status"},
         {"harness": "omp", "raw_command_text": "tool:mcp__truenas_pilot_apps"},
     ]
-    monkeypatch.setattr(store, "list_receipts", lambda limit: receipts)
+    monkeypatch.setattr(store, "observed_mcp_history", lambda *, limit: ([], receipts))
     tool = observed_mcp_tool("omp", "mcp__truenas_pilot_status", ["truenas-pilot"])
     assert tool is not None
 

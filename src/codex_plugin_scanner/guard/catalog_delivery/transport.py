@@ -8,29 +8,26 @@ from __future__ import annotations
 
 import hashlib
 import os
-import re
 import tempfile
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import zipfile
 from contextlib import suppress
+from pathlib import Path
 
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
-from codex_plugin_scanner.guard.extension_builder.io import checked_path, read_bytes
+from codex_plugin_scanner.guard.extension_builder.io import checked_path
 from codex_plugin_scanner.guard.mdm.network import managed_urlopen
 
 from .authority import MAX_PROVENANCE_BYTES, decode, verify_distribution
-from .containers import location, member
-from .containers import maximum as container_maximum
+from .containers import member
+from .object_native import call, member_at
 from .selection import BRANCH, FILE, SHA, root_tag, validate
 
 REPOSITORY = "hashgraph-online/hol-guard"
 ROOT_ASSET = "extension-distribution.v2.json"
 PROVENANCE_ASSET = "extension-distribution.intoto.jsonl"
-DATA_TAG = re.compile(r"extension-data-[0-9a-f]{40}-[0-9]{1,20}\.[0-9]{1,10}-[0-9]{6}")
-DATA_ASSET = re.compile(r"(?:object-[0-9a-f]{64}\.json|pack-[0-9a-f]{64}\.zip)")
 HOSTS = frozenset(
     {
         "api.github.com",
@@ -190,42 +187,38 @@ def cached_fetcher(directory):
 
 
 def _fetch(target, maximum, cache=None):
-    if not isinstance(target, dict):
-        raise ValueError("release object location invalid")
-    name = target.get("member", target.get("asset", ""))
-    if not isinstance(name, str) or DATA_ASSET.fullmatch(name) is None:
-        raise ValueError("release object location invalid")
-    kind = "object" if name.startswith("object-") else "pack"
-    digest = name.split("-", 1)[1].split(".", 1)[0]
-    location(target, digest, kind)
-    url = f"https://github.com/{REPOSITORY}/releases/download/{target['tag']}/{target['asset']}"
-    if "member" not in target:
+    # The runtime names the asset, checks its location and bounds the container.
+    plan = call("asset", profile="release", target=target, invalid="release object location invalid")
+    asset, name = plan["asset"], plan["name"]
+    url = f"https://github.com/{REPOSITORY}/releases/download/{plan['tag']}/{asset}"
+    if plan["bound"] is None:
         return download(url, maximum)
-    bound = container_maximum(target["asset"])
+    bound = plan["bound"]
     path = None if cache is None else checked_path(cache / (hashlib.sha256(url.encode()).hexdigest() + ".zip"))
     repair = False
     if path is not None and path.exists():
         try:
-            return member(read_bytes(path, limit=bound), target["asset"], name, maximum)
-        except (ValueError, OSError, zipfile.BadZipFile, BuilderError):
+            return member_at(path, asset, name, maximum)
+        except (ValueError, OSError, BuilderError):
             repair = True
     data = download(url, bound)
-    result = member(data, target["asset"], name, maximum)
-    if path is not None and (repair or not path.exists()):
-        with tempfile.NamedTemporaryFile(dir=cache, prefix=".transfer-", delete=False) as stream:
-            temporary = stream.name
-            try:
-                stream.write(data)
-                stream.flush()
-                os.fsync(stream.fileno())
-                stream.close()
-                if repair:
-                    os.replace(temporary, path)
-                else:
-                    # A competing untrusted cache entry is checked on read.
-                    with suppress(FileExistsError):
-                        os.link(temporary, path)
-            finally:
-                with suppress(FileNotFoundError):
-                    os.unlink(temporary)
-    return result
+    if path is None:
+        return member(data, asset, name, maximum)
+    with tempfile.NamedTemporaryFile(dir=cache, prefix=".transfer-", delete=False) as stream:
+        temporary = stream.name
+        try:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+            stream.close()
+            result = member_at(Path(temporary), asset, name, maximum)
+            if repair:
+                os.replace(temporary, path)
+            else:
+                # A competing untrusted cache entry is checked on read.
+                with suppress(FileExistsError):
+                    os.link(temporary, path)
+            return result
+        finally:
+            with suppress(FileNotFoundError):
+                os.unlink(temporary)

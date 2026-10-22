@@ -75,6 +75,7 @@ from .commands_hook_native_state import NativeArtifactHookState
 from .commands_parser_helpers import *
 from .commands_support_hook_state import _load_cursor_native_shell_allowance
 from .commands_support_runtime_artifact_policy import (
+    artifact_fact_content_hash,
     artifact_fact_risk_classes,
     artifact_fact_skip_native_floor,
     record_policy_auto_stops,
@@ -278,6 +279,7 @@ def evaluate_native_artifact_hook(
     event_name = _hook_event_name(payload_map) or "PreToolUse"
     package_evaluation = None
     package_execution_context: PackageExecutionContext | None = None
+    artifact_content_hash: str | None = None
     if runtime_artifact.artifact_type == "package_request":
         package_evaluation = evaluate_package_request_artifact(
             artifact=runtime_artifact,
@@ -319,12 +321,17 @@ def evaluate_native_artifact_hook(
             execution_context=package_execution_context,
             config=config,
         )
-    else:
-        artifact_content_hash = artifact_hash(approval_context_artifact)
+    # Anything other than a package request is hashed by the resident: see the
+    # facts request below.
     artifact_id = runtime_artifact.artifact_id
     artifact_name = runtime_artifact.name
     policy_harness = _canonical_harness_name(args.harness)
     cli_action = getattr(args, "policy_action", None)
+    # A saved approval is keyed by the artifact as it stood before this hook
+    # stamped its runtime posture onto the metadata, so the identity is taken
+    # before the stamp: keying it by the stamped metadata would stop a saved
+    # approval matching the moment a risk signal appeared.
+    approval_identity_metadata = None if artifact_content_hash is not None else dict(approval_context_artifact.metadata)
     _stamp_runtime_posture_metadata(runtime_artifact, data_flow_signals)
     _stamp_runtime_posture_metadata(approval_context_artifact, data_flow_signals)
     current_action_override = config.resolve_action_override(
@@ -332,15 +339,44 @@ def evaluate_native_artifact_hook(
         runtime_artifact.artifact_id,
         runtime_artifact.publisher,
     )
-    # Both artifacts' facts are asked for in one request, under the same
+    # The alias artifact a pre-rename claude-code approval was saved under is
+    # resolved here so its digest rides the same request: it renames the
+    # runtime artifact and shares its metadata, so nothing between here and
+    # the saved-decision lookup below changes what it hashes to.
+    legacy_artifact = (
+        None
+        if runtime_artifact.artifact_type == "package_request"
+        else _legacy_claude_alias_runtime_artifact(
+            artifact=runtime_artifact,
+            requested_harness=args.harness,
+            home_dir=context.home_dir,
+            workspace=runtime_workspace,
+        )
+    )
+    # Every artifact's facts are asked for in one request, under the same
     # ``guard_home`` the composition below uses: the facts and the verdict that
     # reads them must come from one resident, and one round trip rather than
     # two keeps the hook off the resident's critical path twice over.
-    runtime_facts, approval_context_facts = runtime_policy_artifact_facts_batch(
+    facts_requests: list[tuple[GuardArtifact, str]] = [
+        (runtime_artifact, args.harness),
+        (approval_context_artifact, policy_harness),
+    ]
+    facts_identities: list[Mapping[str, object] | None] = [None, approval_identity_metadata]
+    if legacy_artifact is not None:
+        # The alias is hashed over the metadata as it now stands, stamp and
+        # all: a pre-rename approval was saved under that spelling, so naming
+        # the current metadata as the identity leaves the stamp empty and the
+        # resident hashes the artifact exactly as it is sent.
+        facts_requests.append((legacy_artifact, args.harness))
+        facts_identities.append(legacy_artifact.metadata)
+    runtime_facts, approval_context_facts, *alias_facts = runtime_policy_artifact_facts_batch(
         config,
-        ((runtime_artifact, args.harness), (approval_context_artifact, policy_harness)),
+        tuple(facts_requests),
         guard_home=guard_home,
+        hash_metadata=tuple(facts_identities),
     )
+    if artifact_content_hash is None:
+        artifact_content_hash = artifact_fact_content_hash(approval_context_facts)
     # The resident says whether the generic command floor applies: a package
     # install is decided by the package evaluator and a verified
     # explicit-permission allow was already adjudicated, so the floor is only
@@ -581,16 +617,6 @@ def evaluate_native_artifact_hook(
             artifact_type=runtime_artifact.artifact_type,
             execution_context=package_execution_context,
         )
-    legacy_artifact = (
-        None
-        if runtime_artifact.artifact_type == "package_request"
-        else _legacy_claude_alias_runtime_artifact(
-            artifact=runtime_artifact,
-            requested_harness=args.harness,
-            home_dir=context.home_dir,
-            workspace=runtime_workspace,
-        )
-    )
     cursor_allowance = (
         _load_cursor_native_shell_allowance(store, payload)
         if policy_harness == "cursor"
@@ -609,7 +635,7 @@ def evaluate_native_artifact_hook(
         legacy_workspace=legacy_policy_workspace,
         alias_harness=args.harness,
         alias_artifact=legacy_artifact,
-        alias_artifact_hash=artifact_hash(legacy_artifact) if legacy_artifact is not None else None,
+        alias_artifact_hash=artifact_fact_content_hash(alias_facts[0]) if legacy_artifact is not None else None,
         alias_workspace=str(runtime_workspace) if runtime_workspace else None,
         risk_classes=artifact_fact_risk_classes(runtime_facts),
         reuse=None

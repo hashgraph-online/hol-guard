@@ -412,17 +412,21 @@
     "src/codex_plugin_scanner/guard/native_mcp_relay_server_report.py",
     "src/codex_plugin_scanner/guard/native_daemon_lifecycle.py",
     "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
+    "src/codex_plugin_scanner/guard/native_extension_control_authority.py",
+    "src/codex_plugin_scanner/guard/native_extension_control_authority_memo.py",
     "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
     "src/codex_plugin_scanner/guard/native_mcp_tool_evidence.py",
     "src/codex_plugin_scanner/guard/native_mcp_tool_call_identity.py",
     "src/codex_plugin_scanner/guard/native_skill_workflow_preflight.py",
     "src/codex_plugin_scanner/guard/native_mcp_stdio_exchange.py",
     "src/codex_plugin_scanner/guard/native_package_approval_hash.py",
+    "src/codex_plugin_scanner/guard/native_artifact_content_hash.py",
     "src/codex_plugin_scanner/guard/native_package_policy_resolve.py",
     "src/codex_plugin_scanner/guard/native_package_protect_finalize.py",
     "src/codex_plugin_scanner/guard/native_supply_chain_posture.py",
     "src/codex_plugin_scanner/guard/native_package_audit_projection.py",
     "src/codex_plugin_scanner/guard/native_workspace_inventory.py",
+    "src/codex_plugin_scanner/guard/native_inventory_source_evidence.py",
     "src/codex_plugin_scanner/guard/native_package_authority.py",
     "src/codex_plugin_scanner/guard/native_package_evaluation_compose.py",
     "src/codex_plugin_scanner/guard/native_supply_chain_eval.py",
@@ -525,7 +529,8 @@
     "src/codex_plugin_scanner/guard/daemon/manager.py",
     "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
     "src/codex_plugin_scanner/guard/native_catalog_read.py",
-    "src/codex_plugin_scanner/guard/native_extension_control.py"
+    "src/codex_plugin_scanner/guard/native_extension_control.py",
+    "src/codex_plugin_scanner/guard/native_extension_allow_hint.py"
    ],
    "current": "Python performs binary identity checks and minimal client launch. Rust owns authentication, framing, process and peer attestation, bounded retirement, liveness, reconnect, restart, and generation state. Both superseded Python resident implementations are physically deleted.",
    "target": "binary identity and minimal Rust client launch only"
@@ -637,7 +642,8 @@
     "rust/Cargo.toml",
     "rust/rust-toolchain.toml",
     "rust/.config/nextest.toml",
-    "rust/build_support/**"
+    "rust/build_support/**",
+    "rust/test_support/**"
    ],
    "current": "pinned native dependency graph, shared fixtures, and fuzz targets",
    "target": "same"

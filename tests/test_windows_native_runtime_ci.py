@@ -222,6 +222,7 @@ def test_windows_partition_union_keeps_every_original_cargo_contract() -> None:
             "guard-command --test shim_admin_vectors",
             "guard-command --test pretool_windows_drive_path_writes",
             "guard-command --test pretool_windows_sibling_repository_writes",
+            "guard-command --test pretool_windows_git_toplevel",
         ],
         "native-op": [
             "hol-guard-runtime --bin hol-guard-runtime shim_op",
@@ -253,7 +254,7 @@ def test_windows_partition_union_keeps_every_original_cargo_contract() -> None:
         ]
         assert selected[gate] == commands
     flattened = [command for commands in selected.values() for command in commands]
-    assert len(flattened) == len(set(flattened)) == 14
+    assert len(flattened) == len(set(flattened)) == 15
 
 
 def test_cross_platform_builds_no_native_runtime() -> None:

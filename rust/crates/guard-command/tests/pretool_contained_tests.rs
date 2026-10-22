@@ -197,8 +197,7 @@ fn direct_pytest_requires_real_containment_never_direct_allow() {
     ] {
         for harness in ["omp", "claude-code", "codex"] {
             let result = classify(harness, command);
-            // Codex's Windows sink runs only the Python evaluation profile.
-            let contained = cfg!(target_os = "macos") || (cfg!(windows) && harness != "codex");
+            let contained = cfg!(target_os = "macos") || cfg!(windows);
             let (expected, reason) = if contained {
                 (
                     "sandbox-required",
@@ -585,7 +584,6 @@ fn windows_contains_only_python_runs_from_harnesses_with_a_sink_command() {
             ("codex", "node -e 'console.log(1)'"),
             ("claude-code", "node -e 'console.log(1)'"),
             ("omp", "node -e 'console.log(1)'"),
-            ("codex", "python3 -m pytest"),
         ] {
             let result = classify(harness, command);
             if command == "python3 test_calc.py" && harness != "zcode" {
@@ -671,7 +669,7 @@ fn windows_contains_direct_vite_builds_of_a_flat_install() {
         .to_string_lossy()
         .replace('\\', "/");
     let resolved = format!(r"'C:\Program Files\nodejs\node.exe' {entry} build");
-    for harness in ["claude-code", "omp", "pi"] {
+    for harness in ["claude-code", "codex", "omp", "pi"] {
         for (command, cwd) in [
             (
                 "cd dashboard && ./node_modules/.bin/vite build 2>&1 | tail -15",
@@ -693,7 +691,7 @@ fn windows_contains_direct_vite_builds_of_a_flat_install() {
     }
     let app_dir = app.to_str().unwrap();
     for (harness, command) in [
-        ("codex", "npx vite build"),
+        ("zcode", "npx vite build"),
         ("omp", "npm run build"),
         ("omp", "npx vite build --outDir ../elsewhere"),
     ] {

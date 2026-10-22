@@ -235,14 +235,17 @@ pub(super) fn record_supervised_exit(
     success: bool,
     exit_code: Option<i32>,
     ran_for: Duration,
+    child_process_id: u32,
 ) {
     let code = exit_code.map_or_else(|| "none".to_owned(), |code| code.to_string());
     let ran_for_ms = ran_for.as_millis();
+    let stop_requested = super::requested_stop::take(&supervised.scope, child_process_id);
+    let orderly = restart_budget::orderly_exit(success, ran_for, stop_requested);
     let note = if !success {
         Some(format!(
             "native_resident_managed_exit_failed exit_code={code} ran_for_ms={ran_for_ms}"
         ))
-    } else if restart_budget::healthy_exit(success, ran_for) {
+    } else if orderly {
         None
     } else {
         // A resident that reports success before it can have served anything
@@ -262,7 +265,7 @@ pub(super) fn record_supervised_exit(
         note.as_deref(),
         supervised.started,
     );
-    let _ = restart_budget::release_after_exit(&scope, success, ran_for);
+    let _ = restart_budget::release_after_exit(&scope, orderly, ran_for);
     // The hold is released last: it is what tells a waiting stop that these
     // writes are over.
     #[cfg(windows)]
@@ -278,9 +281,17 @@ pub(super) fn record_supervised_run(
     stderr: Option<std::sync::mpsc::Receiver<Vec<u8>>>,
     status: std::process::ExitStatus,
     ran_for: Duration,
+    child_process_id: u32,
 ) {
     let stderr = stderr.and_then(|stderr| stderr.recv_timeout(super::MANAGED_STOP_TIMEOUT).ok());
-    record_supervised_exit(supervised, stderr, status.success(), status.code(), ran_for);
+    record_supervised_exit(
+        supervised,
+        stderr,
+        status.success(),
+        status.code(),
+        ran_for,
+        child_process_id,
+    );
 }
 
 #[cfg(all(test, windows))]

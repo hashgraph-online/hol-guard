@@ -218,7 +218,6 @@
           "src/codex_plugin_scanner/guard/aibom_content_upload.py",
           "src/codex_plugin_scanner/guard/aibom_models.py",
           "src/codex_plugin_scanner/guard/aibom_reporting.py",
-          "src/codex_plugin_scanner/guard/aibom_symlink.py",
           "src/codex_plugin_scanner/guard/aibom_sync.py",
           "src/codex_plugin_scanner/guard/aibom_trust_metadata.py",
           "src/codex_plugin_scanner/guard/local_risk_report.py",
@@ -864,6 +863,12 @@
           "src/codex_plugin_scanner/guard/secret_redaction.py"
         ],
         "reason": "Reviewed and retained in runtime scope: catalog_delivery/discovery reaches this lazily when it records a failing catalog preparation or publication refresh in daemon.log. It only strips token, password and bearer shapes from a bounded diagnostic line; it decides nothing about what Guard allows."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/cli/native_hook_exit_code.py"
+        ],
+        "reason": "Reviewed and retained in runtime scope: the per-harness verdict exit-status table. The JSON document now carries the status the resident's directive decided, so commands_support_hook_payload no longer imports this table at load; commands_hook_native_availability still reaches it lazily to map a native-unavailable fail-closed deny onto the harness's own exit contract. That fallback runs exactly when the resident cannot answer, so the table stays counted as runtime until the native runtime owns the unavailable lane too."
       }
     ],
     "tests": {

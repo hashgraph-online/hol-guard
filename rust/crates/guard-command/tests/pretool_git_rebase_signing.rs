@@ -43,10 +43,7 @@ fn stopped_rebase(session: &Session, options: &[&str]) {
     git(home, tree, &["add", "later.txt"]);
     git(home, tree, &["commit", "--quiet", "-m", "later change"]);
     let primary = &session.primary;
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let stamp = crate::unique_nanos::unique_nanos();
     std::fs::write(primary.join("tracked.txt"), format!("main {stamp}\n")).unwrap();
     git(home, primary, &["commit", "--quiet", "-am", "main change"]);
     let mut arguments = vec!["rebase"];

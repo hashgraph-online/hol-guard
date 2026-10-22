@@ -11,8 +11,10 @@ from pathlib import Path
 
 import extension_artifact_bundle as legacy
 import extension_delivery_github as provider
+from extension_delivery_containers import maximum
 from extension_delivery_inventory import publication_inventory, read_plan
 from extension_delivery_legacy import UNAVAILABLE, unavailable_marker
+from extension_delivery_runtime import pinned_runtime
 from extension_delivery_selector import select
 from extension_delivery_source import verify_sources
 
@@ -22,7 +24,6 @@ from codex_plugin_scanner.guard.catalog_delivery.authority import (
     decode,
     verify_distribution,
 )
-from codex_plugin_scanner.guard.catalog_delivery.containers import maximum
 from codex_plugin_scanner.guard.catalog_delivery.selection import root_tag
 from codex_plugin_scanner.guard.catalog_delivery.transport import PROVENANCE_ASSET, ROOT_ASSET
 from codex_plugin_scanner.guard.extension_builder.io import read_bytes
@@ -146,4 +147,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    with pinned_runtime():
+        main()

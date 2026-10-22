@@ -13,10 +13,7 @@ fn home() -> PathBuf {
         .join(format!(
             "home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let project = root.join("home/project");
     std::fs::create_dir_all(&project).unwrap();
@@ -34,6 +31,21 @@ fn decide(home: &Path, command: &str) -> String {
 }
 
 fn decide_with(home: &Path, command: &str, environment_names: &[&str]) -> String {
+    decide_in(home, command, environment_names, None)
+}
+
+/// The same decision for a session that exports `XDG_CONFIG_HOME`, with the
+/// directory the stamp carries for it.
+fn decide_with_xdg(home: &Path, command: &str, stamped: Option<&str>) -> String {
+    decide_in(home, command, &["XDG_CONFIG_HOME"], stamped)
+}
+
+fn decide_in(
+    home: &Path,
+    command: &str,
+    environment_names: &[&str],
+    xdg_config_home: Option<&str>,
+) -> String {
     let environment = guard_contracts::GuardExecutionEnvironmentV1 {
         path: std::env::var("PATH").unwrap(),
         environment_names: environment_names
@@ -44,7 +56,7 @@ fn decide_with(home: &Path, command: &str, environment_names: &[&str]) -> String
         home: Some(home.to_str().unwrap().to_owned()),
         git_pager_disabled: false,
         pager_disabled: false,
-        xdg_config_home: None,
+        xdg_config_home: xdg_config_home.map(str::to_owned),
         git_config_no_system: false,
         library_search_paths: Default::default(),
     };
@@ -152,7 +164,6 @@ fn inherited_pip_configuration_returns_a_listing_to_review() {
         // Each of these moves a directory pip resolves its configuration
         // files through, so none leaves the file check looking at the files
         // pip would actually read.
-        "XDG_CONFIG_HOME",
         "XDG_CONFIG_DIRS",
         "XDG_DATA_HOME",
         "XDG_DATA_DIRS",
@@ -225,4 +236,49 @@ fn a_user_configuration_file_that_adds_an_option_returns_a_listing_to_review() {
             assert_ne!(decision, "allow", "{body}");
         }
     }
+}
+
+// Every session that follows the base directory specification exports
+// `XDG_CONFIG_HOME`, and pip reads its user configuration from the directory
+// that names. The proof follows it there rather than returning every listing
+// such a session runs to review.
+#[test]
+fn a_redirected_configuration_directory_is_read_where_pip_would_read_it() {
+    let home = home();
+    let redirect = home.join("xdg");
+    std::fs::create_dir_all(redirect.join("pip")).unwrap();
+    let stamped = redirect.to_str().unwrap().to_owned();
+
+    // Nothing there yet, so the listing pip prints is the whole effect.
+    assert_eq!(decide_with_xdg(&home, "pip list", Some(&stamped)), "allow");
+
+    // A file that only changes how pip prints leaves the listing admitted.
+    std::fs::write(
+        redirect.join("pip").join("pip.conf"),
+        "[global]\nquiet = 1\n",
+    )
+    .unwrap();
+    assert_eq!(decide_with_xdg(&home, "pip list", Some(&stamped)), "allow");
+
+    // A file that adds an index query returns it to review, exactly as the
+    // same file under the default directory does.
+    std::fs::write(
+        redirect.join("pip").join("pip.conf"),
+        "[list]\noutdated = true\n",
+    )
+    .unwrap();
+    assert_ne!(decide_with_xdg(&home, "pip list", Some(&stamped)), "allow");
+}
+
+// The redirect is provable only when the stamp carries a directory the proof
+// can resolve. Without one, the file check cannot see the `pip.conf` pip will
+// read, so the listing keeps its review.
+#[test]
+fn an_unresolvable_redirect_returns_a_listing_to_review() {
+    let home = home();
+    assert_ne!(decide_with_xdg(&home, "pip list", None), "allow");
+    assert_ne!(
+        decide_with_xdg(&home, "pip list", Some("relative/config")),
+        "allow"
+    );
 }
