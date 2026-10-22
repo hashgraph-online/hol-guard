@@ -21,13 +21,11 @@ from .inventory_contract_mcp import (
 from .inventory_contract_metadata import (
     _aibom_trust_metadata_module,
     _apply_aibom_metadata_enrichment,
-    _apply_source_of_truth_metadata,
     _bind_skill_document_evidence,
     _capabilities_for_artifact,
     _discard_unverified_skill_directory_hash,
     _inventory_item_description_module,
     _item_kind,
-    _primary_artifact_content_hash,
     _resolve_item_content_hash,
     _risk_level,
 )
@@ -43,12 +41,16 @@ def _item_from_artifact(
     generated_at: str,
     home_dir: Path,
     workspace_dir: Path | None,
+    source_evidence: Mapping[str, object],
     cisco_runs: tuple[object, ...] = (),
-    include_symlinks: bool = True,
-    follow_unsafe_symlinks: bool = False,
     trust_attestation_context: Mapping[str, object] | None = None,
 ) -> GuardAgentInventoryItem:
-    """Convert a native artifact into an inventory item with source and trust metadata."""
+    """Convert a native artifact into an inventory item with source and trust metadata.
+
+    ``source_evidence`` is the resident's answer for this artifact: the source
+    of truth behind a symlinked config path and the hash of its primary
+    document. Both read the filesystem, so neither is derived here.
+    """
     artifact_id = str(getattr(artifact, "artifact_id", "artifact"))
     artifact_type = str(getattr(artifact, "artifact_type", "unknown"))
     name = str(getattr(artifact, "name", artifact_id))
@@ -63,22 +65,11 @@ def _item_from_artifact(
         workspace_dir=workspace_dir,
         cisco_runs=cisco_runs,
     )
-    if include_symlinks:
-        safe_metadata = _apply_source_of_truth_metadata(
-            artifact,
-            harness=harness,
-            item_kind=item_kind,
-            metadata=safe_metadata,
-            home_dir=home_dir,
-            workspace_dir=workspace_dir,
-            follow_unsafe_symlinks=follow_unsafe_symlinks,
-        )
-    primary_content_hash = _primary_artifact_content_hash(
-        artifact,
-        artifact_type=artifact_type,
-        home_dir=home_dir,
-        workspace_dir=workspace_dir,
-    )
+    source_of_truth = source_evidence.get("source_of_truth")
+    if isinstance(source_of_truth, dict):
+        safe_metadata = {**safe_metadata, "sourceOfTruth": source_of_truth}
+    primary_hash_value = source_evidence.get("primary_content_hash")
+    primary_content_hash = primary_hash_value if isinstance(primary_hash_value, str) else None
     if artifact_type == "skill":
         safe_metadata = _bind_skill_document_evidence(
             safe_metadata,

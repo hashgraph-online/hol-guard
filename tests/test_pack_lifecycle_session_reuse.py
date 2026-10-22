@@ -256,3 +256,55 @@ def test_a_preparation_reads_its_publication_once_inside_its_session(native, mon
     with pytest.raises(ValueError, match="stop after"):
         preparation.prepare(object(), (), Path("/cache"), engine="engine")
     assert len(reads) == 1 and reads[0] is not None
+
+
+@pytest.fixture
+def authoring(monkeypatch):
+    # An installed authoring context whose every fetch is a native object read.
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard.catalog_delivery import installed_bundle
+    from codex_plugin_scanner.guard.extension_builder import bundle_baseline, metadata_index
+
+    bundle = SimpleNamespace(
+        digest="d" * 64,
+        manifest=lambda: {"policy": {"root": "root", "transport": "transport"}},
+        fetch=lambda location, length: lifecycle.invoke("object", operation="installed") and b"{}",
+    )
+    monkeypatch.setattr(installed_bundle, "load_installed_bundle", lambda: bundle)
+    exchanged = []
+
+    def exchange(compiler, operation, records, directory, *, fetch=None, archive=None):
+        exchanged.append(operation)
+        for index in range(3):
+            fetch({"location": {"asset": str(index)}, "length": 2})
+        return {"metadata_index": {}, "programs": []}
+
+    monkeypatch.setattr(metadata_index, "exchange", exchange)
+    return bundle_baseline, exchanged
+
+
+def test_an_installed_authoring_context_reads_its_objects_through_one_runtime(native, authoring, tmp_path):
+    # Every located object is checked by the runtime. Verifying and copying it
+    # per object outlasted the compiler's deadline over a full authoring context.
+    bundle_baseline, exchanged = authoring
+    result = bundle_baseline.validation_base({}, Path("compiler"), installed=True, directory=tmp_path)
+    assert result == {"metadata_index": {}, "programs": []}
+    assert exchanged == ["authoring-context"]
+    assert native == {"verify": 1, "copies": 1, "runs": 3}
+    assert lifecycle._SESSION.get() is None
+
+
+def test_an_authoring_refusal_keeps_its_code_through_the_session(native, authoring, monkeypatch, tmp_path):
+    from codex_plugin_scanner.guard.extension_builder import metadata_index
+    from codex_plugin_scanner.guard.extension_builder.native_source_compiler import NativeSourceCompilerError
+
+    bundle_baseline, _ = authoring
+
+    def refuse(*args, **kwargs):
+        raise NativeSourceCompilerError("native authoring failed: refused", code="refused")
+
+    monkeypatch.setattr(metadata_index, "exchange", refuse)
+    with pytest.raises(NativeSourceCompilerError) as raised:
+        bundle_baseline.validation_base({}, Path("compiler"), installed=True, directory=tmp_path)
+    assert raised.value.code == "refused"

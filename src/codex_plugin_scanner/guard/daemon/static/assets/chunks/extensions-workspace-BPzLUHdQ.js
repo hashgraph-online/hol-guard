@@ -1,4 +1,4 @@
-import { r as reactExports, bt as fetchExtensionCatalog, bu as ExtensionControlApiError, bv as normalizeExtensionCatalogSummary, bw as normalizeExtensionPermission, bx as ExtensionControlProtocolError, by as normalizeExtensionCatalogItem, bz as guardApiCacheScope, bA as fetchExtensionCatalogV2Api, bB as localPermissionDraftState, bC as setLocalPermissionDraftState, bD as extensionPolicyAuthorityUnchanged, bE as newExtensionPolicyDraftIdentity, bF as extensionPolicyDraftIsDirty, bG as setLocalPermissionDraftStates, bH as buildExtensionPolicyDraftMutation, bI as fetchEffectiveExtensionControls, bJ as previewExtensionMutation, bK as isCurrentExtensionPolicyDraft, bL as applyExtensionMutation, bM as fetchExtensionControlHistory, j as jsxRuntimeExports, bN as managedPermissionState, Z as HiMiniSparkles, s as HiMiniCheckCircle, g as HiMiniNoSymbol, v as HiMiniLockClosed, a4 as HiMiniExclamationTriangle, bO as controlProvenance, bP as treatmentLabel, aR as isApprovalProofSubmitDisabled, _ as HiMiniXMark, aQ as ApprovalProofFieldInputs, bQ as useResolvedApprovalGate, bR as groupPermissionsByFamily, d as HiMiniArrowPath, R as HiMiniShieldCheck, bS as HiMiniInformationCircle, aS as buildApprovalProofCredentials, bT as approvalProofRecentlySatisfied, p as HiMiniMagnifyingGlass, bU as bulkCommandState, H as HiMiniChevronRight, bV as fetchLocalCliApi, bW as ExtensionBrandMark, c as HiMiniChevronDown, bX as fetchMcpProviderActions, bY as previewLocalCliMutation, bZ as applyLocalCliMutation, b_ as LocalCliApiError, b$ as LOCAL_CLI_CAPABILITIES, c0 as readJson, c1 as enrollablePackageScriptCommands, c2 as seenSuggestionMeta, c3 as HiMiniPlus, c4 as looksLikeProjectRelocatePaste, c5 as packageScriptFilterNeedle, e as HiMiniCheck, c6 as suggestedPackageScriptExtensions, c7 as filterExtensionSuggestions, c8 as suggestedHarnessExtensions, c9 as suggestedSeenExtensions, ca as keepsPackageScriptCatalog, cb as recognizeLocalCli, cc as preferredPackageScriptExtension, cd as looksLikePackageScriptPaste, ce as enrollmentCommandStates, cf as isBulkApproveGateReady, cg as HiMiniArrowLeft, ch as fetchLocalCliList, ci as normalizeLocalCliList, cj as refreshMcpInventory, ck as startGuardCloudConnect, cl as extensionEffectiveState, cm as permissionEffectiveState, cn as HiMiniArrowTopRightOnSquare, a0 as HiMiniCloud, co as fetchExtensionControlApi, cp as permissionForRule, cq as refreshEffectiveExtensionControls, aD as HiMiniClipboardDocumentCheck, aE as HiMiniClipboard, aG as ApprovalProofModal, cr as fetchExtensionDiscoveryApi, t as HiMiniArrowRight, cs as HiMiniClock, B as createCommandActivityClient, C as fetchCommandActivityApi, ct as startCancelableDiscoveryJob, cu as waitForMcpDiscoveryJob, cv as isLocalCliId, bc as guardAwareHref, cw as localCliHref, cx as filterCodexHostApps, cy as connectorWorkspaceItems, cz as customExtensionNeedsReview, aM as HiMiniAdjustmentsHorizontal, cA as extensionDisplayName, cB as catalogRowSecondLine, cC as extensionStateLabel, cD as HiMiniGlobeAlt, cE as HiMiniFunnel, cF as discoveryFailureMessage, ba as WorkspacePageHeader, cG as refreshCodexHostInventory, cH as CODEX_HOST_FALLBACK, cI as CONFIGURED_CONNECTIONS_FALLBACK, cJ as loadCurrentDashboardBuild, cK as canonicalExtensionId, cL as extensionDetailHref, cM as DEFAULT_EXTENSION_DETAIL_URL_STATE, cN as acknowledgeDegradedExtensionControlAuthority, cO as recoverExtensionControlAuthority, cP as readExtensionDetailUrlState, cQ as parseProtectionRoute, cR as addCustomExtensionHref } from "../guard-dashboard.js";
+import { r as reactExports, bt as fetchExtensionCatalog, bu as ExtensionControlApiError, bv as normalizeExtensionCatalogSummary, bw as normalizeExtensionPermission, bx as ExtensionControlProtocolError, by as normalizeExtensionCatalogItem, bz as guardApiCacheScope, bA as fetchExtensionCatalogV2Api, bB as localPermissionDraftState, bC as setLocalPermissionDraftState, bD as extensionPolicyAuthorityUnchanged, bE as newExtensionPolicyDraftIdentity, bF as extensionPolicyDraftIsDirty, bG as setLocalPermissionDraftStates, bH as buildExtensionPolicyDraftMutation, bI as fetchEffectiveExtensionControls, bJ as previewExtensionMutation, bK as isCurrentExtensionPolicyDraft, bL as applyExtensionMutation, bM as fetchExtensionControlHistory, j as jsxRuntimeExports, bN as managedPermissionState, Z as HiMiniSparkles, s as HiMiniCheckCircle, g as HiMiniNoSymbol, v as HiMiniLockClosed, a4 as HiMiniExclamationTriangle, bO as controlProvenance, bP as treatmentLabel, aR as isApprovalProofSubmitDisabled, _ as HiMiniXMark, aQ as ApprovalProofFieldInputs, bQ as useResolvedApprovalGate, bR as groupPermissionsByFamily, d as HiMiniArrowPath, R as HiMiniShieldCheck, bS as HiMiniInformationCircle, aS as buildApprovalProofCredentials, bT as LocalCliApiError, bU as approvalProofRecentlySatisfied, p as HiMiniMagnifyingGlass, bV as bulkCommandState, H as HiMiniChevronRight, bW as fetchLocalCliApi, bX as ExtensionBrandMark, c as HiMiniChevronDown, bY as fetchMcpProviderActions, bZ as previewLocalCliMutation, b_ as applyLocalCliMutation, b$ as LOCAL_CLI_CAPABILITIES, c0 as readJson, c1 as enrollablePackageScriptCommands, c2 as seenSuggestionMeta, c3 as HiMiniPlus, c4 as looksLikeProjectRelocatePaste, c5 as packageScriptFilterNeedle, e as HiMiniCheck, c6 as suggestedPackageScriptExtensions, c7 as filterExtensionSuggestions, c8 as suggestedHarnessExtensions, c9 as suggestedSeenExtensions, ca as keepsPackageScriptCatalog, cb as recognizeLocalCli, cc as preferredPackageScriptExtension, cd as looksLikePackageScriptPaste, ce as enrollmentCommandStates, cf as isBulkApproveGateReady, cg as HiMiniArrowLeft, ch as fetchLocalCliList, ci as normalizeLocalCliList, cj as refreshMcpInventory, ck as startGuardCloudConnect, cl as extensionEffectiveState, cm as permissionEffectiveState, cn as HiMiniArrowTopRightOnSquare, a0 as HiMiniCloud, co as fetchExtensionControlApi, cp as permissionForRule, cq as refreshEffectiveExtensionControls, aD as HiMiniClipboardDocumentCheck, aE as HiMiniClipboard, aG as ApprovalProofModal, cr as fetchExtensionDiscoveryApi, t as HiMiniArrowRight, cs as HiMiniClock, B as createCommandActivityClient, C as fetchCommandActivityApi, ct as startCancelableDiscoveryJob, cu as waitForMcpDiscoveryJob, cv as isLocalCliId, bc as guardAwareHref, cw as localCliHref, cx as filterCodexHostApps, cy as connectorWorkspaceItems, cz as customExtensionNeedsReview, aM as HiMiniAdjustmentsHorizontal, cA as extensionDisplayName, cB as catalogRowSecondLine, cC as extensionStateLabel, cD as HiMiniGlobeAlt, cE as HiMiniFunnel, cF as discoveryFailureMessage, ba as WorkspacePageHeader, cG as refreshCodexHostInventory, cH as CODEX_HOST_FALLBACK, cI as CONFIGURED_CONNECTIONS_FALLBACK, cJ as loadCurrentDashboardBuild, cK as canonicalExtensionId, cL as extensionDetailHref, cM as DEFAULT_EXTENSION_DETAIL_URL_STATE, cN as acknowledgeDegradedExtensionControlAuthority, cO as recoverExtensionControlAuthority, cP as readExtensionDetailUrlState, cQ as parseProtectionRoute, cR as addCustomExtensionHref } from "../guard-dashboard.js";
 import { u as useConfirmDialog } from "./confirm-dialog-DoiBaaXB.js";
 const PROFILE_SETUP_COMMANDS = { wrangler: "npx wrangler" };
 const PROFILE_COMMAND_PARAM = "command";
@@ -2029,13 +2029,17 @@ function bulkPolicyCopy(surface) {
     mixedCopy: "Custom mix. Pick Recommended, Allow all, or Block all to reset every command."
   };
 }
+const FRESH_TOTP_REQUIRED_MESSAGE = "Enter the current six-digit code from your authenticator.";
+function isFreshTotpRequired(error) {
+  return error instanceof LocalCliApiError && error.code === "approval_gate_totp_required";
+}
 function reviewTitle(name, state) {
   if (state === "allowed") return `Save ${name} command settings`;
   if (state === "blocked") return `Block ${name}`;
   return `Remove ${name}`;
 }
-function reviewModalDetail(gate) {
-  if (approvalProofRecentlySatisfied(gate)) {
+function reviewModalDetail(gate, requireFreshTotp = false) {
+  if (!requireFreshTotp && approvalProofRecentlySatisfied(gate)) {
     return "Recently confirmed with your authenticator. A new code is not needed yet.";
   }
   if (gate?.totp_enabled === true) {
@@ -3037,18 +3041,18 @@ function CustomExtensionReviewModal(props) {
     props.onConfirm(buildApprovalProofCredentials(props.approvalGate, {
       approvalPassword: password,
       approvalTotpCode: totp
-    }));
+    }, props.requireFreshTotp === true));
   }, [password, props, totp]);
   const submitDisabled = isApprovalProofSubmitDisabled(
     props.approvalGate,
     { approvalPassword: password, approvalTotpCode: totp },
     props.busy,
-    false,
+    props.requireFreshTotp === true,
     true
   );
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { ref: dialogRef, tabIndex: -1, role: "dialog", "aria-modal": "true", "aria-labelledby": "custom-extension-review-title", onSubmit: handleSubmit, className: "max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl focus:outline-none", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-review-title", className: "text-xl font-semibold text-brand-dark", children: title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/80", children: reviewModalDetail(props.approvalGate) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/80", children: reviewModalDetail(props.approvalGate, props.requireFreshTotp === true) }),
     props.item.surface === "mcp" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 text-sm leading-6 text-brand-dark", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
         props.item.source_label || "This host",
@@ -3095,6 +3099,7 @@ function CustomExtensionReviewModal(props) {
         approvalGate: props.approvalGate,
         approvalPassword: password,
         approvalTotpCode: totp,
+        requireFreshTotp: props.requireFreshTotp === true,
         requireGate: true,
         onApprovalPasswordChange: handlePassword,
         onApprovalTotpCodeChange: handleTotp
@@ -3147,11 +3152,13 @@ function LocalCliCapabilities(props) {
   const [pending, setPending] = reactExports.useState(null);
   const [busy, setBusy] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
+  const [freshTotpRequired, setFreshTotpRequired] = reactExports.useState(false);
   const name = customExtensionDisplayName(props.item);
   const states = props.item.capabilities;
   const suggested = props.item.suggested_capability;
   const request2 = reactExports.useCallback(async (change) => {
     setError(null);
+    setFreshTotpRequired(false);
     try {
       await refreshApprovalGate({ failClosed: true });
     } catch {
@@ -3189,7 +3196,13 @@ function LocalCliCapabilities(props) {
       await refreshApprovalGate();
       setPending(null);
     } catch (caught) {
-      setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not change this access.");
+      if (isFreshTotpRequired(caught)) {
+        setFreshTotpRequired(true);
+        await refreshApprovalGate().catch(() => void 0);
+        setError(FRESH_TOTP_REQUIRED_MESSAGE);
+      } else {
+        setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not change this access.");
+      }
     } finally {
       setBusy(false);
     }
@@ -3266,6 +3279,7 @@ function LocalCliCapabilities(props) {
         busy,
         error,
         approvalGate: resolvedApprovalGate,
+        requireFreshTotp: freshTotpRequired,
         onCancel: cancel,
         onConfirm: confirm
       }
@@ -4699,6 +4713,7 @@ function LocalCliDetail(props) {
   const catalogController = reactExports.useRef(null);
   reactExports.useEffect(() => () => catalogController.current?.abort(), []);
   const [error, setError] = reactExports.useState(null);
+  const [freshTotpRequired, setFreshTotpRequired] = reactExports.useState(false);
   const added = props.item.state !== "unset";
   const commandChanges = commandPermissionChanges(props.item.commands, commands);
   const commandsDirty = commandChanges.length > 0;
@@ -4724,6 +4739,7 @@ function LocalCliDetail(props) {
   }, [props.item]);
   const setupMatch = props.setupLink ? connectorSetupMatch(props.item, props.setupLink) : null;
   const openPending = reactExports.useCallback(async (state, fromSetupLink = false) => {
+    setFreshTotpRequired(false);
     await refreshApprovalGate();
     setRecommended(fromSetupLink);
     setPending(state);
@@ -4802,7 +4818,13 @@ function LocalCliDetail(props) {
       await refreshApprovalGate();
       setPending(null);
     } catch (caught) {
-      setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not update this custom extension.");
+      if (isFreshTotpRequired(caught)) {
+        setFreshTotpRequired(true);
+        await refreshApprovalGate().catch(() => void 0);
+        setError(FRESH_TOTP_REQUIRED_MESSAGE);
+      } else {
+        setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not update this custom extension.");
+      }
     } finally {
       setBusy(false);
     }
@@ -5066,6 +5088,7 @@ function LocalCliDetail(props) {
         busy,
         error,
         approvalGate: resolvedApprovalGate,
+        requireFreshTotp: freshTotpRequired,
         onCancel: clearPending,
         onConfirm: confirmChange
       }

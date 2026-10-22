@@ -2013,39 +2013,6 @@
       "semantic_text": "semantic:fallback"
     }
   ],
-  "safe_roots": [
-    {
-      "home_dir": "/home/user",
-      "roots": [
-        "/home/user"
-      ],
-      "workspace_dir": null
-    },
-    {
-      "home_dir": "/home/user",
-      "roots": [
-        "/home/user/project",
-        "/home/user"
-      ],
-      "workspace_dir": "/home/user/project"
-    },
-    {
-      "home_dir": "/home/user",
-      "roots": [
-        "/srv/work",
-        "/home/user"
-      ],
-      "workspace_dir": "/srv/work"
-    },
-    {
-      "home_dir": "/home/user",
-      "roots": [
-        "/home/user",
-        "/home/user"
-      ],
-      "workspace_dir": "/home/user"
-    }
-  ],
   "skill_document_evidence": [
     {
       "bound": {

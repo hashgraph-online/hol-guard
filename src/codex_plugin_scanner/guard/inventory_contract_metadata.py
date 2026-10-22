@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import re
 from pathlib import Path
 
-from ..path_support import resolves_within_root
-from .inventory_contract_constants import _path_has_symlink_component
 from .inventory_contract_models import InventoryCapability, InventoryItemKind, InventorySeverity
 from .skill_directory_identity import validated_complete_skill_directory_hash
 
@@ -16,11 +13,6 @@ from .skill_directory_identity import validated_complete_skill_directory_hash
 def _aibom_detection_module():
     """Load source-of-truth detection lazily to avoid inventory initialization cycles."""
     return importlib.import_module(".aibom_detection", __package__)
-
-
-def _aibom_symlink_module():
-    """Load symlink evidence helpers only when inventory enrichment requires them."""
-    return importlib.import_module(".aibom_symlink", __package__)
 
 
 def _aibom_trust_metadata_module():
@@ -88,114 +80,12 @@ def _discard_unverified_skill_directory_hash(metadata: dict[str, object]) -> dic
     return sanitized
 
 
-def _primary_artifact_content_hash(
-    artifact: object,
-    *,
-    artifact_type: str,
-    home_dir: Path,
-    workspace_dir: Path | None,
-) -> str | None:
-    """Read the primary artifact fingerprint without substituting unrelated evidence."""
-    path_value = getattr(artifact, "config_path", None)
-    if not isinstance(path_value, str) or not path_value.strip():
-        return None
-    path = Path(path_value).expanduser()
-    if artifact_type == "skill":
-        if path.name != "SKILL.md":
-            return None
-        skills_root = next((parent for parent in path.parents if parent.name.lower() == "skills"), None)
-        if skills_root is None:
-            return None
-        try:
-            relative = path.relative_to(skills_root)
-        except ValueError:
-            return None
-        if len(relative.parts) < 2:
-            return None
-        outer_root = next(
-            (
-                root
-                for root in (home_dir, workspace_dir)
-                if root is not None and resolves_within_root(root, skills_root, require_exists=True)
-            ),
-            None,
-        )
-        if outer_root is None:
-            return None
-        allowed_roots = (skills_root,)
-    elif artifact_type == "instruction":
-        if workspace_dir is None or path.suffix.lower() not in {".md", ".mdc"}:
-            return None
-        allowed_roots = (workspace_dir,)
-    else:
-        return None
-    allowed_root = next(
-        (root for root in allowed_roots if root is not None and resolves_within_root(root, path, require_exists=True)),
-        None,
-    )
-    if allowed_root is None or _path_has_symlink_component(path, allowed_root=allowed_root):
-        return None
-    try:
-        digest = hashlib.sha256()
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(64 * 1024), b""):
-                digest.update(chunk)
-    except OSError:
-        return None
-    return f"sha256:{digest.hexdigest()}"
-
-
 def _canonical_inventory_content_hash(value: str) -> str:
     """Normalize a supported content fingerprint into its canonical wire form."""
     normalized = value.lower()
     if re.fullmatch(r"[0-9a-f]{64}", normalized):
         return f"sha256:{normalized}"
     return value
-
-
-def _safe_roots_for_inspection(
-    *,
-    home_dir: Path,
-    workspace_dir: Path | None,
-) -> tuple[Path, ...]:
-    """Derive bounded filesystem roots permitted for source-of-truth inspection."""
-    roots: list[Path] = [home_dir]
-    if workspace_dir is not None:
-        roots.insert(0, workspace_dir)
-    return tuple(roots)
-
-
-def _apply_source_of_truth_metadata(
-    artifact: object,
-    *,
-    harness: str,
-    item_kind: InventoryItemKind,
-    metadata: dict[str, object],
-    home_dir: Path,
-    workspace_dir: Path | None,
-    follow_unsafe_symlinks: bool = False,
-) -> dict[str, object]:
-    """Reconcile metadata with the native source while retaining bounded inspection."""
-    config_path = getattr(artifact, "config_path", None)
-    if not isinstance(config_path, str) or not config_path:
-        return metadata
-    path = Path(config_path)
-    if not path.is_symlink():
-        return metadata
-    inspection = _aibom_symlink_module().inspect_aibom_source_path(
-        path,
-        safe_roots=_safe_roots_for_inspection(home_dir=home_dir, workspace_dir=workspace_dir),
-        home_dir=home_dir,
-        workspace_dir=workspace_dir,
-        follow_unsafe_symlinks=follow_unsafe_symlinks,
-    )
-    source_link_id = f"{harness}:{item_kind}:{inspection.source_fingerprint[:24]}"
-    enriched = dict(metadata)
-    enriched["sourceOfTruth"] = _aibom_symlink_module().source_of_truth_metadata_from_inspection(
-        inspection,
-        source_link_id=source_link_id,
-    )
-    return enriched
 
 
 def _apply_aibom_metadata_enrichment(

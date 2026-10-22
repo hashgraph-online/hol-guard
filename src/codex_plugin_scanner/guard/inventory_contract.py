@@ -71,10 +71,8 @@ from .inventory_contract_mcp import _optional_context_string as _optional_contex
 from .inventory_contract_mcp import _risk_level_for_capabilities as _risk_level_for_capabilities
 from .inventory_contract_mcp import _string_value as _string_value
 from .inventory_contract_metadata import _aibom_detection_module as _aibom_detection_module
-from .inventory_contract_metadata import _aibom_symlink_module as _aibom_symlink_module
 from .inventory_contract_metadata import _aibom_trust_metadata_module as _aibom_trust_metadata_module
 from .inventory_contract_metadata import _apply_aibom_metadata_enrichment as _apply_aibom_metadata_enrichment
-from .inventory_contract_metadata import _apply_source_of_truth_metadata as _apply_source_of_truth_metadata
 from .inventory_contract_metadata import _bind_skill_document_evidence as _bind_skill_document_evidence
 from .inventory_contract_metadata import _canonical_inventory_content_hash as _canonical_inventory_content_hash
 from .inventory_contract_metadata import _capabilities_for_artifact as _capabilities_for_artifact
@@ -83,10 +81,8 @@ from .inventory_contract_metadata import (
 )
 from .inventory_contract_metadata import _inventory_item_description_module as _inventory_item_description_module
 from .inventory_contract_metadata import _item_kind as _item_kind
-from .inventory_contract_metadata import _primary_artifact_content_hash as _primary_artifact_content_hash
 from .inventory_contract_metadata import _resolve_item_content_hash as _resolve_item_content_hash
 from .inventory_contract_metadata import _risk_level as _risk_level
-from .inventory_contract_metadata import _safe_roots_for_inspection as _safe_roots_for_inspection
 from .inventory_contract_models import DockerProofStatus as DockerProofStatus
 from .inventory_contract_models import GuardAgentIntegrationRun as GuardAgentIntegrationRun
 from .inventory_contract_models import GuardAgentInventoryDockerProof as GuardAgentInventoryDockerProof
@@ -126,6 +122,7 @@ from .inventory_contract_scans import _inventory_severity as _inventory_severity
 from .inventory_contract_scans import _score_delta_for_severity as _score_delta_for_severity
 from .inventory_contract_scans import _source_status_for_cisco_status as _source_status_for_cisco_status
 from .inventory_contract_scans import _symlink_findings_from_items as _symlink_findings_from_items
+from .native_inventory_source_evidence import native_inventory_source_evidence
 from .path_security import path_has_symlink_component as path_has_symlink_component
 from .skill_directory_identity import validated_complete_skill_directory_hash as validated_complete_skill_directory_hash
 
@@ -265,17 +262,31 @@ def inventory_snapshot_from_detection(
             workspace_dir=workspace_dir,
         )
     )
+    source_evidence = native_inventory_source_evidence(
+        [
+            {
+                "harness": harness,
+                "item_kind": _item_kind(str(getattr(artifact, "artifact_type", "unknown"))),
+                "artifact_type": str(getattr(artifact, "artifact_type", "unknown")),
+                "config_path": getattr(artifact, "config_path", None),
+            }
+            for artifact in artifact_tuple
+        ],
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        include_symlinks=include_symlinks,
+        follow_unsafe_symlinks=follow_unsafe_symlinks,
+    )
     items: list[GuardAgentInventoryItem] = []
-    for artifact in artifact_tuple:
+    for artifact, evidence in zip(artifact_tuple, source_evidence, strict=True):
         item = _item_from_artifact(
             harness,
             artifact,
             generated_at=generated_at,
             home_dir=home_dir,
             workspace_dir=workspace_dir,
+            source_evidence=evidence,
             cisco_runs=cisco_runs,
-            include_symlinks=include_symlinks,
-            follow_unsafe_symlinks=follow_unsafe_symlinks,
             trust_attestation_context=trust_attestation_context,
         )
         items.append(item)

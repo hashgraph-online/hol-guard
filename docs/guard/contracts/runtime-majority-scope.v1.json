@@ -218,7 +218,6 @@
           "src/codex_plugin_scanner/guard/aibom_content_upload.py",
           "src/codex_plugin_scanner/guard/aibom_models.py",
           "src/codex_plugin_scanner/guard/aibom_reporting.py",
-          "src/codex_plugin_scanner/guard/aibom_symlink.py",
           "src/codex_plugin_scanner/guard/aibom_sync.py",
           "src/codex_plugin_scanner/guard/aibom_trust_metadata.py",
           "src/codex_plugin_scanner/guard/local_risk_report.py",
