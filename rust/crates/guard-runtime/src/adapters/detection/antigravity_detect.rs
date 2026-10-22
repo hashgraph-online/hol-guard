@@ -22,7 +22,7 @@ const HARNESS: &str = "antigravity";
 
 /// The editor settings Antigravity owns outright, with the source each one
 /// names its MCP servers by.
-const OWNED_SETTINGS: [(&[&str], &str); 3] = [
+const OWNED_SETTINGS: [(&[&str], &str); 4] = [
     (
         &[
             "Library",
@@ -38,9 +38,20 @@ const OWNED_SETTINGS: [(&[&str], &str); 3] = [
         "settings:xdg-user",
     ),
     (
+        &[".config", "antigravity", "user", "settings.json"],
+        "settings:xdg-user",
+    ),
+    (
         &["AppData", "Roaming", "Antigravity", "User", "settings.json"],
         "settings:windows-user",
     ),
+];
+
+const SKILL_CANDIDATES: [(&[&str], &str); 4] = [
+    (&[".gemini", "antigravity", "skills"], "skills"),
+    (&[".gemini", "antigravity", "builtin", "skills"], "skills/builtin"),
+    (&[".gemini", "config", "plugins"], "skills/plugins"),
+    (&[".agents", "skills"], "skills/agents"),
 ];
 
 fn under(base: &Path, parts: &[&str]) -> PathBuf {
@@ -194,18 +205,21 @@ pub(crate) fn detect(args: &Value) -> KindResult {
         }
     }
     for root in &roots {
-        let skill_root = under(root, &[".gemini", "antigravity", "skills"]);
-        let scope = Scope {
-            harness: HARNESS,
-            scope: inventory.scope_for(&skill_root),
-        };
-        inventory.skills(
-            &scope,
-            "Antigravity",
-            &SkillNaming::Prefixed,
-            &skill_root,
-            root,
-        )?;
+        for (parts, prefix) in SKILL_CANDIDATES {
+            let skill_root = under(root, parts);
+            let scope = Scope {
+                harness: HARNESS,
+                scope: inventory.scope_for(&skill_root),
+            };
+            inventory.skills(
+                &scope,
+                "Antigravity",
+                &SkillNaming::Prefixed,
+                &skill_root,
+                root,
+                prefix,
+            )?;
+        }
     }
 
     let mut candidates: Vec<(PathBuf, String, bool)> = OWNED_SETTINGS
@@ -223,8 +237,14 @@ pub(crate) fn detect(args: &Value) -> KindResult {
         candidates.push((path, source, false));
     }
     let mut signal = inventory.has_found();
+    let mut seen_canonical: Vec<PathBuf> = Vec::new();
     for (path, source, owned) in candidates {
-        let payload = json_payload(&inventory.fs(&path))?;
+        let fs_path = inventory.fs(&path);
+        let canonical = std::fs::canonicalize(&fs_path).unwrap_or_else(|_| fs_path.clone());
+        if seen_canonical.contains(&canonical) {
+            continue;
+        }
+        let payload = json_payload(&fs_path)?;
         if !payload.truthy() {
             continue;
         }
@@ -236,6 +256,7 @@ pub(crate) fn detect(args: &Value) -> KindResult {
         if !(owned || names_antigravity || signal) {
             continue;
         }
+        seen_canonical.push(canonical);
         mcp_servers(&mut inventory, &path, &source, &payload)?;
         inventory.found(&path);
         signal = true;

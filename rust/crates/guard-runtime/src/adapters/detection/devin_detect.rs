@@ -510,6 +510,7 @@ pub(crate) fn detect(args: &Value) -> KindResult {
             &SkillNaming::Bare { root_label: &label },
             &skill_root,
             &identity_root,
+            "skills",
         )?;
     }
 
