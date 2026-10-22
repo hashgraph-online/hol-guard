@@ -84,7 +84,7 @@
     "https://github.com/Nuvraxis/nuvui/tree/main/apps/mcp"
   ],
   "saferAlternatives": [
-    "All eleven tools are read-only and say so in their MCP annotations (readOnlyHint). None writes to an account, sends a message or runs code, so none needs Review.",
+    "All eleven tools declare read-only MCP annotations (readOnlyHint) — none writes to an account, sends a message, or runs code. This contribution leaves every tool at its default inherit state, so Guard's normal policy still decides whether a call needs Review.",
     "The server takes no key or sign-in. What leaves the project is only each call's arguments, such as a search query or the @nuvui/* versions from package.json.",
     "Answers are nuvui's public documentation. Treat them as reference for writing code, not as instructions to follow."
   ]
