@@ -1023,6 +1023,11 @@
     height: calc(var(--spacing) * 8);
   }
 
+  .size-9 {
+    width: calc(var(--spacing) * 9);
+    height: calc(var(--spacing) * 9);
+  }
+
   .size-10 {
     width: calc(var(--spacing) * 10);
     height: calc(var(--spacing) * 10);
@@ -2456,6 +2461,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .border-brand-blue\/30 {
       border-color: color-mix(in oklab, var(--brand-blue) 30%, transparent);
+    }
+  }
+
+  .border-brand-blue\/40 {
+    border-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-brand-blue\/40 {
+      border-color: color-mix(in oklab, var(--brand-blue) 40%, transparent);
     }
   }
 
@@ -4744,6 +4759,10 @@
     white-space: nowrap;
   }
 
+  .whitespace-pre-line {
+    white-space: pre-line;
+  }
+
   .whitespace-pre-wrap {
     white-space: pre-wrap;
   }
@@ -5274,6 +5293,20 @@
 
   .underline {
     text-decoration-line: underline;
+  }
+
+  .decoration-brand-blue\/40 {
+    -webkit-text-decoration-color: var(--brand-blue);
+    -webkit-text-decoration-color: var(--brand-blue);
+    text-decoration-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .decoration-brand-blue\/40 {
+      -webkit-text-decoration-color: color-mix(in oklab, var(--brand-blue) 40%, transparent);
+      -webkit-text-decoration-color: color-mix(in oklab, var(--brand-blue) 40%, transparent);
+      text-decoration-color: color-mix(in oklab, var(--brand-blue) 40%, transparent);
+    }
   }
 
   .underline-offset-2 {
@@ -5868,6 +5901,16 @@
       }
     }
 
+    .hover\:border-brand-dark\/10:hover {
+      border-color: var(--brand-dark);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:border-brand-dark\/10:hover {
+        border-color: color-mix(in oklab, var(--brand-dark) 10%, transparent);
+      }
+    }
+
     .hover\:border-emerald-300:hover {
       border-color: var(--color-emerald-300);
     }
@@ -6006,6 +6049,16 @@
       }
     }
 
+    .hover\:bg-brand-blue\/\[0\.04\]:hover {
+      background-color: var(--brand-blue);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-brand-blue\/\[0\.04\]:hover {
+        background-color: color-mix(in oklab, var(--brand-blue) 4%, transparent);
+      }
+    }
+
     .hover\:bg-brand-blue\/\[0\.06\]:hover {
       background-color: var(--brand-blue);
     }
@@ -6026,8 +6079,24 @@
       }
     }
 
-    .hover\:bg-brand-dark:hover {
+    .hover\:bg-brand-dark:hover, .hover\:bg-brand-dark\/5:hover {
       background-color: var(--brand-dark);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-brand-dark\/5:hover {
+        background-color: color-mix(in oklab, var(--brand-dark) 5%, transparent);
+      }
+    }
+
+    .hover\:bg-brand-dark\/\[0\.03\]:hover {
+      background-color: var(--brand-dark);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:bg-brand-dark\/\[0\.03\]:hover {
+        background-color: color-mix(in oklab, var(--brand-dark) 3%, transparent);
+      }
     }
 
     .hover\:bg-brand-purple\/90:hover {
@@ -6210,6 +6279,12 @@
 
     .hover\:underline:hover {
       text-decoration-line: underline;
+    }
+
+    .hover\:decoration-brand-blue:hover {
+      -webkit-text-decoration-color: var(--brand-blue);
+      -webkit-text-decoration-color: var(--brand-blue);
+      text-decoration-color: var(--brand-blue);
     }
 
     .hover\:opacity-80:hover {
@@ -7358,6 +7433,10 @@
 
     .lg\:grid-cols-\[minmax\(0\,14rem\)_minmax\(0\,12rem\)_minmax\(0\,1fr\)\] {
       grid-template-columns: minmax(0, 14rem) minmax(0, 12rem) minmax(0, 1fr);
+    }
+
+    .lg\:grid-cols-\[minmax\(0\,20rem\)_minmax\(0\,1fr\)\] {
+      grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
     }
 
     .lg\:flex-col {

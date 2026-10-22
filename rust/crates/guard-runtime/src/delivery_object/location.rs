@@ -35,24 +35,6 @@ fn digits(value: &str, least: usize, most: usize) -> bool {
     (least..=most).contains(&value.len()) && value.bytes().all(|b| b.is_ascii_digit())
 }
 
-/// `extension-data-<source>-<publication>.<epoch>-<sequence>`
-fn tag(value: &str) -> bool {
-    let rest = value.strip_prefix("extension-data-");
-    let Some((source, rest)) = rest.and_then(|rest| rest.split_once('-')) else {
-        return false;
-    };
-    let Some((publication, rest)) = rest.split_once('.') else {
-        return false;
-    };
-    let Some((epoch, sequence)) = rest.split_once('-') else {
-        return false;
-    };
-    lower_hex(source, 40)
-        && digits(publication, 1, 20)
-        && digits(epoch, 1, 10)
-        && digits(sequence, 6, 6)
-}
-
 /// `objects-NNNNNN.zip` or `packs-NNNNNN.zip`.
 pub(super) fn family(name: &str) -> Option<Family> {
     let (found, rest) = match (name.strip_prefix("objects-"), name.strip_prefix("packs-")) {
@@ -75,37 +57,12 @@ fn data_name(name: &str) -> Option<(&'static str, &str)> {
 }
 
 /// The location of the object `kind` with `digest`: a whole asset named for it,
-/// or a member of a container of the matching family.
+/// or a member of a container of the matching family. Distribution-root
+/// validation applies the same check, so both accept exactly the same
+/// locations.
 pub(super) fn check(value: &Value, digest: &str, kind: &str) -> Result<(), String> {
-    let invalid = || "delivery asset location invalid".to_owned();
-    let map = value.as_object().ok_or_else(invalid)?;
-    let tagged = map.get("tag").and_then(Value::as_str).is_some_and(tag);
-    let shaped = map.contains_key("asset")
-        && (map.len() == 2 || (map.len() == 3 && map.contains_key("member")));
-    if !matches!(kind, "object" | "pack") || !lower_hex(digest, 64) || !tagged || !shaped {
-        return Err(invalid());
-    }
-    let name = format!(
-        "{kind}-{digest}.{}",
-        if kind == "object" { "json" } else { "zip" }
-    );
-    let asset = map.get("asset").and_then(Value::as_str);
-    match map.get("member") {
-        None if asset != Some(name.as_str()) => Err("delivery asset identity invalid".into()),
-        None => Ok(()),
-        Some(member) => {
-            let wanted = if kind == "object" {
-                Family::Objects
-            } else {
-                Family::Packs
-            };
-            if member.as_str() == Some(name.as_str()) && asset.and_then(family) == Some(wanted) {
-                Ok(())
-            } else {
-                Err("delivery container location invalid".into())
-            }
-        }
-    }
+    crate::pack_lifecycle::location::check(value, digest, kind)
+        .map_err(|rejection| rejection.message().to_owned())
 }
 
 /// Resolve the asset a fetch names. `release` is the public release transport;

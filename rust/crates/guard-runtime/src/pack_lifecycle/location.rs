@@ -1,6 +1,6 @@
-//! The one structural check for where a published asset lives. Preparation
-//! and distribution-root validation share it so a location accepted by one is
-//! accepted by the other.
+//! The one structural check for where a published asset lives. Preparation,
+//! distribution-root validation and the delivery fetch share it, so a location
+//! accepted by one is accepted by all of them.
 use regex::Regex;
 use serde_json::Value;
 use std::sync::OnceLock;

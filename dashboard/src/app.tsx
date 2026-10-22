@@ -54,6 +54,9 @@ const PolicyWorkspacePage = lazyWorkspace("policy-workspace-page", () =>
 const AboutWorkspace = lazyWorkspace("about-workspace", () =>
   import("./about/about-workspace").then((m) => ({ default: m.AboutWorkspace }))
 );
+const ReleasesWorkspace = lazyWorkspace("releases-workspace", () =>
+  import("./releases/releases-workspace").then((m) => ({ default: m.ReleasesWorkspace }))
+);
 const ProtectionRepairPage = lazyWorkspace("protection-repair-page", () =>
   import("./protection-repair-page").then((m) => ({ default: m.ProtectionRepairPage }))
 );
@@ -156,6 +159,7 @@ export function viewTitle(view: AppView): string {
   if (view === "policy") return "Rules & exceptions";
   if (view === "feed-health") return "Feed Health";
   if (view === "about") return "About";
+  if (view === "releases") return "Releases";
   if (view === "extensions") return "Extensions";
   if (view === "protection-repair") return "Repair protection";
   return "App detail";
@@ -209,6 +213,9 @@ export function resolveView(pathname: string): AppView {
   }
   if (pathname === "/about") {
     return "about";
+  }
+  if (pathname === "/releases") {
+    return "releases";
   }
   if (
     pathname === "/inbox" ||
@@ -475,7 +482,7 @@ export function App() {
         }
       })
       .catch(() => {});
-    if (view === "about") {
+    if (view === "about" || view === "releases") {
       fetchGuardUpdateStatus()
         .then((status) => {
           if (!cancelled && status.current_version) {
@@ -1104,6 +1111,13 @@ export function App() {
         ) : null
       }
       policyContent={policyContent}
+      releasesContent={
+        view === "releases" ? (
+          <Suspense fallback={<LazyFallback />}>
+            <ReleasesWorkspace installedVersion={guardVersion} />
+          </Suspense>
+        ) : null
+      }
       aboutContent={
         <Suspense fallback={<LazyFallback />}>
           <AboutWorkspace runtimeSummary={

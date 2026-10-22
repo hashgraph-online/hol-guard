@@ -10,6 +10,7 @@ raises ``NativeExtensionControlError`` and callers fail closed.
 
 from __future__ import annotations
 
+import functools
 import json
 import threading
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -491,3 +492,92 @@ def resolve_extension_controls(
         authority_failure,
     )
     return resolve_scenarios(registry, (scenario,), guard_home=guard_home)[0].items[0]
+
+
+def _digest(payload: dict[str, Any]) -> str:
+    digest = payload["digest"]
+    if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+        raise _invalid()
+    return digest
+
+
+def mutation_digest(
+    *,
+    previous_revision: int,
+    catalog_digest: str,
+    layers: Iterable[ExtensionControlLayer],
+    actor_id: str,
+    idempotency_key: str,
+    nonce: str,
+    guard_home: Path | None = None,
+) -> str:
+    """The digest a commit proof binds, computed by the resident from the mutation it describes."""
+
+    query: dict[str, object] = {
+        "kind": "mutation_digest",
+        "previous_revision": previous_revision,
+        "catalog_digest": catalog_digest,
+        "layers": [_layer_wire(layer) for layer in layers],
+        "actor_id": actor_id,
+        "idempotency_key": idempotency_key,
+        "nonce": nonce,
+    }
+    return _ask(query, guard_home, {"digest": str}, _digest)
+
+
+def enrollment_digest(
+    *,
+    catalog_digest: str,
+    actor_id: str,
+    nonce: str,
+    guard_home: Path | None = None,
+) -> str:
+    """The digest a first-enrollment proof binds, computed by the resident."""
+
+    query: dict[str, object] = {
+        "kind": "enrollment_digest",
+        "catalog_digest": catalog_digest,
+        "actor_id": actor_id,
+        "nonce": nonce,
+    }
+    return _ask(query, guard_home, {"digest": str}, _digest)
+
+
+def snapshot_digest(
+    *,
+    catalog_digest: str,
+    health: str,
+    revision: int,
+    managed_revision: int,
+    layers: Iterable[ExtensionControlLayer],
+    guard_home: Path | None = None,
+) -> str:
+    """The digest that identifies the runtime snapshot of one authority view.
+
+    One hook builds the same snapshot several times, so the digest is kept for
+    the process: it is a pure function of these inputs, and asking again would
+    spend a resident round trip per build.
+    """
+
+    return _snapshot_digest(catalog_digest, health, revision, managed_revision, tuple(layers), guard_home)
+
+
+@functools.lru_cache(maxsize=32)
+def _snapshot_digest(
+    catalog_digest: str,
+    health: str,
+    revision: int,
+    managed_revision: int,
+    layers: tuple[ExtensionControlLayer, ...],
+    guard_home: Path | None,
+) -> str:
+    query: dict[str, object] = {
+        "kind": "snapshot_digest",
+        "catalog_digest": catalog_digest,
+        "health": health,
+        "revision": revision,
+        "managed_revision": managed_revision,
+        "layers": [_layer_wire(layer) for layer in layers],
+    }
+
+    return _ask(query, guard_home, {"digest": str}, _digest)

@@ -51,6 +51,7 @@ export type AppView =
   | "policy"
   | "feed-health"
   | "about"
+  | "releases"
   | "protection-repair";
 
 export function ShellHeader(props: {

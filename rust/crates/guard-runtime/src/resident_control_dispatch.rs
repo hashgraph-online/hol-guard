@@ -39,6 +39,7 @@ pub(super) fn is_request(bytes: &[u8]) -> bool {
                 | "catalog_read_prepared_v1"
                 | "cloud_catalog"
                 | "discovery_placement_project"
+                | "release_feed_project"
         )
     })
 }
@@ -70,6 +71,7 @@ mod tests {
             "catalog_read_prepared_v1",
             "cloud_catalog",
             "discovery_placement_project",
+            "release_feed_project",
         ] {
             let bytes = serde_json::to_vec(&serde_json::json!({
                 "request": {"data": "bounded opaque data"}, "operation": operation,

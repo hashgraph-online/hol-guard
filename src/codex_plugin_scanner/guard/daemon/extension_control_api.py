@@ -7,6 +7,7 @@ import json
 import logging
 import threading
 from collections import OrderedDict
+from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,6 +29,7 @@ from ..runtime.command_extensions import CommandSafetyExtensionRegistry
 from ..runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityError,
+    ExtensionControlAuthorityView,
     layers_from_json,
 )
 from ..runtime.extension_control_contract import (
@@ -50,7 +52,11 @@ from ..runtime.extension_control_proof import (
     ExtensionControlProofError,
     issue_extension_control_proof,
 )
-from ..runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
+from ..runtime.extension_control_runtime import (
+    ExtensionControlRuntime,
+    ExtensionControlRuntimeSnapshot,
+    ExtensionControlSnapshotUnavailableError,
+)
 from .extension_control_errors import ExtensionControlApiError
 from .extension_control_preparation_failure import preparation_unavailable
 from .extension_control_prepared import (
@@ -246,7 +252,12 @@ class ExtensionControlApiService:
             # failed. Serve the snapshot the runtime already holds rather than
             # retrying the read through effective(), which would wait again.
             return self._effective_payload(self._runtime.current())
-        _ = self._runtime.refresh(view)
+        try:
+            _ = self._runtime.refresh(view)
+        except ExtensionControlSnapshotUnavailableError:
+            # The native runtime gave no digest, so nothing new was installed;
+            # serve the snapshot the runtime holds, as for a busy lease.
+            return self._effective_payload(self._runtime.current())
         return self.effective()
 
     def test_command(self, payload: dict[str, object]) -> dict[str, object]:
@@ -341,9 +352,11 @@ class ExtensionControlApiService:
                         _ = self._runtime.refresh(current)
                 except ValueError as exc:
                     raise ExtensionControlApiError(503, "authority_recovery_failed") from exc
+                except ExtensionControlSnapshotUnavailableError as exc:
+                    raise ExtensionControlApiError(503, "native_runtime_unavailable") from exc
                 return self.effective()
             raise ExtensionControlApiError(409, "authority_not_recoverable")
-        _ = self._runtime.refresh(current)
+        self._install_view(current)
         action = "recover-authority"
         subject = f"{action}:{current.health.value}:{current.revision}:{self._registry.catalog_digest}"
         self._require_action_grant(
@@ -365,7 +378,19 @@ class ExtensionControlApiService:
             _ = self._runtime.replace_after_recovery(view)
         except ValueError as exc:
             raise ExtensionControlApiError(503, "authority_recovery_failed") from exc
+        except ExtensionControlSnapshotUnavailableError as exc:
+            # The recovery is durable; the daemon's refresh installs it once
+            # the native runtime answers again.
+            raise ExtensionControlApiError(503, "native_runtime_unavailable") from exc
         return self.effective()
+
+    def _install_view(self, view: ExtensionControlAuthorityView) -> None:
+        try:
+            _ = self._runtime.refresh(view)
+        except ExtensionControlSnapshotUnavailableError as exc:
+            # A change already committed stays durable; the daemon's refresh
+            # installs it once the native runtime answers again.
+            raise ExtensionControlApiError(503, "native_runtime_unavailable") from exc
 
     def acknowledge_degraded(self, payload: dict[str, object]) -> dict[str, object]:
         current_snapshot = self._runtime.current()
@@ -381,7 +406,7 @@ class ExtensionControlApiService:
         subject = f"{action}:{current.health.value}:{current.revision}:{self._registry.catalog_digest}"
         self._require_action_grant(payload, action=action, subject=subject)
         view = self._store.acknowledge_extension_control_degraded_mode()
-        _ = self._runtime.refresh(view)
+        self._install_view(view)
         return self.effective()
 
     def preview(self, payload: dict[str, object]) -> dict[str, object]:
@@ -539,13 +564,18 @@ class ExtensionControlApiService:
         self._registry = registry
         self.catalog_digest = registry.catalog_digest
         composed_view = self._store.read_extension_control_authority_for_registry(registry)
-        snapshot = self._runtime.refresh(composed_view)
+        revision, catalog_digest = composed_view.revision, composed_view.catalog_digest
+        # The mutation is committed. If the native runtime gives no digest, the
+        # daemon's refresh installs it once it answers again; the audit event
+        # and the replay record below still belong to the committed change.
+        with suppress(ExtensionControlSnapshotUnavailableError):
+            _ = self._runtime.refresh(composed_view)
         self._store.add_event(
             "extension_control_authority_changed",
             {
-                "revision": snapshot.revision,
+                "revision": revision,
                 "previous_revision": mutation.previous_revision,
-                "catalog_digest": snapshot.catalog_digest,
+                "catalog_digest": catalog_digest,
                 "actor_ref": hashlib.sha256(f"actor-ref\u0000{mutation.actor_id}".encode()).hexdigest(),
                 "mutation_ref": mutation.canonical_digest,
                 "semantic_targets": self._semantic_event_targets(semantic_preview),
@@ -555,8 +585,8 @@ class ExtensionControlApiService:
         response: dict[str, object] = {
             "schema_version": _EXTENSION_CONTROL_API_SCHEMA,
             "status": "applied",
-            "revision": snapshot.revision,
-            "catalog_digest": snapshot.catalog_digest,
+            "revision": revision,
+            "catalog_digest": catalog_digest,
         }
         with self._proof_lock:
             _ = self._pending_proofs.pop(proof_id, None)
@@ -651,9 +681,12 @@ class ExtensionControlApiService:
                 idempotency_key=required_request_string(payload, "idempotency_key"),
                 nonce=required_request_string(payload, "nonce"),
             )
-            _ = mutation.canonical_digest
         except ExtensionControlApiError:
             raise
+        except NativeExtensionControlError as exc:
+            # The resident checks the mutation and computes its digest; without
+            # it there is no mutation to preview or apply.
+            raise ExtensionControlApiError(503, "native_runtime_unavailable") from exc
         except (
             TypeError,
             ValueError,

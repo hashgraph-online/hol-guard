@@ -9,13 +9,14 @@
 use rusqlite::params;
 use serde_json::{json, Map, Value};
 
-use super::layers::validate_serialized_layers;
+use super::layers::{layers_from_json, validate_serialized_layers};
 use super::records::{
     authenticated_record, degraded, fields_match, private_hash, query_row, row_int, row_py_int,
     row_str, row_text, tampered, verify_record, Anchor, Fault, Phase, Res, Row, SNAPSHOT_PURPOSE,
     TRANSITION_PURPOSE,
 };
 use super::{Ctx, View, PROTECTED, RECOVERY_REQUIRED};
+use crate::extension_control_proof::{mutation_digest, Mutation};
 use crate::policy_bundle_time::from_isoformat;
 
 /// A request that failed after preparing its transition may be retried with
@@ -307,6 +308,22 @@ impl Ctx<'_> {
         };
         let current = View::from_value(self.request.view.as_ref())?;
         validate_serialized_layers(&commit.layers_json)?;
+        // The proof was granted for one mutation digest. Recompute it from the
+        // layers and identities this plan seals, so a grant cannot commit
+        // anything other than what was approved.
+        let layers = layers_from_json(&commit.layers_json)?;
+        let sealed_digest = mutation_digest(&Mutation {
+            previous_revision: commit.expected_revision,
+            catalog_digest,
+            layers: &layers,
+            actor_id: &commit.actor_id,
+            idempotency_key: &commit.idempotency_key,
+            nonce: &commit.nonce,
+        })
+        .map_err(|_| tampered("invalid extension control commit request"))?;
+        if sealed_digest != commit.mutation_digest {
+            return Err(tampered("extension control proof does not match mutation"));
+        }
         let actor_hash = private_hash(&commit.actor_id, key, "actor");
         let idempotency_hash = private_hash(&commit.idempotency_key, key, "idempotency");
         let nonce_hash = private_hash(&commit.nonce, key, "nonce");

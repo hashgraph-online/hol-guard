@@ -16,16 +16,18 @@ use guard_command::extension_control::{
 };
 use guard_command::extension_trust::extension_is_active_for_class;
 use guard_contracts::{
-    ExtensionControlComposedControlV1, ExtensionControlComposedV1, ExtensionControlFailureV1,
-    ExtensionControlItemResultV1, ExtensionControlItemV1, ExtensionControlPayloadV1,
-    ExtensionControlQueryV1, ExtensionControlRegistryExtensionV1,
-    ExtensionControlRegistryPermissionV1, ExtensionControlRegistryV1, ExtensionControlRequestV1,
-    ExtensionControlResultV1, ExtensionControlScenarioResultV1, ExtensionControlScenarioV1,
-    NativeExtensionControlLayerV1, EXTENSION_CONTROL_MAX_BYTES, EXTENSION_CONTROL_REQUEST_SCHEMA,
+    runtime_snapshot_digest, validate_snapshot_layers, ExtensionControlComposedControlV1,
+    ExtensionControlComposedV1, ExtensionControlFailureV1, ExtensionControlItemResultV1,
+    ExtensionControlItemV1, ExtensionControlPayloadV1, ExtensionControlQueryV1,
+    ExtensionControlRegistryExtensionV1, ExtensionControlRegistryPermissionV1,
+    ExtensionControlRegistryV1, ExtensionControlRequestV1, ExtensionControlResultV1,
+    ExtensionControlScenarioResultV1, ExtensionControlScenarioV1, NativeExtensionControlLayerV1,
+    RuntimeSnapshot, EXTENSION_CONTROL_MAX_BYTES, EXTENSION_CONTROL_REQUEST_SCHEMA,
     EXTENSION_CONTROL_RESULT_SCHEMA,
 };
 use serde_json::Value;
 
+use crate::extension_control_proof::{enrollment_digest, mutation_digest, Mutation};
 use crate::package_authority_op::request_digest_with_limit;
 
 /// Most scenarios and items one request resolves, bounding both the work and
@@ -38,6 +40,14 @@ pub(crate) const TOO_MANY_ITEMS: &str = "native_extension_control_too_many_items
 /// never cut, because a cut answer would be reviewed and approved as complete.
 pub(crate) const REPLY_TOO_LARGE: &str = "native_extension_control_reply_too_large";
 const TRUST_CLASSES: [&str; 3] = ["first-party", "trusted-library", "external"];
+const AUTHORITY_HEALTH: [&str; 6] = [
+    "unenrolled",
+    "protected",
+    "degraded-unacknowledged",
+    "degraded-acknowledged",
+    "tampered",
+    "recovery-required",
+];
 
 pub(crate) fn evaluate_extension_control_request(
     request: &ExtensionControlRequestV1,
@@ -109,6 +119,57 @@ fn decide(request: &ExtensionControlRequestV1) -> Result<ExtensionControlPayload
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(ExtensionControlPayloadV1::Resolve { scenarios })
         }
+        ExtensionControlQueryV1::SnapshotDigest {
+            catalog_digest,
+            health,
+            revision,
+            managed_revision,
+            layers,
+        } => {
+            if !AUTHORITY_HEALTH.contains(&health.as_str()) {
+                return Err("native_extension_control_snapshot_invalid".to_owned());
+            }
+            typed_layers(layers)?;
+            // Only a snapshot the resident would bind gets a digest.
+            validate_snapshot_layers(catalog_digest, layers)
+                .map_err(|_| "native_extension_control_snapshot_invalid".to_owned())?;
+            let digest = runtime_snapshot_digest(&RuntimeSnapshot {
+                catalog_digest,
+                health,
+                revision: *revision,
+                managed_revision: *managed_revision,
+                layers,
+                active_security_digest: None,
+            })
+            .map_err(|_| "native_extension_control_snapshot_invalid".to_owned())?;
+            Ok(ExtensionControlPayloadV1::SnapshotDigest { digest })
+        }
+        ExtensionControlQueryV1::MutationDigest {
+            previous_revision,
+            catalog_digest,
+            layers,
+            actor_id,
+            idempotency_key,
+            nonce,
+        } => {
+            let layers = typed_layers(layers)?;
+            let digest = mutation_digest(&Mutation {
+                previous_revision: *previous_revision,
+                catalog_digest,
+                layers: &layers,
+                actor_id,
+                idempotency_key,
+                nonce,
+            })?;
+            Ok(ExtensionControlPayloadV1::MutationDigest { digest })
+        }
+        ExtensionControlQueryV1::EnrollmentDigest {
+            catalog_digest,
+            actor_id,
+            nonce,
+        } => Ok(ExtensionControlPayloadV1::EnrollmentDigest {
+            digest: enrollment_digest(catalog_digest, actor_id, nonce)?,
+        }),
         ExtensionControlQueryV1::Preview {
             registry,
             current_layers,

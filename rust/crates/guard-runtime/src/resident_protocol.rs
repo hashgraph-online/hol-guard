@@ -301,6 +301,7 @@ pub(crate) enum ResidentOperationV1 {
     CatalogReadPreparedV1(guard_command::catalog_prepare::ReadRequest),
     CloudCatalog(Value),
     DiscoveryPlacementProject(crate::discovery_placement_op::DiscoveryPlacementProjectRequest),
+    ReleaseFeedProject(crate::release_feed_op::ReleaseFeedProjectRequest),
     DataFlowAnalyze(DataFlowAnalyzeRequestV1),
     ToolActionRequestIdentity(guard_contracts::ToolActionRequestIdentityRequestV1),
     RuntimeArtifactIdentity(guard_contracts::RuntimeArtifactIdentityRequestV1),

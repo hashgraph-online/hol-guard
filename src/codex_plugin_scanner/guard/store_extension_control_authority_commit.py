@@ -80,6 +80,7 @@ class ExtensionControlAuthorityCommitMixin:
             catalog_digest=catalog_digest,
             actor_id=actor_id,
             nonce=nonce,
+            guard_home=self.guard_home,
         )
         validate_extension_control_enrollment_proof(proof, enrollment)
         with self._extension_control_authority_lock():

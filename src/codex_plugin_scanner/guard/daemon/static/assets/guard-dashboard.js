@@ -17336,6 +17336,13 @@ async function fetchExtensionDiscoveryApi(input, init) {
   }
   return fetchWithGuardAuth(input, init);
 }
+async function fetchReleaseFeedApi(input, init) {
+  const approvedPath = typeof input === "string" && /^\/v1\/releases\/(?:index|release)(?:\?[A-Za-z0-9=&_.-]*)?$/.test(input);
+  if (!approvedPath) {
+    throw new Error("Invalid release feed API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
 function guardAuthHeaders() {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
@@ -21731,6 +21738,15 @@ const SHELL_NAV_ITEMS = [
     view: "evidence",
     group: "manage",
     icon: HiMiniDocumentText
+  },
+  {
+    href: "/releases",
+    label: "Releases",
+    shortLabel: "Releases",
+    description: "Published versions and what each one changed",
+    view: "releases",
+    group: "support",
+    icon: HiMiniRocketLaunch
   },
   {
     href: "/about",
@@ -36033,7 +36049,7 @@ function turnProtectionOnUpdate(snapshot) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-CdbiqqaN.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-CVKNSTkg.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -36142,6 +36158,9 @@ function renderViewContent(props) {
   }
   if (props.view === "about") {
     return props.aboutContent ?? null;
+  }
+  if (props.view === "releases") {
+    return props.releasesContent ?? null;
   }
   if (props.view === "policy") {
     return props.policyContent ?? null;
@@ -36461,7 +36480,7 @@ const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePre
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-B0TZsHE3.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BvuDt7F-.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-DgBATQaU.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
@@ -36470,6 +36489,10 @@ const PolicyWorkspacePage = lazyWorkspace(
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
   () => __vitePreload(() => import("./chunks/about-workspace-C1-uAYDr.js"), true ? __vite__mapDeps([13,2]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+);
+const ReleasesWorkspace = lazyWorkspace(
+  "releases-workspace",
+  () => __vitePreload(() => import("./chunks/releases-workspace-B8afqB1K.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
@@ -36514,6 +36537,7 @@ function viewTitle(view) {
   if (view === "policy") return "Rules & exceptions";
   if (view === "feed-health") return "Feed Health";
   if (view === "about") return "About";
+  if (view === "releases") return "Releases";
   if (view === "extensions") return "Extensions";
   if (view === "protection-repair") return "Repair protection";
   return "App detail";
@@ -36565,6 +36589,9 @@ function resolveView(pathname) {
   }
   if (pathname === "/about") {
     return "about";
+  }
+  if (pathname === "/releases") {
+    return "releases";
   }
   if (pathname === "/inbox" || pathname === "/requests" || pathname === "/approvals" || pathname.startsWith("/requests/") || pathname.startsWith("/approvals/")) {
     return "inbox";
@@ -36785,7 +36812,7 @@ function App() {
       }
     }).catch(() => {
     });
-    if (view === "about") {
+    if (view === "about" || view === "releases") {
       fetchGuardUpdateStatus().then((status) => {
         if (!cancelled && status.current_version) {
           setGuardVersion(status.current_version);
@@ -37316,6 +37343,7 @@ function App() {
           }
         ) }) : null,
         policyContent,
+        releasesContent: view === "releases" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ReleasesWorkspace, { installedVersion: guardVersion }) }) : null,
         aboutContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(AboutWorkspace, { runtimeSummary: runtime.kind === "ready" ? {
           // TODO: GuardRuntimeSnapshot does not yet expose guard_version or protected_app_count.
           // When those fields are added, populate them here instead of null/0.
@@ -37565,7 +37593,7 @@ export {
   connectorWorkspaceItems as cy,
   customExtensionNeedsReview as cz,
   HiMiniArrowPath as d,
-  fetchMcpPolicyRequest as d$,
+  fetchReleaseFeedApi as d$,
   appSetupTarget as d0,
   guardActionPresentation as d1,
   DEFAULT_FILTER_STATE as d2,
@@ -37629,19 +37657,20 @@ export {
   runPackageFirewallAction as dy,
   parseInterceptProofSnapshot as dz,
   HiMiniCheck as e,
-  resolveMcpPolicyRequest as e0,
-  HiMiniDocumentPlus as e1,
-  HiMiniDocumentMagnifyingGlass as e2,
-  fetchSupplyChainBundle as e3,
-  isSupplyChainScannerEvidence as e4,
-  isBlockedGuardAction as e5,
-  HiMiniShieldExclamation as e6,
-  HiMiniComputerDesktop as e7,
-  HiMiniChevronLeft as e8,
-  HiMiniArrowDown as e9,
-  HiMiniArrowUp as ea,
-  runAuditRemediation as eb,
-  HiMiniSignal as ec,
+  fetchMcpPolicyRequest as e0,
+  resolveMcpPolicyRequest as e1,
+  HiMiniDocumentPlus as e2,
+  HiMiniDocumentMagnifyingGlass as e3,
+  fetchSupplyChainBundle as e4,
+  isSupplyChainScannerEvidence as e5,
+  isBlockedGuardAction as e6,
+  HiMiniShieldExclamation as e7,
+  HiMiniComputerDesktop as e8,
+  HiMiniChevronLeft as e9,
+  HiMiniArrowDown as ea,
+  HiMiniArrowUp as eb,
+  runAuditRemediation as ec,
+  HiMiniSignal as ed,
   formatRelativeTime as f,
   HiMiniNoSymbol as g,
   harnessDisplayName as h,

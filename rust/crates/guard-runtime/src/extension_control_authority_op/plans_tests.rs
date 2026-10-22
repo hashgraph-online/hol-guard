@@ -2,9 +2,10 @@ use guard_contracts::{ExtensionControlAuthorityRequestV1, ExtensionControlCommit
 use rusqlite::params;
 use serde_json::{json, Value};
 
-use super::layers::layers_to_json;
+use super::layers::{layers_from_json, layers_to_json};
 use super::records::{private_hash, verify_record, SNAPSHOT_PURPOSE, TRANSITION_PURPOSE};
 use super::tests::{anchor, catalog, local, run, Home, AT, KEY};
+use crate::extension_control_proof::{mutation_digest, Mutation};
 
 const LATER: &str = "2026-10-21T00:05:00+00:00";
 const SOON: &str = "2026-10-21T00:04:59.999999+00:00";
@@ -19,17 +20,33 @@ fn view(health: &str, revision: i64) -> Value {
     })
 }
 
+/// `commit` with the digest its proof was granted for.
+fn approved(mut commit: ExtensionControlCommitV1) -> ExtensionControlCommitV1 {
+    let catalog = catalog('a');
+    let layers = layers_from_json(&commit.layers_json).unwrap();
+    commit.mutation_digest = mutation_digest(&Mutation {
+        previous_revision: commit.expected_revision,
+        catalog_digest: &catalog,
+        layers: &layers,
+        actor_id: &commit.actor_id,
+        idempotency_key: &commit.idempotency_key,
+        nonce: &commit.nonce,
+    })
+    .unwrap();
+    commit
+}
+
 fn commit(revision: i64, expected_revision: i64) -> ExtensionControlCommitV1 {
-    ExtensionControlCommitV1 {
+    approved(ExtensionControlCommitV1 {
         actor_id: format!("actor-{revision}"),
         idempotency_key: format!("idem-{revision}"),
         nonce: format!("nonce-{revision}"),
         proof_id: format!("proof-{revision}"),
-        mutation_digest: "m".repeat(64),
+        mutation_digest: String::new(),
         layers_json: layers_to_json(&[local(&catalog('a'))]).unwrap(),
         expected_revision,
         pack_record_digest: None,
-    }
+    })
 }
 
 fn commit_request(
@@ -124,7 +141,7 @@ fn commit_plan_refuses_conflicts_and_replays() {
             &home,
             &head,
             view("protected", 1),
-            reused_nonce
+            approved(reused_nonce)
         ))),
         "extension control authority nonce replay"
     );
@@ -157,6 +174,42 @@ fn commit_plan_refuses_conflicts_and_replays() {
     assert_eq!(
         refusal(&unavailable),
         "extension control authority unavailable"
+    );
+}
+
+#[test]
+fn commit_plan_seals_only_the_approved_mutation() {
+    let home = Home::new();
+    let head = home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    let mut other_layers = commit(2, 1);
+    other_layers.layers_json = layers_to_json(&[]).unwrap();
+    let mut other_revision = commit(2, 1);
+    other_revision.expected_revision = 0;
+    let mut other_nonce = commit(2, 1);
+    other_nonce.nonce = "nonce-9".to_owned();
+    let mut forged = commit(2, 1);
+    forged.mutation_digest = "m".repeat(64);
+    for changed in [other_layers, other_revision, other_nonce, forged] {
+        assert_eq!(
+            refusal(&run(&commit_request(
+                &home,
+                &head,
+                view("protected", 1),
+                changed
+            ))),
+            "extension control proof does not match mutation"
+        );
+    }
+    let mut blank_actor = commit(2, 1);
+    blank_actor.actor_id = " ".to_owned();
+    assert_eq!(
+        refusal(&run(&commit_request(
+            &home,
+            &head,
+            view("protected", 1),
+            blank_actor
+        ))),
+        "invalid extension control commit request"
     );
 }
 
@@ -211,7 +264,7 @@ fn a_retry_with_another_request_under_the_same_key_is_refused() {
             &home,
             &head,
             view("protected", 1),
-            other
+            approved(other)
         ))),
         "idempotency key request mismatch"
     );

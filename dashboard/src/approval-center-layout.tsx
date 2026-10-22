@@ -84,6 +84,7 @@ type LayoutProps = {
   supplyChainHubContent?: ReactNode;
   policyContent?: ReactNode;
   aboutContent?: ReactNode;
+  releasesContent?: ReactNode;
   protectionRepairContent?: ReactNode;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
@@ -225,6 +226,9 @@ function renderViewContent(props: LayoutProps): ReactNode {
   }
   if (props.view === "about") {
     return props.aboutContent ?? null;
+  }
+  if (props.view === "releases") {
+    return props.releasesContent ?? null;
   }
   if (props.view === "policy") {
     return props.policyContent ?? null;

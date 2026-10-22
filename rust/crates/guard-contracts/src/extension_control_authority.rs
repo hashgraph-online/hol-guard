@@ -177,7 +177,9 @@ pub struct ExtensionControlCommitV1 {
     pub idempotency_key: String,
     pub nonce: String,
     pub proof_id: String,
-    /// `ExtensionControlMutation.canonical_digest`.
+    /// The digest the commit proof was granted for. The plan recomputes it
+    /// from these layers, identities and `expected_revision` and refuses a
+    /// commit it does not match.
     pub mutation_digest: String,
     /// The requested layers, serialized as `layers_to_json` writes them.
     pub layers_json: String,

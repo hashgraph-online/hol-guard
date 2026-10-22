@@ -11,7 +11,7 @@ strictly shaped hint: there is no Python answer to fall back to.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -41,7 +41,23 @@ HINT: dict[str, object] = {
 }
 
 
+_ENTRIES: dict[Path, CommandEvaluationInput] = {}
+
+
+@pytest.fixture(autouse=True)
+def _entry_before_the_scripted_resident(tmp_path: Path) -> Iterator[None]:
+    # The evaluation snapshot's digest comes from the real resident, so the
+    # entry is built before a test replaces the resident with a scripted one.
+    _ENTRIES[tmp_path] = _build_entry(tmp_path)
+    yield
+    del _ENTRIES[tmp_path]
+
+
 def _entry(tmp_path: Path) -> CommandEvaluationInput:
+    return _ENTRIES[tmp_path]
+
+
+def _build_entry(tmp_path: Path) -> CommandEvaluationInput:
     fixture = real_native_review_fixture(COMMAND, cwd=tmp_path, home_dir=tmp_path)
     canonical = _canonical_command_from_native(COMMAND, fixture.payload["command_model"])
     assert canonical is not None

@@ -33,6 +33,10 @@ MCP_PROXY_ARCHIVE_BINDING_REQUIRED_FEATURE = "mcp-proxy-archive-binding-required
 # The resident also classifies the answer to an inline approval prompt. An older
 # resident rejects that query as an unknown check, so a caller asks for it by name.
 MCP_PROXY_INLINE_APPROVAL_REPLY_FEATURE = "mcp-proxy-inline-approval-reply-v1"
+# The resident spells the sensitive read's artifact content hash itself, from
+# the artifact fields the context query carries. An older resident rejects
+# those fields as unknown, so a caller asks for it by name.
+MCP_SENSITIVE_READ_ARTIFACT_FEATURE = "mcp-sensitive-read-artifact-v1"
 _REQUEST_SCHEMA = "guard-mcp-proxy-decision-request.v1"
 _RESULT_SCHEMA = "guard-mcp-proxy-decision-result.v1"
 _OPERATION = "mcp_proxy_decide"
