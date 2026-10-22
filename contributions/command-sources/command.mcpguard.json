@@ -10,7 +10,7 @@
     "conflicts": [],
     "delegated_protection": null,
     "dependencies": [],
-    "description": "Reviews mcp-guard runs that start processes, approve a trust baseline or write message bodies to disk. proxy, test-injection --run and --live (inspect, lock, ui, snapshot save) start the MCP servers named in a config or on the command line, or the given agent script. lock writes the lock file that later runs compare against, so running it approves the current tools, including a changed description. proxy --record-bodies keeps full JSON-RPC messages, which can contain secrets, in the journal. Static audits (inspect, scan, ui, snapshot save and diff without --live), journal export, test-injection without --run, and direct runs with --help or --version (except proxy, whose later arguments go to the server) are not matched by this extension; Guard's default handling for commands no rule matches still applies to them. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe), uvx, uv tool run and pipx run launches of the mcp-guard-audit package, and versioned launches (mcp-guard-audit@version).",
+    "description": "Reviews mcp-guard runs that start processes, approve a trust baseline or write message bodies to disk. proxy, test-injection --run and --live (inspect, lock, ui, snapshot save) start the MCP servers named in a config or on the command line, or the given agent script. lock writes the lock file that later runs compare against, so running it approves the current tools, including a changed description. proxy --record-bodies keeps full JSON-RPC messages, which can contain secrets, in the journal. Static audits (inspect, scan, ui, snapshot save and diff without --live), journal export, test-injection without --run, and direct runs with --help or --version (except proxy, whose later arguments go to the server) are not matched by this extension; Guard's default handling for commands no rule matches still applies to them. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
     "ecosystem_ids": [],
     "executables": [
       "mcp-guard",
@@ -130,7 +130,7 @@
           "mcp-guard MCP server launch command"
         ],
         "default_mode": "review",
-        "description": "Identifies mcp-guard proxy, test-injection --run, and inspect, lock, ui or snapshot save with --live. They start the MCP servers named in the config or given with --server (any command, or an http(s) URL that is contacted), or run the agent script given to test-injection. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe), uvx, uv tool run and pipx run launches of the mcp-guard-audit package, and versioned launches (mcp-guard-audit@version).",
+        "description": "Identifies mcp-guard proxy, test-injection --run, and inspect, lock, ui or snapshot save with --live. They start the MCP servers named in the config or given with --server (any command, or an http(s) URL that is contacted), or run the agent script given to test-injection. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
         "family": null,
         "matcher": {
           "op": "any.v1",
@@ -425,7 +425,7 @@
           "mcp-guard lock approval command"
         ],
         "default_mode": "review",
-        "description": "Identifies mcp-guard lock. It writes (or with --update, migrates) the lock file that inspect --lock and proxy --lock treat as the approved state, so running it approves the current servers and tools, including a description or annotation that changed since the last lock. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe), uvx, uv tool run and pipx run launches of the mcp-guard-audit package, and versioned launches (mcp-guard-audit@version).",
+        "description": "Identifies mcp-guard lock. It writes (or with --update, migrates) the lock file that inspect --lock and proxy --lock treat as the approved state, so running it approves the current servers and tools, including a description or annotation that changed since the last lock. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
         "family": null,
         "matcher": {
           "op": "any.v1",
@@ -496,7 +496,7 @@
           "mcp-guard full-body journal command"
         ],
         "default_mode": "review",
-        "description": "Identifies mcp-guard proxy --record-bodies. The journal then keeps every JSON-RPC message in full, including tool arguments and results that can hold tokens or file contents. Without it, the journal keeps no bodies. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe), uvx, uv tool run and pipx run launches of the mcp-guard-audit package, and versioned launches (mcp-guard-audit@version).",
+        "description": "Identifies mcp-guard proxy --record-bodies. The journal then keeps every JSON-RPC message in full, including tool arguments and results that can hold tokens or file contents. Without it, the journal keeps no bodies. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
         "family": null,
         "matcher": {
           "op": "any.v1",

@@ -5,6 +5,7 @@
     "schema": "guard.command-extension-build.v1",
     "sources": [
       {
+        "schema": "guard.command-extension-source.v1",
         "extension": {
           "action_classes": [
             "mcp-guard MCP server launch command",
@@ -15,7 +16,7 @@
           "conflicts": [],
           "delegated_protection": null,
           "dependencies": [],
-          "description": "Reviews mcp-guard runs that start processes, approve a trust baseline or write message bodies to disk. proxy, test-injection --run and --live (inspect, lock, ui, snapshot save) start the MCP servers named in a config or on the command line, or the given agent script. lock writes the lock file that later runs compare against, so running it approves the current tools, including a changed description. proxy --record-bodies keeps full JSON-RPC messages, which can contain secrets, in the journal. Static audits (inspect, scan, ui, snapshot save and diff without --live), journal export, test-injection without --run, and direct runs with --help or --version (except proxy, whose later arguments go to the server) are not matched by this extension; Guard's default handling for commands no rule matches still applies to them. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe), uvx, uv tool run and pipx run launches of the mcp-guard-audit package, and versioned launches (mcp-guard-audit@version).",
+          "description": "Reviews mcp-guard runs that start processes, approve a trust baseline or write message bodies to disk. proxy, test-injection --run and --live (inspect, lock, ui, snapshot save) start the MCP servers named in a config or on the command line, or the given agent script. lock writes the lock file that later runs compare against, so running it approves the current tools, including a changed description. proxy --record-bodies keeps full JSON-RPC messages, which can contain secrets, in the journal. Static audits (inspect, scan, ui, snapshot save and diff without --live), journal export, test-injection without --run, and direct runs with --help or --version (except proxy, whose later arguments go to the server) are not matched by this extension; Guard's default handling for commands no rule matches still applies to them. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
           "ecosystem_ids": [],
           "executables": [
             "mcp-guard",
@@ -135,12 +136,14 @@
                 "mcp-guard MCP server launch command"
               ],
               "default_mode": "review",
-              "description": "Identifies mcp-guard proxy, test-injection --run, and inspect, lock, ui or snapshot save with --live. They start the MCP servers named in the config or given with --server (any command, or an http(s) URL that is contacted), or run the agent script given to test-injection. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe), uvx, uv tool run and pipx run launches of the mcp-guard-audit package, and versioned launches (mcp-guard-audit@version).",
+              "description": "Identifies mcp-guard proxy, test-injection --run, and inspect, lock, ui or snapshot save with --live. They start the MCP servers named in the config or given with --server (any command, or an http(s) URL that is contacted), or run the agent script given to test-injection. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
               "family": null,
               "matcher": {
+                "op": "any.v1",
                 "config": {},
                 "matchers": [
                   {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -177,10 +180,10 @@
                       "subcommands": [
                         "proxy"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
                   },
                   {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -222,10 +225,10 @@
                       "subcommands": [
                         "inspect"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
                   },
                   {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -267,10 +270,10 @@
                       "subcommands": [
                         "lock"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
                   },
                   {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -312,10 +315,10 @@
                       "subcommands": [
                         "ui"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
                   },
                   {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -358,10 +361,10 @@
                         "snapshot",
                         "save"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
                   },
                   {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -403,11 +406,9 @@
                       "subcommands": [
                         "test-injection"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
                   }
-                ],
-                "op": "any.v1"
+                ]
               },
               "native_capability": null,
               "permission_id": "command.mcpguard.permission.server-launch",
@@ -430,12 +431,14 @@
                 "mcp-guard lock approval command"
               ],
               "default_mode": "review",
-              "description": "Identifies mcp-guard lock. It writes (or with --update, migrates) the lock file that inspect --lock and proxy --lock treat as the approved state, so running it approves the current servers and tools, including a description or annotation that changed since the last lock. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe), uvx, uv tool run and pipx run launches of the mcp-guard-audit package, and versioned launches (mcp-guard-audit@version).",
+              "description": "Identifies mcp-guard lock. It writes (or with --update, migrates) the lock file that inspect --lock and proxy --lock treat as the approved state, so running it approves the current servers and tools, including a description or annotation that changed since the last lock. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
               "family": null,
               "matcher": {
+                "op": "any.v1",
                 "config": {},
                 "matchers": [
                   {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -475,11 +478,9 @@
                       "subcommands": [
                         "lock"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
                   }
-                ],
-                "op": "any.v1"
+                ]
               },
               "native_capability": null,
               "permission_id": "command.mcpguard.permission.lock-approve",
@@ -501,12 +502,14 @@
                 "mcp-guard full-body journal command"
               ],
               "default_mode": "review",
-              "description": "Identifies mcp-guard proxy --record-bodies. The journal then keeps every JSON-RPC message in full, including tool arguments and results that can hold tokens or file contents. Without it, the journal keeps no bodies. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe), uvx, uv tool run and pipx run launches of the mcp-guard-audit package, and versioned launches (mcp-guard-audit@version).",
+              "description": "Identifies mcp-guard proxy --record-bodies. The journal then keeps every JSON-RPC message in full, including tool arguments and results that can hold tokens or file contents. Without it, the journal keeps no bodies. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
               "family": null,
               "matcher": {
+                "op": "any.v1",
                 "config": {},
                 "matchers": [
                   {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -545,11 +548,9 @@
                       "subcommands": [
                         "proxy"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
                   }
-                ],
-                "op": "any.v1"
+                ]
               },
               "native_capability": null,
               "permission_id": "command.mcpguard.permission.record-bodies",
@@ -574,8 +575,7 @@
           ],
           "source": "built-in",
           "version": "1.0.0"
-        },
-        "schema": "guard.command-extension-source.v1"
+        }
       }
     ],
     "trust": {
@@ -1884,942 +1884,6 @@
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
-      "command": "uvx mcp-guard-audit proxy -- npx -y @modelcontextprotocol/server-memory",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.04.00.proxy-npx-y-modelcontextprotocol-server-",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit proxy node server.js --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.04.03.proxy-node-server-js-help",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit inspect --live --yes --timeout 30 mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.04.07.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit lock mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.04.09.lock-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit ui mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.04.10.ui-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit snapshot save mcp.json --live -o snap.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.04.11.snapshot-save-mcp-json-live-o-snap-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit test-injection ./agent.py --run",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.04.12.test-injection-agent-py-run",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit lock --update -o mcp-guard.lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.04.16.lock-update-o-mcp-guard-lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx mcp-guard-audit proxy --record-bodies --record s.jsonl -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.04.19.proxy-record-bodies-record-s-jsonl-node-",
-      "rule_id": "command.mcpguard.record-bodies"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard proxy -- npx -y @modelcontextprotocol/server-memory",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.05.00.proxy-npx-y-modelcontextprotocol-server-",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard proxy node server.js --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.05.03.proxy-node-server-js-help",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard inspect --live --yes --timeout 30 mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.05.07.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard lock mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.05.09.lock-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard ui mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.05.10.ui-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard snapshot save mcp.json --live -o snap.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.05.11.snapshot-save-mcp-json-live-o-snap-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard test-injection ./agent.py --run",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.05.12.test-injection-agent-py-run",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard lock --update -o mcp-guard.lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.05.16.lock-update-o-mcp-guard-lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard proxy --record-bodies --record s.jsonl -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.05.19.proxy-record-bodies-record-s-jsonl-node-",
-      "rule_id": "command.mcpguard.record-bodies"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit proxy -- npx -y @modelcontextprotocol/server-memory",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.06.00.proxy-npx-y-modelcontextprotocol-server-",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit proxy node server.js --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.06.03.proxy-node-server-js-help",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit inspect --live --yes --timeout 30 mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.06.07.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit lock mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.06.09.lock-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit ui mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.06.10.ui-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit snapshot save mcp.json --live -o snap.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.06.11.snapshot-save-mcp-json-live-o-snap-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit test-injection ./agent.py --run",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.06.12.test-injection-agent-py-run",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit lock --update -o mcp-guard.lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.06.16.lock-update-o-mcp-guard-lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit proxy --record-bodies --record s.jsonl -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.06.19.proxy-record-bodies-record-s-jsonl-node-",
-      "rule_id": "command.mcpguard.record-bodies"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 proxy -- npx -y @modelcontextprotocol/server-memory",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.07.00.proxy-npx-y-modelcontextprotocol-server-",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 proxy node server.js --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.07.03.proxy-node-server-js-help",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 inspect --live --yes --timeout 30 mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.07.07.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 lock mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.07.09.lock-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 ui mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.07.10.ui-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 snapshot save mcp.json --live -o snap.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.07.11.snapshot-save-mcp-json-live-o-snap-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 test-injection ./agent.py --run",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.07.12.test-injection-agent-py-run",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 lock --update -o mcp-guard.lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.07.16.lock-update-o-mcp-guard-lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 proxy --record-bodies --record s.jsonl -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.07.19.proxy-record-bodies-record-s-jsonl-node-",
-      "rule_id": "command.mcpguard.record-bodies"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit proxy -- npx -y @modelcontextprotocol/server-memory",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.08.00.proxy-npx-y-modelcontextprotocol-server-",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit proxy node server.js --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.08.03.proxy-node-server-js-help",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit inspect --live --yes --timeout 30 mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.08.07.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit lock mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.08.09.lock-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit ui mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.08.10.ui-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit snapshot save mcp.json --live -o snap.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.08.11.snapshot-save-mcp-json-live-o-snap-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit test-injection ./agent.py --run",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.08.12.test-injection-agent-py-run",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit lock --update -o mcp-guard.lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.08.16.lock-update-o-mcp-guard-lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit proxy --record-bodies --record s.jsonl -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.08.19.proxy-record-bodies-record-s-jsonl-node-",
-      "rule_id": "command.mcpguard.record-bodies"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 proxy -- npx -y @modelcontextprotocol/server-memory",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.09.00.proxy-npx-y-modelcontextprotocol-server-",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 proxy node server.js --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.09.03.proxy-node-server-js-help",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 inspect --live --yes --timeout 30 mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.09.07.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 lock mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.09.09.lock-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 ui mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.09.10.ui-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 snapshot save mcp.json --live -o snap.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.09.11.snapshot-save-mcp-json-live-o-snap-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 test-injection ./agent.py --run",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.09.12.test-injection-agent-py-run",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 lock --update -o mcp-guard.lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.09.16.lock-update-o-mcp-guard-lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 proxy --record-bodies --record s.jsonl -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.09.19.proxy-record-bodies-record-s-jsonl-node-",
-      "rule_id": "command.mcpguard.record-bodies"
-    },
-    {
-      "command": "pipx run mcp-guard-audit proxy -- npx -y @modelcontextprotocol/server-memory",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.10.00.proxy-npx-y-modelcontextprotocol-server-",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit proxy node server.js --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.10.03.proxy-node-server-js-help",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit inspect --live --yes --timeout 30 mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.10.07.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit lock mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.10.09.lock-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit ui mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.10.10.ui-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit snapshot save mcp.json --live -o snap.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.10.11.snapshot-save-mcp-json-live-o-snap-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit test-injection ./agent.py --run",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.10.12.test-injection-agent-py-run",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit lock --update -o mcp-guard.lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.10.16.lock-update-o-mcp-guard-lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "pipx run mcp-guard-audit proxy --record-bodies --record s.jsonl -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.10.19.proxy-record-bodies-record-s-jsonl-node-",
-      "rule_id": "command.mcpguard.record-bodies"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 proxy -- npx -y @modelcontextprotocol/server-memory",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.11.00.proxy-npx-y-modelcontextprotocol-server-",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 proxy node server.js --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.11.03.proxy-node-server-js-help",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 inspect --live --yes --timeout 30 mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.11.07.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 lock mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.11.09.lock-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 ui mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.11.10.ui-mcp-json-live",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 snapshot save mcp.json --live -o snap.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.11.11.snapshot-save-mcp-json-live-o-snap-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 test-injection ./agent.py --run",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.11.12.test-injection-agent-py-run",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 lock --update -o mcp-guard.lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.11.16.lock-update-o-mcp-guard-lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 proxy --record-bodies --record s.jsonl -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.11.19.proxy-record-bodies-record-s-jsonl-node-",
-      "rule_id": "command.mcpguard.record-bodies"
-    },
-    {
       "command": "mcp-guard inspect mcp.json",
       "disabled_permissions": [],
       "enabled_extensions": [
@@ -2831,7 +1895,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx mcp-guard-audit inspect mcp.json",
+      "command": "mcp-guard-audit inspect mcp.json",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -2853,7 +1917,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx mcp-guard-audit inspect mcp.json --format sarif -o report.sarif",
+      "command": "mcp-guard-audit inspect mcp.json --format sarif -o report.sarif",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -2875,7 +1939,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx mcp-guard-audit inspect mcp.json --lock mcp-guard.lock",
+      "command": "mcp-guard-audit inspect mcp.json --lock mcp-guard.lock",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -2897,7 +1961,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx mcp-guard-audit scan",
+      "command": "mcp-guard-audit scan",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -2919,7 +1983,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx mcp-guard-audit scan --json -o report.json",
+      "command": "mcp-guard-audit scan --json -o report.json",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -2941,7 +2005,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx mcp-guard-audit ui mcp.json",
+      "command": "mcp-guard-audit ui mcp.json",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -2963,7 +2027,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx mcp-guard-audit snapshot save mcp.json",
+      "command": "mcp-guard-audit snapshot save mcp.json",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -2985,7 +2049,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx mcp-guard-audit snapshot diff a.json b.json",
+      "command": "mcp-guard-audit snapshot diff a.json b.json",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -3007,7 +2071,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx mcp-guard-audit test-injection ./agent.py",
+      "command": "mcp-guard-audit test-injection ./agent.py",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -3029,7 +2093,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx mcp-guard-audit journal export session.jsonl --otlp -o traces.json",
+      "command": "mcp-guard-audit journal export session.jsonl --otlp -o traces.json",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -3051,16 +2115,14 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx mcp-guard-audit inspect --live --help",
+      "command": "mcp-guard-audit inspect --live --help",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "launcher-stays.01.10.inspect-live-help",
+      "expected_effective_segments": [],
+      "id": "safe.01.10.inspect-live-help",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3075,7 +2137,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx mcp-guard-audit --version",
+      "command": "mcp-guard-audit --version",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -3097,7 +2159,7 @@
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
-      "command": "uvx mcp-guard-audit inspect mcp.json --lock mcp-guard.lock",
+      "command": "mcp-guard-audit inspect mcp.json --lock mcp-guard.lock",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -3119,16 +2181,14 @@
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
-      "command": "uvx mcp-guard-audit lock --help",
+      "command": "mcp-guard-audit lock --help",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "launcher-stays.01.13.lock-help",
+      "expected_effective_segments": [],
+      "id": "safe.01.13.lock-help",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -3143,7 +2203,7 @@
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
-      "command": "uvx mcp-guard-audit proxy --record s.jsonl -- node server.js",
+      "command": "mcp-guard-audit proxy --record s.jsonl -- node server.js",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -3165,16 +2225,14 @@
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
-      "command": "uvx mcp-guard-audit proxy -- node server.js --record-bodies",
+      "command": "mcp-guard-audit proxy -- node server.js --record-bodies",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "launcher-stays.01.15.proxy-node-server-js-record-bodies",
+      "expected_effective_segments": [],
+      "id": "safe.01.15.proxy-node-server-js-record-bodies",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -3239,36 +2297,6 @@
       ],
       "id": "disabled-bodies",
       "rule_id": "command.mcpguard.record-bodies"
-    },
-    {
-      "command": "uvx mcp-guard-audit lock mcp.json",
-      "disabled_permissions": [
-        "command.mcpguard.permission.lock-approve"
-      ],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "block",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "disabled-lock-uvx",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "pipx run mcp-guard-audit proxy -- node s.js",
-      "disabled_permissions": [
-        "command.mcpguard.permission.server-launch"
-      ],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "block",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "disabled-launch-pipx",
-      "rule_id": "command.mcpguard.server-launch"
     },
     {
       "command": "mcp-guard lock mcp.json",
