@@ -95,6 +95,40 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.55.0](https://github.com/hashgraph-online/hol-guard/compare/v3.54.0...v3.55.0) (2026-10-22)
+
+
+### Features
+
+* **dashboard:** render release notes as the maintainer wrote them ([#5618](https://github.com/hashgraph-online/hol-guard/issues/5618)) ([3de1a4d](https://github.com/hashgraph-online/hol-guard/commit/3de1a4d0daec0429027a7520663bd627ac9aff6f))
+* **desktop:** retire other HOL Guard installs when Desktop updates Core ([#5657](https://github.com/hashgraph-online/hol-guard/issues/5657)) ([efb38bb](https://github.com/hashgraph-online/hol-guard/commit/efb38bbb041f51b7ed6990beb09ab41b094d32c7))
+* **mcp-servers:** add Pinpoint MCP contribution ([#5610](https://github.com/hashgraph-online/hol-guard/issues/5610)) ([e555bd1](https://github.com/hashgraph-online/hol-guard/commit/e555bd1ada065653dbc5daa378e8bb799c8b9bae))
+* **mcp-servers:** add remote-pc-mcp MCP contribution ([#5599](https://github.com/hashgraph-online/hol-guard/issues/5599)) ([b447225](https://github.com/hashgraph-online/hol-guard/commit/b4472255e3ec129fa27b8a94cd80d2410601fad1))
+* **mcp:** add brickproof-adb MCP server contribution and trust binding ([#5638](https://github.com/hashgraph-online/hol-guard/issues/5638)) ([daf648d](https://github.com/hashgraph-online/hol-guard/commit/daf648d37fdff143914fc18c506c97219cb5f3d7))
+
+
+### Bug Fixes
+
+* **approvals:** report held decisions outside Oh My Pi ([#5623](https://github.com/hashgraph-online/hol-guard/issues/5623)) ([e3be7ea](https://github.com/hashgraph-online/hol-guard/commit/e3be7eabe6218fa938b0471095593a9bd2326674))
+* **ci:** declare the find -exec reader in the command source inputs ([#5649](https://github.com/hashgraph-online/hol-guard/issues/5649)) ([0951b34](https://github.com/hashgraph-online/hol-guard/commit/0951b343dee3581e70bee9bf189bfa33fb7512dd))
+* **ci:** declare the find -exec reader in the command source manifest ([#5650](https://github.com/hashgraph-online/hol-guard/issues/5650)) ([7a87277](https://github.com/hashgraph-online/hol-guard/commit/7a872770f98dcb337bbee8a38a88cd9358b1fe82))
+* **ci:** give the default-auto probe's receipt drain the same budget everywhere ([#5637](https://github.com/hashgraph-online/hol-guard/issues/5637)) ([1c2ba0f](https://github.com/hashgraph-online/hol-guard/commit/1c2ba0f7fef39e503a1fec4254e10e874cb4f51e))
+* **guard:** keep frozen hooks and MCP proxies on the stable launcher ([#5655](https://github.com/hashgraph-online/hol-guard/issues/5655)) ([12f3d28](https://github.com/hashgraph-online/hol-guard/commit/12f3d285f5b637815c061cd908f22541a4e31df7))
+* **hooks:** migrate retained policy when the installed compiler changes ([#5648](https://github.com/hashgraph-online/hol-guard/issues/5648)) ([fe7eec1](https://github.com/hashgraph-online/hol-guard/commit/fe7eec13a81e414051eb0c680fe419f1bbf9e223))
+* **native:** name the command-admission failure the resident actually hit ([#5658](https://github.com/hashgraph-online/hol-guard/issues/5658)) ([38735d1](https://github.com/hashgraph-online/hol-guard/commit/38735d128673c7045ef9c18d9f1cfc7e82994a49))
+* **native:** prove a list item that only binds a shell variable ([#5614](https://github.com/hashgraph-online/hol-guard/issues/5614)) ([d5840f8](https://github.com/hashgraph-online/hol-guard/commit/d5840f8777f2c0edd879a2dfb74948169fcc06bf))
+* **native:** read the program a find -exec names and the timeout an eval call carries ([#5606](https://github.com/hashgraph-online/hol-guard/issues/5606)) ([1891cb3](https://github.com/hashgraph-online/hol-guard/commit/1891cb349e78979050d6d3726a6b096fa46b73db))
+* **review:** show extension setup guidance for commands an extension covers ([#5619](https://github.com/hashgraph-online/hol-guard/issues/5619)) ([f383122](https://github.com/hashgraph-online/hol-guard/commit/f3831228de12b8626128b942056c29ada2c7fac9))
+* **rust:** scope the symlink test's fingerprint import to Unix ([#5636](https://github.com/hashgraph-online/hol-guard/issues/5636)) ([eeaefb2](https://github.com/hashgraph-online/hol-guard/commit/eeaefb26b461171ae76b267ced604e1ea810ce58))
+* **test:** build the runtime test binary on Windows again ([#5651](https://github.com/hashgraph-online/hol-guard/issues/5651)) ([411bb55](https://github.com/hashgraph-online/hol-guard/commit/411bb55d65622c5e5723e39c0a3bf84d16413b9b))
+* **update:** release the update barrier before repairing shims and hooks ([#5645](https://github.com/hashgraph-online/hol-guard/issues/5645)) ([769ad39](https://github.com/hashgraph-online/hol-guard/commit/769ad39bc7399b2ac42616e6bd27decc832adb36))
+
+
+### Performance Improvements
+
+* **ci:** split Rust compilation units and rebalance coverage shards ([#5578](https://github.com/hashgraph-online/hol-guard/issues/5578)) ([98068e3](https://github.com/hashgraph-online/hol-guard/commit/98068e3999f5e4ab7f537b3d26286dc83324adac))
+* **extensions:** stop re-reading command controls every second while nothing changed ([#5646](https://github.com/hashgraph-online/hol-guard/issues/5646)) ([d7cd917](https://github.com/hashgraph-online/hol-guard/commit/d7cd9177eaacfcd27d198462ee84d76d1a8e43d0))
+
 ## [3.54.0](https://github.com/hashgraph-online/hol-guard/compare/v3.53.0...v3.54.0) (2026-10-22)
 
 
