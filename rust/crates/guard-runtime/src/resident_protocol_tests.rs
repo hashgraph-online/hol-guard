@@ -3,13 +3,9 @@ use guard_contracts::NATIVE_APPROVAL_MAX_BYTES;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 fn policy_store() -> (crate::policy_store::PolicySnapshotStore, PathBuf) {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let suffix = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir().join(format!(
         "hol-guard-resident-enrollment-test-{}-{suffix}",
         std::process::id()

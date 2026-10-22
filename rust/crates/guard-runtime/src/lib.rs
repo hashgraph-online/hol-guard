@@ -266,6 +266,7 @@ mod extension_allow_hint_op;
 mod extension_control_authority_op;
 mod extension_control_mutation_op;
 mod extension_control_op;
+mod extension_control_prepared_op;
 mod extension_control_preview_op;
 mod extension_control_proof;
 #[path = "adapters/detection/gemini_detect.rs"]
@@ -744,6 +745,9 @@ mod supply_chain_eval_seams;
 mod supply_chain_eval_transport;
 mod tool_action_identity_op;
 mod totp;
+#[cfg(test)]
+#[path = "../../../test_support/unique_nanos.rs"]
+mod unique_nanos;
 mod verified_npm_op;
 mod verified_read_decision_op;
 #[cfg(windows)]

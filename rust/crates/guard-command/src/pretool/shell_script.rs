@@ -194,10 +194,7 @@ mod tests {
 
     #[test]
     fn physical_script_inspection_blocks_posting_without_authorizing_other_scripts() {
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = crate::unique_nanos::unique_nanos();
         let temporary_root = if cfg!(target_os = "macos") {
             std::path::PathBuf::from("/tmp")
         } else {

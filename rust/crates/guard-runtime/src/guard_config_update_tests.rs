@@ -7,10 +7,7 @@ const FIXTURE: &str = include_str!(concat!(
 ));
 
 fn scratch(label: &str) -> PathBuf {
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir().join(format!(
         "hol-guard-config-update-{label}-{}-{nonce}",
         std::process::id()

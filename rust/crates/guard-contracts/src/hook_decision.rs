@@ -53,6 +53,14 @@ pub const HOOK_DECISION_ARTIFACT_REVIEW_ROUTE_FEATURE: &str =
 /// closed after an upgrade until it is retired. Callers that read a directive
 /// demand this capability so the older resident is replaced instead.
 pub const HOOK_DECISION_JSON_EXIT_CODE_FEATURE: &str = "hook-decision-json-exit-code-v1";
+/// Advertised when `native_edge` carries `reason_code`, the reason the edge
+/// result reached its action. `HookNativeEdgeV1` denies unknown fields, so a
+/// resident that predates the field rejects every composition, settlement and
+/// finalize request that names it, and the hook fails closed as unavailable
+/// until that resident retires. Callers that send an edge demand this
+/// capability so the older resident is replaced instead. It ships with
+/// `hook-decision-json-exit-code-v1`.
+pub const HOOK_DECISION_NATIVE_EDGE_REASON_FEATURE: &str = "hook-decision-native-edge-reason-v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -345,6 +353,11 @@ pub struct HookNativeEdgeV1 {
     pub minimum_action: Value,
     #[serde(default)]
     pub decision: Value,
+    /// The edge result's `reason_code`. A network protection review is a match
+    /// against the synced bundle rather than an unproven command, so the floor
+    /// keeps it before execution.
+    #[serde(default)]
+    pub reason_code: Value,
 }
 
 /// What the transport learned after the lookups the composition permitted.

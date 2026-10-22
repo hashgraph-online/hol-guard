@@ -434,10 +434,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!(
             "hol-guard-missing-home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
         let state_base = root.join("native-runtime");
         let error = super::ensure_private_directory_under(&state_base, &root, false).unwrap_err();

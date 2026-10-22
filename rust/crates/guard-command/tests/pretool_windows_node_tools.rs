@@ -33,10 +33,7 @@ const REPORTING: [&str; 7] = [
 /// A repository with a flat install of each read-only tool, and the declared
 /// home beside it.
 fn project(marker: Option<&str>) -> (PathBuf, PathBuf) {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir().join(format!("guard-win-tool-{}-{nonce}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();

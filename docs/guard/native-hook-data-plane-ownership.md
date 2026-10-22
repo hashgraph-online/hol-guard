@@ -198,6 +198,28 @@ resident cannot read is an error. Python (`ExtensionControlApiService`) parses
 the layers, asks, and builds the mutation from the canonical layers it gets
 back; with no resident there is no mutation and no Python validation.
 
+The values the daemon binds around a prepared Extension control commit are the
+resident's too, through three more `extension_control` queries (`request_digest`,
+`candidate_nonce` and `preview_event_targets`, each answered with a payload of
+its own kind). `request_digest` identifies one apply request: the SHA-256 of the
+canonical JSON of the six fields that make two requests the same request
+(`previous_revision`, `catalog_digest`, `layers`, `actor_id`, `idempotency_key`
+and `nonce`, taken as the caller sent them), so the apply must repeat exactly
+the request its preview was issued for. Python sends only those six fields, never
+an approval password, a TOTP code or a session nonce. `candidate_nonce` binds the
+caller's nonce to the identities of the activation records staged for a prepared
+candidate, so an approval cannot commit other records than the ones it was shown.
+`preview_event_targets` is the audit projection of the semantic preview: each
+changed target is named by a digest of its kind and id, never by the id, with
+the rules it alone affects, bounded at 512 targets of 1,024 rule ids each. The
+digests are byte-identical to the Python ones they replace (the canonical writer
+is CPython's `json.dumps(sort_keys=True)`), pinned by vectors in the resident's
+tests. A request the resident cannot encode (a non-finite number) or
+cannot carry in one ask names no digest and matches no preview; a resident that
+cannot answer stops the apply before it commits. Python keeps the cache-lease
+and candidate LRU bookkeeping, the target-metadata overlay and its transfer IO,
+and the shape checks on what the resident returns.
+
 ## Harness route inventory
 
 The v2 contract maps all harnesses in `HARNESS_CONTRACTS`, including harnesses

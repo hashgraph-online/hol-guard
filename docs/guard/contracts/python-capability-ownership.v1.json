@@ -2046,11 +2046,26 @@
    "source_sha256": "8fa482660f01babb2cad8f8f25ec88dc53675b6e9604062511d5f1a17fc2e688",
    "forbidden_symbols": [
     "_canonicalize_extension_ids",
+    "_semantic_event_targets",
     "_validate_authority_mutability"
    ],
    "native_replacements": [
     "rust/crates/guard-contracts/src/extension_control_mutation.rs",
-    "rust/crates/guard-runtime/src/extension_control_mutation_op.rs"
+    "rust/crates/guard-contracts/src/extension_control_prepared.rs",
+    "rust/crates/guard-runtime/src/extension_control_mutation_op.rs",
+    "rust/crates/guard-runtime/src/extension_control_prepared_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/daemon/extension_control_prepared.py",
+   "source_sha256": "565ccd1483c36d6f6ff4e4cb6b065576ce02853135c617f851d7ba0e8b7e0f24",
+   "forbidden_symbols": [
+    "_REQUEST_FIELDS",
+    "request_digest"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-contracts/src/extension_control_prepared.rs",
+    "rust/crates/guard-runtime/src/extension_control_prepared_op.rs"
    ]
   }
  ]

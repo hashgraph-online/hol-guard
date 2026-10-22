@@ -202,6 +202,43 @@ fn decide(request: &ExtensionControlRequestV1) -> Result<ExtensionControlPayload
             current_layers,
             layers,
         } => crate::extension_control_mutation_op::mutability(registry, current_layers, layers),
+        ExtensionControlQueryV1::RequestDigest {
+            previous_revision,
+            catalog_digest,
+            layers,
+            actor_id,
+            idempotency_key,
+            nonce,
+        } => crate::extension_control_prepared_op::request_digest([
+            ("previous_revision", &**previous_revision),
+            ("catalog_digest", &**catalog_digest),
+            ("layers", &**layers),
+            ("actor_id", &**actor_id),
+            ("idempotency_key", &**idempotency_key),
+            ("nonce", &**nonce),
+        ]),
+        ExtensionControlQueryV1::CandidateNonce {
+            nonce,
+            activation_digest,
+            lifecycle_before,
+            lifecycle_after,
+            security_digest,
+        } => crate::extension_control_prepared_op::candidate_nonce(
+            nonce,
+            activation_digest,
+            lifecycle_before,
+            lifecycle_after,
+            security_digest.as_deref(),
+        ),
+        ExtensionControlQueryV1::PreviewEventTargets {
+            registry,
+            current_layers,
+            proposed_layers,
+        } => crate::extension_control_prepared_op::event_targets(
+            registry,
+            current_layers,
+            proposed_layers,
+        ),
     }
 }
 

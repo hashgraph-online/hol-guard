@@ -360,6 +360,9 @@ pub mod tool_action_identity;
 #[cfg(test)]
 mod tool_action_identity_tests;
 pub mod typescript_launch_evidence;
+#[cfg(test)]
+#[path = "../../../test_support/unique_nanos.rs"]
+mod unique_nanos;
 mod unmodeled_shell_artifact;
 
 pub mod package_context_environment;

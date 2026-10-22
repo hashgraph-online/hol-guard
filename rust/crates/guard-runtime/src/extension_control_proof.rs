@@ -20,7 +20,7 @@ const MAX_IDENTITY_LENGTH: usize = 256;
 pub(crate) const INVALID_REVISION: &str = "native_extension_control_invalid_revision";
 pub(crate) const INVALID_CATALOG_DIGEST: &str = "native_extension_control_invalid_catalog_digest";
 pub(crate) const INVALID_IDENTITY: &str = "native_extension_control_invalid_identity";
-const UNENCODABLE: &str = "native_extension_control_invalid_digest_input";
+pub(crate) const UNENCODABLE: &str = "native_extension_control_invalid_digest_input";
 
 /// One requested replacement of the control layers.
 pub(crate) struct Mutation<'a> {

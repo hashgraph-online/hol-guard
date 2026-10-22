@@ -27,10 +27,7 @@ fn routine_work_in_a_private_temporary_workspace_is_quiet() {
         "expected the per-user temporary directory, got {}",
         temporary.display()
     );
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let workspace = temporary.join(format!(
         "guard-temp-workspace-{}-{nonce}",
         std::process::id()

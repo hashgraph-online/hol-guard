@@ -150,6 +150,24 @@ def test_malformed_answers_raise(monkeypatch: pytest.MonkeyPatch, payloads: list
         decision.native_copilot_settle(_INPUTS, lambda: False)
 
 
+def test_a_settlement_demands_the_edge_reason_capability(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A settlement carries `native_edge`, which now names the reason the edge
+    # result reached its action and denies unknown fields, so a resident built
+    # before the field is replaced rather than asked. Both rounds demand it.
+    asked: list[str] = []
+    payloads = [_ASK, {"kind": "copilot_settle", "needs_facts": [], "plan": _PLAN}]
+    _resident_returning(monkeypatch, payloads)
+    inner = decision._resident_request
+
+    def transport(*, required_feature: str, **kwargs: Any) -> dict[str, Any]:
+        asked.append(required_feature)
+        return inner(required_feature=required_feature, **kwargs)
+
+    monkeypatch.setattr(decision, "_resident_request", transport)
+    decision.native_copilot_settle(_INPUTS, lambda: False)
+    assert asked == [decision.HOOK_DECISION_NATIVE_EDGE_REASON_FEATURE] * 2
+
+
 def test_acked_fact_is_asked_once(monkeypatch: pytest.MonkeyPatch) -> None:
     _resident_returning(monkeypatch, [_ASK, {"kind": "copilot_settle", "needs_facts": [], "plan": _PLAN}])
     calls: list[bool] = []

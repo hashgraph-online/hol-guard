@@ -244,10 +244,7 @@ fn fresh_temporary_leaf(label: &str) -> std::path::PathBuf {
     let unique = format!(
         "{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     );
     std::fs::canonicalize("/tmp")
         .unwrap()

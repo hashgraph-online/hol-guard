@@ -642,7 +642,8 @@
     "rust/Cargo.toml",
     "rust/rust-toolchain.toml",
     "rust/.config/nextest.toml",
-    "rust/build_support/**"
+    "rust/build_support/**",
+    "rust/test_support/**"
    ],
    "current": "pinned native dependency graph, shared fixtures, and fuzz targets",
    "target": "same"

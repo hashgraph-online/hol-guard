@@ -8,10 +8,12 @@
 //! specific code, never a default verdict.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::{
-    ExtensionControlMutationRegistryV1, ExtensionControlPreviewRegistryV1,
-    ExtensionControlSemanticPreviewV1, NativeExtensionControlLayerV1,
+    ExtensionControlEventTargetV1, ExtensionControlMutationRegistryV1,
+    ExtensionControlPreviewRegistryV1, ExtensionControlSemanticPreviewV1,
+    NativeExtensionControlLayerV1,
 };
 
 /// Schema discriminator for the request.
@@ -148,6 +150,39 @@ pub enum ExtensionControlQueryV1 {
         current_layers: Vec<NativeExtensionControlLayerV1>,
         layers: Vec<NativeExtensionControlLayerV1>,
     },
+    /// The digest that identifies one apply request: the fields below are
+    /// exactly the ones that make two requests the same request. They are
+    /// hashed as the caller sent them (`null` for a missing field), because the
+    /// request is not yet known to be well formed.
+    ///
+    /// The fields are boxed so the arbitrary-shape values do not set the size of
+    /// every query.
+    RequestDigest {
+        previous_revision: Box<Value>,
+        catalog_digest: Box<Value>,
+        layers: Box<Value>,
+        actor_id: Box<Value>,
+        idempotency_key: Box<Value>,
+        nonce: Box<Value>,
+    },
+    /// The nonce a prepared candidate's mutation is proven under: the caller's
+    /// nonce bound to the identities of the activation records staged for it,
+    /// so a proof cannot be reused with other records.
+    CandidateNonce {
+        nonce: String,
+        activation_digest: String,
+        lifecycle_before: String,
+        lifecycle_after: String,
+        security_digest: Option<String>,
+    },
+    /// The audit projection of the semantic preview of replacing
+    /// `current_layers` with `proposed_layers`: one entry per changed target,
+    /// without the target's id.
+    PreviewEventTargets {
+        registry: ExtensionControlPreviewRegistryV1,
+        current_layers: Vec<NativeExtensionControlLayerV1>,
+        proposed_layers: Vec<NativeExtensionControlLayerV1>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -248,6 +283,19 @@ pub enum ExtensionControlPayloadV1 {
     /// otherwise the immutability reason.
     MutabilityValidate {
         refusal: Option<String>,
+    },
+    /// The answer to `request_digest`: lowercase hex SHA-256.
+    RequestDigest {
+        digest: String,
+    },
+    /// The answer to `candidate_nonce`: lowercase hex SHA-256.
+    CandidateNonce {
+        nonce: String,
+    },
+    /// The answer to `preview_event_targets`, bounded by
+    /// `EXTENSION_CONTROL_MAX_EVENT_TARGETS`.
+    PreviewEventTargets {
+        targets: Vec<ExtensionControlEventTargetV1>,
     },
 }
 

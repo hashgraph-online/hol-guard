@@ -501,6 +501,38 @@ def preview_control_mutation(
     )
 
 
+def preview_event_targets(
+    registry: CommandSafetyExtensionRegistry,
+    current_layers: Sequence[ExtensionControlLayer],
+    proposed_layers: Sequence[ExtensionControlLayer],
+    render: Callable[[object, Callable[[], RuntimeError]], list[dict[str, object]]],
+    *,
+    guard_home: Path | None = None,
+) -> list[dict[str, object]]:
+    """The audit projection the resident makes of the semantic preview of the same replacement.
+
+    One entry per changed target, named by a digest of its kind and id. ``render``
+    validates and shapes the ``targets`` payload, raising the given error for a
+    malformed one, so a bad payload counts against resident health.
+    """
+
+    query: dict[str, object] = {
+        "kind": "preview_event_targets",
+        "registry": _preview_registry_wire(registry),
+        "current_layers": [_layer_wire(layer) for layer in current_layers],
+        "proposed_layers": [_layer_wire(layer) for layer in proposed_layers],
+    }
+    if _wire_bytes(query) > _MAX_BATCH_BYTES:
+        raise _too_large()
+    return _ask(
+        query,
+        guard_home,
+        {"targets": list},
+        lambda payload: render(payload["targets"], _invalid),
+        operation=_PREVIEW_OPERATION,
+    )
+
+
 def _mutation_registry_wire(
     registry: CommandSafetyExtensionRegistry,
     overlay: Iterable[Any],
@@ -692,11 +724,14 @@ def resolve_extension_controls(
     return resolve_scenarios(registry, (scenario,), guard_home=guard_home)[0].items[0]
 
 
-def _digest(payload: dict[str, Any]) -> str:
-    digest = payload["digest"]
-    if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+def _hex_digest(value: str) -> str:
+    if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
         raise _invalid()
-    return digest
+    return value
+
+
+def _digest(payload: dict[str, Any]) -> str:
+    return _hex_digest(payload["digest"])
 
 
 def mutation_digest(
@@ -779,3 +814,67 @@ def _snapshot_digest(
     }
 
     return _ask(query, guard_home, {"digest": str}, _digest)
+
+
+_REQUEST_DIGEST_FIELDS: Final = (
+    "previous_revision",
+    "catalog_digest",
+    "layers",
+    "actor_id",
+    "idempotency_key",
+    "nonce",
+)
+
+
+def request_json(payload: Mapping[str, object]) -> str:
+    """Snapshot the request wire fields for transport and committed-response replay."""
+    query: dict[str, object] = {"kind": "request_digest"}
+    query.update({field: payload.get(field) for field in _REQUEST_DIGEST_FIELDS})
+    try:
+        encoded = json.dumps(query, separators=(",", ":"), sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError) as error:
+        raise NativeExtensionControlError(f"{_OPERATION.prefix}_invalid_digest_input") from error
+    if len(encoded) > _MAX_BATCH_BYTES:
+        raise _too_large()
+    return encoded
+
+
+def request_digest(payload: Mapping[str, object], *, guard_home: Path | None = None) -> str:
+    """The digest that identifies one apply request, computed by the resident.
+
+    The resident hashes exactly the fields that make two requests the same
+    request, as the caller sent them (``None`` for one that is missing): the
+    request is not yet known to be well formed. A request the resident could not
+    encode (a non-finite number) or is too big for one ask names no digest, so
+    it matches no preview.
+    """
+
+    query = json.loads(request_json(payload))
+    return _ask(query, guard_home, {"digest": str}, _digest)
+
+
+def candidate_nonce(
+    *,
+    nonce: str,
+    activation_digest: str,
+    lifecycle_before: str,
+    lifecycle_after: str,
+    security_digest: str | None,
+    guard_home: Path | None = None,
+) -> str:
+    """The nonce a prepared candidate's mutation is proven under, computed by the resident.
+
+    The caller's nonce is bound to the identities of the activation records
+    staged for the candidate, so an approval cannot commit other records than
+    the ones it was shown.
+    """
+
+    query: dict[str, object] = {
+        "kind": "candidate_nonce",
+        "nonce": nonce,
+        "activation_digest": activation_digest,
+        "lifecycle_before": lifecycle_before,
+        "lifecycle_after": lifecycle_after,
+        "security_digest": security_digest,
+    }
+    return _ask(query, guard_home, {"nonce": str}, lambda payload: _hex_digest(payload["nonce"]))

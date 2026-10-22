@@ -297,10 +297,7 @@ fn git_c_rejects_external_gitfile_pointers() {
     let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/gitfile-pointer-fixtures");
     std::fs::create_dir_all(&base).unwrap();
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let fixture = base.join(format!("fixture-{}-{nonce}", std::process::id()));
     let workspace = fixture.join("workspace");
     let external = fixture.join("external-admin");
@@ -328,10 +325,7 @@ fn git_c_rejects_forged_external_linked_worktree_metadata() {
     let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/gitfile-pointer-fixtures");
     std::fs::create_dir_all(&base).unwrap();
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let fixture = base.join(format!("linked-fixture-{}-{nonce}", std::process::id()));
     let workspace = fixture.join("workspace");
     let common = fixture.join("external-common/.git");

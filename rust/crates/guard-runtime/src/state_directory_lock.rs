@@ -229,16 +229,12 @@ impl DirectoryLock {
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn root(label: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(
             "hol-guard-state-directory-lock-{label}-{}-{}",
             std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
         fs::create_dir(&root).unwrap();
         fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();

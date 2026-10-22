@@ -19,6 +19,8 @@ mod extension_control;
 pub use extension_control::*;
 mod extension_control_mutation;
 pub use extension_control_mutation::*;
+mod extension_control_prepared;
+pub use extension_control_prepared::*;
 mod extension_control_preview;
 pub use extension_control_preview::*;
 mod github_cli_classify;

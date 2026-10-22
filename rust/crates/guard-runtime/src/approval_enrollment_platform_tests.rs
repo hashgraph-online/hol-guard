@@ -2,7 +2,7 @@ use super::bounded_transport::{classify_lookup, run_helper, Completed, DEFAULT_T
 use super::{SECURE_STATE_INVALID, SECURE_STATE_UNAVAILABLE};
 use std::fs;
 use std::path::Path;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 fn shell(script: &str, input: Option<&[u8]>, max_bytes: usize) -> Result<Completed, String> {
     run_helper(
@@ -15,10 +15,7 @@ fn shell(script: &str, input: Option<&[u8]>, max_bytes: usize) -> Result<Complet
 }
 
 fn unique_path(suffix: &str) -> std::path::PathBuf {
-    let nonce = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     std::env::temp_dir().join(format!(
         "hol-guard-approval-platform-{}-{nonce}-{suffix}",
         std::process::id()

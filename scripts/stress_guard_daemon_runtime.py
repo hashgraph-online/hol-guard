@@ -279,16 +279,28 @@ def collect_batch(
 
 def run_stress_batches(execution: StressExecution, request_count: int) -> None:
     max_workers = min(request_count, 32)
+    # The daemon starts runtime workers on demand, so the tree can still be
+    # adding workers well after warmup. The baseline is the ceiling over the
+    # first tenth of the run; growth after that is what a leak looks like.
+    warm_requests = request_count // 10
+    start = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        for start in range(0, request_count, max_workers):
-            futures = [
-                executor.submit(stress_request, execution.endpoint, execution.auth_token)
-                for _ in range(min(max_workers, request_count - start))
-            ]
+        while start < request_count:
+            # A batch never crosses the end of the warm window.
+            size = min(max_workers, request_count - start)
+            if start < warm_requests:
+                size = min(size, warm_requests - start)
+            futures = [executor.submit(stress_request, execution.endpoint, execution.auth_token) for _ in range(size)]
+            # Sample at least once per batch, even one that finishes before the
+            # first check, so the warm-window ceiling and the peak see it.
+            sample_stress_runtime(execution)
             while not all(future.done() for future in futures):
-                sample_stress_runtime(execution)
                 time.sleep(0.05)
+                sample_stress_runtime(execution)
             collect_batch(execution, futures)
+            start += size
+            if start <= warm_requests:
+                execution.rss_baseline_bytes = max(execution.rss_baseline_bytes, execution.rss_peak_bytes)
 
 
 def update_pid_stability(execution: StressExecution, guard_home: Path) -> None:

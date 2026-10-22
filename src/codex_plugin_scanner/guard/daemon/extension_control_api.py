@@ -29,6 +29,8 @@ from ..native_extension_control import (
     compose_control_layers,
     mutability_validate,
     mutation_bounds,
+    request_digest,
+    request_json,
     validate_mutation,
 )
 from ..runtime import command_inspection
@@ -69,10 +71,12 @@ from .extension_control_prepared import (
     expired,
     prepare_candidate,
     release_all_leases,
-    request_digest,
 )
 from .extension_control_request import request_needs_proof, required_request_string
-from .extension_control_semantic_preview import build_extension_control_semantic_preview
+from .extension_control_semantic_preview import (
+    build_extension_control_event_targets,
+    build_extension_control_semantic_preview,
+)
 from .managed_controls_api import effective_controls_payload
 
 if TYPE_CHECKING:
@@ -83,9 +87,12 @@ _LOGGER = logging.getLogger(__name__)
 _EXTENSION_CONTROL_API_SCHEMA = "guard.daemon.extension-controls.v1"
 _MAX_PENDING_PROOFS = 128
 _MAX_APPLIED_MUTATIONS = 128
-_MAX_EVENT_TARGETS = 512
-_MAX_EVENT_RULE_IDS = 1024
 _MAX_INSPECTION_COMMAND_CHARS = 4096
+# Why the resident names no digest for an apply request itself: no preview was
+# ever issued for a request that could not be encoded or sent whole.
+_UNDIGESTABLE_REQUEST_CODES = frozenset(
+    {"native_extension_control_too_large", "native_extension_control_invalid_digest_input"}
+)
 # The resident names why it refuses a draft; this maps each reason to the HTTP
 # status the API has always answered it with.
 _MUTATION_REFUSAL_STATUS = {
@@ -117,7 +124,7 @@ class _PendingMutation:
 
 @dataclass(frozen=True, slots=True)
 class _AppliedMutation:
-    canonical_digest: str
+    request_json: str
     response: dict[str, object]
 
 
@@ -438,6 +445,8 @@ class ExtensionControlApiService:
             except NativeExtensionControlError as error:
                 if error.code in PREVIEW_LIMIT_CODES:
                     raise ExtensionControlApiError(400, "control_limit_exceeded") from error
+                if error.code == "native_extension_control_invalid_digest_input":
+                    raise ExtensionControlApiError(400, "invalid_mutation") from error
                 raise ExtensionControlApiError(503, "native_runtime_unavailable") from error
 
     def _preview_locked(self, payload: dict[str, object]) -> dict[str, object]:
@@ -506,6 +515,10 @@ class ExtensionControlApiService:
         }
         if request_needs_proof(payload):
             session_nonce = required_request_string(payload, "session_nonce")
+            # Ask the resident before the approval is spent, so an unreachable
+            # runtime refuses the preview instead of issuing a proof nobody can
+            # apply.
+            digest = request_digest(payload, guard_home=self._store.guard_home)
             try:
                 proof = issue_extension_control_proof(
                     self._store.guard_home,
@@ -515,7 +528,7 @@ class ExtensionControlApiService:
                 )
             except (ApprovalGateError, ExtensionControlProofError) as exc:
                 raise ExtensionControlApiError(423, "approval_required") from exc
-            self._remember_proof(mutation, proof, request_digest=request_digest(payload), candidate=candidate)
+            self._remember_proof(mutation, proof, request_digest=digest, candidate=candidate)
             response["proof_id"] = proof.proof_id
         return response
 
@@ -541,11 +554,15 @@ class ExtensionControlApiService:
     def _apply_locked(self, payload: dict[str, object]) -> dict[str, object]:
         proof_id = required_request_string(payload, "proof_id")
         pending = self._proof_state(proof_id)
-        original_digest = request_digest(payload)
+        try:
+            original_request = request_json(payload)
+        except NativeExtensionControlError as error:
+            raise ExtensionControlApiError(409, "proof_mismatch") from error
         if isinstance(pending, _AppliedMutation):
-            if pending.canonical_digest != original_digest:
+            if pending.request_json != original_request:
                 raise ExtensionControlApiError(409, "proof_mismatch")
             return dict(pending.response)
+        original_digest = self._apply_request_digest(payload)
         if pending.request_digest != original_digest:
             raise ExtensionControlApiError(409, "proof_mismatch")
         mutation = pending.mutation
@@ -562,7 +579,10 @@ class ExtensionControlApiService:
             raise ExtensionControlApiError(409, "managed_layer_conflict")
         proposed_layers = self._effective_layers_for_local_mutation(mutation.layers)
         proposed_layers = tuple(replace(layer, catalog_digest=registry.catalog_digest) for layer in proposed_layers)
-        semantic_preview = build_extension_control_semantic_preview(
+        # The resident projects the audit event before anything is committed, so
+        # a runtime that cannot answer stops the apply instead of leaving a
+        # committed change without its event.
+        semantic_targets = build_extension_control_event_targets(
             registry,
             tuple(replace(layer, catalog_digest=registry.catalog_digest) for layer in current.layers),
             proposed_layers,
@@ -604,7 +624,7 @@ class ExtensionControlApiService:
                 "catalog_digest": catalog_digest,
                 "actor_ref": hashlib.sha256(f"actor-ref\u0000{mutation.actor_id}".encode()).hexdigest(),
                 "mutation_ref": mutation.canonical_digest,
-                "semantic_targets": self._semantic_event_targets(semantic_preview),
+                "semantic_targets": semantic_targets,
             },
             datetime.now(timezone.utc).isoformat(),
         )
@@ -616,11 +636,20 @@ class ExtensionControlApiService:
         }
         with self._proof_lock:
             _ = self._pending_proofs.pop(proof_id, None)
-            self._applied_mutations[proof_id] = _AppliedMutation(original_digest, response)
+            self._applied_mutations[proof_id] = _AppliedMutation(original_request, response)
             self._applied_mutations.move_to_end(proof_id)
             while len(self._applied_mutations) > _MAX_APPLIED_MUTATIONS:
                 _ = self._applied_mutations.popitem(last=False)
         return dict(response)
+
+    def _apply_request_digest(self, payload: dict[str, object]) -> str:
+        try:
+            return request_digest(payload, guard_home=self._store.guard_home)
+        except NativeExtensionControlError as error:
+            # A request the resident cannot digest names no preview's request.
+            if error.code in _UNDIGESTABLE_REQUEST_CODES:
+                raise ExtensionControlApiError(409, "proof_mismatch") from error
+            raise
 
     def _mutation_from_payload(
         self, payload: dict[str, object], *, targets: TargetMetadata | None = None
@@ -695,42 +724,6 @@ class ExtensionControlApiService:
             layer for layer in self._runtime.current().layers if layer.kind is ControlLayerKind.SIGNED_CLOUD
         )
         return (*local_layers, *managed_layers)
-
-    def _semantic_event_targets(self, semantic_preview: dict[str, object]) -> list[dict[str, object]]:
-        raw_targets = semantic_preview.get("changed_targets")
-        if not isinstance(raw_targets, list):
-            return []
-        event_targets: list[dict[str, object]] = []
-        for raw in raw_targets[:_MAX_EVENT_TARGETS]:
-            if not isinstance(raw, dict):
-                continue
-            target = raw.get("target")
-            if not isinstance(target, dict):
-                continue
-            kind = target.get("kind")
-            target_id = target.get("target_id")
-            if not isinstance(kind, str) or not isinstance(target_id, str):
-                continue
-            rule_ids = raw.get("affected_rule_ids")
-            safe_rule_ids = (
-                [value for value in rule_ids[:_MAX_EVENT_RULE_IDS] if isinstance(value, str)]
-                if isinstance(rule_ids, list)
-                else []
-            )
-            event_targets.append(
-                {
-                    "kind": kind,
-                    "target_ref": hashlib.sha256(
-                        f"extension-control-target-ref\u0000{kind}\u0000{target_id}".encode()
-                    ).hexdigest(),
-                    "before_explicit": raw.get("before_explicit"),
-                    "after_explicit": raw.get("after_explicit"),
-                    "before_effective": raw.get("before_effective"),
-                    "after_effective": raw.get("after_effective"),
-                    "affected_rule_ids": safe_rule_ids,
-                }
-            )
-        return event_targets
 
     def _remember_proof(
         self, mutation: ExtensionControlMutation, proof: ExtensionControlProof, *, request_digest="", candidate=None

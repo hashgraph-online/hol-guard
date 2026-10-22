@@ -423,9 +423,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!(
             "guard-worktree-prefix-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |elapsed| elapsed.as_nanos())
+            crate::unique_nanos::unique_nanos()
         ));
         let exec_path = root.join("usr/libexec/git-core");
         fs::create_dir_all(&exec_path).expect("exec path");

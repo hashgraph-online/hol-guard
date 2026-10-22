@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Final
 
-from ..native_extension_control import preview_control_mutation
+from ..native_extension_control import preview_control_mutation, preview_event_targets
 from ..runtime.command_extensions import CommandSafetyExtensionRegistry
 from ..runtime.extension_control_contract import ExtensionControlLayer
 
@@ -60,6 +60,20 @@ _TARGET_FIELDS: Final = frozenset(
 _COUNT_FIELDS: Final = ("changed_target_count", "affected_permission_count", "affected_rule_count")
 _SUMMARY_FIELDS: Final = ("newly_blocked_permissions", "newly_allowed_permissions", "effective_change_count")
 _LOCKDOWN_FIELDS: Final = ("before", "after", "changed")
+# What an audit event names of one changed target: its opaque reference, how
+# its control and effective state changed, and the rules it alone touches.
+_EVENT_TARGET_FIELDS: Final = (
+    "kind",
+    "target_ref",
+    "before_explicit",
+    "after_explicit",
+    "before_effective",
+    "after_effective",
+    "affected_rule_ids",
+)
+_MAX_EVENT_TARGETS: Final = 512
+_MAX_EVENT_RULE_IDS: Final = 1024
+_HEX: Final = frozenset("0123456789abcdef")
 
 
 def _keys(value: object, required: Iterable[str], optional: Iterable[str] = ()) -> dict[str, object]:
@@ -169,3 +183,52 @@ def build_extension_control_semantic_preview(
     guard_home: Path | None = None,
 ) -> dict[str, object]:
     return preview_control_mutation(registry, current_layers, proposed_layers, _render, guard_home=guard_home)
+
+
+def _event_target(value: object) -> dict[str, object]:
+    entry = _keys(value, _EVENT_TARGET_FIELDS)
+    reference = _text(entry["target_ref"])
+    if entry["kind"] not in _TARGET_KINDS or len(reference) != 64 or not set(reference) <= _HEX:
+        raise TypeError
+    for name in ("before_explicit", "after_explicit"):
+        if entry[name] not in _EXPLICIT_STATES:
+            raise TypeError
+    for name in ("before_effective", "after_effective"):
+        if entry[name] not in _EFFECTIVE_STATES:
+            raise TypeError
+    rule_ids = entry["affected_rule_ids"]
+    if not isinstance(rule_ids, list) or len(rule_ids) > _MAX_EVENT_RULE_IDS:
+        raise TypeError
+    for rule_id in rule_ids:
+        _text(rule_id)
+    return {name: entry[name] for name in _EVENT_TARGET_FIELDS}
+
+
+def _render_event_targets(value: object, invalid: Callable[[], RuntimeError]) -> list[dict[str, object]]:
+    """The resident's audit projection, in the order the event records it.
+
+    Checks shape only: which targets changed, and how they are named, is the
+    resident's. A reply with a target that has no reference, or with more
+    targets than one event may hold, is refused here rather than recorded.
+    """
+
+    try:
+        if not isinstance(value, list) or len(value) > _MAX_EVENT_TARGETS:
+            raise TypeError
+        return [_event_target(target) for target in value]
+    except TypeError:
+        raise invalid() from None
+
+
+def build_extension_control_event_targets(
+    registry: CommandSafetyExtensionRegistry,
+    current_layers: tuple[ExtensionControlLayer, ...],
+    proposed_layers: tuple[ExtensionControlLayer, ...],
+    *,
+    guard_home: Path | None = None,
+) -> list[dict[str, object]]:
+    """What the audit event of a committed mutation records of each target it changed."""
+
+    return preview_event_targets(
+        registry, current_layers, proposed_layers, _render_event_targets, guard_home=guard_home
+    )

@@ -20,7 +20,7 @@ from ..extension_builder.io import checked_path, read_bytes
 from ..extension_builder.native_source_compiler import NativeSourceCompilerError, run_source_compiler
 from . import lifecycle
 from .authority import decode
-from .object_native import CONTAINER_STRUCTURE, call
+from .object_native import CONTAINER_STRUCTURE, addressed
 
 MANIFEST = "command-pack-bundle.v1.json"
 PREFIX = "codex_plugin_scanner/guard/contracts/data/extensions/command-pack-bundle/"
@@ -204,12 +204,14 @@ class VerifiedInstalledBundle:
 
     def _fetch(self, target_location: dict[str, Any], max_bytes: int) -> bytes:
         base = _package() / ASSETS
+        root = checked_path(base, anchor=_installation_root())
         try:
             # The runtime validates the location, bounds the request and reads a
             # container member by its digest; a whole asset is only resolved.
-            reply = call(
+            reply = addressed(
                 "installed",
-                root=str(checked_path(base, anchor=_installation_root())),
+                sources=lambda _reply: [root / target_location["tag"] / target_location["asset"]],
+                root=str(root),
                 target=target_location,
                 source=self.source_sha,
                 length=max_bytes,

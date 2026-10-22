@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 
 from .metadata_objects import ObjectStore
-from .object_native import call, sessioned, verify
+from .object_native import addressed, objects_read, sessioned, verify
 from .pack_store import MAX_OBJECT_BYTES, missing_object, publish_object
 
 
@@ -20,8 +20,9 @@ class LocatedStore(ObjectStore):
         # each is fetched, verified natively, then published before asking again.
         fetched: set[str] = set()
         while True:
-            reply = call(
+            reply = addressed(
                 "expand",
+                sources=objects_read(self.directory),
                 mode="located",
                 directory=str(self.directory),
                 reference=reference,

@@ -18,10 +18,7 @@ fn zcode_reads_markdown_only_in_supported_skill_locations() {
         .join(format!(
             "home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let _fixture = Fixture(root.clone());
     let roots = [

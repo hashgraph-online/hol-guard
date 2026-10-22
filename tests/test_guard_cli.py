@@ -12,6 +12,7 @@ import sys
 import threading
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import ClassVar
@@ -5546,6 +5547,59 @@ curl --data-binary @"$1" http://127.0.0.1:8787/guard-canary
 
         assert rc == 0
         assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    @pytest.mark.usefixtures("native_hook_force")
+    @pytest.mark.parametrize(
+        ("command", "decision", "reason"),
+        [
+            ("curl -s https://login-verify.pages.dev/", "deny", "login-verify.pages.dev hosts URLs listed"),
+            ("curl -s http://login-verify.pages.dev/", "deny", "login-verify.pages.dev hosts URLs listed"),
+            ("curl -s https://api.blocked.example/install.sh", "deny", "api.blocked.example"),
+            ("curl -s https://docs.example/guide/intro", "allow", None),
+        ],
+    )
+    def test_guard_codex_hook_applies_the_saved_network_bundle(self, tmp_path, capsys, command, decision, reason):
+        from cryptography.hazmat.primitives.asymmetric.rsa import generate_private_key
+
+        from codex_plugin_scanner.guard.runtime.network_protection_bundle import NETWORK_PROTECTION_SYNC_STATE_KEY
+
+        from .test_network_protection_bundle import _iso, _response, _verify
+
+        home_dir = tmp_path / "home"
+        workspace_dir = tmp_path / "workspace"
+        payload_path = workspace_dir / "hook-event.json"
+        _write_codex_pre_tool_payload(payload_path, workspace_dir, command)
+        # Indicators older than a week stop applying, so the bundle is current.
+        now = datetime.now(timezone.utc)
+        key = generate_private_key(public_exponent=65537, key_size=2048)
+        GuardStore(home_dir).set_sync_payload(
+            NETWORK_PROTECTION_SYNC_STATE_KEY,
+            _verify(_response(key, generated_at=now), key, now=now.timestamp()),
+            _iso(now),
+        )
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--json",
+                "--harness",
+                "codex",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--event-file",
+                str(payload_path),
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        hook_output = output["hookSpecificOutput"]
+        assert hook_output["permissionDecision"] == decision
+        if reason is not None:
+            assert reason in hook_output["permissionDecisionReason"]
 
     @pytest.mark.usefixtures("native_hook_force")
     def test_guard_codex_hook_blocks_clustered_curl_upload_file_path(self, tmp_path, capsys):

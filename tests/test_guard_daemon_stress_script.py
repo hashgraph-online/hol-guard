@@ -447,3 +447,41 @@ def test_stress_cleanup_reports_leftover_daemon(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(stress_script, "guard_daemon_retirement_is_complete", lambda _guard_home: False)
 
     assert stress_script._cleanup_stress_runtime(Path("guard-home")) is False
+
+
+def test_soak_baseline_includes_worker_scale_up_but_not_later_growth(monkeypatch, tmp_path) -> None:
+    served = []
+
+    def request(_endpoint: str, _token: str) -> float:
+        served.append(1)
+        return 1.0
+
+    def resources(_pid: int) -> tuple[int, int, int]:
+        return (200 if len(served) >= 320 else 150 if len(served) >= 32 else 100), 1, 1
+
+    monkeypatch.setattr(stress_runtime, "stress_request", request)
+    monkeypatch.setattr(stress_runtime, "process_tree_resources", resources)
+    monkeypatch.setattr(stress_runtime, "health_probe_status", lambda _url: "ready")
+    execution = stress_runtime.StressExecution("u", "e", "t", 1, tmp_path, rss_baseline_bytes=100, rss_peak_bytes=100)
+
+    stress_runtime.run_stress_batches(execution, 640)
+
+    assert (execution.rss_baseline_bytes, execution.rss_peak_bytes) == (150, 200)
+
+
+def test_short_soak_counts_growth_after_the_warm_tenth(monkeypatch, tmp_path) -> None:
+    served = []
+
+    def request(_endpoint: str, _token: str) -> float:
+        served.append(1)
+        return 1.0
+
+    monkeypatch.setattr(stress_runtime, "stress_request", request)
+    monkeypatch.setattr(stress_runtime, "process_tree_resources", lambda _pid: (120 if len(served) > 5 else 100, 1, 1))
+    monkeypatch.setattr(stress_runtime, "health_probe_status", lambda _url: "ready")
+    execution = stress_runtime.StressExecution("u", "e", "t", 1, tmp_path, rss_baseline_bytes=100, rss_peak_bytes=100)
+
+    stress_runtime.run_stress_batches(execution, 50)
+
+    assert (execution.rss_baseline_bytes, execution.rss_peak_bytes) == (100, 120)
+    assert len(served) == 50

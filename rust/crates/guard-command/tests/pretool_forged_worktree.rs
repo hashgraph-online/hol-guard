@@ -7,10 +7,7 @@ fn forged_worktree_metadata_cannot_hide_external_execution_configuration() {
     let root = std::env::temp_dir().join(format!(
         "guard-forged-worktree-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let _cleanup = fixture::FixtureCleanup(root.clone());
     let home = root.join("home");

@@ -239,11 +239,15 @@ def test_the_client_budgets_add_up_the_resident_budgets_they_wait_for() -> None:
 
     read = timeouts.AUTHORITY_ROUND_TIMEOUT_S * timeouts.AUTHORITY_READ_ROUNDS
     assert read == timeouts.AUTHORITY_READ_TIMEOUT_S
-    # A preview: two authority reads, the three mutation asks, the composition and the semantic preview.
-    assert timeouts.PREVIEW_MUTATION_ASKS == 3
-    assert 2 * read + 3 * 5.0 + 5.0 + 15.0 <= timeouts.PREVIEW_REQUEST_TIMEOUT_S
-    # An apply: its authority reads, the semantic preview and the commit rounds.
-    assert 4 * read + 15.0 + 4 * 10.0 <= timeouts.APPLY_REQUEST_TIMEOUT_S
+    # A preview: two authority reads, the five mutation asks (bounds, candidate
+    # nonce, validation, mutability and request digest), the composition and the
+    # semantic preview.
+    assert timeouts.PREVIEW_MUTATION_ASKS == 5
+    assert 2 * read + 5 * 5.0 + 5.0 + 15.0 <= timeouts.PREVIEW_REQUEST_TIMEOUT_S
+    # An apply: its authority reads, the request digest ask, the audit projection
+    # of the change (the semantic preview's budget) and the commit rounds.
+    assert timeouts.APPLY_MUTATION_ASKS == 1
+    assert 4 * read + 1 * 5.0 + 15.0 + 4 * 10.0 <= timeouts.APPLY_REQUEST_TIMEOUT_S
     assert timeouts.APPLY_REQUEST_TIMEOUT_S >= timeouts.PREVIEW_REQUEST_TIMEOUT_S
     # Both go to the client, which waits exactly that long for the whole answer.
     sent: list[tuple[str, float, int | None]] = []

@@ -47,8 +47,9 @@ _SOAK_MIN_REQUESTS = 100_000
 _SOAK_MIN_RECEIPTS = 250_000
 _SOAK_MAX_THREADS = 128
 _SOAK_MAX_FILE_DESCRIPTORS = 512
-# Hosted 100k-request soaks fill SQLite page cache after the worker baseline.
-# Observed growth is about 45%; keep a leak-detecting ceiling above that.
+# Growth is measured from the tree's ceiling over the first tenth of the soak,
+# after the worker pool has filled. SQLite page cache keeps growing slowly
+# after that; this ceiling leaves room for it while still catching a leak.
 _SOAK_MAX_RSS_GROWTH = 0.50
 # Long soak runs probe /healthz about 20k times beside 32 in-flight hooks.
 # Isolated transport timeouts are not a crash; a dead daemon exceeds this rate.

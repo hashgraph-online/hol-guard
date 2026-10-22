@@ -1124,11 +1124,11 @@
   },
   {
    "verdict": "windows-equivalent",
-   "note": "Unix serves over a unix socket; the else arm serves the authenticated loopback transport that the Windows build advertises as `authenticated-loopback-resident-v1`. Both are real transports.",
+   "note": "Unix serves over a unix socket; the else arm serves the authenticated loopback transport that the Windows build advertises as `authenticated-loopback-resident-v1`. Both are real transports. The requested-stop note the block leaves afterwards is written the same way on either arm.",
    "file": "rust/crates/guard-runtime/src/managed_resident.rs",
    "item": "fn serve_managed -- cfg! expression",
    "cfg": "unix",
-   "body": "ea871725d1f8"
+   "body": "e0bcc9f4d23c"
   },
   {
    "file": "rust/crates/guard-runtime/src/managed_resident_lease_identity.rs",
