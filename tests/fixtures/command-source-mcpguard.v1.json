@@ -5,7 +5,6 @@
     "schema": "guard.command-extension-build.v1",
     "sources": [
       {
-        "schema": "guard.command-extension-source.v1",
         "extension": {
           "action_classes": [
             "mcp-guard MCP server launch command",
@@ -139,11 +138,9 @@
               "description": "Identifies mcp-guard proxy, test-injection --run, and inspect, lock, ui or snapshot save with --live. They start the MCP servers named in the config or given with --server (any command, or an http(s) URL that is contacted), or run the agent script given to test-injection. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
               "family": null,
               "matcher": {
-                "op": "any.v1",
                 "config": {},
                 "matchers": [
                   {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -180,10 +177,10 @@
                       "subcommands": [
                         "proxy"
                       ]
-                    }
+                    },
+                    "op": "executable.v1"
                   },
                   {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -225,10 +222,10 @@
                       "subcommands": [
                         "inspect"
                       ]
-                    }
+                    },
+                    "op": "executable.v1"
                   },
                   {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -270,10 +267,10 @@
                       "subcommands": [
                         "lock"
                       ]
-                    }
+                    },
+                    "op": "executable.v1"
                   },
                   {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -315,10 +312,10 @@
                       "subcommands": [
                         "ui"
                       ]
-                    }
+                    },
+                    "op": "executable.v1"
                   },
                   {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -361,10 +358,10 @@
                         "snapshot",
                         "save"
                       ]
-                    }
+                    },
+                    "op": "executable.v1"
                   },
                   {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -406,9 +403,11 @@
                       "subcommands": [
                         "test-injection"
                       ]
-                    }
+                    },
+                    "op": "executable.v1"
                   }
-                ]
+                ],
+                "op": "any.v1"
               },
               "native_capability": null,
               "permission_id": "command.mcpguard.permission.server-launch",
@@ -434,11 +433,9 @@
               "description": "Identifies mcp-guard lock. It writes (or with --update, migrates) the lock file that inspect --lock and proxy --lock treat as the approved state, so running it approves the current servers and tools, including a description or annotation that changed since the last lock. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
               "family": null,
               "matcher": {
-                "op": "any.v1",
                 "config": {},
                 "matchers": [
                   {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -478,9 +475,11 @@
                       "subcommands": [
                         "lock"
                       ]
-                    }
+                    },
+                    "op": "executable.v1"
                   }
-                ]
+                ],
+                "op": "any.v1"
               },
               "native_capability": null,
               "permission_id": "command.mcpguard.permission.lock-approve",
@@ -505,11 +504,9 @@
               "description": "Identifies mcp-guard proxy --record-bodies. The journal then keeps every JSON-RPC message in full, including tool arguments and results that can hold tokens or file contents. Without it, the journal keeps no bodies. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
               "family": null,
               "matcher": {
-                "op": "any.v1",
                 "config": {},
                 "matchers": [
                   {
-                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -548,9 +545,11 @@
                       "subcommands": [
                         "proxy"
                       ]
-                    }
+                    },
+                    "op": "executable.v1"
                   }
-                ]
+                ],
+                "op": "any.v1"
               },
               "native_capability": null,
               "permission_id": "command.mcpguard.permission.record-bodies",
@@ -575,7 +574,8 @@
           ],
           "source": "built-in",
           "version": "1.0.0"
-        }
+        },
+        "schema": "guard.command-extension-source.v1"
       }
     ],
     "trust": {
@@ -620,6 +620,7 @@
           "command.kranz",
           "command.librarybridge",
           "command.macscope",
+          "command.mcp-agent-wire",
           "command.mcp-agenthub",
           "command.mcp-architecture-intelligence-platform",
           "command.mcp-asdecided",
@@ -627,6 +628,7 @@
           "command.mcp-askjev",
           "command.mcp-authyouragent",
           "command.mcp-axpilot",
+          "command.mcp-brickproof-adb",
           "command.mcp-ccm",
           "command.mcp-cf-mail-mcp",
           "command.mcp-ci-guard",
@@ -660,12 +662,16 @@
           "command.mcp-mail-server",
           "command.mcp-melra",
           "command.mcp-musiccontext",
+          "command.mcp-obsidian-kanban",
           "command.mcp-openscreenshot",
           "command.mcp-ops-brain",
           "command.mcp-pc-control",
+          "command.mcp-pinpoint",
           "command.mcp-plim",
           "command.mcp-pr-ui-compare",
+          "command.mcp-quidli-connect",
           "command.mcp-reaper",
+          "command.mcp-remote-pc-mcp",
           "command.mcp-repo-notebook",
           "command.mcp-run",
           "command.mcp-seahorse",
