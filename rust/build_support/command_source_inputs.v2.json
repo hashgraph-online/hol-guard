@@ -135,6 +135,7 @@
       "src/environment_secret_dump.rs",
       "src/executable_flag_contract.rs",
       "src/extension_control.rs",
+      "src/extension_control/prepared.rs",
       "src/false_positive_rules.rs",
       "src/github_capability_contract.rs",
       "src/github_capability_interaction.rs",
