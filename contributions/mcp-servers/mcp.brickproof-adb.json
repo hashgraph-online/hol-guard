@@ -3,7 +3,7 @@
   "id": "mcp.brickproof-adb",
   "version": "1.0.0",
   "name": "brickproof-adb",
-  "description": "Lets an agent operate your own Android devices over ADB: screen, input, installs and package changes. The server keeps its own guard rails: dry run by default, a protected set read off the device, a network guard and one-call rollback. adb_shell and adb_uninstall are reviewed. Off until you turn it on.",
+  "description": "Lets an agent operate your own Android devices over ADB: screen, input, installs and package changes. Reading the device stays automatic; input, installs, package changes, file pushes, shell and connecting new devices are reviewed. The server adds its own guard rails: dry run by default, a protected set read off the device, a network guard and one-call rollback. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -48,9 +48,9 @@
     "https://www.npmjs.com/package/brickproof-adb"
   ],
   "saferAlternatives": [
-    "adb_install and adb_app change nothing without dry_run=false: read the plan first. adb_app refuses packages the device needs and keeps a snapshot; action=restore rolls it back.",
+    "adb_install, and adb_app disable, uninstall, enable, restore and clear, change nothing without dry_run=false; launch, stop and backup act at once. adb_app refuses packages the device needs and keeps a snapshot; action=restore rolls it back.",
     "adb_shell and adb_uninstall stay off until the operator enables them with brickproof-adb set; no tool can turn them on.",
     "Start with adb_devices, adb_screenshot and adb_ui_dump; they only read the device.",
-    "This entry matches npx brickproof-adb. The Claude Desktop extension and the Home Assistant app launch it differently and keep Guard's normal handling."
+    "Review defaults match the brickproof-adb package under any recognized package launcher. The Claude Desktop extension and the Home Assistant app start the server without one and keep Guard's normal handling."
   ]
 }
