@@ -291,7 +291,7 @@ def test_a_command_that_is_not_held_for_review_costs_no_resident_question(
     hint = hint_module.compute_extension_allow_hint(
         _stub_evaluation(action),
         command_text=COMMAND,
-        snapshot=SimpleNamespace(authority_failure=None),
+        snapshot=SimpleNamespace(authority_failure=None, awaiting_enrollment=False),
         native_evidence={},
     )
 
@@ -305,12 +305,31 @@ def test_an_authority_failure_costs_no_resident_question(monkeypatch: pytest.Mon
     hint = hint_module.compute_extension_allow_hint(
         _stub_evaluation("review"),
         command_text=COMMAND,
-        snapshot=SimpleNamespace(authority_failure="unavailable"),
+        snapshot=SimpleNamespace(authority_failure="unavailable", awaiting_enrollment=False),
         native_evidence=dict(REVIEW_EVIDENCE),
     )
 
     assert hint is None
     assert calls == []
+
+
+@pytest.mark.parametrize("action", ["allow", "block", "review"])
+def test_a_device_that_never_enrolled_asks_the_resident_whatever_it_answered_locally(
+    monkeypatch: pytest.MonkeyPatch, action: str
+) -> None:
+    calls = _recording_client(monkeypatch)
+    snapshot = SimpleNamespace(authority_failure="unavailable", awaiting_enrollment=True)
+
+    hint = hint_module.compute_extension_allow_hint(
+        _stub_evaluation(action),
+        command_text=COMMAND,
+        snapshot=snapshot,
+        native_evidence=dict(REVIEW_EVIDENCE),
+    )
+
+    assert hint == HINT
+    assert len(calls) == 1
+    assert calls[0]["entry"].extension_control_snapshot is snapshot
 
 
 @pytest.mark.parametrize(
@@ -330,7 +349,7 @@ def test_a_fixed_floor_review_costs_no_resident_question(
     hint = hint_module.compute_extension_allow_hint(
         _stub_evaluation("review"),
         command_text=COMMAND,
-        snapshot=SimpleNamespace(authority_failure=None),
+        snapshot=SimpleNamespace(authority_failure=None, awaiting_enrollment=False),
         native_evidence=evidence,
     )
 
@@ -344,7 +363,7 @@ def test_a_held_review_asks_the_resident_with_its_home_and_deadline(
 ) -> None:
     calls = _recording_client(monkeypatch)
     deadline = time.monotonic() + 1.0
-    snapshot = SimpleNamespace(authority_failure=None)
+    snapshot = SimpleNamespace(authority_failure=None, awaiting_enrollment=False)
 
     hint = hint_module.compute_extension_allow_hint(
         _stub_evaluation(action),

@@ -26,7 +26,7 @@ from .store_extension_control_authority_catalog_events import (
     build_catalog_migration_payload,
     insert_catalog_migration_event,
 )
-from .store_extension_control_authority_support import _now, _plan_int, _plan_map, _plan_record
+from .store_extension_control_authority_support import _now, _plan_int, _plan_map, _plan_pack_digest, _plan_record
 
 
 class ExtensionControlAuthorityCatalogMixin:
@@ -164,6 +164,8 @@ class ExtensionControlAuthorityCatalogMixin:
         *,
         registry: CommandSafetyExtensionRegistry,
         key: bytes,
+        pack_activation=None,
+        installed_upgrade: Mapping[str, object] | None = None,
     ) -> ExtensionControlAuthorityView:
         """Commit the rebinding the resident computed for a trusted catalog update."""
 
@@ -177,20 +179,26 @@ class ExtensionControlAuthorityCatalogMixin:
             raise ExtensionControlAuthorityError("invalid extension control catalog migration")
         layers = layers_from_wire(action.get("layers"))
         retired_targets = tuple(str(target) for target in cast(list[object], action.get("retired_targets") or []))
+        migration = {
+            "previous_revision": previous_revision,
+            "previous_catalog_digest": previous_catalog_digest,
+            "layers": action.get("layers"),
+        }
+        if installed_upgrade is not None:
+            migration["installed_upgrade"] = installed_upgrade
         reply = self._extension_control_authority_op(
             "migrate_plan",
             key=key,
             catalog_digest=catalog_digest,
             now=_now(),
-            catalog_migration={
-                "previous_revision": previous_revision,
-                "previous_catalog_digest": previous_catalog_digest,
-                "layers": action.get("layers"),
-            },
+            catalog_migration=migration,
         )
         plan = _plan_map(reply, "plan")
         if plan.get("outcome") != "migrate":
             raise ExtensionControlAuthorityError("invalid extension control catalog migration")
+        pack_digest = _plan_pack_digest(plan)
+        if pack_digest != (pack_activation.digest if pack_activation is not None else None):
+            raise ExtensionControlAuthorityError("installed command pack migration binding mismatch")
         revision = _plan_int(plan, "revision")
         previous_digest, created_at = str(plan["previous_digest"]), str(plan["created_at"])
         layers_json = str(plan["layers_json"])
@@ -225,8 +233,27 @@ class ExtensionControlAuthorityCatalogMixin:
                     created_at,
                 ),
             )
+            if pack_activation is not None:
+                from .catalog_delivery.activation_journal import reserve
+
+                reserve(
+                    self,
+                    connection,
+                    pack_activation,
+                    control_revision=revision,
+                    snapshot_digest=snapshot_digest,
+                    catalog_digest=catalog_digest,
+                    recorded_at=created_at,
+                )
         self._write_and_verify_anchor(AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.ANCHORED), key=key)
         with self._connect() as connection:
+            if pack_activation is not None:
+                from .catalog_delivery.activation_journal import finish
+
+                pending = connection.execute(
+                    "select * from extension_control_authority_transition where revision=?", (revision,)
+                ).fetchone()
+                finish(self, connection, pending, expected_pack=pack_digest)
             connection.execute(
                 "update extension_control_authority_transition set phase = ? where revision = ?",
                 (AuthorityPhase.ANCHORED.value, revision),

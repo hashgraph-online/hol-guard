@@ -25,7 +25,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
-    authenticated_record,
     layers_from_json,
     layers_to_json,
 )
@@ -37,6 +36,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ControlTargetKind,
     ResolverFailureCode,
 )
+from tests.extension_control_records import authenticated_record
 from tests.test_guard_extension_control_authority import (
     MemorySecretStore,
     _commit_enabled_permission,

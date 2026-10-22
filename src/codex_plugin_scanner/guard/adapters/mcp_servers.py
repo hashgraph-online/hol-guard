@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from pathlib import Path, PurePath
@@ -12,6 +11,7 @@ from typing import cast
 from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
+from ..stable_guard_cli import guard_cli_launcher
 from .base import HarnessContext
 from .managed_mcp_upstream import (
     MAX_PROXY_UNWRAP_LAYERS,
@@ -209,7 +209,7 @@ def proxy_launcher_entry(
         home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
         workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
     )
-    command, launch_args = mcp_proxy_launch(sys.executable, args)
+    command, launch_args = mcp_proxy_launch(guard_cli_launcher(), args)
     entry: dict[str, object] = {
         "command": command,
         "args": launch_args,

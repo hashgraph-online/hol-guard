@@ -3483,6 +3483,10 @@
     }
   }
 
+  .bg-brand-green-text {
+    background-color: var(--brand-green-text);
+  }
+
   .bg-brand-green\/10 {
     background-color: var(--brand-green);
   }

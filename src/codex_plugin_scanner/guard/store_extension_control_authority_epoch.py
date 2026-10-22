@@ -25,6 +25,7 @@ AUTHORITY_INPUT_TABLES: Final[tuple[tuple[str, str | None], ...]] = (
     ("extension_control_catalog_manifest", None),
     ("extension_control_authority_transition", None),
     ("extension_control_authority_proof", None),
+    ("extension_command_pack_activation", None),
     ("guard_events", "{row}.event_name = 'extension_control_authority_catalog_migrated'"),
     ("sync_state", "{row}.state_key in ('managed_controls_active', 'managed_controls_revision')"),
 )
@@ -64,6 +65,13 @@ _TRIGGERS: Final[dict[str, tuple[str, str]]] = {
 _TRIGGERS_DIGEST: Final = hashlib.sha256(
     "\n".join(f"{name}\n{sql}" for name, (_table, sql) in sorted(_TRIGGERS.items())).encode()
 ).hexdigest()
+_LEGACY_TRIGGERS_DIGEST: Final = hashlib.sha256(
+    "\n".join(
+        f"{name}\n{sql}"
+        for name, (table, sql) in sorted(_TRIGGERS.items())
+        if table != "extension_command_pack_activation"
+    ).encode()
+).hexdigest()
 
 
 def ensure_extension_control_authority_epoch(connection: sqlite3.Connection) -> None:
@@ -91,17 +99,40 @@ def ensure_extension_control_authority_epoch(connection: sqlite3.Connection) -> 
 def extension_control_authority_epoch(connection: sqlite3.Connection) -> int | None:
     """The counter, or None unless every trigger is in place exactly as written."""
 
+    packs = (
+        connection.execute(
+            "select 1 from sqlite_master where type='table' and name='extension_command_pack_activation'"
+        ).fetchone()
+        is not None
+    )
+    if not packs:
+        from .store_extension_control_authority_schema import (
+            PACK_ACTIVATION_SCHEMA_VERSION,
+            extension_control_schema_marker_is_compatible,
+        )
+
+        marker = connection.execute(
+            "select version, checksum from extension_control_schema_migration where singleton=1"
+        ).fetchone()
+        if (
+            marker is None
+            or not extension_control_schema_marker_is_compatible(marker[0], marker[1])
+            or marker[0] >= PACK_ACTIVATION_SCHEMA_VERSION
+        ):
+            return None
     rows = connection.execute(
         "select name, sql from sqlite_master where type = 'trigger' "
         "and name glob 'trg_extension_control_epoch_*' order by name"
     ).fetchall()
     found = hashlib.sha256("\n".join(f"{row[0]}\n{row[1]}" for row in rows).encode()).hexdigest()
-    if found != _TRIGGERS_DIGEST:
+    if found != (_TRIGGERS_DIGEST if packs else _LEGACY_TRIGGERS_DIGEST):
         return None
     row = connection.execute("select epoch from extension_control_authority_epoch where singleton = 1").fetchone()
     if row is None or type(row[0]) is not int:
         return None
-    return row[0]
+    # Schema activation must change the memo token even if its migration did
+    # not advance the counter. Never reuse a pre-pack reply for a pack store.
+    return row[0] * 2 + int(packs)
 
 
 __all__ = [

@@ -3,13 +3,81 @@
 //! The bundle ships its delivery data under one fixed directory, one
 //! subdirectory per release tag. A location names the asset to read; this
 //! resolves it against the bundle's source and reads a member out of its
-//! container in one step, so a bulk traversal asks once per object.
+//! container in one step. A bulk traversal can share a process while retaining
+//! those same checks for each object.
 use super::{container, location, request, Outcome};
 use serde_json::{json, Value};
-use std::{fs, path::Path};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 const OBJECT_BYTES: u64 = 65536;
 const PACK_BYTES: u64 = 32 * 1024 * 1024;
+const BATCH_ITEMS: usize = 64;
+const BATCH_BYTES: u64 = BATCH_ITEMS as u64 * OBJECT_BYTES;
+
+/// Read a bounded batch of small installed objects with the same checks as a
+/// single fetch. Validate the whole request before opening any container.
+pub(super) fn batch(input: &Value) -> Outcome {
+    let items = input["items"]
+        .as_array()
+        .filter(|items| !items.is_empty() && items.len() <= BATCH_ITEMS)
+        .ok_or("installed bundle batch bounds invalid")?;
+    let mut total = 0u64;
+    let mut plans = Vec::with_capacity(items.len());
+    for item in items {
+        let plan = location::asset(&json!({
+            "profile": "installed", "target": item["target"], "source": input["source"],
+        }))?;
+        let length = item["length"]
+            .as_u64()
+            .filter(|length| (1..=OBJECT_BYTES).contains(length))
+            .ok_or("installed bundle batch bounds invalid")?;
+        if plan["kind"] != "object" {
+            return Err("installed bundle batch requires objects".into());
+        }
+        total = total
+            .checked_add(length)
+            .filter(|total| *total <= BATCH_BYTES)
+            .ok_or("installed bundle batch bounds invalid")?;
+        plans.push((plan, length));
+    }
+    let mut groups = BTreeMap::<(PathBuf, String), Vec<(usize, String, u64)>>::new();
+    let mut replies = vec![Value::Null; items.len()];
+    for (index, (plan, length)) in plans.into_iter().enumerate() {
+        if plan["bound"].is_null() {
+            replies[index] = plan;
+            continue;
+        }
+        let path = path(&input["root"], &plan)?;
+        groups
+            .entry((path, plan["asset"].as_str().unwrap_or_default().to_owned()))
+            .or_default()
+            .push((
+                index,
+                plan["name"].as_str().unwrap_or_default().to_owned(),
+                length,
+            ));
+    }
+    for ((path, asset), members) in groups {
+        check_tag(&path)?;
+        let verified = container::members(
+            &path,
+            &asset,
+            members
+                .iter()
+                .map(|(_, name, length)| (name.as_str(), *length)),
+        )?;
+        for ((index, _, _), reply) in members.into_iter().zip(verified) {
+            replies[index] = reply;
+        }
+    }
+    let mut reply = json!({});
+    reply["items"] = Value::Array(replies);
+    Ok(reply)
+}
 
 /// Validate a location of the installed bundle and, for a container member,
 /// return its verified bytes. A whole asset is only resolved: the caller holds
@@ -37,19 +105,29 @@ pub(super) fn fetch(input: &Value) -> Outcome {
     if plan["bound"].is_null() {
         return Ok(plan);
     }
-    let root = input["root"].as_str().ok_or_else(request)?;
-    let text = |key: &str| plan[key].as_str().unwrap_or_default();
-    let directory = Path::new(root).join(text("tag"));
-    if fs::symlink_metadata(&directory).is_ok_and(|found| found.file_type().is_symlink()) {
-        return Err("delivery container unreadable".into());
-    }
-    let path = directory.join(text("asset"));
+    let path = path(&input["root"], &plan)?;
+    check_tag(&path)?;
     container::member(&json!({
         "path": path.to_string_lossy(),
-        "asset": text("asset"),
-        "name": text("name"),
+        "asset": plan["asset"],
+        "name": plan["name"],
         "length": length,
     }))
+}
+
+fn path(root: &Value, plan: &Value) -> Result<PathBuf, String> {
+    let root = root.as_str().ok_or_else(request)?;
+    let text = |key: &str| plan[key].as_str().unwrap_or_default();
+    let directory = Path::new(root).join(text("tag"));
+    Ok(directory.join(text("asset")))
+}
+
+fn check_tag(path: &Path) -> Result<(), String> {
+    let directory = path.parent().ok_or_else(request)?;
+    if fs::symlink_metadata(directory).is_ok_and(|found| found.file_type().is_symlink()) {
+        return Err("delivery container unreadable".into());
+    }
+    Ok(())
 }
 
 #[cfg(test)]

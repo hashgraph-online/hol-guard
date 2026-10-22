@@ -81,7 +81,8 @@ use approval_v4_authority::ApprovalV4Authority;
 pub(crate) use policy_store_approval::ApprovalPolicyFence;
 use policy_store_authority::*;
 use policy_store_persistence::*;
-use policy_store_validation::{read_verifier_key, validate_private_directory};
+pub(crate) use policy_store_validation::read_verifier_key;
+use policy_store_validation::validate_private_directory;
 
 #[cfg(test)]
 #[path = "policy_store_scope_tests.rs"]

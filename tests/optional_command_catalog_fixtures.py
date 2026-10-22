@@ -152,8 +152,10 @@ def optional_command_catalog(request, monkeypatch, tmp_path):
         global_lockdown=False,
         managed_global_lockdown=False,
         health=AuthorityHealth.PROTECTED,
+        never_enrolled=False,
     ):
         assert health is AuthorityHealth.PROTECTED
+        assert not never_enrolled
         if not delivery:
             delivery.append(request.getfixturevalue("mcp_policy_delivery"))
             monkeypatch.setattr(mcp_policy_catalog_fixture, "_DELIVERY", delivery)

@@ -36,7 +36,7 @@ def committed(delivery, selected):
     # Preserve an actual legacy remote v1 record to qualify schema5 reading.
     import json
 
-    from codex_plugin_scanner.guard.runtime.extension_control_authority import authenticated_record
+    from tests.extension_control_records import authenticated_record
 
     legacy = json.loads(sealed[0])
     legacy["schema"] = activation_record.SCHEMA

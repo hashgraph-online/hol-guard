@@ -1,6 +1,5 @@
 use super::*;
 
-#[cfg(unix)]
 #[test]
 fn a_large_silent_reply_keeps_its_readable_wait_notification() {
     let home = store_home("review-queue-large-notification", SILENT_VECTORS);

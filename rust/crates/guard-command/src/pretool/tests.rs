@@ -566,6 +566,12 @@ fn reviews_only_materially_risky_variants_of_safe_commands() {
     let inert_pattern = evaluate_pre_tool(&request("rg -e '.env.local' src")).unwrap();
     assert_eq!(inert_pattern.decision, "allow");
     assert_eq!(inert_pattern.minimum_action, "allow");
+    // An ordinary project setting in front of a proven read is a value that
+    // read takes for itself. Every name that could steer lookup, loading,
+    // configuration, a home, a credential, the trust anchor or an endpoint
+    // keeps its review, and the cases below still cover those families.
+    let ordinary_setting = evaluate_pre_tool(&request("FOO=bar git status --short")).unwrap();
+    assert_eq!(ordinary_setting.decision, "allow");
     for command in [
             "rg --pre /opt/guard-test/payload authority src",
             "rg --hostname-bin=/opt/guard-test/payload --hyperlink-format='file://{host}{path}' TOKEN src",
@@ -608,7 +614,6 @@ fn reviews_only_materially_risky_variants_of_safe_commands() {
             "rg --hidd TOKEN .",
             "rg --globx '*.ts' TOKEN .",
             "/opt/guard-test/rg authority src",
-            "FOO=bar git status --short",
             "GIT_EXTERNAL_DIFF=/opt/guard-test/payload git diff --ext-diff README.md",
             "git diff --output=/opt/guard-test/diff README.md",
             "git log -1 --output=/opt/guard-test/log",

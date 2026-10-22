@@ -105,6 +105,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::CommandModel(request) => {
                 crate::oneshot::evaluate_command_model_request(&request)
             }
+            ResidentOperationV1::PreToolUse(request) if request.extension_evidence => {
+                crate::pre_tool_extension_evidence_op::evaluate_with_store(&request, policy_store)
+            }
             ResidentOperationV1::PreToolUse(request) => {
                 crate::oneshot::evaluate_pre_tool_request(&request)
             }
@@ -474,6 +477,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     &request,
                 )
             }
+            ResidentOperationV1::CommandPackRecord(request) => {
+                crate::command_pack_record_op::evaluate_command_pack_record_request(&request)
+            }
             ResidentOperationV1::PolicyIntegrityRows(request) => {
                 crate::policy_integrity_rows_op::evaluate_policy_integrity_rows_request(&request)
             }
@@ -745,6 +751,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::CursorObserverProof(request) => Some(&request.guard_home),
         ResidentOperationV1::HookAuthorityState(request) => Some(&request.guard_home),
         ResidentOperationV1::ExtensionControlAuthority(request) => Some(&request.guard_home),
+        ResidentOperationV1::CommandPackRecord(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageEvaluationCompose(request) => Some(&request.guard_home),
         ResidentOperationV1::VerifiedNpm(request) => Some(&request.guard_home),
@@ -817,6 +824,7 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::ContributedMcpDecide(request) => Some(&request.store_path),
         ResidentOperationV1::HookAuthorityState(request) => Some(&request.store_path),
         ResidentOperationV1::ExtensionControlAuthority(request) => Some(&request.store_path),
+        ResidentOperationV1::CommandPackRecord(request) => Some(&request.store_path),
         ResidentOperationV1::ProtectRequest(request) => request.store_path.as_deref(),
         ResidentOperationV1::CodexRequestResume(request) => Some(&request.store_path),
         ResidentOperationV1::PolicyIntegrityRows(request) => request

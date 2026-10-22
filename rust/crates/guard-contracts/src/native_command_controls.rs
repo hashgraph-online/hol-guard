@@ -12,6 +12,16 @@ pub const NATIVE_COMMAND_CONTROL_FENCE_CAPABILITY: &str = "native-command-contro
 /// Fixed public failure identities. These contain no paths, keys, revisions,
 /// command text or raw OS errors; unknown codes remain redacted by transport.
 pub const NATIVE_COMMAND_CONTROL_ERROR_CODES: &[&str] = &[
+    "native_active_pack_security_binding_mismatch",
+    "native_active_pack_security_invalid",
+    "native_active_pack_security_program_mismatch",
+    "native_command_compatibility_context_unsupported",
+    "native_command_compatibility_deadline",
+    "native_command_compatibility_inventory_mismatch",
+    "native_command_compatibility_limit",
+    "native_command_compatibility_model_unsupported",
+    "native_command_compatibility_owner_invalid",
+    "native_command_compatibility_permission_invalid",
     "native_command_control_authority_downgrade",
     "native_command_control_authority_epoch_reused",
     "native_command_control_authority_invalid",
@@ -39,7 +49,47 @@ pub const NATIVE_COMMAND_CONTROL_ERROR_CODES: &[&str] = &[
     "native_command_control_revision_reused",
     "native_command_control_target_invalid",
     "native_command_control_target_unknown",
+    "native_command_encoding_failed",
+    "native_command_extension_contract_invalid",
+    "native_command_extension_dependency_unknown",
+    "native_command_extension_duplicate",
+    "native_command_matcher_digest_mismatch",
+    "native_command_node_missing",
+    "native_command_pack_budget_exceeded",
+    "native_command_pack_cache_identity_invalid",
+    "native_command_pack_cache_invalid",
+    "native_command_pack_cache_noncanonical",
+    "native_command_pack_cache_read_failed",
+    "native_command_pack_index_invalid",
+    "native_command_pack_inventory_invalid",
+    "native_command_pack_link_invalid",
+    "native_command_pack_rule_owner_invalid",
+    "native_command_pack_selection_invalid",
+    "native_command_pack_selection_missing",
+    "native_command_pack_transition_mismatch",
+    "native_command_permission_contract_invalid",
+    "native_command_permission_dependency_invalid",
+    "native_command_permission_dependency_unknown",
+    "native_command_permission_duplicate",
     "native_command_program_binding_mismatch",
+    "native_command_program_bounds_invalid",
+    "native_command_program_bytes_exceeded",
+    "native_command_program_contract_invalid",
+    "native_command_program_digest_mismatch",
+    "native_command_program_digest_missing",
+    "native_command_program_json_invalid",
+    "native_command_program_noncanonical",
+    "native_command_program_shape_invalid",
+    "native_command_program_version_unsupported",
+    "native_command_required_forbidden_flag_conflict",
+    "native_command_required_option_duplicated",
+    "native_command_required_option_values_empty",
+    "native_command_required_pack_missing",
+    "native_command_rule_candidate_invalid",
+    "native_command_rule_coverage_invalid",
+    "native_command_rule_duplicate",
+    "native_command_rule_owner_missing",
+    "native_command_variant_coverage_invalid",
     "native_policy_snapshot_command_authority_invalid",
     "native_policy_snapshot_command_authority_not_private",
     "native_policy_snapshot_command_authority_parent_missing",
@@ -90,6 +140,12 @@ pub struct NativeCommandControlAuthorityV1 {
 }
 
 impl NativeCommandControlAuthorityV1 {
+    /// The authority a device starts with: the first epoch, the all-zero key
+    /// and no recovery pending.
+    pub fn is_initial(&self) -> bool {
+        self.epoch == 1 && self.authority_key_id == "0".repeat(64) && self.recovery.is_none()
+    }
+
     pub fn validate(&self) -> Result<(), &'static str> {
         if self.epoch == 0 || self.mutation_revision == 0 || !valid_digest(&self.authority_key_id) {
             return Err("native_command_control_authority_invalid");
@@ -234,6 +290,29 @@ fn valid_target(value: &str) -> bool {
 }
 
 impl NativeCommandControlBindingV1 {
+    /// The binding a device has before it ever enrolls: unenrolled, nothing
+    /// saved, no layers, and the initial authority with no recovery pending.
+    /// Enforcement keeps packaged protection for it instead of a global
+    /// block, and the advisory allow hint judges it as it will be once
+    /// enrolled. Any other unenrolled binding is a lost authority.
+    pub fn is_initial_defaults(&self) -> bool {
+        self.has_first_install_shape()
+            && self
+                .authority
+                .as_ref()
+                .is_some_and(NativeCommandControlAuthorityV1::is_initial)
+    }
+
+    /// Unenrolled with nothing saved and no layers. It names a first install
+    /// only together with the initial authority, see
+    /// [`Self::is_initial_defaults`].
+    pub fn has_first_install_shape(&self) -> bool {
+        self.health == "unenrolled"
+            && self.revision == 0
+            && self.managed_revision == 0
+            && self.layers.is_empty()
+    }
+
     pub fn validate(&self) -> Result<(), &'static str> {
         if self.schema != NATIVE_COMMAND_CONTROL_BINDING_SCHEMA
             || [

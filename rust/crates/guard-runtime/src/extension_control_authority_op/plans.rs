@@ -12,8 +12,8 @@ use serde_json::{json, Map, Value};
 use super::layers::{layers_from_json, validate_serialized_layers};
 use super::records::{
     authenticated_record, degraded, field, fields_match, private_hash, query_row, row_int,
-    row_py_int, row_str, row_text, tampered, verify_record, Anchor, Fault, Phase, Res, Row,
-    SNAPSHOT_PURPOSE, TRANSITION_PURPOSE,
+    row_py_int, row_str, row_text, snapshot_pack_binding, tampered, verify_record, Anchor, Fault,
+    Phase, Res, Row, SNAPSHOT_PURPOSE, TRANSITION_PURPOSE,
 };
 use super::{Ctx, View, PROTECTED, RECOVERY_REQUIRED};
 use crate::extension_control_proof::{mutation_digest, Mutation};
@@ -95,7 +95,7 @@ pub(super) fn sealed(payload: Value, key: &[u8], purpose: &str) -> Res<Value> {
     Ok(json!({ "json": record, "digest": digest, "mac": mac }))
 }
 
-fn with_pack(mut payload: Value, pack_record_digest: Option<&str>) -> Value {
+pub(super) fn with_pack(mut payload: Value, pack_record_digest: Option<&str>) -> Value {
     if let (Some(digest), Value::Object(fields)) = (pack_record_digest, &mut payload) {
         fields.insert("command_pack_record_digest".to_owned(), json!(digest));
     }
@@ -420,14 +420,13 @@ impl Ctx<'_> {
         )? {
             return Err(tampered("extension control authority proof replay"));
         }
-        let previous_digest = row_text(
-            &self
-                .snapshot_row()?
-                .ok_or_else(|| tampered("extension control authority snapshot missing"))?,
-            "snapshot_digest",
-        )?;
+        let source = self
+            .snapshot_row()?
+            .ok_or_else(|| tampered("extension control authority snapshot missing"))?;
+        let previous_digest = row_text(&source, "snapshot_digest")?;
         let revision = current.revision + 1;
         let pack = commit.pack_record_digest.as_deref();
+        let retained = snapshot_pack_binding(&source, key)?;
         let snapshot = sealed(
             with_pack(
                 json!({
@@ -437,7 +436,7 @@ impl Ctx<'_> {
                     "previous_digest": previous_digest,
                     "committed_at": created_at,
                 }),
-                pack,
+                pack.or(retained.as_deref()),
             ),
             key,
             SNAPSHOT_PURPOSE,

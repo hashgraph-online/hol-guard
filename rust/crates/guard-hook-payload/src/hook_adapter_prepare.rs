@@ -196,6 +196,31 @@ fn unwrap_dispatcher_tool(
     (tool_name, tool_input)
 }
 
+/// Record `canonical` under `tool_name` and under each `toolName`, `toolname`
+/// or `tool` spelling that names the same tool as `source` (or `canonical`), so
+/// the generic extractor sees one name, not an ambiguous payload. A spelling
+/// naming another tool is left as sent for the extractor's ambiguity check.
+fn set_canonical_tool_name(
+    normalized: &mut OMap,
+    table: &[(&str, &str)],
+    source: Option<&OValue>,
+    canonical: &str,
+) {
+    let source_tool = canonical_tool_name(table, source);
+    normalized.insert("tool_name", OValue::str(canonical));
+    for key in ["toolName", "toolname", "tool"] {
+        let Some(value @ OValue::Str(_)) = normalized.get(key) else {
+            continue;
+        };
+        let Some(named) = canonical_tool_name(table, Some(value)) else {
+            continue;
+        };
+        if named == canonical || source_tool.as_deref() == Some(named.as_str()) {
+            normalized.insert(key, OValue::str(canonical));
+        }
+    }
+}
+
 fn apply_qualified_mcp_tool(normalized: &mut OMap, tool_name: String) -> String {
     let lowered = py_lower(&tool_name);
     if !tool_name.contains("__") || GROK_TOOL_ALIASES.iter().any(|(alias, _)| *alias == lowered) {
@@ -234,7 +259,12 @@ fn prepare_grok(payload: &OMap) -> OMap {
         let remapped = canonical_tool_name(GROK_TOOL_ALIASES, Some(&OValue::Str(current.clone())))
             .unwrap_or(current);
         let qualified = apply_qualified_mcp_tool(&mut normalized, remapped);
-        normalized.insert("tool_name", OValue::str(qualified.as_str()));
+        set_canonical_tool_name(
+            &mut normalized,
+            GROK_TOOL_ALIASES,
+            tool_name.as_ref(),
+            &qualified,
+        );
         canonical_tool = Some(qualified);
     }
     let mut effective_input = tool_input.clone();
@@ -319,7 +349,7 @@ fn prepare_claude_shaped(payload: &OMap, events: &[(&str, &str)], tools: &[(&str
     }
     let tool_name = first_present(&normalized, &["tool_name", "toolName"]).cloned();
     if let Some(canonical) = canonical_tool_name(tools, tool_name.as_ref()) {
-        normalized.insert("tool_name", OValue::Str(canonical));
+        set_canonical_tool_name(&mut normalized, tools, tool_name.as_ref(), &canonical);
     }
     if let Some(tool_input) =
         first_present(&normalized, &["tool_input", "toolInput", "arguments"]).cloned()
@@ -393,10 +423,16 @@ fn apply_devin_mcp_call(normalized: &mut OMap) {
     call.insert("server_name", OValue::str(server.as_str()));
     call.insert("tool_name", OValue::str(tool.as_str()));
     normalized.insert("devin_mcp_call", OValue::Map(call));
-    normalized.insert(
-        "tool_name",
-        OValue::Str(format!("mcp__{}__{}", py_strip(server), py_strip(tool))),
-    );
+    let qualified = format!("mcp__{}__{}", py_strip(server), py_strip(tool));
+    // Spellings that named the dispatcher now name the call it carried.
+    for key in ["toolName", "toolname", "tool"] {
+        if let Some(OValue::Str(name)) = normalized.get(key) {
+            if py_lower(py_strip(name)) == "mcp_call_tool" {
+                normalized.insert(key, OValue::str(qualified.as_str()));
+            }
+        }
+    }
+    normalized.insert("tool_name", OValue::Str(qualified));
     let arguments = match tool_input.get("arguments") {
         Some(OValue::Map(map)) => map.clone(),
         _ => OMap::new(),
@@ -455,3 +491,7 @@ fn prepare_kimi(payload: &OMap) -> OMap {
     normalized.insert("prompt", prompt);
     normalized
 }
+
+#[cfg(test)]
+#[path = "hook_adapter_prepare_tests.rs"]
+mod tests;

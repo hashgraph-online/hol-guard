@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,6 +12,10 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard.daemon.extension_control_api import (
+    EFFECTIVE_LOCK_WAIT_SECONDS,
+    ExtensionControlApiService,
+)
 from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHttpServer
 from codex_plugin_scanner.guard.native_command_control_authority_io import (
     hold_command_control_authority_lock,
@@ -136,7 +141,7 @@ def test_busy_refresh_retains_the_installed_authority_even_during_migration(
     )
     attempts = []
 
-    def busy(registry, *, read_only=False):
+    def busy(registry, *, read_only=False, **_kwargs):
         attempts.append((registry.catalog_digest, read_only))
         if mutation_required and read_only:
             raise NativeCommandControlMutationRequiredError()
@@ -192,3 +197,35 @@ def test_authenticated_startup_retains_its_floor_under_a_live_native_reader(
                 result.result(timeout=5)
     assert lifecycle_store.read(store) == floor
     assert backend.get_secret(store._build_scoped_secret_ref(lifecycle_store.STAMP)) == stamp
+
+
+def test_effective_serves_the_installed_snapshot_while_a_writer_holds_the_lease(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    view = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+    service = ExtensionControlApiService(
+        store=store, registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY, runtime=ExtensionControlRuntime(view)
+    )
+    expected = service.effective(reread=False)
+    held = threading.Event()
+    release = threading.Event()
+
+    def writer() -> None:
+        with hold_command_control_authority_lock(store.guard_home):
+            held.set()
+            assert release.wait(timeout=30)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        holding = executor.submit(writer)
+        assert held.wait(timeout=5)
+        try:
+            started = time.monotonic()
+            served = service.effective()
+            elapsed = time.monotonic() - started
+        finally:
+            release.set()
+        holding.result(timeout=5)
+
+    # The dashboard's poll returns what the runtime holds instead of waiting
+    # out the writer's whole lease.
+    assert served == expected
+    assert elapsed < EFFECTIVE_LOCK_WAIT_SECONDS + 2.0

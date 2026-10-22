@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HiMiniArrowTopRightOnSquare, HiMiniExclamationTriangle, HiMiniSparkles } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
+import { ExtensionAuthoritySetup, useExtensionAuthorityWatch } from "./approval-extension-authority-setup";
 import { approvalExtensionRecommendationCopy } from "./approval-extension-recommendation";
+import type { GuardApprovalExtensionRecommendation } from "./approval-extension-recommendation-types";
 import {
   approvalGateIsLocked,
   approvalGateLockRemainingSeconds,
@@ -33,7 +35,9 @@ export function ApprovalExtensionRecommendationCard(props: {
   /** Lets the parent pause its own decision shortcuts while this dialog is open or saving. */
   onDialogActiveChange?: (active: boolean) => void;
 }) {
-  const recommendation = props.item.extension_recommendation;
+  // Set once the device finishes enrolling, so the card can offer Always allow without a reload.
+  const [liveRecommendation, setLiveRecommendation] = useState<GuardApprovalExtensionRecommendation | null>(null);
+  const recommendation = liveRecommendation ?? props.item.extension_recommendation;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   // Set synchronously so a second submit before the re-render cannot start another save.
@@ -45,8 +49,21 @@ export function ApprovalExtensionRecommendationCard(props: {
     [recommendation],
   );
   const primary = recommendation?.permissions[0] ?? null;
-  const { item, allowScope, approvalGate, onResolve, onApproved, onDialogActiveChange, persistExactAction = false } = props;
+  const { item, allowScope, onResolve, onApproved, onDialogActiveChange, persistExactAction = false } = props;
   const resolutionAvailable = !retryCannotReuseApproval(item) || persistExactAction;
+  const authorityUnavailable = recommendation?.status === "authority_unavailable";
+  const handleAvailable = useCallback((next: GuardApprovalExtensionRecommendation) => {
+    setLiveRecommendation(next);
+  }, []);
+  const watch = useExtensionAuthorityWatch({
+    active: authorityUnavailable,
+    requestId: item.request_id,
+    approvalGate: props.approvalGate,
+    onAvailable: handleAvailable,
+  });
+  // The watch reads settings again while setup is open, so a password set in another tab counts here.
+  const approvalGate = watch.approvalGate;
+  const justEnrolled = liveRecommendation !== null;
   const dialogActive = confirmOpen || busy;
   useEffect(() => {
     onDialogActiveChange?.(dialogActive);
@@ -110,7 +127,6 @@ export function ApprovalExtensionRecommendationCard(props: {
   if (!recommendation || !copy || !primary) return null;
 
   const caution = recommendation.caution;
-  const authorityUnavailable = recommendation.status === "authority_unavailable";
   const gateReady = approvalGateProofReady(approvalGate);
   const gateLocked = approvalGateIsLocked(approvalGate);
   const tone = caution
@@ -144,9 +160,10 @@ export function ApprovalExtensionRecommendationCard(props: {
               ))}
             </ul>
           )}
-          {authorityUnavailable && (
-            <p className="mt-2 text-sm text-brand-dark/80">
-              Protection settings need attention before Guard can change them from here.
+          {authorityUnavailable && <ExtensionAuthoritySetup watch={watch} commandText={copy.commandText} />}
+          {justEnrolled && savedMessage === null && (
+            <p className="mt-2 text-sm font-medium text-brand-green-text" role="status">
+              This device is set up. You can now approve and always allow from here.
             </p>
           )}
           {!resolutionAvailable && (

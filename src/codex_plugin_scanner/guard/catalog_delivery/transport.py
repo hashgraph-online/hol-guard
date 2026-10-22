@@ -22,71 +22,70 @@ from codex_plugin_scanner.guard.mdm.network import managed_urlopen
 
 from .authority import MAX_PROVENANCE_BYTES, decode, verify_distribution
 from .containers import member
-from .object_native import call, member_at
-from .selection import BRANCH, FILE, SHA, root_tag, validate
+from .object_native import call, member_at, sessioned
+from .selection import BRANCH, FILE, root_tag, validate
+from .transport_native import decide
 
 REPOSITORY = "hashgraph-online/hol-guard"
 ROOT_ASSET = "extension-distribution.v2.json"
 PROVENANCE_ASSET = "extension-distribution.intoto.jsonl"
-HOSTS = frozenset(
-    {
-        "api.github.com",
-        "github.com",
-        "raw.githubusercontent.com",
-        "release-assets.githubusercontent.com",
-        "objects.githubusercontent.com",
-    }
-)
 
 
 class MissingReleaseError(ValueError):
     pass
 
 
-def _check_url(url):
-    parsed = urllib.parse.urlsplit(url)
-    if (
-        parsed.scheme != "https"
-        or parsed.hostname not in HOSTS
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.port not in {None, 443}
-    ):
-        raise ValueError("release transport destination is not permitted")
+def _joined(url, location):
+    # The runtime judges the joined URL; a Location that cannot be joined names none.
+    if not location:
+        return None
+    try:
+        return urllib.parse.urljoin(url, location)
+    except ValueError:
+        return None
 
 
-# A publication that momentarily refuses the request fails an operator's save
-# outright, and the operator has nothing to do about it but try again later.
-# Retry the refusals that are transient by definition: a rate limit, a
-# server-side error, and a connection that never completed. Every byte is still
-# authenticated afterwards, so a retry can admit nothing a first attempt could
-# not, and no other failure is repeated.
-_RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
-_RETRY_DELAYS = (0.5, 2.0)
+def _after_refusal(error, url, hop):
+    """Close a refusal the runtime classified and return the redirect it asked to follow."""
+    headers = error.headers
+    location = None if headers is None else headers.get("Location")
+    try:
+        verdict = decide("refusal", status=error.code, hop=hop, location=location, next=_joined(url, location))
+    except ValueError:
+        error.close()
+        raise
+    if "missing" in verdict:
+        error.close()
+        raise MissingReleaseError(verdict["missing"]) from error
+    if "redirect" in verdict:
+        error.close()
+        return verdict["redirect"]
+    # Any other refusal is the caller's to see; its connection must not outlive the attempt.
+    error.close()
+    raise error
 
 
-def _retriable(error):
-    if isinstance(error, urllib.error.HTTPError):
-        return error.code in _RETRY_STATUS
-    return isinstance(error, (urllib.error.URLError, ConnectionError, TimeoutError))
-
-
+@sessioned
 def download(url, maximum):
-    for delay in _RETRY_DELAYS:
+    attempt = 0
+    while True:
         try:
             return _download(url, maximum)
         except OSError as error:
-            if not _retriable(error):
+            status = error.code if isinstance(error, urllib.error.HTTPError) else None
+            network = status is None and isinstance(error, (urllib.error.URLError, ConnectionError, TimeoutError))
+            delay = decide("retry", status=status, network=network, attempt=attempt)["delay"]
+            if delay is None:
                 raise
         time.sleep(delay)
-    return _download(url, maximum)
+        attempt += 1
 
 
 def _download(url, maximum):
-    if type(maximum) is not int or not 0 < maximum <= 32 * 1024 * 1024:
-        raise ValueError("release transport byte limit invalid")
-    for redirects in range(5):
-        _check_url(url)
+    # The runtime ends a redirect chain: it refuses the hop that exceeds its budget.
+    decide("request", url=url, maximum=maximum)
+    hop = 0
+    while True:
         request = urllib.request.Request(
             url, headers={"User-Agent": "HOL-Guard-extension-delivery", "Accept-Encoding": "identity"}
         )
@@ -94,29 +93,17 @@ def _download(url, maximum):
             response = managed_urlopen(request, timeout=20, allow_redirects=False)
             break
         except urllib.error.HTTPError as error:
-            if error.code == 404:
-                error.close()
-                raise MissingReleaseError("extension release is unavailable") from error
-            if error.code not in {301, 302, 303, 307, 308}:
-                raise
-            target = error.headers.get("Location")
-            error.close()
-            if not target or redirects == 4:
-                raise ValueError("release transport redirect limit or destination invalid") from error
-            url = urllib.parse.urljoin(url, target)
-    else:
-        raise ValueError("release transport redirect limit exceeded")
+            url = _after_refusal(error, url, hop)
+            hop += 1
     with response:
-        if response.headers.get("Content-Encoding", "identity") != "identity":
-            raise ValueError("compressed release transport is not permitted")
-        declared = response.headers.get("Content-Length")
-        if declared is not None and (
-            not declared.isascii() or not declared.isdecimal() or not 0 < int(declared) <= maximum
-        ):
-            raise ValueError("release transport content length exceeds byte limit")
+        declared = decide(
+            "headers",
+            content_encoding=response.headers.get("Content-Encoding"),
+            content_length=response.headers.get("Content-Length"),
+            maximum=maximum,
+        )["declared"]
         data = response.read(maximum + 1)
-        if not 0 < len(data) <= maximum or (declared is not None and len(data) != int(declared)):
-            raise ValueError("release transport body length invalid")
+        decide("body", length=len(data), declared=declared, maximum=maximum)
         return data
 
 
@@ -124,46 +111,21 @@ def selected():
     return validate(decode(download(f"https://raw.githubusercontent.com/{REPOSITORY}/{BRANCH}/{FILE}", 4096)))
 
 
-def require_source_ancestor(previous, candidate):
-    """Validate publication lineage outside activation locks and hook decisions."""
-    if any(not isinstance(value, str) or SHA.fullmatch(value) is None for value in (previous, candidate)):
-        raise ValueError("publication ancestry requires full source identities")
-    if previous == candidate:
-        return
-    # Page two omits the potentially large changed-file list. The comparison's
-    # status and merge base remain present even when that commit page is empty.
-    url = f"https://api.github.com/repos/{REPOSITORY}/compare/{previous}...{candidate}?per_page=1&page=2"
-    value = decode(download(url, 64 * 1024))
-    if (
-        not isinstance(value, dict)
-        or value.get("status") != "ahead"
-        or not isinstance(value.get("base_commit"), dict)
-        or value["base_commit"].get("sha") != previous
-        or not isinstance(value.get("merge_base_commit"), dict)
-        or value["merge_base_commit"].get("sha") != previous
-        or type(value.get("behind_by")) is not int
-        or value["behind_by"] != 0
-        or type(value.get("ahead_by")) is not int
-        or value["ahead_by"] <= 0
-    ):
-        raise ValueError("publication source is not a descendant of the retained floor")
-
-
 def root_assets(source, publication):
     base = f"https://github.com/{REPOSITORY}/releases/download/{root_tag(source, publication)}/"
     return download(base + ROOT_ASSET, 65536), download(base + PROVENANCE_ASSET, MAX_PROVENANCE_BYTES)
 
 
+@sessioned
 def fetch_root(*, now, selection=None, offline=False, verified_io=None):
     selection = selected() if selection is None else validate(selection)
     data, provenance = root_assets(selection["source_sha"], selection["publication_id"])
-    if hashlib.sha256(data).hexdigest() != selection["root_sha256"]:
-        raise ValueError("release root differs from advisory selector")
+    # The digest is bound before verification, so a substituted root never reaches it.
+    decide("bind", selector=selection, root_sha256=hashlib.sha256(data).hexdigest())
     result = verify_distribution(
         data, provenance, expected_source_sha=selection["source_sha"], now=now, offline=offline
     )
-    if result.manifest()["publication_id"] != selection["publication_id"]:
-        raise ValueError("release root publication identity differs from selector")
+    decide("bind", selector=selection, publication_id=result.manifest()["publication_id"])
     if verified_io is not None:
         verified_io(result, provenance)
     return result

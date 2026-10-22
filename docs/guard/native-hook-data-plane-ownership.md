@@ -220,6 +220,24 @@ cannot answer stops the apply before it commits. Python keeps the cache-lease
 and candidate LRU bookkeeping, the target-metadata overlay and its transfer IO,
 and the shape checks on what the resident returns.
 
+The public release transport used by update and activation commands is decided
+in the resident (`pack-lifecycle` kind `release-transport`, in
+`pack_lifecycle/release_transport.rs`). It owns the host allow-list and the
+https-only, default-port rule, the 32 MiB byte bound, the redirect budget of one
+request and four redirects, what an HTTP refusal means (missing release,
+redirect or answer to raise), which response headers may be read, whether the
+body matches the length it declared, the retry schedule for transient failures,
+and the advisory selector contract with the checks that tie a fetched root back
+to it. A URL is held to printable ASCII and its authority is compared whole
+against the allow-list, so no URL parser reading the same string can find another
+host in it; Python resolves a redirect `Location` and the resident judges the
+joined URL. A request the resident cannot judge fails the download, with no
+Python fallback. Python keeps opening the connection through the managed egress
+transport, reading the bytes, sleeping between attempts and the cache and
+container IO that surrounds a download. The dead source-ancestry fetch is
+removed; the same descendant rule runs in `transition` and is covered by its
+tests.
+
 ## Harness route inventory
 
 The v2 contract maps all harnesses in `HARNESS_CONTRACTS`, including harnesses

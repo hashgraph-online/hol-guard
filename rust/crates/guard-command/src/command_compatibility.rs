@@ -14,7 +14,7 @@ mod catalog;
 #[path = "command_compatibility/domains.rs"]
 mod domains;
 #[path = "command_compatibility/environment.rs"]
-mod environment;
+pub(crate) mod environment;
 #[path = "command_compatibility/git.rs"]
 mod git;
 #[path = "command_compatibility/github.rs"]
@@ -205,18 +205,18 @@ fn assignment_prefix_is_unsupported(segment: &CommandSegmentV1) -> bool {
 /// since an expansion such as `${GIT_DIR:=x}` sets another variable, and every
 /// name is inert or ordinary. A variable the session already exported passes
 /// its new value to later commands, so a name that steers the shell, lookup,
-/// loading, configuration or credentials keeps the evaluation failure.
-fn sets_ordinary_variables(segment: &CommandSegmentV1) -> bool {
+/// loading, configuration, credentials, the trust anchor or the endpoint of
+/// a later fetch keeps the evaluation failure.
+pub(crate) fn sets_ordinary_variables(segment: &CommandSegmentV1) -> bool {
     !segment.environment_names.is_empty()
         && segment.tokens.len() == segment.environment_names.len()
         && segment.arguments.is_empty()
         && segment.wrapper_chain.is_empty()
         && !segment.text.contains(['$', '`'])
-        && segment.environment_names.iter().all(|name| {
-            environment::inert_environment_name(name)
-                || (crate::pretool::generic::chain_literals::ordinary_name(name)
-                    && !environment::code_or_redirect_environment_name(name))
-        })
+        && segment
+            .environment_names
+            .iter()
+            .all(|name| environment::ordinary_setting_name(name))
 }
 
 pub fn compatibility_observations(

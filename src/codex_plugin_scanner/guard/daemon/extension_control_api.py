@@ -84,6 +84,7 @@ if TYPE_CHECKING:
     from .extension_control_targets import TargetMetadata
 
 _LOGGER = logging.getLogger(__name__)
+EFFECTIVE_LOCK_WAIT_SECONDS = 0.5
 _EXTENSION_CONTROL_API_SCHEMA = "guard.daemon.extension-controls.v1"
 _MAX_PENDING_PROOFS = 128
 _MAX_APPLIED_MUTATIONS = 128
@@ -203,7 +204,15 @@ class ExtensionControlApiService:
         # itself. Re-reading durable authority there would take the authority
         # lease a second time for an answer the caller already installed, and
         # that second wait is the one a dashboard repair pays for.
-        snapshot = self._runtime.current() if not reread else self._live_snapshot(read_only=True)
+        #
+        # The dashboard polls this while the page is open, so it waits for a
+        # busy authority lease only briefly and otherwise serves the snapshot
+        # the runtime holds; the next poll reads the authority again.
+        snapshot = (
+            self._runtime.current()
+            if not reread
+            else self._live_snapshot(read_only=True, lock_timeout_seconds=EFFECTIVE_LOCK_WAIT_SECONDS)
+        )
         return self._effective_payload(snapshot)
 
     def _effective_payload(self, snapshot: ExtensionControlRuntimeSnapshot) -> dict[str, object]:
@@ -213,7 +222,13 @@ class ExtensionControlApiService:
         except NativeExtensionControlError as error:
             raise ExtensionControlApiError(503, "native_runtime_unavailable") from error
 
-    def _live_snapshot(self, *, read_only: bool = False, apply_locked: bool = False) -> ExtensionControlRuntimeSnapshot:
+    def _live_snapshot(
+        self,
+        *,
+        read_only: bool = False,
+        apply_locked: bool = False,
+        lock_timeout_seconds: float | None = None,
+    ) -> ExtensionControlRuntimeSnapshot:
         """The snapshot a draft is built on, re-read from durable authority.
 
         The in-process snapshot only advances when this daemon commits, so a
@@ -242,12 +257,17 @@ class ExtensionControlApiService:
         `apply_locked` is for a caller that already holds the apply lock. That
         lock is not reentrant, so taking it again here would deadlock the
         apply that asked for the snapshot.
+
+        `lock_timeout_seconds` bounds the wait for the authority lease; a read
+        that times out serves the snapshot the runtime already holds.
         """
 
         registry = self._registry
         current = self._runtime.current()
         try:
-            view = self._store.read_extension_control_authority_for_registry(registry, read_only=read_only)
+            view = self._store.read_extension_control_authority_for_registry(
+                registry, read_only=read_only, lock_timeout_seconds=lock_timeout_seconds
+            )
             if view.health is not AuthorityHealth.PROTECTED:
                 return current
             if view.catalog_digest == current.catalog_digest and (view.revision, view.managed_revision) <= (

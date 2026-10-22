@@ -19,6 +19,9 @@ inputs:
   cache-fallback-key:
     description: Optional read-only cache family used to seed a new namespace.
     default: ""
+  normalize-toolchains:
+    description: Exclude unused Linux hosted-runner compilers from dependency cache keys.
+    default: "false"
   save-main-cache:
     description: Also save this Windows producer's successful scheduled or manual main build.
     default: "false"
@@ -58,6 +61,12 @@ runs:
         done
         rustup toolchain install "$RUST_TOOLCHAIN" "${args[@]}"
         rustup default "$RUST_TOOLCHAIN"
+    - name: Normalize the hosted Rust compiler inventory
+      if: inputs.normalize-toolchains == 'true' && runner.environment == 'github-hosted' && runner.os == 'Linux'
+      shell: bash
+      env:
+        RUST_TOOLCHAIN: ${{ inputs.toolchain }}
+      run: python3 scripts/ci/normalize_rust_toolchains.py --toolchain "$RUST_TOOLCHAIN"
     - name: Cache Rust compilation
       id: rust-cache
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6

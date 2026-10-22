@@ -668,7 +668,13 @@ fn literal_redirects_only(text: &str) -> bool {
         // `2>&1>log` keeps the descriptor copy in the projected text. That
         // copy is not a file write, so it does not by itself move data.
         let projected = projected.replace("2>&1", " ").replace("2>/dev/null", " ");
-        let literal = unquoted_literal(&projected);
+        // The projection removed every redirect the shell would act on, or it
+        // reported nothing to project. An angle bracket still standing in it is
+        // quoted or escaped text the shell passes through as an argument: the
+        // `<address>` of a commit trailer, an HTML tag, a comparison. Reading
+        // those as data movement blocked an ordinary heredoc file write
+        // outright, with no approval left to give it.
+        let literal = unquoted_literal(&projected).replace(['<', '>'], " ");
         !(moves_data(&literal) || (names_files && creates_links(&literal)))
     })
 }
@@ -1312,6 +1318,10 @@ mod expansion_tests;
 #[cfg(test)]
 #[path = "native_command_unmodeled_tree_group_tests.rs"]
 mod tree_group_tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_quoted_angle_tests.rs"]
+mod quoted_angle_tests;
 
 #[cfg(test)]
 #[path = "native_command_unmodeled_substitution_tests.rs"]

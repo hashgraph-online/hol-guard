@@ -17,15 +17,11 @@ from codex_plugin_scanner.guard.catalog_delivery import (
 from codex_plugin_scanner.guard.native_command_control_authority_io import hold_command_control_authority_lock
 from codex_plugin_scanner.guard.native_command_control_authority_store import _key
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
-from codex_plugin_scanner.guard.runtime.extension_control_authority import (
-    TRANSITION_PURPOSE,
-    AuthorityAnchor,
-    AuthorityPhase,
-    authenticated_record,
-)
+from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityAnchor, AuthorityPhase
 from codex_plugin_scanner.guard.store_extension_control_authority_schema import (
     ensure_extension_control_authority_schema,
 )
+from tests.extension_control_records import TRANSITION_PURPOSE, authenticated_record
 from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 from tests.native_activation_support import seed
 from tests.test_extension_pack_preparation import delivery as delivery
@@ -224,10 +220,7 @@ def previous_writer_pending(value):
     import json
 
     from codex_plugin_scanner.guard.catalog_delivery import activation_record
-    from codex_plugin_scanner.guard.runtime.extension_control_authority import (
-        SNAPSHOT_PURPOSE,
-        anchor_to_json,
-    )
+    from tests.extension_control_records import SNAPSHOT_PURPOSE, anchor_to_json
     from tests.guard_extension_control_authority_fixtures import MemorySecretStore
 
     with hold_command_control_authority_lock(value.store.guard_home), value.connection:

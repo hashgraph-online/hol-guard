@@ -5,7 +5,8 @@
 //! uses, under the resident's own admitted control snapshot, with hypothetical
 //! enabled permissions. It never mutates authority and answers catalog
 //! identifiers only. A hint is offered only when the review is an extension
-//! review: not under an authority failure, not under a fixed PreTool floor, and
+//! review: not under an authority failure (a device that never enrolled is
+//! judged as it will be once enrolled), not under a fixed PreTool floor, and
 //! only when enabling the matched configurable permissions makes the command
 //! allow. The set is then minimized so a rule that does not gate is not named.
 
@@ -22,7 +23,9 @@ use guard_contracts::{
 };
 use serde_json::Value;
 
-use crate::command_effect::{evaluate_composite, with_store, EvaluatedCommand};
+use crate::command_effect::{
+    evaluate_composite_under, with_store, AuthorityView, EvaluatedCommand,
+};
 use crate::package_authority_op::request_digest_with_limit;
 
 /// The only reason code of a native review that an extension Allow can settle.
@@ -44,7 +47,7 @@ pub(crate) fn evaluate_with_store(
     })
 }
 
-fn evaluate_extension_allow_hint(
+pub(crate) fn evaluate_extension_allow_hint(
     request: &ExtensionAllowHintRequestV1,
     controls: Option<&CompiledNativeCommandControls>,
 ) -> Result<Vec<u8>, String> {
@@ -215,13 +218,17 @@ fn candidate_permissions(base: &EvaluatedCommand) -> Option<(Vec<Owner>, Vec<Str
     Some((owners, relied))
 }
 
-/// Evaluate the query's command with `permission_ids` hypothetically enabled.
+/// Evaluate the query's command with `permission_ids` hypothetically enabled,
+/// as the device would judge it once its authority is enrolled. A device that
+/// never enrolled gets the answer it would get after setup, and the
+/// recommendation says setup comes first. Any other authority failure still
+/// has no hint.
 fn evaluate_with(
     query: &ExtensionAllowHintQueryV1,
     permission_ids: &[String],
     controls: Option<&CompiledNativeCommandControls>,
 ) -> Result<EvaluatedCommand, String> {
-    evaluate_composite(
+    evaluate_composite_under(
         &CommandEffectRequestV1 {
             schema: COMMAND_EFFECT_REQUEST_SCHEMA.to_owned(),
             request_id: String::new(),
@@ -237,6 +244,7 @@ fn evaluate_with(
             counterfactual_enabled_permission_ids: permission_ids.to_vec(),
         },
         controls,
+        AuthorityView::OnceEnrolled,
     )
 }
 

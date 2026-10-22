@@ -52,11 +52,7 @@ runs:
     - uses: ./.github/actions/setup-bubblewrap
     - name: Provision the checked test linker
       shell: bash
-      run: |
-        if ! command -v ld.lld >/dev/null 2>&1; then
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends lld
-        fi
+      run: bash scripts/ci/setup_test_linker.sh
     - name: Install instrumented compiler cache
       uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
       with:

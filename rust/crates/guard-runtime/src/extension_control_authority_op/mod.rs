@@ -16,6 +16,7 @@
 mod catalog;
 mod chain;
 mod history;
+mod installed_upgrade;
 mod layers;
 mod managed;
 mod managed_seals;

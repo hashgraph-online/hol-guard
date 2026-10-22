@@ -55,8 +55,13 @@ def compute_extension_allow_hint(
     # The resident decides everything; this only spares it a round trip for a
     # command that already runs, is held by a fixed authority failure, or is held
     # by a fixed PreTool floor (sensitive access, Guard self-protection, ...) that
-    # no extension Allow can settle.
-    if snapshot.authority_failure is not None or evaluation.decision_plane.action not in (
+    # no extension Allow can settle. A device that never enrolled is not held:
+    # the resident answers what enrolling and allowing would change. The local
+    # evaluation of such a device answers its authority failure, so only the
+    # resident's once-enrolled evaluation can say whether review applies.
+    if not hint_authority_admitted(snapshot):
+        return None
+    if not snapshot.awaiting_enrollment and evaluation.decision_plane.action not in (
         "review",
         "require-reapproval",
     ):
@@ -78,6 +83,17 @@ def compute_extension_allow_hint(
         guard_home=guard_home,
         deadline=deadline,
     )
+
+
+def hint_authority_admitted(snapshot: ExtensionControlRuntimeSnapshot) -> bool:
+    """Whether an allow hint can be offered under this authority.
+
+    A protected authority can apply the Allow now. A device that never enrolled
+    can once it enrolls, so it gets the hint with the setup step in front of it.
+    Any other failure (degraded, tampered, recovery) needs repair first.
+    """
+
+    return snapshot.authority_failure is None or snapshot.awaiting_enrollment
 
 
 def validated_extension_allow_hint(value: object) -> dict[str, object] | None:

@@ -145,6 +145,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
         assert "python scripts/ci/pytest_shard.py" not in commands
         assert "--ignore" not in commands
         assert '"@$shard_file"' in commands
+        assert "-n 4 --dist loadfile --max-worker-restart 0" in commands
 
     coverage_job = _workflow_job(workflow, "coverage", "duration-manifest-candidate")
     scheduling_job = "\n".join(step.get("run", "") for step in jobs["scheduling-sensitive"]["steps"])

@@ -2067,6 +2067,32 @@
     "rust/crates/guard-contracts/src/extension_control_prepared.rs",
     "rust/crates/guard-runtime/src/extension_control_prepared_op.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/catalog_delivery/transport.py",
+   "source_sha256": "37fdf670e06a68b2501e39b415fdacf3d640cd7f3b5c8aa28d09756f53722c80",
+   "forbidden_symbols": [
+    "HOSTS",
+    "_RETRY_DELAYS",
+    "_RETRY_STATUS",
+    "_check_url",
+    "_retriable",
+    "require_source_ancestor"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/pack_lifecycle/release_transport.rs",
+    "rust/crates/guard-runtime/src/pack_lifecycle/tests/ancestry.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/catalog_delivery/selection.py",
+   "source_sha256": "9426fcfa53ff125d6bac6d75c21c5e3a27c23188f9d1280a1c840b3e75cfedb1",
+   "forbidden_symbols": [
+    "PUBLICATION"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/pack_lifecycle/release_transport/selector.rs"
+   ]
   }
  ]
 }

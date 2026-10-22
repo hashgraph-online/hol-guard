@@ -478,6 +478,7 @@ mod pack_lifecycle;
 mod pack_preparation;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
+mod command_pack_record_op;
 #[allow(dead_code)]
 mod hook_evidence_activity;
 #[allow(dead_code)]
@@ -668,6 +669,7 @@ mod policy_runtime_saved;
 mod policy_runtime_saved_reuse;
 mod policy_snapshot_build;
 mod policy_store;
+mod pre_tool_extension_evidence_op;
 mod project_identity;
 mod prompt_analyze_op;
 mod protect_request_op;

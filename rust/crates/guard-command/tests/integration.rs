@@ -39,6 +39,7 @@ pub mod native_command_source_stream;
 pub mod package_context_vectors;
 pub mod portable_command_source_fixtures;
 pub mod pretool_agent_metadata;
+pub mod pretool_bare_assignment_lists;
 pub mod pretool_brew_reads;
 pub mod pretool_bun_eval;
 pub mod pretool_cd_canonical_workspace;

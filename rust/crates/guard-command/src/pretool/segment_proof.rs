@@ -202,7 +202,16 @@ pub(super) fn exact_safe_segment_with_context(
     let stripped = without_stderr_merge(segment);
     let segment = stripped.as_ref().unwrap_or(segment);
     let Some(executable) = segment.executable.as_deref() else {
-        return false;
+        // A list item such as `OUT=build/report.json` runs no program: it binds
+        // shell variables and returns, so there is nothing to attribute and
+        // nothing to execute. The same screen the compatibility pass uses keeps
+        // the values literal and the names ordinary, so no setting here steers
+        // lookup, loading, configuration or credentials for a later item. Each
+        // later item still carries its own proof, with the literal projected
+        // into it, and a redirect would write a file rather than bind a name.
+        return segment.pipeline_index == 0
+            && !segment.text.contains(['<', '>'])
+            && crate::command_compatibility::sets_ordinary_variables(segment);
     };
     let basename = executable_basename(executable);
     let jq_filter = (basename == "jq")
@@ -329,7 +338,7 @@ pub(super) fn exact_safe_segment_with_context(
             let alone = basename != "ln" || model.segments.len() == 1;
             (model.segments.len() == 1
                 || (basename == "mkdir" && super::chain_temporary::mkdir_chain(model))
-                || (basename == "ln" && super::symlink_writes::link_chain(model)))
+                || (basename == "ln" && super::symlink_writes::link_chain(model, context)))
                 && (basename != "ln" && basename != "rm"
                     || super::directory_targets::home_targets_unquoted(segment))
                 // In a chain the link must join two checkouts of one

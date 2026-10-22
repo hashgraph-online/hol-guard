@@ -113,6 +113,33 @@ def session():
         raise NativePackLifecycleUnavailableError(f"native_pack_lifecycle_unavailable: {exc}") from exc
 
 
+# The Guard home and store whose records the resident may read, while a caller
+# that polls them has named one. Unset, every record goes to the one-shot.
+_RESIDENT: ContextVar[tuple[Path, str] | None] = ContextVar("pack_lifecycle_resident_store", default=None)
+_RESIDENT_RECORD_OPERATIONS = frozenset({"verify", "open"})
+_RESIDENT_RECORD_FEATURE = "command-pack-record-v1"
+_RESIDENT_RECORD_REQUEST_SCHEMA = "guard-command-pack-record-request.v1"
+_RESIDENT_RECORD_RESULT_SCHEMA = "guard-command-pack-record-result.v1"
+_RESIDENT_RECORD_TIMEOUT_SECONDS = 10.0
+
+
+@contextmanager
+def resident(store):
+    """Let the resident answer this store's record reads instead of a one-shot.
+
+    The policy publisher authenticates the active pack record about once a
+    second. A one-shot re-verifies the runtime and starts a process for each
+    record; the resident runs the same evaluator in process. It serves only the
+    Guard home it is bound to, so any request it does not answer -- another
+    home, an older runtime, no resident at all -- goes to the one-shot as before.
+    """
+    token = _RESIDENT.set((Path(store.guard_home), str(store.path)))
+    try:
+        yield
+    finally:
+        _RESIDENT.reset(token)
+
+
 def one_runtime(function):
     """Verify and materialize the runtime once per operation, not once per record.
 
@@ -207,7 +234,11 @@ def record(operation, purpose, *, key: bytes, **fields) -> dict[str, Any]:
     from ..runtime.extension_control_authority import ExtensionControlAuthorityError
 
     try:
-        result = invoke("record", operation=operation, purpose=purpose, key=key.hex(), **fields)
+        result = _resident_record(
+            {"kind": "record", "operation": operation, "purpose": purpose, "key": key.hex(), **fields}
+        )
+        if result is None:
+            result = invoke("record", operation=operation, purpose=purpose, key=key.hex(), **fields)
     except (TypeError, OverflowError) as error:
         # A record the request cannot carry is refused by name here, the way the
         # runtime refuses one it can read but will not accept.
@@ -218,6 +249,66 @@ def record(operation, purpose, *, key: bytes, **fields) -> dict[str, Any]:
     if fault is not None:
         raise ValueError(str(result.get("reason")))
     return result
+
+
+def _resident_record(request: dict[str, Any]) -> dict[str, Any] | None:
+    """The resident's answer to one reading record request, or None to spawn."""
+    bound = _RESIDENT.get()
+    if bound is None or request["operation"] not in _RESIDENT_RECORD_OPERATIONS:
+        return None
+    return _resident_answer(bound, request)
+
+
+def resident_answer(store, request: dict[str, Any]) -> dict[str, Any] | None:
+    """The resident's answer to one `pack-lifecycle` request for this store.
+
+    None means the resident did not answer, and the caller spawns the one-shot.
+    The resident serves a store by its database path, so a store without one
+    is answered by the one-shot.
+    """
+    path = getattr(store, "path", None)
+    if path is None:
+        return None
+    return _resident_answer((Path(store.guard_home), str(path)), request)
+
+
+def _resident_answer(bound: tuple[Path, str], request: dict[str, Any]) -> dict[str, Any] | None:
+    import uuid
+
+    from .. import native_execution
+    from ..native_resident_client import native_resident_client_ready
+
+    guard_home, store_path = bound
+    request_id = f"command-pack-record-{uuid.uuid4().hex}"
+    try:
+        # Only a resident this process already talks to answers: a poll must
+        # never start one just to read a record.
+        status = native_execution.native_runtime_status()
+        if status.identity is None or not native_resident_client_ready(status.identity.path, guard_home):
+            return None
+        response = native_execution._resident_request(
+            operation="command_pack_record",
+            request={
+                "schema": _RESIDENT_RECORD_REQUEST_SCHEMA,
+                "request_id": request_id,
+                "guard_home": str(guard_home),
+                "store_path": store_path,
+                "record": request,
+            },
+            guard_home=guard_home,
+            timeout_seconds=_RESIDENT_RECORD_TIMEOUT_SECONDS,
+            required_feature=_RESIDENT_RECORD_FEATURE,
+            response_schema=_RESIDENT_RECORD_RESULT_SCHEMA,
+            max_request_bytes=transport._MAX_NATIVE_REQUEST_BYTES,
+            status=status,
+        )
+    except (OSError, RuntimeError):
+        # The resident could not be reached; the one-shot answers instead.
+        return None
+    if response is None or response.get("request_id") != request_id:
+        return None
+    payload = response.get("payload")
+    return cast(dict[str, Any], payload) if isinstance(payload, dict) else None
 
 
 def transfer(**fields):

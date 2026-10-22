@@ -61,12 +61,15 @@ class ExtensionControlAuthorityCommitMixin:
             record_background_event("installed_authority_release_absent", "detail=installed bundle not advertised")
             return
         with self._extension_control_authority_lock(shared=True):
-            if lifecycle_store.migration_retained(self):
-                return
-        with self._extension_control_authority_lock():
-            with self._connect() as connection:
-                ensure_extension_control_authority_schema(connection)
-            lifecycle_store.migrate_installed(self, installed)
+            retained = lifecycle_store.migration_retained(self)
+        if not retained:
+            with self._extension_control_authority_lock():
+                with self._connect() as connection:
+                    ensure_extension_control_authority_schema(connection)
+                lifecycle_store.migrate_installed(self, installed)
+        from .catalog_delivery.installed_upgrade import migrate_active
+
+        migrate_active(self, installed)
 
     def enroll_extension_control_authority(
         self,

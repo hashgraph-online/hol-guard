@@ -98,6 +98,17 @@ impl Home {
         layers: &[ExtensionControlLayer],
         phase: &str,
     ) -> String {
+        self.commit_bound(revision, catalog_digest, layers, phase, None)
+    }
+
+    pub(super) fn commit_bound(
+        &self,
+        revision: i64,
+        catalog_digest: &str,
+        layers: &[ExtensionControlLayer],
+        phase: &str,
+        retained_pack: Option<&str>,
+    ) -> String {
         let layers_json = layers_to_json(layers).unwrap();
         let previous_digest = if revision == 1 {
             catalog('0')
@@ -110,13 +121,16 @@ impl Home {
                 )
                 .unwrap()
         };
-        let snapshot = object(json!({
+        let mut snapshot = object(json!({
             "revision": revision,
             "catalog_digest": catalog_digest,
             "layers_json": layers_json,
             "previous_digest": previous_digest,
             "committed_at": AT,
         }));
+        if let Some(pack) = retained_pack {
+            snapshot.insert("command_pack_record_digest".to_owned(), json!(pack));
+        }
         let (snapshot_json, snapshot_digest, snapshot_mac) =
             authenticated_record(&snapshot, &KEY, SNAPSHOT_PURPOSE).unwrap();
         let hashes = [

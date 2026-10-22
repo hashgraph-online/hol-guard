@@ -123,6 +123,47 @@ fn commit_plan_seals_the_next_revision_on_the_committed_head() {
 }
 
 #[test]
+fn ordinary_control_writes_retain_the_bound_pack_without_a_new_activation() {
+    let home = Home::new();
+    let retained = "a".repeat(64);
+    let head = home.commit_bound(
+        1,
+        &catalog('a'),
+        &[local(&catalog('a'))],
+        "committed",
+        Some(&retained),
+    );
+    for replacement in [None, Some("b".repeat(64))] {
+        let mut write = commit(2, 1);
+        write.pack_record_digest = replacement.clone();
+        let result = run(&commit_request(&home, &head, view("protected", 1), write));
+        let plan = &result["plan"];
+        assert_eq!(plan["outcome"], "prepare", "{result}");
+        let payload = |name: &str, purpose: &str| {
+            verify_record(
+                plan[name]["json"].as_str().unwrap(),
+                plan[name]["digest"].as_str().unwrap(),
+                plan[name]["mac"].as_str().unwrap(),
+                &KEY,
+                purpose,
+            )
+            .unwrap()
+        };
+        let expected = replacement.as_ref().unwrap_or(&retained);
+        assert_eq!(
+            payload("snapshot", SNAPSHOT_PURPOSE)["command_pack_record_digest"],
+            json!(expected)
+        );
+        assert_eq!(
+            payload("transition", TRANSITION_PURPOSE)
+                .get("command_pack_record_digest")
+                .cloned(),
+            replacement.map(Value::String)
+        );
+    }
+}
+
+#[test]
 fn commit_plan_refuses_conflicts_and_replays() {
     let home = Home::new();
     let head = home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");

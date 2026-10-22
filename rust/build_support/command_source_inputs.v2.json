@@ -215,6 +215,7 @@
       "src/native_command_unmodeled.rs",
       "src/native_command_unmodeled_ansi_c_tests.rs",
       "src/native_command_unmodeled_expansion.rs",
+      "src/native_command_unmodeled_find_exec.rs",
       "src/native_command_unmodeled_functions.rs",
       "src/native_command_unmodeled_prefix.rs",
       "src/native_command_unmodeled_redirections.rs",

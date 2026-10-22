@@ -92,6 +92,10 @@ fn links_into_the_workspace_or_a_linked_worktree_proceed() {
             format!("ln -s -- {h}/main/dashboard/node_modules {h}/main/modules-link"),
             "ln -s ~/main/dashboard/node_modules ~/linked/dashboard/node_modules".to_owned(),
             format!("cd {h}/linked && ln -s {h}/main/src/old.ts dashboard/old.ts"),
+            // A relative target resolves against the directory the link is
+            // written in, exactly as the kernel resolves it, and the screens
+            // below act on the canonical target either way.
+            "ln -s dashboard/node_modules linked-modules".to_owned(),
         ] {
             assert_eq!(
                 action(&home, harness, &command),
@@ -101,8 +105,6 @@ fn links_into_the_workspace_or_a_linked_worktree_proceed() {
         }
     }
     for command in [
-        // Relative sources resolve against the link's directory.
-        "ln -s dashboard/node_modules linked-modules".to_owned(),
         // Existing destinations, forced and directory forms.
         format!("ln -s {h}/main/src/old.ts {h}/main/src/stale.ts"),
         format!("ln -s {h}/main/src/old.ts {h}/main/src"),

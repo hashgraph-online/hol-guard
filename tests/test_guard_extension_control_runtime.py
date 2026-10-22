@@ -444,7 +444,7 @@ def test_daemon_rebinds_control_api_when_activated_catalog_changes_after_startup
         monkeypatch.setattr(
             store,
             "read_extension_control_authority_for_registry",
-            lambda registry, *, read_only=False: ExtensionControlAuthorityView(
+            lambda registry, *, read_only=False, **_kwargs: ExtensionControlAuthorityView(
                 AuthorityHealth.PROTECTED, 1, registry.catalog_digest, ()
             ),
         )
@@ -481,7 +481,7 @@ def test_refresh_does_not_roll_back_an_activation_applied_after_its_lease(
         monkeypatch.setattr(
             store,
             "read_extension_control_authority_for_registry",
-            lambda registry, *, read_only=False: ExtensionControlAuthorityView(
+            lambda registry, *, read_only=False, **_kwargs: ExtensionControlAuthorityView(
                 AuthorityHealth.PROTECTED, 1, registry.catalog_digest, ()
             ),
         )
@@ -531,7 +531,7 @@ def test_daemon_refreshes_resident_snapshot_after_external_authority_change(
     monkeypatch.setattr(
         store,
         "read_extension_control_authority_for_registry",
-        lambda registry, *, read_only=False: updated,
+        lambda registry, *, read_only=False, **_kwargs: updated,
     )
     daemon.start()
     try:

@@ -107,9 +107,9 @@ def _checkout_runtime_judges_distribution(monkeypatch: pytest.MonkeyPatch) -> No
 @pytest.fixture(autouse=True)
 def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep reused native answers from crossing tests that stub native replies."""
-    from codex_plugin_scanner.guard.catalog_delivery import active_security, installed_bundle, object_native
+    from codex_plugin_scanner.guard.catalog_delivery import installed_bundle, object_native
 
-    for module in (active_security, installed_bundle, object_native):
+    for module in (installed_bundle, object_native):
         monkeypatch.setattr(module, "_ANSWERS", type(module._ANSWERS)())
 
 

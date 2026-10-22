@@ -29,6 +29,7 @@ _MAX_RESULT_TEXT = 2_048
 _PRETOOL_AUTHORITY_FEATURE = "pre-tool-command-authority-v1"
 _PRETOOL_PATH_CONTEXT_FEATURE = "pre-tool-path-context-v1"
 _PRETOOL_EXECUTION_ENVIRONMENT_FEATURE = "pre-tool-execution-environment-v1"
+_PRETOOL_EXTENSION_EVIDENCE_FEATURE = "pre-tool-extension-evidence-v1"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _PRETOOL_RESULT_KEYS = {
     "schema",
@@ -209,6 +210,7 @@ def review_pre_tool_native(
     timeout_seconds: float = 0.5,
     record_health: bool = True,
     full_lattice: bool = False,
+    extension_evidence: bool = False,
 ) -> dict[str, Any] | None:
     """Return the Rust PreToolUse decision, or None when native cannot decide.
 
@@ -232,6 +234,12 @@ def review_pre_tool_native(
     ``require-reapproval`` and ``sandbox-required`` included, for a caller that
     routes them. Other callers keep receiving only allow, review and block, so
     an answer they cannot route stays a failed review rather than a relaxed one.
+
+    ``extension_evidence=True`` asks the resident to decide under the extension
+    controls of the snapshot it admitted and to return the
+    ``command_extensions`` evidence with the decision. A caller that resolves
+    the review against those controls needs it; a runtime without the feature
+    answers without evidence, and that caller fails closed.
     """
     status = native_runtime_status()
     if (
@@ -269,6 +277,8 @@ def review_pre_tool_native(
         execution_environment, Mapping
     ):
         request["execution_environment"] = dict(execution_environment)
+    if extension_evidence and _PRETOOL_EXTENSION_EVIDENCE_FEATURE in status.capabilities.features:
+        request["extension_evidence"] = True
     encoded = json.dumps(request, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     if len(encoded) > _MAX_REQUEST_BYTES:
         # A shell with many exported names can outgrow the request bound. The

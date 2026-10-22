@@ -167,7 +167,6 @@ def test_fixed_factory_selected_fetch_and_offline_native_admission(built, tmp_pa
 
     def mirror(request, **kwargs):
         url = request.full_url
-        transport._check_url(url)
         prefix = "https://github.com/hashgraph-online/hol-guard/releases/download/"
         assert url.startswith(prefix)
         tag, name = url.removeprefix(prefix).split("/")

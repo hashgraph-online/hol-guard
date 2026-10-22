@@ -13,6 +13,7 @@ mod migration;
 mod offline;
 mod record;
 mod release;
+mod release_transport;
 mod selection;
 #[cfg(test)]
 mod tests;
@@ -143,6 +144,9 @@ pub(super) fn evaluate(input: &Value) -> Result<Value, String> {
     }
     if input["kind"] == "distribution" {
         return distribution::evaluate(input);
+    }
+    if input["kind"] == "release-transport" {
+        return release_transport::evaluate(input);
     }
     if input["kind"] == "active-security" {
         return crate::active_pack_security::evaluate(input);

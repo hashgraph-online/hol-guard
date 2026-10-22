@@ -1,4 +1,5 @@
 use super::*;
+#[cfg(unix)]
 #[path = "hook_direct_review_queue_size_tests.rs"]
 mod size_tests;
 use crate::policy_store::policy_store_direct_lane::{DirectLaneBinding, DirectLaneReviewFacts};

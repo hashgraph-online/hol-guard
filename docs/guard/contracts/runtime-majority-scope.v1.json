@@ -526,6 +526,10 @@
     ],
     "reviewed_runtime": [
       {
+        "path": "src/codex_plugin_scanner/guard/runtime/extension_control_proof.py",
+        "reason": "Retained conservatively in runtime scope: installed-upgrade recovery imports the existing authority phase and error contracts from this proof module. Count the complete module, including its proof helpers, rather than exclude code reached by startup recovery. Installed-upgrade authorization remains native."
+      },
+      {
         "path": [
           "src/codex_plugin_scanner/guard/adapters/_modules/cline/__init__.py",
           "src/codex_plugin_scanner/guard/adapters/_modules/devin/__init__.py",

@@ -14,6 +14,7 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::COMPOSIO_ROLE_FEATURE,
     guard_contracts::EXTENSION_CONTROL_FEATURE,
     guard_contracts::EXTENSION_ALLOW_HINT_FEATURE,
+    crate::pre_tool_extension_evidence_op::PRE_TOOL_EXTENSION_EVIDENCE_FEATURE,
     guard_contracts::APPROVAL_EXTENSION_RECOMMENDATION_FEATURE,
     guard_contracts::GITHUB_CLI_CLASSIFY_FEATURE,
     guard_contracts::PROTECT_REQUEST_FEATURE,
@@ -153,4 +154,5 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::NATIVE_BASH_RESULT_POLICY_FEATURE,
     guard_contracts::SKILL_WORKFLOW_PREFLIGHT_FEATURE,
     guard_contracts::INVENTORY_SOURCE_EVIDENCE_FEATURE,
+    guard_contracts::COMMAND_PACK_RECORD_FEATURE,
 ];

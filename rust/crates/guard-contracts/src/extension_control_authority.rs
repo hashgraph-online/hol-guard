@@ -166,6 +166,10 @@ pub struct ExtensionControlCatalogMigrationV1 {
     pub previous_revision: i64,
     pub previous_catalog_digest: String,
     pub layers: Value,
+    /// Authenticated installed-release replacement of the same active selection.
+    /// Ordinary catalog migrations cannot change the active pack record.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed_upgrade: Option<Value>,
 }
 
 /// One requested extension-control commit. The identities are sent as the

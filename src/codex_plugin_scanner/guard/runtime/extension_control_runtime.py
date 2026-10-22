@@ -112,6 +112,24 @@ class ExtensionControlRuntimeSnapshot:
         )
 
     @property
+    def awaiting_enrollment(self) -> bool:
+        """This device never enrolled: packaged first-party protection applies and
+        no permission can change until the authority is enrolled.
+
+        It is the first-install baseline the resident accepts, with no layers at
+        revision zero. An unenrolled reading that carries controls is a lost
+        authority, not a new one.
+        """
+
+        return (
+            self.health is AuthorityHealth.UNENROLLED
+            and not self.unread
+            and self.revision == 0
+            and self.managed_revision == 0
+            and not self.layers
+        )
+
+    @property
     def authority_failure(self) -> ResolverFailureCode | None:
         if self.health is AuthorityHealth.PROTECTED:
             return None

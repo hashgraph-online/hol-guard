@@ -16312,6 +16312,7 @@ function approvalExtensionRecommendationCopy(recommendation) {
   const firstExtension = recommendation.permissions[0]?.extension_name ?? owner;
   return {
     commands,
+    commandText,
     title: `${owner} covers ${commandText}`,
     body: `${owner} asks before agents run ${commandText}. Allow it in ${owner} and future ${commandText} commands run without asking. Other protections still apply.`,
     primaryLabel: `Approve & always allow ${commandText}`,
@@ -30849,89 +30850,6 @@ function BusinessReviewSummaryPanel({ requestId }) {
   ] });
   return state.summary ? /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryDetails, { summary: state.summary }) : null;
 }
-function ApprovalProofModal(props) {
-  const {
-    title,
-    detail,
-    confirmLabel,
-    approvalGate,
-    busy = false,
-    busyLabel = "Repairing…",
-    error = null,
-    requireFreshTotp = false,
-    onCancel,
-    onConfirm
-  } = props;
-  const [password, setPassword] = reactExports.useState("");
-  const [totpCode, setTotpCode] = reactExports.useState("");
-  const formRef = reactExports.useRef(null);
-  useFocusTrap(true, formRef);
-  const handlePasswordChange = reactExports.useCallback((event) => {
-    setPassword(event.target.value);
-  }, []);
-  const handleTotpChange = reactExports.useCallback((event) => {
-    setTotpCode(event.target.value);
-  }, []);
-  const confirmDisabled = isApprovalProofSubmitDisabled(
-    approvalGate,
-    { approvalPassword: password, approvalTotpCode: totpCode },
-    busy,
-    requireFreshTotp
-  );
-  const handleSubmit = reactExports.useCallback((event) => {
-    event.preventDefault();
-    if (confirmDisabled) {
-      return;
-    }
-    onConfirm(buildApprovalProofCredentials(
-      approvalGate,
-      { approvalPassword: password, approvalTotpCode: totpCode },
-      requireFreshTotp
-    ));
-  }, [approvalGate, confirmDisabled, onConfirm, password, requireFreshTotp, totpCode]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/30 px-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "form",
-    {
-      ref: formRef,
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-labelledby": "approval-proof-modal-title",
-      "aria-describedby": "approval-proof-modal-detail",
-      className: "w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl",
-      onSubmit: handleSubmit,
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval required" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "approval-proof-modal-title", className: "mt-2 text-base font-semibold text-brand-dark", children: title }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "approval-proof-modal-detail", className: "mt-1 text-sm text-slate-500", children: detail }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ApprovalProofFieldInputs,
-          {
-            approvalGate,
-            approvalPassword: password,
-            approvalTotpCode: totpCode,
-            requireFreshTotp,
-            onApprovalPasswordChange: handlePasswordChange,
-            onApprovalTotpCodeChange: handleTotpChange
-          }
-        ) }),
-        error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.06] px-3 py-2 text-sm text-brand-attention", children: error }) : null,
-        busy ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "p",
-          {
-            role: "status",
-            tabIndex: 0,
-            className: "mt-4 text-sm font-medium text-brand-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
-            children: busyLabel
-          }
-        ) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex justify-end gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { type: "button", variant: "outline", onClick: onCancel, disabled: busy, children: "Cancel" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { type: "submit", disabled: confirmDisabled, children: busy ? busyLabel : confirmLabel })
-        ] })
-      ]
-    }
-  ) });
-}
 const DIGEST$2 = /^[a-f0-9]{64}$/;
 const EXTENSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const PERMISSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -31722,6 +31640,314 @@ async function applyExtensionMutation(payload) {
     throw new ExtensionControlApiError(error instanceof Error ? error.message : "Guard returned an invalid apply response", 502);
   }
 }
+const DEFAULT_ENROLL_COMMAND = "hol-guard command controls enroll";
+const DEFAULT_RECOVER_COMMAND = "hol-guard command controls recover-authority";
+const AUTHORITY_WATCH_INTERVAL_MS = 5e3;
+function useExtensionAuthorityWatch(input) {
+  const { active, requestId, onAvailable } = input;
+  const [effective, setEffective] = reactExports.useState(null);
+  const [liveGate, setLiveGate] = reactExports.useState(null);
+  const [loadFailed, setLoadFailed] = reactExports.useState(false);
+  const [checking, setChecking] = reactExports.useState(false);
+  const [checkResult, setCheckResult] = reactExports.useState(null);
+  const [noOption, setNoOption] = reactExports.useState(null);
+  const inFlight = reactExports.useRef(null);
+  const mounted = reactExports.useRef(true);
+  reactExports.useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const load = reactExports.useCallback(async () => {
+    try {
+      const [nextEffective, settings, item] = await Promise.all([
+        fetchEffectiveExtensionControls(),
+        fetchSettings().catch(() => null),
+        fetchRequest(requestId)
+      ]);
+      if (!mounted.current) return "unchanged";
+      setEffective(nextEffective);
+      setLoadFailed(false);
+      const gate = settings?.settings.approval_gate;
+      if (gate !== void 0 && gate !== null) setLiveGate(gate);
+      if (item.status !== "pending") {
+        setNoOption("resolved");
+        return "unchanged";
+      }
+      if (nextEffective.health !== "protected") {
+        setNoOption(null);
+        return "unchanged";
+      }
+      const recommendation = item.extension_recommendation;
+      if (recommendation?.status !== "available") {
+        setNoOption("unavailable");
+        return "unchanged";
+      }
+      if (settings === null) throw new Error("approval settings unavailable");
+      onAvailable(recommendation);
+      return "available";
+    } catch {
+      if (mounted.current) setLoadFailed(true);
+      return "failed";
+    }
+  }, [onAvailable, requestId]);
+  const refresh = reactExports.useCallback(() => {
+    if (inFlight.current === null) {
+      inFlight.current = load().finally(() => {
+        inFlight.current = null;
+      });
+    }
+    return inFlight.current;
+  }, [load]);
+  reactExports.useEffect(() => {
+    if (!active || noOption) return void 0;
+    void refresh();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, AUTHORITY_WATCH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [active, noOption, refresh]);
+  const checkAgain = reactExports.useCallback(() => {
+    if (checking) return;
+    setChecking(true);
+    setCheckResult(null);
+    void refresh().then((outcome) => {
+      if (!mounted.current) return;
+      setChecking(false);
+      setCheckResult(outcome === "available" ? null : outcome);
+    });
+  }, [checking, refresh]);
+  return { effective, approvalGate: liveGate ?? input.approvalGate, loadFailed, checking, checkResult, noOption, checkAgain };
+}
+function SetupStep(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        className: `mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${props.done ? "bg-brand-green-text text-white" : props.current ? "bg-brand-blue text-white" : "border border-slate-300 bg-white text-slate-600"}`,
+        "aria-hidden": "true",
+        children: props.done ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "size-4" }) : props.index
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
+        props.title,
+        props.done && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: " (done)" })
+      ] }),
+      props.children
+    ] })
+  ] });
+}
+function CopyCommand(props) {
+  const [state, setState] = reactExports.useState("idle");
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(props.command);
+      setState("copied");
+    } catch {
+      setState("failed");
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row sm:items-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2.5 font-mono text-xs text-brand-dark", children: props.command }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: () => void copy(),
+          "aria-label": state === "copied" ? "Command copied" : props.label,
+          className: "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-blue hover:border-brand-blue/40 focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          children: [
+            state === "copied" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "size-4", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "size-4", "aria-hidden": "true" }),
+            state === "copied" ? "Copied" : "Copy"
+          ]
+        }
+      )
+    ] }),
+    state === "failed" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-brand-dark/70", role: "status", children: "Copy is unavailable here. Select the command and copy it." })
+  ] });
+}
+function CheckAgain(props) {
+  const { watch } = props;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-x-3 gap-y-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: watch.checkAgain, disabled: watch.checking, "aria-busy": watch.checking, children: watch.checking ? "Checking…" : "Check again" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 flex-1 text-xs leading-5 text-slate-600", role: "status", "aria-live": "polite", children: watch.checking ? "Checking this device…" : watch.checkResult === "failed" ? "Guard could not reach this device's protection settings. Try again in a moment." : watch.checkResult === "unchanged" && watch.noOption === null ? "Not finished yet. Guard keeps checking while this page is open." : props.note })
+  ] });
+}
+function approvalProofName(gate) {
+  return gate?.totp_enabled ? "authenticator code" : "approval password";
+}
+function ExtensionAuthoritySetup(props) {
+  const { watch, commandText } = props;
+  const health = watch.effective?.health ?? null;
+  if (watch.effective === null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/80", role: "status", children: watch.loadFailed ? "Guard could not read this device's protection settings." : "Checking whether this device can save extension settings…" }),
+      watch.loadFailed && /* @__PURE__ */ jsxRuntimeExports.jsx(CheckAgain, { watch, note: "" })
+    ] });
+  }
+  if (watch.noOption !== null) {
+    let message = "Protection settings are ready, but this request no longer offers Always allow. You can still change the permission in the extension.";
+    if (watch.noOption === "resolved") {
+      message = health === "protected" ? "Protection settings are ready. This request was already answered, so there is nothing left to allow here. You can still change the permission in the extension." : "This request was already answered, so there is nothing left to allow here.";
+    }
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/80", role: "status", children: message }) });
+  }
+  const gate = watch.approvalGate;
+  const proofName = approvalProofName(gate);
+  const terminal = watch.effective.terminal_commands;
+  const terminalName = terminal?.shell === "powershell" ? "PowerShell" : "a terminal";
+  if (health === "unenrolled") {
+    const gateReady = isBulkApproveGateReady(gate);
+    const lost = watch.effective.revision > 0 || watch.effective.layers.length > 0;
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 border-t border-brand-blue/15 pt-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/80", children: lost ? `This device's saved extension settings were lost. Two steps set them up again and let you allow ${commandText} from here.` : `This device hasn't saved its extension settings yet. Two one-time steps let you allow ${commandText} from here.` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { className: "mt-3 space-y-4", "aria-label": lost ? "Setup" : "One-time setup", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SetupStep, { index: 1, done: gateReady, current: !gateReady, title: "Set up local approval", children: gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-brand-dark/70", children: "Local approval is on." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm leading-relaxed text-brand-dark/70", children: gate?.configured ? "Turn local approval back on. It keeps agents from changing protection on their own." : "Choose an approval password. It stays on this device and keeps agents from changing protection on their own." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/settings?section=approval", variant: "primary", className: "mt-2", children: "Open approval settings" })
+        ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(SetupStep, { index: 2, done: false, current: gateReady, title: "Enroll this device", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 text-sm leading-relaxed text-brand-dark/70", children: [
+            "Run this once in ",
+            terminalName,
+            ". It asks for your ",
+            proofName,
+            "."
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommand, { command: terminal?.enroll ?? DEFAULT_ENROLL_COMMAND, label: "Copy enroll command" })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CheckAgain,
+        {
+          watch,
+          note: `When enrollment finishes, Approve & always allow ${commandText} appears here.`
+        }
+      )
+    ] });
+  }
+  if (health === "protected") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark/80", role: "status", children: [
+        "Protection settings are ready. Loading the option to always allow ",
+        commandText,
+        "…"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CheckAgain, { watch, note: "" })
+    ] });
+  }
+  if (health === "degraded-unacknowledged" || health === "degraded-acknowledged") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm leading-relaxed text-brand-dark/80", children: [
+        "Guard cannot fully verify this device's protection settings and is staying fail-safe. Rebuild them from",
+        " ",
+        terminalName,
+        ", then you can allow ",
+        commandText,
+        " from here. It asks for your ",
+        proofName,
+        "."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommand, { command: terminal?.recover_authority ?? DEFAULT_RECOVER_COMMAND, label: "Copy repair command" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CheckAgain, { watch, note: `When the repair finishes, Approve & always allow ${commandText} appears here.` })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm leading-relaxed text-brand-dark/80", children: [
+      "Guard is staying fail-safe because this device's protection settings need repair. Repair them, then you can allow ",
+      commandText,
+      " from here."
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap items-center gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/protection/repair", variant: "primary", children: "Repair protection" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CheckAgain, { watch, note: "" })
+  ] });
+}
+function ApprovalProofModal(props) {
+  const {
+    title,
+    detail,
+    confirmLabel,
+    approvalGate,
+    busy = false,
+    busyLabel = "Repairing…",
+    error = null,
+    requireFreshTotp = false,
+    onCancel,
+    onConfirm
+  } = props;
+  const [password, setPassword] = reactExports.useState("");
+  const [totpCode, setTotpCode] = reactExports.useState("");
+  const formRef = reactExports.useRef(null);
+  useFocusTrap(true, formRef);
+  const handlePasswordChange = reactExports.useCallback((event) => {
+    setPassword(event.target.value);
+  }, []);
+  const handleTotpChange = reactExports.useCallback((event) => {
+    setTotpCode(event.target.value);
+  }, []);
+  const confirmDisabled = isApprovalProofSubmitDisabled(
+    approvalGate,
+    { approvalPassword: password, approvalTotpCode: totpCode },
+    busy,
+    requireFreshTotp
+  );
+  const handleSubmit = reactExports.useCallback((event) => {
+    event.preventDefault();
+    if (confirmDisabled) {
+      return;
+    }
+    onConfirm(buildApprovalProofCredentials(
+      approvalGate,
+      { approvalPassword: password, approvalTotpCode: totpCode },
+      requireFreshTotp
+    ));
+  }, [approvalGate, confirmDisabled, onConfirm, password, requireFreshTotp, totpCode]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/30 px-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "form",
+    {
+      ref: formRef,
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "approval-proof-modal-title",
+      "aria-describedby": "approval-proof-modal-detail",
+      className: "w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl",
+      onSubmit: handleSubmit,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval required" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "approval-proof-modal-title", className: "mt-2 text-base font-semibold text-brand-dark", children: title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "approval-proof-modal-detail", className: "mt-1 text-sm text-slate-500", children: detail }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ApprovalProofFieldInputs,
+          {
+            approvalGate,
+            approvalPassword: password,
+            approvalTotpCode: totpCode,
+            requireFreshTotp,
+            onApprovalPasswordChange: handlePasswordChange,
+            onApprovalTotpCodeChange: handleTotpChange
+          }
+        ) }),
+        error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.06] px-3 py-2 text-sm text-brand-attention", children: error }) : null,
+        busy ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "p",
+          {
+            role: "status",
+            tabIndex: 0,
+            className: "mt-4 text-sm font-medium text-brand-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
+            children: busyLabel
+          }
+        ) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex justify-end gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { type: "button", variant: "outline", onClick: onCancel, disabled: busy, children: "Cancel" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { type: "submit", disabled: confirmDisabled, children: busy ? busyLabel : confirmLabel })
+        ] })
+      ]
+    }
+  ) });
+}
 function cloneLayers(layers) {
   return layers.map((layer) => ({
     ...layer,
@@ -31888,7 +32114,8 @@ async function approveWithExtensionAllow(deps, permissionIds, credentials) {
   return { status: "approved", revision };
 }
 function ApprovalExtensionRecommendationCard(props) {
-  const recommendation = props.item.extension_recommendation;
+  const [liveRecommendation, setLiveRecommendation] = reactExports.useState(null);
+  const recommendation = liveRecommendation ?? props.item.extension_recommendation;
   const [confirmOpen, setConfirmOpen] = reactExports.useState(false);
   const [busy, setBusy] = reactExports.useState(false);
   const inFlight = reactExports.useRef(false);
@@ -31899,8 +32126,20 @@ function ApprovalExtensionRecommendationCard(props) {
     [recommendation]
   );
   const primary = recommendation?.permissions[0] ?? null;
-  const { item, allowScope, approvalGate, onResolve, onApproved, onDialogActiveChange, persistExactAction = false } = props;
+  const { item, allowScope, onResolve, onApproved, onDialogActiveChange, persistExactAction = false } = props;
   const resolutionAvailable = !retryCannotReuseApproval(item) || persistExactAction;
+  const authorityUnavailable = recommendation?.status === "authority_unavailable";
+  const handleAvailable = reactExports.useCallback((next) => {
+    setLiveRecommendation(next);
+  }, []);
+  const watch = useExtensionAuthorityWatch({
+    active: authorityUnavailable,
+    requestId: item.request_id,
+    approvalGate: props.approvalGate,
+    onAvailable: handleAvailable
+  });
+  const approvalGate = watch.approvalGate;
+  const justEnrolled = liveRecommendation !== null;
   const dialogActive = confirmOpen || busy;
   reactExports.useEffect(() => {
     onDialogActiveChange?.(dialogActive);
@@ -31962,7 +32201,6 @@ function ApprovalExtensionRecommendationCard(props) {
   );
   if (!recommendation || !copy || !primary) return null;
   const caution = recommendation.caution;
-  const authorityUnavailable = recommendation.status === "authority_unavailable";
   const gateReady = isBulkApproveGateReady(approvalGate);
   const gateLocked = approvalGateIsLocked(approvalGate);
   const tone = caution ? "border-brand-attention/30 bg-brand-attention/[0.05]" : "border-brand-blue/20 bg-brand-blue/[0.04]";
@@ -31980,7 +32218,8 @@ function ApprovalExtensionRecommendationCard(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "approval-extension-recommendation-title", className: "mt-1 text-sm font-semibold text-brand-dark", children: copy.title }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/80", children: copy.body }),
             copy.cautionLines.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", "aria-label": "Before you allow this", children: copy.cautionLines.map((line) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "text-sm font-medium text-brand-attention", children: line }, line)) }),
-            authorityUnavailable && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/80", children: "Protection settings need attention before Guard can change them from here." }),
+            authorityUnavailable && /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionAuthoritySetup, { watch, commandText: copy.commandText }),
+            justEnrolled && savedMessage === null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm font-medium text-brand-green-text", role: "status", children: "This device is set up. You can now approve and always allow from here." }),
             !resolutionAvailable && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/80", children: "Inspect this permission in Extensions. Approving this request once is unavailable." }),
             savedMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm font-medium text-brand-green-text", role: "status", children: savedMessage }),
             error && !confirmOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-purple", role: "alert", children: error }),

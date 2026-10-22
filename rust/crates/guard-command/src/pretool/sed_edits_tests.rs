@@ -363,7 +363,6 @@ fn protected_outside_and_linked_targets_stay_reviewed() {
         "mv src/linked.ts src/other.ts && sed -i '' 's/a/b/' src/other.ts".to_owned(),
         "ln -sf ../deploy.sh src/index.ts; sed -i '' 's/a/b/' src/index.ts".to_owned(),
         "git checkout feature && sed -i '' 's/a/b/' src/index.ts".to_owned(),
-        "FOO=1 sed -i '' 's/a/b/' src/index.ts".to_owned(),
     ]);
     for command in &commands {
         assert!(!proven(&layout, command), "{command}");
@@ -409,6 +408,14 @@ fn a_bounded_workspace_edit_needs_no_prompt() {
             action(harness, edit).minimum_action,
             "allow",
             "{harness}: {edit}"
+        );
+        // An ordinary project setting in front of the edit is a value sed
+        // reads for itself; it names no program, loader, config or home.
+        let prefixed = "FOO=1 sed -i '' 's|href={OLD}|href={next}|' src/app/page.tsx";
+        assert_eq!(
+            action(harness, prefixed).minimum_action,
+            "allow",
+            "{harness}: {prefixed}"
         );
         // These may still run in the workspace sandbox, but never as a proven
         // exact-safe edit on the host.
