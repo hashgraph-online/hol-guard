@@ -127,7 +127,7 @@ jobs:
       - name: Install the locked development environment
         run: uv sync --frozen --extra dev
       - name: Restore the native runtime that judges release metadata
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: extension-delivery-runtime-${{ github.sha }}
           path: ${{ runner.temp }}/delivery-runtime
@@ -225,7 +225,7 @@ jobs:
       - name: Install locked provenance verifier
         run: uv sync --frozen --extra dev
       - name: Restore the native runtime that judges release metadata
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: extension-delivery-runtime-${{ github.sha }}
           path: ${{ runner.temp }}/delivery-runtime
@@ -233,7 +233,7 @@ jobs:
         run: |
           chmod 0755 "$RUNNER_TEMP/delivery-runtime/hol-guard-runtime"
           echo "HOL_GUARD_NATIVE_BINARY=$RUNNER_TEMP/delivery-runtime/hol-guard-runtime" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: extension-artifacts-${{ github.sha }}
           path: extension-snapshot
