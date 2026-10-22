@@ -189,12 +189,16 @@ def test_real_packaged_cross_engine_and_changed_source_offline_api_upgrade(tmp_p
         service.apply({**payload, "proof_id": approved["proof_id"]})
         return activation_store.read(store)
 
-    old = activation_store.read(store)
+    old = None
     old_identity = checkpoint["old_identity"]
-    assert "command.agentbridge" in old.selected
     remote_identity = checkpoint["remote_identity"]
     for version, source in [("3.50.0a1", "a" * 40), ("3.50.0b1", "b" * 40)]:
         authority = install(BINARY, version, source)
+        if old is None:
+            # The upgraded package's runtime opens the record the previous
+            # client left; no record is read without an installed runtime.
+            old = activation_store.read(store)
+            assert "command.agentbridge" in old.selected
         store.migrate_installed_command_pack_authority()
         active = apply(version)
         assert active.selected == old.selected

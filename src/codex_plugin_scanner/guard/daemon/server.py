@@ -2906,7 +2906,7 @@ class _GuardDaemonHandler(
             load_detail = "Review capacity is available."
         return {
             "ok": True,
-            "receipts": len(store.list_receipts(limit=500)),
+            "receipts": store.count_receipts(),
             "approvals": pending_approvals,
             "pending_approvals": pending_approvals,
             "hook_evidence_writer": evidence_writer_stats,

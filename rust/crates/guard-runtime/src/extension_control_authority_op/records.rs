@@ -26,12 +26,12 @@ const PRIVATE_REF_DOMAIN: &[u8] = b"hol-guard.extension-control.private-ref.v1\x
 /// `ExtensionControlAuthorityError`; `Degraded` is any other failure, which
 /// the Python readers turned into a degraded view.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum Fault {
+pub(crate) enum Fault {
     Tampered(String),
     Degraded(String),
 }
 
-pub(super) type Res<T> = Result<T, Fault>;
+pub(crate) type Res<T> = Result<T, Fault>;
 
 pub(super) fn tampered(reason: &str) -> Fault {
     Fault::Tampered(reason.to_owned())
@@ -46,7 +46,7 @@ pub(super) fn store_fault(_: rusqlite::Error) -> Fault {
 }
 
 /// `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)`.
-pub(super) fn canonical(value: &Value) -> Res<String> {
+pub(crate) fn canonical(value: &Value) -> Res<String> {
     dumps_sorted(value).ok_or_else(|| degraded("authority record is not encodable"))
 }
 
@@ -84,7 +84,7 @@ fn compare_digest(actual: &str, expected: &str) -> Res<bool> {
 }
 
 /// `authenticated_record`: the framed canonical record, its digest and MAC.
-pub(super) fn authenticated_record(
+pub(crate) fn authenticated_record(
     payload: &Map<String, Value>,
     key: &[u8],
     purpose: &str,
@@ -99,7 +99,7 @@ pub(super) fn authenticated_record(
 }
 
 /// `verify_authenticated_record`.
-pub(super) fn verify_record(
+pub(crate) fn verify_record(
     encoded: &str,
     expected_digest: &str,
     expected_mac: &str,
@@ -126,7 +126,7 @@ pub(super) fn verify_record(
 }
 
 /// `payload.get(name)`, with a missing field read as `None`.
-pub(super) fn field<'a>(payload: &'a Map<String, Value>, name: &str) -> &'a Value {
+pub(crate) fn field<'a>(payload: &'a Map<String, Value>, name: &str) -> &'a Value {
     payload.get(name).unwrap_or(&Value::Null)
 }
 
@@ -142,7 +142,7 @@ pub(super) fn fields_match(
 }
 
 /// Python `==` between two values decoded by `json.loads`.
-pub(super) fn py_eq(left: &Value, right: &Value) -> bool {
+pub(crate) fn py_eq(left: &Value, right: &Value) -> bool {
     match (left, right) {
         (Value::Null, Value::Null) => true,
         (Value::String(a), Value::String(b)) => a == b,

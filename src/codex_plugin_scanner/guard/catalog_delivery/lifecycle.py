@@ -7,10 +7,21 @@ import os
 import threading
 from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
+from functools import wraps
 from pathlib import Path
 from typing import Any, cast
 
 from ..extension_builder import native_source_compiler as transport
+
+
+class NativePackLifecycleUnavailableError(ValueError):
+    """The runtime could not answer: missing, unverifiable, timed out or crashed.
+
+    This is the transport saying nothing, not the runtime refusing a record. A
+    caller that resets state on a damaged record must let this one propagate, so
+    an outage cannot be read as damage. It stays a `ValueError` because that is
+    what every existing caller handles.
+    """
 
 
 class _Session:
@@ -51,7 +62,24 @@ def session():
             finally:
                 _SESSION.reset(token)
     except transport.NativeSourceCompilerError as exc:
-        raise ValueError(f"native_pack_lifecycle_unavailable: {exc}") from exc
+        raise NativePackLifecycleUnavailableError(f"native_pack_lifecycle_unavailable: {exc}") from exc
+
+
+def one_runtime(function):
+    """Verify and materialize the runtime once per operation, not once per record.
+
+    A `record` call outside a session re-reads, hashes and copies the packaged
+    executable before spawning it. An operation that authenticates several
+    records -- a store read, a projection capture, a reservation inside an open
+    write transaction -- pays that once with this.
+    """
+
+    @wraps(function)
+    def operation(*args, **kwargs):
+        with session():
+            return function(*args, **kwargs)
+
+    return operation
 
 
 @contextmanager
@@ -105,7 +133,7 @@ def _invoke(kind, fields, deadline) -> dict[str, Any]:
         # Rust validates each operation's record; this adapter transports heterogeneous JSON values.
         return cast(dict[str, Any], transport._decode_output(stdout, returncode=code, stderr=stderr))
     except transport.NativeSourceCompilerError as exc:
-        raise ValueError(f"native_pack_lifecycle_unavailable: {exc}") from exc
+        raise NativePackLifecycleUnavailableError(f"native_pack_lifecycle_unavailable: {exc}") from exc
 
 
 @contextmanager
@@ -117,6 +145,31 @@ def verified_preparation():
             return invoke(kind, **fields)
 
         yield invoke_pinned
+
+
+def record(operation, purpose, *, key: bytes, **fields) -> dict[str, Any]:
+    """Seal or verify one authenticated command-pack record in the runtime.
+
+    A record that does not authenticate is reported as tampered; one that
+    authenticates outside its schema is refused by name. Both arrive as answers:
+    a tampered record raises `ExtensionControlAuthorityError`, a refused one
+    raises `ValueError` with the reason, and only a runtime that could not
+    answer raises `NativePackLifecycleUnavailableError`.
+    """
+    from ..runtime.extension_control_authority import ExtensionControlAuthorityError
+
+    try:
+        result = invoke("record", operation=operation, purpose=purpose, key=key.hex(), **fields)
+    except (TypeError, OverflowError) as error:
+        # A record the request cannot carry is refused by name here, the way the
+        # runtime refuses one it can read but will not accept.
+        raise ValueError("pack_lifecycle_record_payload_invalid") from error
+    fault = result.get("fault")
+    if fault == "tampered":
+        raise ExtensionControlAuthorityError(str(result.get("reason")))
+    if fault is not None:
+        raise ValueError(str(result.get("reason")))
+    return result
 
 
 def transfer(**fields):

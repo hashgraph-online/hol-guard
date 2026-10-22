@@ -44,6 +44,31 @@ def durable_directory(path: Path) -> None:
         os.close(descriptor)
 
 
+def repair_link_count(directory: Path, path: Path, data: bytes) -> None:
+    """Give an object a single link again after an interrupted publication.
+
+    Publication links a complete temporary into place and removes the temporary
+    afterwards, so a crash between those two steps leaves the object with two
+    links. The runtime's bounded reader refuses a file whose link count is not
+    one, which would make a complete, correct object unreadable. The bytes here
+    already compared equal to the object on disk, so republishing them under a
+    fresh inode repairs the link count without changing what the object holds.
+    """
+    if os.stat(path).st_nlink == 1:
+        return
+    with tempfile.NamedTemporaryFile(dir=directory, prefix=".obj-", delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+            stream.close()
+            os.replace(temporary, path)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
+
+
 def publish_object(directory: Path, sha256: str, data: bytes) -> bool:
     """Return True for a new object; competing writers expose only complete files."""
     path = directory / f"{sha256}.json"
@@ -61,6 +86,7 @@ def publish_object(directory: Path, sha256: str, data: bytes) -> bool:
             except FileExistsError:
                 if path.is_symlink() or read_object(path) != data:
                     raise ValueError("existing pack cache object failed integrity") from None
+                repair_link_count(directory, path, data)
                 durable_directory(directory)
                 return False
         finally:

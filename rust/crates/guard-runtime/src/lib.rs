@@ -48,6 +48,7 @@ mod archive_acquisition_op;
 mod archive_inspect;
 mod archive_inspect_containment;
 mod archive_verdict_seam;
+mod artifact_content_hash_op;
 mod artifact_risk_op;
 mod bash_post_delivery;
 #[cfg(unix)]

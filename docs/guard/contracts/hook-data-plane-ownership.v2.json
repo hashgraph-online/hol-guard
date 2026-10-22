@@ -420,6 +420,7 @@
     "src/codex_plugin_scanner/guard/native_skill_workflow_preflight.py",
     "src/codex_plugin_scanner/guard/native_mcp_stdio_exchange.py",
     "src/codex_plugin_scanner/guard/native_package_approval_hash.py",
+    "src/codex_plugin_scanner/guard/native_artifact_content_hash.py",
     "src/codex_plugin_scanner/guard/native_package_policy_resolve.py",
     "src/codex_plugin_scanner/guard/native_package_protect_finalize.py",
     "src/codex_plugin_scanner/guard/native_supply_chain_posture.py",

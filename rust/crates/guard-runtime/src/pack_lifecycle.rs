@@ -11,6 +11,7 @@ mod installed_asset;
 pub(crate) mod location;
 mod migration;
 mod offline;
+mod record;
 mod release;
 mod selection;
 #[cfg(test)]
@@ -206,6 +207,9 @@ pub(super) fn evaluate(input: &Value) -> Result<Value, String> {
     let key = hex::decode(key).map_err(|_| "pack_lifecycle_key_invalid")?;
     if key.len() != 32 {
         return Err("pack_lifecycle_key_invalid".into());
+    }
+    if kind == "record" {
+        return record::evaluate(input, &key);
     }
     if kind == "migrate" {
         return migration::migrate(input, &key);

@@ -36492,7 +36492,7 @@ const AboutWorkspace = lazyWorkspace(
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-B8afqB1K.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-Be4VEQ-S.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",

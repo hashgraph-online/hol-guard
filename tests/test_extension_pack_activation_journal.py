@@ -159,6 +159,42 @@ def test_anchored_recovery_installs_with_controls_atomically_and_needs_no_fetch(
     assert value.connection.execute("select count(*) from extension_command_pack_pending").fetchone()[0] == 0
 
 
+def test_a_runtime_outage_while_resuming_keeps_the_pending_transition(journal, monkeypatch):
+    """An outage says nothing about the record, so it must not read as damage.
+
+    `UnverifiablePackTransitionError` is what lets recovery reset control
+    authority and discard the pending transition. A missing, unverifiable or
+    timed-out runtime has to stay retryable instead.
+    """
+    from codex_plugin_scanner.guard.catalog_delivery import lifecycle
+
+    value = journal
+    with hold_command_control_authority_lock(value.store.guard_home), value.connection:
+        reserve(value)
+    value.anchor.current = AuthorityAnchor(1, value.transition["snapshot_digest"], AuthorityPhase.ANCHORED)
+    before = tuple(value.connection.iterdump())
+
+    def unavailable(*args, **kwargs):
+        raise lifecycle.NativePackLifecycleUnavailableError("native_pack_lifecycle_unavailable: feature unavailable")
+
+    # `compiled_lifecycle` pins the runtime through the same `monkeypatch`
+    # instance, so undoing here would drop the retry onto the production
+    # lifecycle. Restore the one name this test replaced.
+    available = lifecycle.record
+    monkeypatch.setattr(lifecycle, "record", unavailable)
+    with (
+        hold_command_control_authority_lock(value.store.guard_home),
+        pytest.raises(lifecycle.NativePackLifecycleUnavailableError, match="unavailable"),
+        value.connection,
+    ):
+        activation_journal.finish(value.store, value.connection, value.transition, expected_pack=value.pack)
+    assert tuple(value.connection.iterdump()) == before
+    monkeypatch.setattr(lifecycle, "record", available)
+    with hold_command_control_authority_lock(value.store.guard_home), value.connection:
+        activation_journal.finish(value.store, value.connection, value.transition, expected_pack=value.pack)
+    assert activation_store.read(value.store).metadata == value.prepared.metadata
+
+
 def test_missing_reservation_cannot_commit_pack_bound_controls(journal):
     value = journal
     with (

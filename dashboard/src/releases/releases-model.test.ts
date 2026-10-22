@@ -241,6 +241,22 @@ function change(kind: ReleaseChange["kind"], id: string): ReleaseChange {
   );
 }
 
+// The range follows the page size hol.org answered with, not the one asked for.
+{
+  const clamped: ReleaseIndex = {
+    kind: "index",
+    page: 3,
+    pageSize: 20,
+    total: 2079,
+    totalPages: 104,
+    generatedAt: "2026-10-22T00:00:00Z",
+    releases: Array.from({ length: 20 }, (_value, offset) =>
+      summary({ slug: `v3-${offset}-1`, versionLabel: `3.${offset}.1` }),
+    ),
+  };
+  assert.equal(pageRangeLabel(clamped), "Showing 41–60 of 2079 releases");
+}
+
 // A date Guard cannot parse is shown as published rather than "Invalid Date".
 {
   assert.equal(formatReleaseDate("not-a-date"), "not-a-date");

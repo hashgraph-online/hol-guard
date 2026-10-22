@@ -372,7 +372,7 @@ function WhatsNewCard(props) {
     }
   );
 }
-const RELEASES_PAGE_SIZE = 25;
+const RELEASES_PAGE_SIZE = 20;
 const CAPABILITY_UNAVAILABLE = "release_feed_capability_unavailable";
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);

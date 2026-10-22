@@ -277,6 +277,7 @@ pub(crate) enum ResidentOperationV1 {
     HookAdapter(HookAdapterRequestV1),
     HookArtifactCompose(HookArtifactComposeRequestV1),
     HookArtifactFacts(guard_contracts::HookArtifactFactsRequestV1),
+    ArtifactContentHash(guard_contracts::ArtifactContentHashRequestV1),
     ConsumerArtifactCompose(ConsumerArtifactComposeRequestV1),
     ConsumerArtifactProject(ConsumerArtifactProjectRequestV1),
     McpToolEvidence(McpToolEvidenceRequestV1),

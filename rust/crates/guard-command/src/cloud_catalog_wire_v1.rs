@@ -1,12 +1,15 @@
 //! Cloud v1 Extension catalog wire: privacy-safe projection of a registry,
-//! the shared bounded shape/identity contract, and the cross-language
-//! canonical digest. Refusal messages are the stable reason strings the
-//! Python adapter raises; tests and Cloud diagnostics match them verbatim.
+//! the shared bounded shape/identity contract, the cross-language canonical
+//! digest, and the Cloud negotiation verdicts. Refusal messages are the stable
+//! reason strings the Python adapter raises; tests and Cloud diagnostics match
+//! them verbatim.
 use super::{hash, timestamp};
 use serde_json::{json, Map, Value};
 use std::collections::HashSet;
 use std::sync::OnceLock;
 
+#[path = "cloud_catalog_wire_v1_sync.rs"]
+mod negotiation;
 #[path = "cloud_catalog_wire_v1_build.rs"]
 mod projection;
 pub use projection::build;
@@ -72,6 +75,8 @@ const FORBIDDEN_KEYS: [&str; 14] = [
 pub enum Refusal {
     Invalid(String),
     Limit(String),
+    /// Cloud or the runtime answered outside the negotiated protocol.
+    Protocol(String),
 }
 pub type Outcome<T> = std::result::Result<T, Refusal>;
 
@@ -81,6 +86,10 @@ fn invalid<T>(message: impl Into<String>) -> Outcome<T> {
 
 fn limit<T>(message: impl Into<String>) -> Outcome<T> {
     Err(Refusal::Limit(message.into()))
+}
+
+fn protocol<T>(message: impl Into<String>) -> Outcome<T> {
+    Err(Refusal::Protocol(message.into()))
 }
 
 fn limits() -> Value {
@@ -456,6 +465,8 @@ fn answer(request: &Value) -> Outcome<Value> {
             let digest = hash(text.as_bytes());
             Ok(json!({"canonical_json": text, "catalog_digest": digest}))
         }
+        Some("v1_handshake") => negotiation::handshake(request),
+        Some("v1_sync_ack") => negotiation::sync_ack(request),
         _ => invalid("Unsupported Extension catalog action"),
     }
 }
@@ -467,6 +478,7 @@ pub fn evaluate(request: &Value) -> Value {
         Ok(payload) => payload,
         Err(Refusal::Invalid(message)) => json!({"v1_error": "invalid", "message": message}),
         Err(Refusal::Limit(message)) => json!({"v1_error": "limit", "message": message}),
+        Err(Refusal::Protocol(message)) => json!({"v1_error": "protocol", "message": message}),
     };
     json!({"schema": "guard-cloud-catalog-result.v2", "payload": payload})
 }

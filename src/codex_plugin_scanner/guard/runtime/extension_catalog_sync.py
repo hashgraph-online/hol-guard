@@ -175,7 +175,7 @@ def _render(value: object) -> ExtensionCatalogWire:
     return wire
 
 
-def _native(action: str, *, guard_home: Path | None = None, **fields: object) -> dict[str, Any]:
+def native_wire_call(action: str, *, guard_home: Path | None = None, **fields: object) -> dict[str, Any]:
     """Run one v1 wire action in the resident and raise its stable refusal."""
 
     from ..native_context import _resolve_digest_home, ensure_resident_prerequisite
@@ -197,6 +197,8 @@ def _native(action: str, *, guard_home: Path | None = None, **fields: object) ->
         raise ExtensionCatalogLimitError(message)
     if refusal == "invalid" and isinstance(message, str):
         raise ValueError(message)
+    if refusal == "protocol" and isinstance(message, str):
+        raise RuntimeError(message)
     raise RuntimeError("Native Extension catalog answer is malformed")
 
 
@@ -205,7 +207,7 @@ def canonical_extension_catalog_json(
 ) -> str:
     """Return the shared canonical JSON for an Extension projection."""
 
-    text = _native("v1_canonical", guard_home=guard_home, extensions=extensions).get("canonical_json")
+    text = native_wire_call("v1_canonical", guard_home=guard_home, extensions=extensions).get("canonical_json")
     if not isinstance(text, str):
         raise RuntimeError("Native Extension catalog answer is malformed")
     return text
@@ -216,7 +218,7 @@ def catalog_digest_for_extensions(
 ) -> str:
     """Return the cross-language SHA-256 digest over canonical projected Extensions."""
 
-    digest = _native("v1_canonical", guard_home=guard_home, extensions=extensions).get("catalog_digest")
+    digest = native_wire_call("v1_canonical", guard_home=guard_home, extensions=extensions).get("catalog_digest")
     if not isinstance(digest, str):
         raise RuntimeError("Native Extension catalog answer is malformed")
     return digest
@@ -225,7 +227,7 @@ def catalog_digest_for_extensions(
 def validate_extension_catalog_wire(payload: object, *, guard_home: Path | None = None) -> ExtensionCatalogWire:
     """Execute the shared catalog's bounded shape, privacy, identity, and digest contract."""
 
-    return _render(_native("v1_validate", guard_home=guard_home, payload=payload).get("catalog"))
+    return _render(native_wire_call("v1_validate", guard_home=guard_home, payload=payload).get("catalog"))
 
 
 def build_extension_catalog_wire(
@@ -241,7 +243,7 @@ def build_extension_catalog_wire(
 
     if not guard_version.strip() or not generated_at.strip():
         raise ValueError("guard_version and generated_at are required")
-    answer = _native(
+    answer = native_wire_call(
         "v1_build",
         guard_home=guard_home,
         extensions=[_raw_extension(extension) for extension in registry.extensions],

@@ -26,7 +26,7 @@ mod managed_tests;
 mod plans;
 #[cfg(test)]
 mod plans_tests;
-mod records;
+pub(crate) mod records;
 mod seals;
 #[cfg(test)]
 mod seals_tests;

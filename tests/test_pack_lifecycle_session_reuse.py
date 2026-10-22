@@ -184,19 +184,44 @@ def test_a_discovery_preparation_verifies_the_runtime_once_for_its_whole_batch(n
 
 def test_a_record_traversal_runs_inside_one_session(native, monkeypatch):
     # The distribution, each selection and executable page, and every registry
-    # catalog is a separate native expansion of the same record.
+    # catalog is expanded by the runtime inside one read of the record, so the
+    # whole traversal verifies and copies the executable once.
     from codex_plugin_scanner.guard.catalog_delivery import activation_record
 
-    def verify_header(data, expected_digest, expected_mac, *, key):
-        assert lifecycle._SESSION.get() is not None
-        lifecycle.invoke("offline", operation="header")
-        raise ValueError("stop after the first native read")
+    opened = {
+        "value": {
+            "program_digest": "p" * 64,
+            "catalog_digest": "c" * 64,
+            "trust_digest": "t" * 64,
+            "engine": "engine",
+            "source_sha": "s" * 40,
+        },
+        "selected": ["one"],
+        "registry_ids": ["two"],
+        "executables": ["three"],
+        "registry": [{"kind": "data", "sha256": "r" * 64, "expanded_length": 1}],
+    }
 
-    monkeypatch.setattr(activation_record, "verify_header", verify_header)
-    with pytest.raises(ValueError, match="stop after"):
-        activation_record.open_record(b"", "d" * 64, "m", key=b"k", directory=Path("/cache"))
+    def decode_output(stdout, returncode, stderr):
+        assert lifecycle._SESSION.get() is not None
+        return opened
+
+    monkeypatch.setattr(transport, "_decode_output", decode_output)
+    result = activation_record.open_record("{}", "d" * 64, "m", key=b"k", directory=Path("/cache"))
+    assert result.engine == "engine"
+    assert result.selected == frozenset({"one"}) and result.candidate_executables == ("three",)
     assert lifecycle._SESSION.get() is None
     assert native == {"verify": 1, "copies": 1, "runs": 1}
+
+
+def test_a_record_the_request_cannot_carry_is_refused_by_name(native):
+    # A record arriving as bytes never reaches the runtime, so it is refused
+    # here rather than escaping as a serialisation error.
+    from codex_plugin_scanner.guard.catalog_delivery import activation_record
+
+    with pytest.raises(ValueError, match="pack_lifecycle_record_payload_invalid"):
+        activation_record.verify_header(b"{}", "d" * 64, "m", key=b"k")
+    assert native == {"verify": 0, "copies": 0, "runs": 0}
 
 
 def test_a_security_preparation_runs_inside_one_session(native, monkeypatch):

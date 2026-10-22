@@ -16,8 +16,12 @@ export type ReleaseDetailResult =
   | { status: "ok"; detail: ReleaseDetail }
   | { status: "failed"; failure: ReleaseFeedFailure };
 
-/** One screen of history; the daemon caps the page size at the same number. */
-export const RELEASES_PAGE_SIZE = 25;
+/**
+ * One screen of history. hol.org serves at most 20 releases per public page and
+ * clamps a larger ask without saying so, so ask for exactly what it will send.
+ * Everything downstream reads the page size off the answer, not off this number.
+ */
+export const RELEASES_PAGE_SIZE = 20;
 
 /** The daemon's answer when the archive is switched off on this device. */
 const CAPABILITY_UNAVAILABLE = "release_feed_capability_unavailable";

@@ -28,6 +28,9 @@ pub use policy::select_policy_metadata;
 #[path = "cloud_catalog_tests.rs"]
 mod tests;
 #[cfg(test)]
+#[path = "cloud_catalog_wire_v1_sync_tests.rs"]
+mod wire_v1_sync_tests;
+#[cfg(test)]
 #[path = "cloud_catalog_wire_v1_tests.rs"]
 mod wire_v1_tests;
 

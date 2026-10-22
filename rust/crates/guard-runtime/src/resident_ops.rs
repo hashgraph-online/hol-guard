@@ -501,6 +501,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::HookArtifactFacts(request) => {
                 crate::hook_artifact_facts_op::evaluate_hook_artifact_facts_request(&request)
             }
+            ResidentOperationV1::ArtifactContentHash(request) => {
+                crate::artifact_content_hash_op::evaluate_artifact_content_hash_request(&request)
+            }
             ResidentOperationV1::ConsumerArtifactCompose(request) => {
                 crate::consumer_artifact_compose_op::evaluate_consumer_artifact_compose_request(
                     &request,
