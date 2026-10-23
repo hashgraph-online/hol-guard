@@ -159,26 +159,70 @@
         "description": "Reviews LLMRig apply, run, and verify commands, which may download model artifacts, start runtimes, perform inference, or write verification receipts. LLMRig retains its own approval checks.",
         "family": null,
         "matcher": {
-          "op": "leading-subcommand.v1",
-          "config": {
-            "executables": [
-              "llmrig",
-              "llmrig.cmd",
-              "llmrig.exe"
-            ],
-            "subcommands": [
-              "apply",
-              "run",
-              "verify"
-            ],
-            "options_with_values": [],
-            "required_flags_anywhere": [],
-            "forbidden_flags_before_delimiter": [
-              "--help",
-              "-h",
-              "--version"
-            ]
-          }
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "llmrig",
+                  "llmrig.cmd",
+                  "llmrig.exe"
+                ],
+                "subcommands": [
+                  "apply"
+                ],
+                "options_with_values": [],
+                "required_flags_anywhere": [],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "llmrig",
+                  "llmrig.cmd",
+                  "llmrig.exe"
+                ],
+                "subcommands": [
+                  "run"
+                ],
+                "options_with_values": [],
+                "required_flags_anywhere": [],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "llmrig",
+                  "llmrig.cmd",
+                  "llmrig.exe"
+                ],
+                "subcommands": [
+                  "verify"
+                ],
+                "options_with_values": [],
+                "required_flags_anywhere": [],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ]
+              }
+            }
+          ]
         },
         "native_capability": null,
         "permission_id": "command.llmrig.permission.autopilot-execution",
@@ -204,27 +248,54 @@
         "description": "Reviews --output on report and rescue-evidence commands, which create local files without uploading them.",
         "family": null,
         "matcher": {
-          "op": "leading-subcommand.v1",
-          "config": {
-            "executables": [
-              "llmrig",
-              "llmrig.cmd",
-              "llmrig.exe"
-            ],
-            "subcommands": [
-              "report",
-              "rescue-evidence"
-            ],
-            "options_with_values": [],
-            "required_flags_anywhere": [
-              "--output"
-            ],
-            "forbidden_flags_before_delimiter": [
-              "--help",
-              "-h",
-              "--version"
-            ]
-          }
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "llmrig",
+                  "llmrig.cmd",
+                  "llmrig.exe"
+                ],
+                "subcommands": [
+                  "report"
+                ],
+                "options_with_values": [],
+                "required_flags_anywhere": [
+                  "--output"
+                ],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "llmrig",
+                  "llmrig.cmd",
+                  "llmrig.exe"
+                ],
+                "subcommands": [
+                  "rescue-evidence"
+                ],
+                "options_with_values": [],
+                "required_flags_anywhere": [
+                  "--output"
+                ],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ]
+              }
+            }
+          ]
         },
         "native_capability": null,
         "permission_id": "command.llmrig.permission.report-write",
