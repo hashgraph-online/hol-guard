@@ -5,6 +5,7 @@ import {
   addDialogSubmitLabel,
   dialogIntro,
   enrollConfirmCopy,
+  isObservedMcpItem,
   listToolsAgainLabel,
   mcpCatalogHasTools,
   mcpListingBusyCopy,
@@ -95,3 +96,16 @@ assert.doesNotMatch(enrollConfirmCopy("package-scripts", false, true, false), /a
 assert.match(enrollConfirmCopy("mcp", false, false, null), /approval password/);
 
 console.log("add-custom-extension-support.test.ts: all assertions passed");
+
+{
+  const remote: LocalCliItem = {
+    ...packageItem,
+    surface: "mcp",
+    example_label: "mcp__echo_mcp__",
+    source_label: "Codex · configured server",
+  };
+  assert.equal(isObservedMcpItem(remote), true);
+  assert.equal(isObservedMcpItem({ ...remote, source_label: "Codex · observed tools" }), true);
+  assert.equal(isObservedMcpItem({ ...remote, source_label: "Codex" }), false);
+  assert.equal(isObservedMcpItem({ ...remote, surface: "cli" }), false);
+}

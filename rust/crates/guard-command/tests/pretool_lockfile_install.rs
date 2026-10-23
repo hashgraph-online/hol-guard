@@ -95,10 +95,7 @@ impl Lab {
         let unique = format!(
             "{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         );
         let root = std::fs::canonicalize("/tmp")
             .unwrap()
@@ -151,6 +148,7 @@ impl Lab {
                 cwd: cwd.to_str(),
                 cdpath_unset: true,
                 npm_config_inert: true,
+                pip_config_inert: true,
                 shell_home_matches: true,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),

@@ -7,8 +7,14 @@
 //! allowances. The resident reads, verifies, expires, rewrites and deletes
 //! them against the guard store; every integrity failure leaves an audit row
 //! in `guard_events`. The integrity key material and the clock are shipped by
-//! the Python transport, and so are the Python-owned command fingerprints used
-//! as state keys, which the resident treats as opaque.
+//! the Python transport.
+//!
+//! A row's name belongs to the resident. A Cursor row is named by the
+//! conversation and the command it holds, and a Claude pending permission by
+//! its artifact, so the key a row is written under and the key it is read back
+//! under have one definition. A request may instead echo a key the resident
+//! issued earlier — out of a pending index, or out of an op's own reply — and
+//! that key is acted on as given.
 //!
 //! Each request names one `op` and carries only the fields that op reads;
 //! unused fields are omitted. A store that cannot be opened or a request the
@@ -58,6 +64,10 @@ pub struct HookAuthorityStateRequestV1 {
     /// The unsigned state body: the Claude notice or the Cursor pending state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
+    /// A pending row's key, as the resident issued it — read out of a session
+    /// or conversation index — and acted on as given. `cursor_remove_pending`
+    /// accepts `command` and the Claude pending ops take `artifact_id` instead;
+    /// for those the resident derives the key itself.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -68,19 +78,25 @@ pub struct HookAuthorityStateRequestV1 {
     pub expected_artifact_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_command: Option<String>,
+    /// The artifact a Claude pending permission belongs to. It names the row:
+    /// the resident derives the pending state key from it, and reads it back as
+    /// the artifact the row has to carry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifact_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifact_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub artifact_name: Option<String>,
-    /// The normalized Cursor shell command (or the Claude command binding).
+    /// The Cursor shell command the row belongs to (or the Claude command
+    /// binding). The Cursor ops derive their `sync_state` key from it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
-    /// The `sync_state` key the Cursor operation acts on.
+    /// A `sync_state` key the resident itself issued, acted on as given in
+    /// place of the one `command` would name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_key: Option<String>,
-    /// The key the command fingerprint requires for a Cursor pending state.
+    /// The key a Cursor pending row has to carry to be believed. Derived from
+    /// `command` unless the caller echoes a resident-issued key here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_key: Option<String>,
     /// `state_is_fresh` only: the stored `saved_at`.

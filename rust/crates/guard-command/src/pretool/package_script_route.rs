@@ -34,7 +34,6 @@ mod package_script_vite;
 
 #[cfg(unix)]
 const PACKAGE_TEST: &str = "native_package_test_readonly_containment_required";
-#[cfg(unix)]
 const NODE_TOOL: &str = "native_node_tool_readonly_containment_required";
 const NODE_BUILD: &str = "native_node_build_output_containment_required";
 const GIT: &str = "native_git_readonly_containment_required";
@@ -71,10 +70,10 @@ fn core_cwd(model: &CanonicalCommandV1, context: PathContext<'_>) -> Option<Path
     context.cwd.map(PathBuf::from)
 }
 
-/// Windows runs only the direct Vite build sink, which stages a flat npm or
-/// Yarn classic `node_modules` from the run directory up to the session root.
-/// A package script, a pnpm store or a Plug'n'Play install keeps the review
-/// prompt. Other routes are unchanged.
+/// Windows runs the direct Vite build and the direct read-only tool sinks,
+/// which stage a flat npm or Yarn classic `node_modules` from the run
+/// directory up to the session root. A package script, a pnpm store or a
+/// Plug'n'Play install keeps the review prompt. Other routes are unchanged.
 #[cfg(not(unix))]
 fn resolved(
     model: &CanonicalCommandV1,
@@ -82,34 +81,87 @@ fn resolved(
     cwd: Option<PathBuf>,
     context: PathContext<'_>,
 ) -> Option<&'static str> {
-    if reason != NODE_BUILD {
+    if reason != NODE_BUILD && reason != NODE_TOOL {
         return Some(reason);
     }
     let segment = model.segments.first()?;
     let arguments = segment.arguments.as_slice();
     // The same name the build classification reads, so `npm.exe run build`
     // is the package script `npm run build` is and keeps the review prompt.
-    if matches!(
-        crate::program_basename(segment.executable.as_deref()?),
-        "npm" | "pnpm" | "bun"
-    ) && arguments.first().is_some_and(|word| word == "run")
+    let manager = crate::program_basename(segment.executable.as_deref()?);
+    // A manager's `exec` spelling runs a local bin, not a script body.
+    let local_run = super::manager_local_bin_arguments(manager, arguments).is_some();
+    if matches!(manager, "npm" | "pnpm" | "bun" | "yarn")
+        && !local_run
+        && (arguments.first().is_some_and(|word| word == "run")
+            || super::manager_script_task(manager, arguments).is_some())
     {
         return None;
     }
     let session = std::fs::canonicalize(context.cwd?).ok()?;
     let directory = std::fs::canonicalize(cwd?).ok()?;
-    if !directory.starts_with(&session)
-        || !build_output_allowed(arguments, Some((&directory, &session)))
-    {
+    if !directory.starts_with(&session) {
         return None;
     }
-    let modules =
-        nearest(&directory, &session, "node_modules/vite/bin/vite.js").join("node_modules");
-    let installed = std::fs::canonicalize(modules).ok()?;
-    let flat = [".modules.yaml", ".pnpm"]
-        .iter()
-        .all(|marker| std::fs::symlink_metadata(installed.join(marker)).is_err());
-    (flat && installed.join("vite/bin/vite.js").is_file()).then_some(NODE_BUILD)
+    let entries: &[&str] = if reason == NODE_BUILD {
+        if !build_output_allowed(arguments, Some((&directory, &session))) {
+            return None;
+        }
+        &["vite/bin/vite.js"]
+    } else {
+        staged_tool_entries(manager, arguments)?
+    };
+    staged_install(&directory, &session, entries).then_some(reason)
+}
+
+/// The entrypoints a read-only tool run stages, for the invocation forms the
+/// classifier admits on Windows: a local bin, `npx`, `bunx`, a manager's
+/// `exec` spelling, or Node started on the tool's own entrypoint.
+#[cfg(not(unix))]
+fn staged_tool_entries(program: &str, arguments: &[String]) -> Option<&'static [&'static str]> {
+    const ESLINT: &[&str] = &["eslint/bin/eslint.js"];
+    const TSC: &[&str] = &["typescript/bin/tsc"];
+    // Prettier publishes one entrypoint per major; the sink resolves the same set.
+    const PRETTIER: &[&str] = &super::PRETTIER_ENTRIES;
+    let tool = match program {
+        "npx" | "bunx" => arguments.first()?.as_str(),
+        // Only a manager's bare `exec` spelling is a local-bin run.
+        "npm" | "pnpm" | "yarn" => super::manager_local_bin_arguments(program, arguments)?
+            .first()?
+            .as_str(),
+        "node" | "nodejs" => {
+            let entry = arguments.first()?;
+            return [ESLINT, TSC, PRETTIER].into_iter().find(|entries| {
+                entries
+                    .iter()
+                    .any(|name| super::local_package_entry(entry, name))
+            });
+        }
+        other => other,
+    };
+    Some(match tool {
+        "eslint" => ESLINT,
+        "tsc" => TSC,
+        "prettier" => PRETTIER,
+        _ => return None,
+    })
+}
+
+/// Whether the nearest install carrying one of `entries` is a flat npm or
+/// Yarn classic `node_modules` the Windows runner can stage.
+#[cfg(not(unix))]
+fn staged_install(directory: &Path, session: &Path, entries: &[&str]) -> bool {
+    entries.iter().any(|entry| {
+        let relative = format!("node_modules/{entry}");
+        let modules = nearest(directory, session, &relative).join("node_modules");
+        let Ok(installed) = std::fs::canonicalize(modules) else {
+            return false;
+        };
+        [".modules.yaml", ".pnpm"]
+            .iter()
+            .all(|marker| std::fs::symlink_metadata(installed.join(marker)).is_err())
+            && installed.join(entry).is_file()
+    })
 }
 
 #[cfg(unix)]
@@ -124,16 +176,11 @@ fn resolved(
     }
     let segment = model.segments.first()?;
     let manager = executable_basename(segment.executable.as_deref()?);
-    if !matches!(manager, "npm" | "pnpm" | "bun") {
+    if !matches!(manager, "npm" | "pnpm" | "bun" | "yarn") {
         return direct_tool(reason, &segment.arguments, cwd, context);
     }
     let arguments = segment.arguments.as_slice();
-    let task = match arguments {
-        [run, task] if run == "run" && matches!(task.as_str(), "lint" | "typecheck" | "build") => {
-            Some(task.as_str())
-        }
-        _ => None,
-    };
+    let task = super::manager_script_task(manager, arguments);
     let test = reason == PACKAGE_TEST;
     if test && manager == "bun" && arguments.first().is_some_and(|word| word == "test") {
         // `bun test` is Bun's own runner, never the package `test` script.
@@ -146,8 +193,12 @@ fn resolved(
     }
     let Some((workspace, directory)) = cwd.and_then(|cwd| locations(&cwd, context)) else {
         // No real directory to read: the sink cannot run it either, and no
-        // narrower or broader execution is offered.
-        return Some(reason);
+        // narrower or broader execution is offered. A conventional name says
+        // what the script does on its own; any other name is only as good as
+        // the body behind it, so without the manifest it stays a package
+        // script and keeps the generic route.
+        return (test || task.is_some_and(|task| matches!(task, "lint" | "typecheck" | "build")))
+            .then_some(reason);
     };
     let package = nearest(&directory, &workspace, "package.json");
     let (manifest, _) = read_json_with_integrity(&package.join("package.json"), false);
@@ -352,13 +403,16 @@ fn tool_script(
     }
     let tokens = split_with(PLAIN_LEXER, scripts.get(task)?.as_str()?).ok()?;
     let (tool, arguments) = tokens.split_first()?;
-    let (entry, reason) = match tool.as_str() {
-        "eslint" => ("eslint/bin/eslint.js", NODE_TOOL),
+    let (entries, reason): (&[&str], &'static str) = match tool.as_str() {
+        "eslint" => (&["eslint/bin/eslint.js"], NODE_TOOL),
         "tsc" if arguments.iter().any(|word| word == "--noEmit") => {
-            ("typescript/bin/tsc", NODE_TOOL)
+            (&["typescript/bin/tsc"], NODE_TOOL)
         }
+        // Prettier publishes one entrypoint per major, and only a checking
+        // mode reports instead of rewriting the files it visits.
+        "prettier" if super::prettier_checks(arguments) => (&super::PRETTIER_ENTRIES, NODE_TOOL),
         "vite" if arguments.first().is_some_and(|word| word == "build") => {
-            ("vite/bin/vite.js", NODE_BUILD)
+            (&["vite/bin/vite.js"], NODE_BUILD)
         }
         _ => return None,
     };
@@ -378,17 +432,27 @@ fn tool_script(
                 | "--output-file"
                 | "-o"
                 | "--emitDeclarationOnly"
+                | "--write"
+                | "-w"
         ) || word.starts_with("--fix=")
             || word.starts_with("--output-file=")
+            || word.starts_with("--write=")
     }) {
         return None;
     }
-    let relative = format!("node_modules/{entry}");
-    let modules = nearest(directory, workspace, &relative).join("node_modules");
-    // `node_modules` may be a link to another directory in the workspace.
-    // Compare the entry with that directory after both are canonical, which
-    // is what the sink's path check does.
-    let modules = std::fs::canonicalize(&modules).ok()?;
-    let resolved = std::fs::canonicalize(modules.join(entry)).ok()?;
-    (resolved.is_file() && resolved.starts_with(&modules)).then_some(reason)
+    // A tool that publishes one entrypoint per major is installed under
+    // whichever spelling its version uses, and the sink resolves the same set.
+    let installed = entries.iter().any(|entry| {
+        let relative = format!("node_modules/{entry}");
+        let modules = nearest(directory, workspace, &relative).join("node_modules");
+        // `node_modules` may be a link to another directory in the workspace.
+        // Compare the entry with that directory after both are canonical,
+        // which is what the sink's path check does.
+        let Ok(modules) = std::fs::canonicalize(&modules) else {
+            return false;
+        };
+        std::fs::canonicalize(modules.join(entry))
+            .is_ok_and(|resolved| resolved.is_file() && resolved.starts_with(&modules))
+    });
+    installed.then_some(reason)
 }

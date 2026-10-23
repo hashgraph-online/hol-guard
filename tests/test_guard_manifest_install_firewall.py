@@ -20,6 +20,7 @@ from tests.manifest_install_fixtures import (
     _write_pnpm_workspace,
 )
 from tests.native_workspace import bind_workspace
+from tests.package_review_settings import review_package_signals
 
 
 def test_parse_package_intent_supports_pnpm_install_alias(tmp_path: Path) -> None:
@@ -51,6 +52,7 @@ def test_evaluate_package_request_artifact_requires_review_for_unsynced_manifest
     tmp_path: Path,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     _write_pnpm_workspace(workspace_dir, extra_dependency="evilpkg")
@@ -139,6 +141,7 @@ def test_build_package_protect_payload_reprompts_after_manifest_edit_despite_sav
     tmp_path: Path,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     _write_pnpm_workspace(workspace_dir)

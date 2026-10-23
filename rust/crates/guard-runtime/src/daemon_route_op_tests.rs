@@ -185,3 +185,26 @@ fn harness_version_writes_require_the_header_token() {
         );
     }
 }
+
+#[test]
+fn the_releases_screen_reads_are_session_paths() {
+    // The dashboard tab carries a minted session token, not the daemon auth
+    // token. Without these two reads on the session table the Releases screen
+    // renders and then 401s on every request it makes.
+    for path in ["/v1/releases/index", "/v1/releases/release"] {
+        assert!(
+            crate::daemon_route_paths::session_path("GET", path),
+            "{path}"
+        );
+        // The archive is read-only: nothing on it is posted.
+        assert!(
+            !crate::daemon_route_paths::session_path("POST", path),
+            "{path}"
+        );
+    }
+    // A neighbouring release route is not opened by accident.
+    assert!(!crate::daemon_route_paths::session_path(
+        "GET",
+        "/v1/releases/contributors"
+    ));
+}

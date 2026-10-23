@@ -65,6 +65,8 @@ from ..policy_bundle_delivery import (
     effective_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
+    CANONICAL_COMPILE_DOCUMENT_CODES,
+    CANONICAL_COMPILE_REJECTION_PREFIX,
     non_empty_string,
     policy_bundle_acceptance_checkpoint,
     policy_bundle_is_enforceable,
@@ -118,6 +120,7 @@ from .fleet_posture import (
     commit_fleet_posture_sent,
     request_full_inventory,
 )
+from .fleet_posture_tools import device_display_name
 from .guard_run_evaluation import _get_default_detector_registry as _get_default_detector_registry
 from .local_runtime_fallbacks import local_receipt_redaction_level
 from .managed_controls_sync import (
@@ -306,12 +309,17 @@ def _validate_cached_policy_bundle(
     return cached_policy_bundle_validation(store, policy_bundle)
 
 
-def _policy_bundle_rejection_payload(reason: str | None) -> dict[str, object]:
+def _policy_bundle_rejection_payload(reason: str | None, rule_id: str | None = None) -> dict[str, object]:
     resolved_reason = reason or "invalid_policy_bundle"
     payload: dict[str, object] = {"reason": resolved_reason}
     remediation = policy_bundle_rejection_message(resolved_reason)
     if remediation is not None:
         payload["message"] = remediation
+    # One rule refuses to compile and the whole bundle stays unapplied, so the
+    # rejection names that rule: without it an administrator sees only that a
+    # published policy never arrived.
+    if rule_id:
+        payload["ruleId"] = rule_id[:128]
     return payload
 
 
@@ -649,6 +657,7 @@ def sync_receipts(
     delivery_device_id = runtime_summary_device_id(runtime_session_summary, device_id)
     if policy_bundle_field_provided:
         policy_bundle_rejection_reason: str | None
+        policy_bundle_rejection_rule_id: str | None = None
         if policy_bundle_field_malformed or policy_bundle_payload is None:
             policy_bundle_rejection_reason = "invalid_policy_bundle"
         else:
@@ -700,6 +709,7 @@ def sync_receipts(
             workspace_id=cloud_workspace_id,
             device_id=delivery_device_id,
             runtime_summary=runtime_session_summary,
+            guard_home=store.guard_home,
         )
         if managed_controls_error is not None:
             policy_bundle_rejection_reason = managed_controls_error
@@ -774,7 +784,9 @@ def sync_receipts(
                     )
             except PolicyCompilationError as error:
                 validated_policy_bundle = None
-                policy_bundle_rejection_reason = f"canonical_compile_{error.code}"
+                policy_bundle_rejection_reason = f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}"
+                if error.code not in CANONICAL_COMPILE_DOCUMENT_CODES:
+                    policy_bundle_rejection_rule_id = error.rule_id
             except PolicyBundleNativeError as error:
                 candidate_policy_decisions = []
                 validated_policy_bundle = None
@@ -797,7 +809,10 @@ def sync_receipts(
             # checkpoint. Prefer current so a rejected refresh cannot roll
             # policy authority back to an older signed bundle.
             effective_policy_bundle = existing_policy_bundle or last_good_bundle
-            activation_last_error = _policy_bundle_rejection_payload(policy_bundle_rejection_reason)
+            activation_last_error = _policy_bundle_rejection_payload(
+                policy_bundle_rejection_reason,
+                policy_bundle_rejection_rule_id,
+            )
             store.add_event(
                 "policy_bundle/rejected",
                 activation_last_error,
@@ -1411,6 +1426,83 @@ def sync_supply_chain_bundle(
     return summary
 
 
+def sync_network_protection_bundle(
+    store: GuardStore,
+    *,
+    auth_context: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Fetch, verify, and save the workspace's signed network protection bundle."""
+
+    from .network_protection_bundle import (
+        NETWORK_PROTECTION_SYNC_STATE_KEY,
+        NetworkProtectionBundleError,
+        network_protection_status,
+        verify_network_protection_response,
+    )
+
+    resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
+    workspace_id = store.get_cloud_workspace_id()
+    if workspace_id is None:
+        raise GuardSyncNotConfiguredError("Guard Cloud workspace is not connected.")
+    bundle_url = _sync.sync_url(
+        "network_protection_bundle",
+        str(resolved_auth_context["sync_url"]),
+        workspace_id=workspace_id,
+    )
+    saved = store.get_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY)
+    cached_bundle_version = None
+    saved_bundle = saved.get("bundle") if isinstance(saved, dict) else None
+    if isinstance(saved_bundle, dict) and saved_bundle.get("workspaceId") != workspace_id:
+        # Another workspace's rules must not stay in force, or anchor its
+        # rollback check, once this device is connected elsewhere.
+        store.delete_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY)
+        saved_bundle = None
+    if isinstance(saved_bundle, dict):
+        existing_version = saved_bundle.get("bundleVersion")
+        if isinstance(existing_version, str) and existing_version:
+            cached_bundle_version = existing_version
+    request = _guard_sync_request(
+        resolved_auth_context,
+        request_url=bundle_url,
+        method="GET",
+        data=None,
+        extra_headers={"Accept-Encoding": "identity"},
+    )
+    payload = _fetch_supply_chain_bundle_payload(request)
+    try:
+        verified = verify_network_protection_response(
+            payload,
+            workspace_id=workspace_id,
+            trusted_keys=load_supply_chain_verification_keys(store.get_sync_payload("supply_chain_bundle_keyring")),
+            cached_bundle_version=cached_bundle_version,
+        )
+    except (NetworkProtectionBundleError, SupplyChainBundleError) as error:
+        raise RuntimeError(f"Guard network protection bundle sync failed: {error}") from error
+    synced_at = _now()
+    store.set_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY, verified, synced_at)
+    return {**network_protection_status(verified), "status": "synced", "synced_at": synced_at}
+
+
+def sync_network_protection_bundle_best_effort(
+    store: GuardStore,
+    *,
+    auth_context: dict[str, object] | None = None,
+) -> dict[str, object] | None:
+    """Sync the network protection bundle, keeping the saved one on failure.
+
+    Returns ``None`` when no workspace is connected, and a ``failed`` status
+    with the error when the fetch or verification fails.
+    """
+
+    try:
+        return sync_network_protection_bundle(store, auth_context=auth_context)
+    except GuardSyncNotConfiguredError:
+        return None
+    except (RuntimeError, OSError, ValueError) as error:
+        _LOGGER.warning("Guard network protection bundle sync failed: %s", error)
+        return {"status": "failed", "error": str(error)}
+
+
 def sync_guard_events(
     store: GuardStore,
     *,
@@ -1671,6 +1763,8 @@ def sync_runtime_session(
     if not isinstance(payload, dict):
         raise RuntimeError("Invalid sync response")
     catalog_sync = _sync_extension_catalog_from_runtime_handshake(
+        store=store,
+        guard_home=store.guard_home,
         auth_context=resolved_auth_context,
         runtime_sync_url=sync_url,
         runtime_response=payload,
@@ -3280,6 +3374,7 @@ def _urlopen_with_sync_retries(
     retry_timeout_seconds: int,
     parse_json_response: bool,
     nonce_fast_path: bool,
+    max_response_bytes: int | None = None,
 ) -> object:
     """Drive one Guard Cloud request through the shared sync retry policies.
 
@@ -3299,7 +3394,10 @@ def _urlopen_with_sync_retries(
         try:
             with managed_urlopen(current_request, timeout=current_timeout_seconds) as response:
                 if parse_json_response:
-                    return json.loads(response.read().decode("utf-8"))
+                    raw = response.read() if max_response_bytes is None else response.read(max_response_bytes + 1)
+                    if max_response_bytes is not None and len(raw) > max_response_bytes:
+                        raise RuntimeError("Guard Cloud sync response exceeds its byte budget.")
+                    return json.loads(raw.decode("utf-8"))
                 return None
         except urllib.error.HTTPError as error:
             if nonce_fast_path and error.code == 401:
@@ -3363,6 +3461,7 @@ def _urlopen_json_with_timeout_retry(
     request: urllib.request.Request,
     timeout_seconds: int,
     retry_timeout_seconds: int,
+    max_response_bytes: int | None = None,
 ) -> dict[str, object]:
     payload = _urlopen_with_sync_retries(
         request=request,
@@ -3370,6 +3469,7 @@ def _urlopen_json_with_timeout_retry(
         retry_timeout_seconds=retry_timeout_seconds,
         parse_json_response=True,
         nonce_fast_path=False,
+        max_response_bytes=max_response_bytes,
     )
     if not isinstance(payload, dict):
         raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
@@ -3509,9 +3609,34 @@ def _receipt_sync_cursor_rowid(store: GuardStore) -> int | None:
     return None
 
 
+def _receipt_sync_window_floor(receipts: list[dict[str, object]]) -> int | None:
+    """Return the rowid just below the oldest receipt in a newest-first page."""
+
+    rowids = [
+        value
+        for value in (item.get("receipt_rowid") for item in receipts)
+        if isinstance(value, int) and not isinstance(value, bool)
+    ]
+    if not rowids:
+        return None
+    return max(min(rowids) - 1, 0)
+
+
 def _receipt_sync_rows_for_upload(store: GuardStore, *, cursor_rowid: int | None) -> list[dict[str, object]]:
     if cursor_rowid is None:
-        return store.list_receipts(limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
+        # The first page reads its window in rowid order rather than newest
+        # first, because the cursor saved after it is the highest rowid it
+        # uploaded. A newest-first page that the store shortened would drop its
+        # oldest rows below that cursor, where no later page looks for them.
+        # The window starts at the oldest receipt the newest page names, not at
+        # an arithmetic distance below the latest rowid: cleanup leaves gaps in
+        # the rowids, and an interval that wide can hold far fewer receipts than
+        # a page while the cursor still moves past every one it skipped.
+        newest = store.list_receipts(limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
+        first_after = _receipt_sync_window_floor(newest)
+        if first_after is None:
+            return newest
+        return store.list_receipts_since_rowid(after_rowid=first_after, limit=_RECEIPT_SYNC_CURSOR_PAGE_SIZE)
     latest_rowid = store.latest_receipt_rowid()
     if latest_rowid is None:
         return []
@@ -3555,7 +3680,12 @@ def _receipt_sync_rows_with_command_detail_backfill(
         if isinstance(receipt_rowid, int):
             backfill_rowids.append(receipt_rowid)
     next_before_rowid = min(backfill_rowids) if backfill_rowids else before_rowid
-    complete = len(backfill_rows) < _RECEIPT_COMMAND_DETAIL_BACKFILL_LIMIT
+    # Only an empty page ends the backfill. A page can come back short because
+    # the store shortened it to a size the runtime can reply with, and reading
+    # that as the end would leave every older receipt without its command
+    # detail for good. Each page moves `before_rowid` down, so the walk still
+    # finishes.
+    complete = not backfill_rows
     return merged, {
         "level": redaction_level,
         "updated_at": synced_at,
@@ -4047,6 +4177,8 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
 
 def _sync_extension_catalog_from_runtime_handshake(
     *,
+    store: GuardStore | None = None,
+    guard_home: Path | None = None,
     auth_context: dict[str, object],
     runtime_sync_url: str,
     runtime_response: dict[str, object],
@@ -4054,12 +4186,72 @@ def _sync_extension_catalog_from_runtime_handshake(
 ) -> dict[str, object]:
     """Upload the canonical catalog only after a digest-bound Cloud request."""
 
+    from .extension_catalog_pages import observed_view
+    from .extension_catalog_sync import build_v1_catalog_from_view
+    from .extension_catalog_transfer import catalog_sync_plan, sync_catalog_view
+
+    signal = runtime_response.get("extensionCatalogSync")
+    if isinstance(signal, dict) and "protocolVersion" in signal:
+
+        def send_page(url: str, body: bytes) -> object:
+            request = _guard_sync_request(
+                auth_context,
+                request_url=url,
+                method="POST",
+                data=body,
+                extra_headers=None,
+            )
+            try:
+                return _urlopen_json_with_timeout_retry(
+                    request=request,
+                    timeout_seconds=_RUNTIME_SYNC_TIMEOUT_SECONDS,
+                    retry_timeout_seconds=_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS,
+                    max_response_bytes=4096,
+                )
+            except urllib.error.HTTPError as error:
+                raise RuntimeError(_sync_http_error_message(error)) from error
+            except OSError as error:
+                raise RuntimeError(_sync_url_error_message(error)) from error
+
+        view = observed_view(session_payload, guard_home)
+        result = sync_catalog_view(
+            runtime_sync_url=runtime_sync_url,
+            runtime_response=runtime_response,
+            session_payload=session_payload,
+            view=view,
+            send=send_page,
+        )
+        if store is None:
+            raise RuntimeError("Authenticated catalog completion requires the current store")
+        from .extension_catalog_completion import complete_authenticated_view
+
+        result.update(
+            complete_authenticated_view(
+                store=store,
+                view=view,
+                auth_context=auth_context,
+                url=catalog_sync_plan(
+                    view=view,
+                    runtime_sync_url=runtime_sync_url,
+                    runtime_response=runtime_response,
+                    session_payload=session_payload,
+                )["upload_url"],
+                send=send_page,
+            )
+        )
+        return result
+
     summary, upload = prepare_extension_catalog_handshake(
+        guard_home=guard_home,
         runtime_sync_url=runtime_sync_url,
         runtime_response=runtime_response,
         session_payload=session_payload,
-        catalog_factory=lambda generated_at: build_builtin_extension_catalog_wire(
-            guard_version=__version__, generated_at=generated_at
+        catalog_factory=lambda generated_at: (
+            build_v1_catalog_from_view(observed_view(session_payload, guard_home))
+            if "extensionCatalogViewDigest" in session_payload
+            else build_builtin_extension_catalog_wire(
+                guard_version=__version__, generated_at=generated_at, guard_home=guard_home
+            )
         ),
         fallback_generated_at=_now(),
     )
@@ -4085,8 +4277,8 @@ def _sync_extension_catalog_from_runtime_handshake(
     digest = session_payload.get("extensionCatalogDigest")
     if not isinstance(digest, str):
         raise RuntimeError("Invalid Extension catalog handshake response")
-    _validate_extension_catalog_sync_response(response, expected_digest=digest)
-    return summary
+    unverified = _validate_extension_catalog_sync_response(response, expected_digest=digest, guard_home=guard_home)
+    return summary if unverified is None else unverified
 
 
 def _cloud_local_identity_payload(*, observed_at: str) -> dict[str, object]:
@@ -4217,7 +4409,7 @@ def _cloud_package_manager_coverage(
 
 def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:
     metadata = store.get_device_metadata()
-    return str(metadata["installation_id"]), str(metadata["device_label"])
+    return str(metadata["installation_id"]), device_display_name(store, str(metadata["device_label"]))
 
 
 def _record_synced_alert_events(

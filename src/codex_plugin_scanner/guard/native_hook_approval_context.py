@@ -183,7 +183,6 @@ def generic_hook_approval_context_inputs(
     home_dir: Path | None,
     runtime_workspace: Path | None,
     payload: Mapping[str, object],
-    payload_digest: str,
     tool_command: str | None,
     config: GuardConfig,
     policy_config: Mapping[str, object],
@@ -207,7 +206,10 @@ def generic_hook_approval_context_inputs(
         "home_dir": _optional_path(home_dir),
         "runtime_workspace": _optional_path(runtime_workspace),
         "payload": {key: payload[key] for key in _PAYLOAD_KEYS if key in payload},
-        "payload_digest": payload_digest,
+        # The whole payload, for the content digest the resident computes. The
+        # projection above stays: the rest of the composition reads named
+        # fields, and only the digest reads every key the harness sent.
+        "payload_content": dict(payload),
         "tool_command": tool_command,
         "envelope": _envelope(action_envelope),
         "policy_config": dict(policy_config),

@@ -87,6 +87,38 @@ fn checked(workspace: &Path, code: &str) -> Option<String> {
     Some(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
+/// A contained pytest run names its interpreter relative to the workspace,
+/// because the snapshot root does not exist until the run starts. A spelling
+/// that climbs out of the snapshot must not resolve against it.
+#[test]
+fn a_relative_executable_cannot_climb_out_of_the_snapshot() {
+    let (_directory, workspace) = workspace();
+    let cancel = AtomicBool::new(false);
+    let withhold = |_: &Path| false;
+    let error = run_readonly_snapshot(ReadonlySnapshotRun {
+        workspace: &workspace,
+        cwd: &workspace,
+        executable: Path::new(r"..\..\Windows\System32\cmd.exe"),
+        arguments: &[],
+        environment: &[],
+        withhold: &withhold,
+        max_entries: 100,
+        max_bytes: 1024 * 1024,
+        output_cap: 64 * 1024,
+        deadline: Instant::now() + Duration::from_secs(60),
+        cancel: &cancel,
+        job_limits: guard_runtime_windows_process::ResourceLimits {
+            active_processes: Some(8),
+            ..Default::default()
+        },
+        build: None,
+        stage_executable: false,
+    })
+    .expect_err("a climbing relative executable is refused");
+
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData, "{error}");
+}
+
 #[test]
 fn snapshot_files_are_readable() {
     let (_directory, workspace) = workspace();
@@ -221,31 +253,32 @@ fn snapshot_budget_fails_closed() {
 }
 
 #[test]
-fn hardlinked_files_fail_closed() {
+fn hardlinked_files_are_left_out_of_the_snapshot() {
     let (_directory, workspace) = workspace();
     let outside = tempfile::tempdir().unwrap();
     let secret = outside.path().join("credentials");
     fs::write(&secret, "linked-sentinel").unwrap();
     fs::hard_link(&secret, workspace.join("notes.txt")).unwrap();
-    let cancel = AtomicBool::new(false);
+    let snapshot = tempfile::tempdir().unwrap();
     let withhold = |_: &Path| false;
-    let result = run_readonly_snapshot(ReadonlySnapshotRun {
-        workspace: &workspace,
-        cwd: &workspace,
-        executable: Path::new(r"C:\Windows\System32\cmd.exe"),
-        arguments: &[],
-        environment: &[],
+    let limits = Limits {
         withhold: &withhold,
+        skip_linked: true,
         max_entries: 100,
         max_bytes: 1024 * 1024,
-        output_cap: 1024,
-        deadline: Instant::now() + Duration::from_secs(60),
-        cancel: &cancel,
-        job_limits: Default::default(),
-        build: None,
-        stage_executable: false,
-    });
-    assert!(result.is_err());
+    };
+    let source = Directory::open(&workspace).unwrap();
+    copy_tree(
+        &source,
+        Path::new("."),
+        snapshot.path(),
+        &limits,
+        &mut Budget::default(),
+    )
+    .unwrap();
+    assert!(snapshot.path().join("visible.txt").is_file());
+    assert!(snapshot.path().join("nested").join("inner.txt").is_file());
+    assert!(!snapshot.path().join("notes.txt").exists());
 }
 
 fn node_on_path() -> Option<PathBuf> {

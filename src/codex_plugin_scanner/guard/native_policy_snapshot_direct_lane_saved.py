@@ -112,11 +112,17 @@ def refresh_integrity_state(store: object) -> bool:
     whether the stored row moved, which a key the publisher just minted does.
     """
 
+    return _refresh_integrity_state(store) is True
+
+
+def _refresh_integrity_state(store: object) -> bool | None:
+    """Return whether the row moved, or None when refresh did not complete."""
+
     connect = getattr(store, "_connect", None)
     refresh = getattr(store, "_refresh_policy_integrity_state", None)
     load = getattr(store, "_load_policy_integrity_state", None)
     if not callable(connect) or not callable(refresh) or not callable(load):
-        return False
+        return None
     try:
         with cast("AbstractContextManager[object]", connect()) as connection:
             before = load(connection)
@@ -124,7 +130,7 @@ def refresh_integrity_state(store: object) -> bool:
             return load(connection) != before
     except (OSError, RuntimeError, ValueError, sqlite3.Error):
         # The row stays as it was; a stale or missing one fails closed.
-        return False
+        return None
 
 
 def with_saved_decision_state(
@@ -183,10 +189,11 @@ class NativePolicySnapshotSavedStateMixin:
     def _recheck_direct_lane_saved_state(self) -> None:
         """Refresh after a database write and rebind once the state moved.
 
-        Only a write can move the state, so an unchanged database costs two
-        stats. The stamp is taken before the refresh, so a write that lands
-        during or after it is refreshed on the next reconcile. A refresh that
-        wrote the row costs one more refresh, which writes nothing.
+        On POSIX an unchanged database costs two stats. Windows can retain the
+        same last-write time and size while an open SQLite connection reuses
+        WAL pages, so its background reconcile must read the state every time.
+        The stamp is taken before the refresh, so a later write is refreshed
+        on the next reconcile. An unchanged state never queues another rebind.
         """
 
         publisher = cast("NativePolicySnapshotPublisher", self)
@@ -194,9 +201,10 @@ class NativePolicySnapshotSavedStateMixin:
         if bound is None or publisher._direct_lane_ack_target is None:
             return
         stamp = _database_stamp(publisher.guard_home)
-        if stamp == self._integrity_checked_stamp:
+        if os.name != "nt" and stamp == self._integrity_checked_stamp:
+            return
+        if _refresh_integrity_state(publisher.store) is None:
             return
         self._integrity_checked_stamp = stamp
-        refresh_integrity_state(publisher.store)
         if _integrity_state(publisher.store) != bound:
             publisher._rebind_direct_lane()

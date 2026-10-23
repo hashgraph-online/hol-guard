@@ -13,7 +13,9 @@ use guard_contracts::{
 };
 use serde_json::Value;
 
-use crate::hook_decision_native_facts::{benign_native_file_read, benign_tool_action};
+use crate::hook_decision_native_facts::{
+    apply_patch_may_be_verified, benign_native_file_read, benign_tool_action,
+};
 
 pub(crate) const COPILOT_BENIGN_HINT_REASON: &str =
     "untrusted_hook_payload_hint_ignored_guard_verified_benign";
@@ -151,6 +153,26 @@ fn fact(inputs: &HookCompositionInputsV1, name: &'static str) -> Needs<bool> {
     inputs.facts.get(name).copied().ok_or(name)
 }
 
+/// Whether a prompt is clean enough to relax a review tier.
+///
+/// The transport reports one observation per name and composes none of them:
+/// a prompt is clean when it carries no prompt request, names no credential
+/// file, and attaches nothing from the account home. The observations are
+/// asked for in turn, so a prompt that already carries a request never pays
+/// for the scans behind the later two.
+fn prompt_is_clean(inputs: &HookCompositionInputsV1) -> Needs<bool> {
+    for name in [
+        "prompt_request_free",
+        "prompt_credential_free",
+        "prompt_attachment_free",
+    ] {
+        if !fact(inputs, name)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 /// A verified-benign tool call relaxes a review-tier configured default.
 fn relax_configured_default(
     inputs: &HookCompositionInputsV1,
@@ -169,7 +191,7 @@ fn relax_configured_default(
     let canonical = inputs.canonical_harness.as_str();
     if event == Some("UserPromptSubmit") {
         return if inputs.prompt_nonblank {
-            fact(inputs, "prompt_clean")
+            prompt_is_clean(inputs)
         } else {
             Ok(false)
         };
@@ -177,7 +199,10 @@ fn relax_configured_default(
     if event == Some("PostToolUse") && inputs.runtime_artifact_checked && canonical == "codex" {
         return fact(inputs, "post_tool_read_only_inspection");
     }
-    if fact(inputs, "verified_apply_patch")? {
+    if event == Some("PreToolUse")
+        && apply_patch_may_be_verified(inputs)
+        && fact(inputs, "apply_patch_targets_non_sensitive")?
+    {
         return Ok(true);
     }
     let pre = event == Some("PreToolUse");
@@ -279,8 +304,14 @@ pub(crate) fn edge_floor(
     } else if !hard {
         // Before execution, the edge's review-tier "unproven" verdict is
         // provenance: grants and configured policy settle reviewability. Only
-        // a hard native enforcement verdict floors the emitted decision.
-        action = None;
+        // a hard native enforcement verdict floors the emitted decision, and a
+        // network protection review, which matched the synced bundle.
+        let network_review = edge?
+            .reason_code
+            .as_str()
+            .is_some_and(crate::network_protection::is_review_finding);
+        action = network_review
+            .then(|| action.map_or(GuardAction::Review, |a| a.max(GuardAction::Review)));
     }
     action
 }

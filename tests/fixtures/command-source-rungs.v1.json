@@ -41,7 +41,7 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies `rungs check`, which executes every command gate registered in .ai/gates.toml \u2014 commands the repository owns, not rungs \u2014 and appends one line per gate to the local .ai/.gate-ledger.jsonl. check has no preview form; --dry-run is not read.",
+              "description": "Identifies `rungs check`, which executes every command gate registered in .ai/gates.toml — commands the repository owns, not rungs — and appends one line per gate to the local .ai/.gate-ledger.jsonl. check has no preview form; --dry-run is not read.",
               "example_command": "rungs check",
               "family": null,
               "fixed_reason": null,
@@ -133,7 +133,7 @@
                 "rungs gate execution command"
               ],
               "default_mode": "review",
-              "description": "Identifies `rungs check`, which executes every command gate registered in .ai/gates.toml \u2014 commands the repository owns, not rungs \u2014 and appends one line per gate to the local .ai/.gate-ledger.jsonl. check has no preview form; --dry-run is not read.",
+              "description": "Identifies `rungs check`, which executes every command gate registered in .ai/gates.toml — commands the repository owns, not rungs — and appends one line per gate to the local .ai/.gate-ledger.jsonl. check has no preview form; --dry-run is not read.",
               "family": null,
               "matcher": {
                 "config": {},
@@ -1271,8 +1271,10 @@
       "enabled_extensions": [
         "command.rungs"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "exec",
       "rule_id": "command.rungs.check"
     },

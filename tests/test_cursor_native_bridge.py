@@ -15,17 +15,17 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_command_line
+from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_command_line import split_cursor_hook_command
+from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_native import (
+    NATIVE_CURSOR_HOOK_COMMAND,
+    NATIVE_CURSOR_HOOK_FEATURE,
+)
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor_hook_command_line import split_cursor_hook_command
 from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
     _is_managed_hook_command,
     _is_structured_managed_cursor_hook_command,
     _live_cursor_hook_script_path,
     _managed_hook_command,
-)
-from codex_plugin_scanner.guard.adapters.cursor_hook_native import (
-    NATIVE_CURSOR_HOOK_COMMAND,
-    NATIVE_CURSOR_HOOK_FEATURE,
 )
 from codex_plugin_scanner.guard.adapters.cursor_hooks import _HOOK_SCRIPT_TEMPLATE, cursor_hook_script_source
 from codex_plugin_scanner.guard.adapters.native_hook_bridge import native_hook_bridge_executable
@@ -323,6 +323,22 @@ def test_client_never_gains_time_from_the_handoff(tmp_path: Path, monkeypatch: p
     started = namespace["_HOOK_STARTED_MONOTONIC"]
     deadline = namespace["_HOOK_DEADLINE_MONOTONIC"]
     assert started <= deadline <= started + timeout
+
+
+@pytest.mark.parametrize("raw", ["99999999", "9" * 5000, "9" * 400], ids=["ordinary", "int_limit", "float_overflow"])
+def test_client_exhausted_native_handoff_deadline_is_exact_start(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    started = 122.888386772
+    monkeypatch.setattr("time.monotonic", lambda: started)
+    monkeypatch.setenv("HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS", raw)
+
+    client = _client(tmp_path)
+
+    assert client["GUARD_HOOK_TIMEOUT_SECONDS"] == 8
+    assert client["_HOOK_STARTED_MONOTONIC"] == started
+    assert client["_HOOK_DEADLINE_MONOTONIC"] == started
+    assert "HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS" not in client["os"].environ
 
 
 @pytest.mark.parametrize(

@@ -58,17 +58,9 @@ def native_test_guard_home(*, seed_key_only: bool = False) -> Path:
         home = Path(tempfile.mkdtemp(prefix="hol-guard-native-test-")).resolve()
         atexit.register(shutil.rmtree, home, ignore_errors=True)
         if seed_key_only:
-            from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
-                NATIVE_POLICY_VERIFIER_KEY_NAME,
-                NATIVE_RUNTIME_STATE_DIRECTORY,
-            )
+            from tests.native_guard_home_key import seed_private_verifier_key
 
-            state_dir = home / NATIVE_RUNTIME_STATE_DIRECTORY
-            state_dir.mkdir(mode=0o700)
-            key_path = state_dir / NATIVE_POLICY_VERIFIER_KEY_NAME
-            descriptor = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(os.urandom(32))
+            seed_private_verifier_key(home)
         else:
             # Provision the resident prerequisite up front so its one-time store
             # initialisation never eats the first command's request deadline.
@@ -89,6 +81,18 @@ def _resolve_native_binary(environment_name: str, filename: str) -> Path | None:
     if configured:
         configured_path = Path(configured)
         return configured_path if configured_path.is_file() else None
+    if filename == "guard-command-source" and os.environ.get("HOL_GUARD_TEST_USE_INSTALLED") == "1":
+        # The installed wheel refuses a compiler override, so read its own
+        # verified compiler instead of exporting one.
+        from codex_plugin_scanner.guard.extension_builder.native_source_compiler import (
+            NativeSourceCompilerError,
+            find_packaged_source_compiler,
+        )
+
+        try:
+            return find_packaged_source_compiler()
+        except NativeSourceCompilerError:
+            return None
     for profile in ("release", "debug"):
         candidate = ROOT / "rust" / "target" / profile / filename
         if candidate.is_file():
@@ -358,6 +362,7 @@ def real_native_review_fixture(
     global_lockdown: bool = False,
     managed_global_lockdown: bool = False,
     health: AuthorityHealth = AuthorityHealth.PROTECTED,
+    never_enrolled: bool = False,
 ) -> RealNativeReviewFixture:
     """Return the complete native result and its unchanged control binding.
 
@@ -376,6 +381,7 @@ def real_native_review_fixture(
         global_lockdown=global_lockdown,
         managed_global_lockdown=managed_global_lockdown,
         health=health,
+        never_enrolled=never_enrolled,
     )[0]
 
 
@@ -412,8 +418,14 @@ def real_native_review_fixtures(
     global_lockdown: bool = False,
     managed_global_lockdown: bool = False,
     health: AuthorityHealth = AuthorityHealth.PROTECTED,
+    never_enrolled: bool = False,
 ) -> tuple[RealNativeReviewFixture, ...]:
-    """Return bounded native evaluations with their unmodified offline binding."""
+    """Return bounded native evaluations with their unmodified offline binding.
+
+    ``never_enrolled`` binds the snapshot a fresh install has: unenrolled with no
+    layers at revision zero, where packaged protection still applies. ``health``
+    unenrolled alone models a lost authority instead, which blocks everything.
+    """
 
     if not 1 <= len(commands) <= 256:
         raise ValueError("native review batches must contain between 1 and 256 commands")
@@ -434,6 +446,7 @@ def real_native_review_fixtures(
         # therefore be fixed when the evidence is produced, never swapped on a
         # snapshot afterwards.
         **({"health": health.value} if health is not AuthorityHealth.PROTECTED else {}),
+        **({"never_enrolled": True} if never_enrolled else {}),
         "cases": [{"id": f"case-{index}", "command": command} for index, command in enumerate(commands)],
     }
     if cwd is not None and home_dir is not None:
@@ -448,15 +461,17 @@ def real_native_review_fixtures(
         timeout=30,
     )
     assert completed.returncode == 0, completed.stderr.decode(errors="replace")
-    result = json.loads(completed.stdout)
-    del completed  # drop the raw JSON bytes before the parsed rows are retained
+    output = completed.stdout.decode(json.detect_encoding(completed.stdout), "surrogatepass")
+    del completed  # release wire bytes before allocating the parsed rows
+    result = json.loads(output)
+    del output
     assert result["schema"] == "guard.command-extension-evaluation-batch-results.v1"
     binding = result["control_binding"]
     assert binding["program_digest"] == BUILT_IN_COMMAND_EXTENSION_REGISTRY.program_digest
     assert binding["catalog_digest"] == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    assert binding["revision"] == 1
+    assert binding["revision"] == int(not never_enrolled)
     assert binding["managed_revision"] == int(bool(managed_controls) or managed_global_lockdown)
-    layer_specs = [(ControlLayerKind.LOCAL_ADMIN, controls, global_lockdown)]
+    layer_specs = [] if never_enrolled else [(ControlLayerKind.LOCAL_ADMIN, controls, global_lockdown)]
     if managed_controls or managed_global_lockdown:
         layer_specs.append((ControlLayerKind.SIGNED_CLOUD, managed_controls, managed_global_lockdown))
     layers = tuple(

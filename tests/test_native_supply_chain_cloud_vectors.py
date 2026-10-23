@@ -30,6 +30,11 @@ VECTORS = json.loads(
     (Path(__file__).parent / "fixtures" / "supply-chain-eval" / "cloud-cases.v1.json").read_text(encoding="utf-8")
 )
 OFFLINE_CASES = [case for case in VECTORS["cases"] if case["network"] is None]
+CACHE_CONTRACT = json.loads(
+    (Path(__file__).parent / "fixtures" / "supply-chain-eval" / "cache-authority-contract.v2.json").read_text(
+        encoding="utf-8"
+    )
+)
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("HOL_GUARD_NATIVE_REGRESSION") != "1",
@@ -82,6 +87,14 @@ def test_vector_set_covers_offline_and_cloud_cases() -> None:
     assert VECTORS["recorded_from_commit"]
     assert len(OFFLINE_CASES) >= 10
     assert len(VECTORS["cases"]) > len(OFFLINE_CASES)
+    assert set(CACHE_CONTRACT["expected_patches"]) == {
+        "offline_eval_cache_hit",
+        "unpaid_unreachable_eval_cache_hit",
+        "cached_cloud_error_saved_block",
+    }
+    for case in OFFLINE_CASES:
+        patch = CACHE_CONTRACT["expected_patches"].get(case["name"], {})
+        assert patch.keys() <= case["expect"].keys()
 
 
 @pytest.mark.parametrize("case", OFFLINE_CASES, ids=lambda case: case["name"])
@@ -108,5 +121,6 @@ def test_resident_cloud_connected_evaluation_matches_vector(case: dict, tmp_path
     )
     # Evidence ids come from Python-side persistence of the reply, not from the verdict.
     actual = {key: value for key, value in evaluation.to_dict().items() if key != "evidence_ids"}
-    expected = {key: value for key, value in case["expect"].items() if key != "evidence_ids"}
+    expected_case = {**case["expect"], **CACHE_CONTRACT["expected_patches"].get(case["name"], {})}
+    expected = {key: value for key, value in expected_case.items() if key != "evidence_ids"}
     assert actual == expected

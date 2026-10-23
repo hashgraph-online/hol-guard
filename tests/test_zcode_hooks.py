@@ -6,7 +6,7 @@ import io
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.zcode_hooks import (
+from codex_plugin_scanner.guard.adapters._modules.zcode.zcode_hooks import (
     emit_zcode_hook_response,
     prepare_zcode_hook_payload,
     zcode_authority_block_reason,
@@ -31,6 +31,12 @@ class TestZCodeHookPayload:
         assert normalized["tool_name"] == "Bash"
         assert normalized["session_id"] == "session-redacted-001"
         assert normalized["workspace_root"] == "<workspace>"
+
+    def test_prepare_payload_leaves_no_second_tool_name(self) -> None:
+        # The harness spelling must not survive beside the canonical one: two
+        # names for one call read as an ambiguous payload and deny the work.
+        normalized = prepare_zcode_hook_payload(_fixture("pretooluse_bash.json"))
+        assert {normalized[key] for key in ("tool_name", "toolName") if key in normalized} == {"Bash"}
 
     def test_prepare_payload_maps_mcp_fixture(self) -> None:
         normalized = prepare_zcode_hook_payload(_fixture("pretooluse_mcp.json"))

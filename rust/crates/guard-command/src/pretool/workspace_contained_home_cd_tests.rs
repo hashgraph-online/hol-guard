@@ -54,6 +54,7 @@ fn every_guard_the_home_projection_applies_admits_a_plain_cd() {
         cdpath_unset: false,
         rustup_override_absent: false,
         npm_config_inert: false,
+        pip_config_inert: false,
         ripgrep_config_absent: false,
         psql_environment: Default::default(),
     };

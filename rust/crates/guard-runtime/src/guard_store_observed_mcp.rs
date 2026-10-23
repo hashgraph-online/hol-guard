@@ -9,11 +9,13 @@
 //! seen.
 
 use guard_command::mcp_decision::build_mcp_server_identity;
+use guard_contracts::MAX_NATIVE_RESPONSE_BYTES;
 use guard_policy_snapshot::normalized_harness_selector;
 use rusqlite::Connection;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
+use crate::guard_store_args::Args;
 use crate::guard_store_db::{query_all, query_one, Row, StoreError, StoreResult};
 use crate::guard_store_local_cli_grants as local_cli_grants;
 use crate::local_store_read;
@@ -155,6 +157,10 @@ fn text(row: &Row, name: &str) -> Option<String> {
     row.get(name).and_then(Value::as_str).map(str::to_owned)
 }
 
+/// Oldest schema with every column these reads use. Version 12 only added
+/// the declaration columns, which these reads never touch.
+const MIN_READ_SCHEMA_VERSION: i64 = 11;
+
 /// The Python writer migrates an older store before this read; a store from
 /// a newer Guard, or one whose schema marker is damaged, stays unread.
 pub(crate) fn require_current_schema(connection: &Connection) -> StoreResult<bool> {
@@ -163,11 +169,114 @@ pub(crate) fn require_current_schema(connection: &Connection) -> StoreResult<boo
         return Ok(false);
     }
     match local_store_read::schema_version(connection).map_err(unreadable)? {
-        Some(local_store_read::SUPPORTED_SCHEMA_VERSION) => Ok(true),
+        Some(version)
+            if (MIN_READ_SCHEMA_VERSION..=local_store_read::SUPPORTED_SCHEMA_VERSION)
+                .contains(&version) =>
+        {
+            Ok(true)
+        }
         _ => Err(StoreError::Invalid(
             "native_guard_store_local_cli_schema_unreadable",
         )),
     }
+}
+
+/// The label an observed tool is read from: the tool name a receipt or a
+/// paused request recorded, which is `raw_command_text` without its `tool:`
+/// prefix when it carries one and the artifact name otherwise. Every
+/// observable MCP tool name starts with `mcp__`, including the flattened
+/// spelling Oh My Pi uses, so the scan never reads a row without it.
+const OBSERVED_LABEL: &str = "substr(case when substr(raw_command_text, 1, 5) = 'tool:' \
+     then substr(raw_command_text, 6) else artifact_name end, 1, 5) = 'mcp__'";
+/// A quarter of the response cap for each of the two histories, so together
+/// they leave room for the envelope the resident frames them in and neither
+/// one can starve the other. A history past its budget keeps its newest rows:
+/// an older connector is rediscovered the next time the harness calls one of
+/// its tools.
+const OBSERVED_LIST_BUDGET_BYTES: usize = MAX_NATIVE_RESPONSE_BYTES / 4;
+
+fn projected(rows: &[Row], fields: &[&str]) -> Vec<Value> {
+    let mut budget = OBSERVED_LIST_BUDGET_BYTES;
+    let mut projected = Vec::new();
+    for row in rows {
+        let item: Map<String, Value> = fields
+            .iter()
+            .map(|field| {
+                (
+                    (*field).to_owned(),
+                    row.get(*field).cloned().unwrap_or(Value::Null),
+                )
+            })
+            .collect();
+        let bytes = serde_json::to_vec(&item).map_or(0, |encoded| encoded.len());
+        // A row too large to carry is left out rather than ending the read: the
+        // scan reads each row on its own, so one outsized command text costs
+        // its own connector and not every older one behind it.
+        let Some(remaining) = budget.checked_sub(bytes) else {
+            continue;
+        };
+        budget = remaining;
+        projected.push(Value::Object(item));
+    }
+    projected
+}
+
+/// `observed_mcp_history(limit)`: the paused requests and receipts the
+/// connector scan reads, projected to the handful of fields it parses.
+///
+/// The scan used to page whole approval rows and whole receipts through the
+/// resident to read a tool name and a timestamp from each. On a store with a
+/// few hundred of either, the receipts alone encoded past the response cap
+/// and the whole refresh failed with `native_guard_store_unavailable`, which
+/// the Extensions surface showed as "Could not check host configuration".
+/// Reading only the four fields the scan parses keeps the reply small enough
+/// that a long history cannot stop connector discovery.
+pub(crate) fn observed_mcp_history(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> {
+    let limit = Value::from(args.int("limit")?.max(0));
+    let approvals = query_all(
+        connection,
+        &format!(
+            "select harness, artifact_name, raw_command_text, last_seen_at, created_at \
+             from approval_requests where {OBSERVED_LABEL} \
+             order by coalesce(last_seen_at, created_at) desc limit ?"
+        ),
+        &[limit.clone()],
+    )?;
+    let receipts = query_all(
+        connection,
+        &format!(
+            "select harness, artifact_name, raw_command_text, timestamp \
+             from runtime_receipts where {OBSERVED_LABEL} \
+             order by timestamp desc limit ?"
+        ),
+        &[limit],
+    )?;
+    Ok(Value::Object(
+        [
+            (
+                "approvals".to_owned(),
+                Value::Array(projected(
+                    &approvals,
+                    &[
+                        "harness",
+                        "artifact_name",
+                        "raw_command_text",
+                        "last_seen_at",
+                        "created_at",
+                    ],
+                )),
+            ),
+            (
+                "receipts".to_owned(),
+                Value::Array(projected(
+                    &receipts,
+                    &["harness", "artifact_name", "raw_command_text", "timestamp"],
+                )),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    ))
 }
 
 pub(crate) fn observed_mcp_tool_actions(connection: &Connection) -> StoreResult<Value> {
@@ -311,3 +420,7 @@ fn command_catalog(connection: &Connection, cli_id: &str) -> StoreResult<Vec<(St
 #[cfg(test)]
 #[path = "guard_store_observed_mcp_vectors_tests.rs"]
 mod vectors_tests;
+
+#[cfg(test)]
+#[path = "guard_store_observed_mcp_history_tests.rs"]
+mod history_tests;

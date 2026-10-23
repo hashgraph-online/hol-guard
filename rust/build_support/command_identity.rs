@@ -1,4 +1,11 @@
 //! Shared implementation identity for the host compiler and target program.
+//!
+//! The checked-in input manifest keeps unrelated workspace crates outside
+//! the fingerprint so edits in runtime-only domains stop invalidating the
+//! command compiler, the packaged catalog and both producer executables.
+//! The manifest is bound by contract tests to the real path-dependency
+//! closure; a newly reachable input fails CI until it is classified.
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
     fs,
@@ -26,29 +33,134 @@ fn collect(directory: &Path, files: &mut Vec<PathBuf>) {
     }
 }
 
-pub fn emit(root: &Path) -> String {
-    println!("cargo:rustc-check-cfg=cfg(guard_source_bootstrap)");
-    let mut files = vec![root.join("Cargo.lock"), root.join("Cargo.toml")];
-    let mut crates: Vec<_> = fs::read_dir(root.join("crates"))
-        .expect("native crates")
-        .map(|entry| entry.expect("native crate").path())
-        .collect();
-    crates.sort();
+fn manifest(root: &Path) -> Value {
+    let path = root.join("build_support/command_source_inputs.v2.json");
+    println!("cargo:rerun-if-changed={}", path.display());
+    let manifest: Value = serde_json::from_str(
+        &fs::read_to_string(&path).expect("command source inputs manifest UTF-8"),
+    )
+    .expect("command source inputs manifest JSON");
+    assert_eq!(
+        manifest["schema"].as_str(),
+        Some("guard.command-source-inputs.v2"),
+        "command source inputs manifest schema"
+    );
+    manifest
+}
+
+fn relative_file(root: &Path, entry: &Value, files: &mut Vec<PathBuf>) {
+    let relative = entry.as_str().expect("command source inputs file path");
+    assert!(
+        !relative.is_empty()
+            && !relative.starts_with('/')
+            && !relative.starts_with('\\')
+            && !relative
+                .split('/')
+                .any(|part| part.is_empty() || part == "." || part == ".."),
+        "command source inputs file must stay inside the workspace"
+    );
+    let path = root.join(relative);
+    assert!(path.is_file(), "command source inputs file must exist");
+    files.push(path);
+}
+
+fn crate_inputs(root: &Path, entry: &Value, files: &mut Vec<PathBuf>) {
+    let name = entry.as_str().expect("command source inputs crate name");
+    assert!(
+        !name.is_empty()
+            && name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
+        "command source inputs crate name"
+    );
+    let directory = root.join("crates").join(name);
     // Cargo manifests and each production src directory below are watched.
     // Watching the entire crates directory would also invalidate this build
     // for portable test fixtures, recreating the fixture/recompile cycle.
-    for directory in crates {
-        if directory.join("Cargo.toml").is_file() {
-            files.push(directory.join("Cargo.toml"));
-        }
-        if directory.join("build.rs").is_file() {
-            files.push(directory.join("build.rs"));
-        }
-        if directory.join("src").is_dir() {
-            collect(&directory.join("src"), &mut files);
+    let manifest = directory.join("Cargo.toml");
+    assert!(manifest.is_file(), "command source inputs crate manifest");
+    files.push(manifest);
+    let build = directory.join("build.rs");
+    if build.is_file() {
+        files.push(build);
+    }
+    if directory.join("src").is_dir() {
+        collect(&directory.join("src"), files);
+    }
+}
+
+fn crate_file_inputs(root: &Path, name: &str, entries: &Value, files: &mut Vec<PathBuf>) {
+    assert!(
+        !name.is_empty()
+            && name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
+        "command source inputs crate_files name"
+    );
+    let directory = root.join("crates").join(name);
+    // A crate named here contributes only the sources listed, but the compiler
+    // built from it still reads its own manifest and build script. Leaving
+    // those out lets a dependency feature or an entrypoint change alter the
+    // producer while the identity stays put, and a stale pack is then reused.
+    let manifest = directory.join("Cargo.toml");
+    assert!(
+        manifest.is_file(),
+        "command source inputs crate_files crate manifest"
+    );
+    files.push(manifest);
+    let build = directory.join("build.rs");
+    if build.is_file() {
+        files.push(build);
+    }
+    for entry in entries
+        .as_array()
+        .expect("command source inputs crate_files")
+    {
+        let relative = entry
+            .as_str()
+            .expect("command source inputs crate_files path");
+        assert!(
+            !relative.is_empty()
+                && !relative.starts_with('/')
+                && !relative.starts_with('\\')
+                && !relative
+                    .split('/')
+                    .any(|part| part.is_empty() || part == "." || part == ".."),
+            "command source inputs crate_files must stay inside the crate"
+        );
+        let path = directory.join(relative);
+        assert!(
+            path.is_file(),
+            "command source inputs crate file must exist"
+        );
+        files.push(path);
+    }
+}
+
+pub fn emit(root: &Path) -> String {
+    println!("cargo:rustc-check-cfg=cfg(guard_source_bootstrap)");
+    let manifest = manifest(root);
+    let domain = manifest["identity_domain"]
+        .as_str()
+        .expect("command source inputs identity domain");
+    let mut files = vec![root.join("Cargo.lock"), root.join("Cargo.toml")];
+    for entry in manifest["files"]
+        .as_array()
+        .expect("command source inputs files")
+    {
+        relative_file(root, entry, &mut files);
+    }
+    for entry in manifest["crates"]
+        .as_array()
+        .expect("command source inputs crates")
+    {
+        crate_inputs(root, entry, &mut files);
+    }
+    if let Some(partial) = manifest["crate_files"].as_object() {
+        for (name, entries) in partial {
+            crate_file_inputs(root, name, entries, &mut files);
         }
     }
-    collect(&root.join("build_support"), &mut files);
     files.sort_by_cached_key(|path| {
         path.strip_prefix(root)
             .unwrap()
@@ -58,7 +170,8 @@ pub fn emit(root: &Path) -> String {
     });
     files.dedup();
     let mut hasher = Sha256::new();
-    hasher.update(b"hol-guard.native-source-implementation.v1\0");
+    hasher.update(domain.as_bytes());
+    hasher.update(b"\0");
     for path in files {
         println!("cargo:rerun-if-changed={}", path.display());
         assert!(

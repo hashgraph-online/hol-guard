@@ -547,6 +547,7 @@ fn install_intent() -> PackageIntent {
         execution_context_hashes: Vec::new(),
         execution_context_cwds: Vec::new(),
         execution_context_reason_codes: Vec::new(),
+        routine_local_runner: false,
     }
 }
 
@@ -555,10 +556,7 @@ fn a_failed_refresh_after_a_consumed_claim_keeps_the_review() {
     let home = std::env::temp_dir().join(format!(
         "hol-guard-refresh-lookup-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos(),
+        crate::unique_nanos::unique_nanos(),
     ));
     std::fs::create_dir_all(home.join("package-shims").join("bin")).unwrap();
     let workspace = home.join("proj");

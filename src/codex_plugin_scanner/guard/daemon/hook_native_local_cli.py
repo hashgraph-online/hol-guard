@@ -20,6 +20,10 @@ if TYPE_CHECKING:
     from ..runtime.local_cli_identity import UnlistedCliIdentity
 
 _LOGGER = logging.getLogger(__name__)
+# The one review a custom allow lifts: Rust did not recognise the program. Any
+# other review carries a risk signal of its own (a secret operand, a network
+# target), and the outside-roots review runs in the grant's sandbox instead.
+_GRANT_LIFTABLE_REASON = "native_command_review_required"
 _BLOCK_RULES_TTL_SECONDS = 2.0
 _block_rules_lock = threading.Lock()
 _block_rules_cache: dict[int, tuple[float, bool]] = {}
@@ -90,8 +94,9 @@ def native_local_cli_grant_response(
 ) -> tuple[bool, dict[str, object]] | None:
     """Return ``(blocked, response)`` for a native review with a custom rule, or ``None``.
 
-    A custom block applies to any review. A custom allow only lifts a review
-    that Rust marked overridable, so it never weakens a block or critical floor.
+    A custom block applies to any review. A custom allow only lifts an
+    overridable review that is due to non-recognition alone, so it never
+    weakens a block, a critical floor or a risk signal on the operands.
     Callers must let a saved exact-action block win over a custom allow.
     """
 
@@ -106,7 +111,7 @@ def native_local_cli_grant_response(
     identity, state = match
     if state == "blocked":
         return True, _custom_block_response(harness, native_result, identity.name, store_guard_home(store))
-    if not _native_review_is_overridable(native_result):
+    if native_result.get("reason_code") != _GRANT_LIFTABLE_REASON or not _native_review_is_overridable(native_result):
         return None
     allowed = dict(native_result)
     allowed.update(decision="allow", minimum_action="allow", policy_action="allow")

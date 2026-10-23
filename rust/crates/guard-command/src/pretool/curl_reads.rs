@@ -8,11 +8,14 @@
 //! config, carries credentials, routes through a proxy or socket, or writes a
 //! file other than a scratch file keeps the normal review path.
 //!
-//! A read of a dev server on `127.0.0.1` or `localhost` is proven too, on a
+//! A read of a dev server on `127.0.0.1` or `localhost` is proven too, written
+//! with a scheme or without one, since curl reads `localhost:3000/health` as
+//! the HTTP request a developer means by it, on a
 //! conventional dev-server port ([`super::loopback_ports`]) that neither
 //! Guard's daemon nor a local service answering a plain GET with
 //! credentials, cluster state or a debugger ([`LOCAL_ADMIN_PORTS`]) may
-//! listen on. Private, link-local
+//! listen on, or on a port the agent chose for a server it started itself,
+//! screened against the whole local-service list. Private, link-local
 //! and metadata addresses, other loopback spellings, rebinding names and
 //! names under reserved test suffixes stay reviewed: those resolve to local
 //! services rather than public content. The response body and headers reach
@@ -22,10 +25,13 @@
 //! credential shape, a JWT or a long opaque token stays reviewed, since the
 //! request line itself can carry data to the host.
 
+#[path = "curl_reads_bound.rs"]
+mod bound;
 #[path = "curl_output_targets.rs"]
 pub(in crate::pretool) mod output_targets;
 #[path = "url_secrets.rs"]
 pub(super) mod url_secrets;
+pub use bound::bound_curl_read_destinations;
 
 pub(crate) const NETWORK_READ_REASON: &str = "native_exact_safe_network_read";
 
@@ -110,15 +116,23 @@ pub(super) fn safe_curl_segment(
     if model.dialect != "posix" || segment.pipeline_index != 0 {
         return false;
     }
-    let arguments = &segment.arguments;
+    read_urls(&segment.arguments, context).is_some()
+}
+
+fn read_urls<'a>(arguments: &'a [String], context: super::PathContext<'_>) -> Option<Vec<&'a str>> {
     if arguments.iter().any(|argument| expands(argument)) {
-        return false;
+        return None;
     }
-    let mut urls = 0usize;
+    let mut urls = Vec::new();
     let mut options = true;
     let mut index = 0;
     while index < arguments.len() {
         let argument = arguments[index].as_str();
+        // curl disables default configuration only in this exact position.
+        if index == 0 && matches!(argument, "-q" | "--disable") {
+            index += 1;
+            continue;
+        }
         if options && argument == "--" {
             options = false;
             index += 1;
@@ -126,24 +140,22 @@ pub(super) fn safe_curl_segment(
         }
         if !options || !argument.starts_with('-') || argument == "-" {
             if !readable_url(argument, context) {
-                return false;
+                return None;
             }
-            urls += 1;
+            urls.push(argument);
             index += 1;
             continue;
         }
-        let Some(consumed) = option_consumed(arguments, index, context) else {
-            return false;
-        };
+        let consumed = option_consumed(arguments, index, context)?;
         if let Some(url) = url_option(arguments, index) {
             if !readable_url(url, context) {
-                return false;
+                return None;
             }
-            urls += 1;
+            urls.push(url);
         }
         index += consumed;
     }
-    urls > 0
+    (!urls.is_empty()).then_some(urls)
 }
 
 /// A whole `curl` segment, generic checks included, that the native proof
@@ -285,7 +297,57 @@ fn safe_header(value: &str) -> bool {
 }
 
 fn readable_url(raw: &str, context: super::PathContext<'_>) -> bool {
-    public_url(raw) || loopback_url(raw, context.home_dir)
+    let Some(raw) = as_curl_reads_it(raw) else {
+        return false;
+    };
+    public_url(&raw) || loopback_url(&raw, context.home_dir)
+}
+
+/// Names whose prefix picks curl a protocol other than HTTP when the URL is
+/// written without one. curl matches them case-insensitively.
+const OTHER_PROTOCOL_PREFIXES: [&str; 6] = ["ftp.", "dict.", "ldap.", "imap.", "smtp.", "pop3."];
+
+/// The URL with the scheme curl reads it under. A URL written without `://` is
+/// the ordinary way to name a local server, `localhost:3000/health`, and curl
+/// fetches it over HTTP; only that guess is taken here, so a name whose prefix
+/// picks another protocol stays unread rather than passing as a web request.
+///
+/// The same spelling names a public host too, and `curl example.com` issues
+/// the request `curl http://example.com` issues, so both forms reach the same
+/// checks. Proving one and reviewing the other would turn the scheme into
+/// authority it does not carry.
+fn as_curl_reads_it(raw: &str) -> Option<std::borrow::Cow<'_, str>> {
+    if written_with_a_scheme(raw) {
+        return Some(std::borrow::Cow::Borrowed(raw));
+    }
+    let host = raw.split(['/', '?', '#']).next().unwrap_or(raw);
+    // curl guesses the protocol from the hostname it is left with after the
+    // login part is removed, so `:@ftp.example.com` reaches FTP while the
+    // text before the first `/` begins with neither prefix. An authority
+    // carrying a login is left unread rather than guessed at.
+    if host.contains('@')
+        || OTHER_PROTOCOL_PREFIXES.iter().any(|prefix| {
+            host.get(..prefix.len())
+                .is_some_and(|start| start.eq_ignore_ascii_case(prefix))
+        })
+    {
+        return None;
+    }
+    Some(std::borrow::Cow::Owned(format!("http://{raw}")))
+}
+
+/// Whether the URL itself names a scheme, rather than carrying a `://` in a
+/// query the request only passes on. `localhost:3000/redirect?next=https://app`
+/// is a request to the dev server, which curl fetches over HTTP, so only a
+/// `://` that follows a leading scheme is read as one.
+fn written_with_a_scheme(raw: &str) -> bool {
+    raw.find("://").is_some_and(|delimiter| {
+        let scheme = &raw[..delimiter];
+        scheme.starts_with(|first: char| first.is_ascii_alphabetic())
+            && scheme
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'-' | b'.'))
+    })
 }
 
 /// An `http(s)` URL naming `127.0.0.1` or `localhost` itself, on a dev-server
@@ -306,10 +368,24 @@ pub(in crate::pretool) fn loopback_url(raw: &str, home_dir: Option<&str>) -> boo
         && matches!(url.scheme(), "http" | "https")
         && url.username().is_empty()
         && url.password().is_none()
-        && url.port_or_known_default().is_some_and(|port| {
-            super::loopback_ports::dev_server_port(port, &LOCAL_ADMIN_PORTS, home_dir)
-        })
+        && url
+            .port_or_known_default()
+            .is_some_and(|port| reachable_loopback_port(port, home_dir))
         && !url_secrets::carries_secret(&url)
+}
+
+/// A loopback port this request may reach: a conventional dev-server port, or
+/// one the agent chose for the server it started itself while Guard's daemon
+/// state records another port. A chosen port is screened against the local
+/// services whose plain answer carries credentials, stored data or control of
+/// another process, the same list the workspace sandbox grants against, so
+/// only a port nothing well known claims is reachable by number alone.
+fn reachable_loopback_port(port: u16, home_dir: Option<&str>) -> bool {
+    use super::loopback_ports::{
+        chosen_server_port, dev_server_port, local_service_port, LOCAL_SERVICE_PORTS,
+    };
+    dev_server_port(port, &LOCAL_ADMIN_PORTS, home_dir)
+        || (!local_service_port(port) && chosen_server_port(port, LOCAL_SERVICE_PORTS, home_dir))
 }
 
 fn public_url(raw: &str) -> bool {

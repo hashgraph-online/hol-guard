@@ -71,7 +71,7 @@ fn zcode_exit(action: GuardAction, event: &str) -> i32 {
 }
 
 /// The per-harness verdict exit code; `None` leaves grok to its adapter.
-fn exit_code(canonical: &str, action: GuardAction, event: &str) -> Option<i32> {
+pub(crate) fn exit_code(canonical: &str, action: GuardAction, event: &str) -> Option<i32> {
     let blocking = is_blocking(action);
     if canonical == "grok" {
         return None;
@@ -94,7 +94,7 @@ fn exit_code(canonical: &str, action: GuardAction, event: &str) -> Option<i32> {
     })
 }
 
-fn emitter(canonical: &str) -> &'static str {
+pub(crate) fn emitter(canonical: &str) -> &'static str {
     match canonical {
         "grok" => "grok",
         "pi" | "omp" => "pi",
@@ -104,7 +104,7 @@ fn emitter(canonical: &str) -> &'static str {
     }
 }
 
-fn exit_block(f: &DirectiveFacts<'_>) -> bool {
+pub(crate) fn exit_block(f: &DirectiveFacts<'_>) -> bool {
     let compact = compact_event(f.event);
     if !EXIT_BLOCK_HARNESSES.contains(&f.canonical)
         || !matches!(
@@ -120,7 +120,7 @@ fn exit_block(f: &DirectiveFacts<'_>) -> bool {
     is_blocking(f.action)
 }
 
-fn native_response(f: &DirectiveFacts<'_>) -> bool {
+pub(crate) fn native_response(f: &DirectiveFacts<'_>) -> bool {
     let plain =
         f.canonical == "hermes" || (NATIVE_RESPONSE_HARNESSES.contains(&f.canonical) && !f.json);
     let json_native = match f.canonical {
@@ -168,7 +168,8 @@ pub(crate) fn directive(f: &DirectiveFacts<'_>) -> HookResponseDirectiveV1 {
     } else {
         "fallback_envelope"
     };
-    let mut exit = exit_code(f.canonical, f.action, f.event);
+    let json_exit = exit_code(f.canonical, f.action, f.event);
+    let mut exit = json_exit;
     if route == "render" && after_json == "fallback_envelope" && f.replayed {
         // A replayed decision was recorded upstream; acknowledge without
         // re-blocking the harness.
@@ -195,6 +196,7 @@ pub(crate) fn directive(f: &DirectiveFacts<'_>) -> HookResponseDirectiveV1 {
         queue_approval_request: !early && pre && ask && !f.has_approval_requests_list,
         emitter: emitter(f.canonical).to_owned(),
         exit_code: exit,
+        json_exit_code: json_exit,
         stderr_only_on_nonzero_exit: f.canonical == "grok",
         codex_native_reason: codex_native_reason.to_owned(),
         include_remediation: blocking,
@@ -203,5 +205,7 @@ pub(crate) fn directive(f: &DirectiveFacts<'_>) -> HookResponseDirectiveV1 {
         try_json_document: f.json && !f.output_stream_present,
         after_json: after_json.to_owned(),
         envelope_decision: if blocking { "block" } else { "allow" }.to_owned(),
+        exit_block_stderr: None,
+        json_reason: None,
     }
 }

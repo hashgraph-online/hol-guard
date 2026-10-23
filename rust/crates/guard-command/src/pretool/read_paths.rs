@@ -4,6 +4,8 @@ pub(super) use allowances::{
     agent_skill_listing_directory, agent_state_tree_holds_only_documents, inside_agent_state_tree,
     project_skill_listing_directory, skill_link_resolves_over_home,
 };
+#[path = "read_feature_directories.rs"]
+pub(super) mod feature_directories;
 #[path = "read_path_harness_notes.rs"]
 pub(super) mod harness_notes;
 #[path = "hidden_listing.rs"]
@@ -11,12 +13,12 @@ mod hidden_listing;
 #[path = "omp_json_query.rs"]
 mod omp_json_query;
 #[path = "omp_read_targets.rs"]
-mod omp_targets;
-use hidden_listing::resolved_home_hidden_content_read;
+pub(super) mod omp_targets;
 pub(super) use hidden_listing::{
     home_hidden_content_read, home_hidden_directory, home_hidden_tool_directory,
-    repository_hidden_directory,
+    home_hidden_walk_clears_stores, repository_hidden_directory,
 };
+use hidden_listing::{resolved_home_hidden_content_read, resolved_home_hidden_listing};
 #[path = "private_temporary_workspace.rs"]
 mod private_temporary;
 #[path = "workspace_scratch_reads.rs"]
@@ -59,6 +61,23 @@ pub(super) fn safe_read_target(argument: &str) -> bool {
     true
 }
 
+/// The lexical floor a path-spelled word shares with every read screen: a
+/// bounded length, no shell metacharacter or glob, and no parent component.
+///
+/// A caller that proves its own target, rather than asking whether the path
+/// may be read, still owes the shell's own reading of the word. `..` stays
+/// refused here even though the read screens admit a parent component that
+/// canonicalizing resolves, because nothing downstream re-reads the spelling.
+pub(super) fn bounded_path_spelling(value: &str) -> bool {
+    value == value.trim()
+        && !value.is_empty()
+        && value.len() <= 4096
+        && !value.contains([
+            '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '{', '}', '[', ']',
+        ])
+        && !value.split(['/', '\\']).any(|part| part == "..")
+}
+
 /// Share canonical path-risk checks between structured reads and shell reads.
 /// Absolute/home-relative targets must resolve; sensitive symlink destinations
 /// stay guarded. Unresolved relative targets retain the legacy lexical floor.
@@ -69,7 +88,7 @@ pub(super) fn bounded_file_read_target(
 ) -> bool {
     // A missing harness note is a shell-read exception. Structured tools come
     // through this helper, and a missing note there stays unproved.
-    bounded_read_target_with_brackets(value, home_dir, cwd, false, false, false)
+    bounded_read_target_with_brackets(value, home_dir, cwd, false, false, false, false)
 }
 
 pub(super) fn existing_regular_read_target(
@@ -99,7 +118,7 @@ pub(super) fn bounded_read_target(
     cwd: Option<&str>,
     allow_directory: bool,
 ) -> bool {
-    bounded_read_target_with_brackets(value, home_dir, cwd, allow_directory, false, true)
+    bounded_read_target_with_brackets(value, home_dir, cwd, allow_directory, false, true, false)
 }
 
 /// A structured read tool opens its path literally, so `[slug]` in a Next.js
@@ -111,7 +130,36 @@ pub(super) fn bounded_structured_file_read_target(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
-    bounded_read_target_with_brackets(value, home_dir, cwd, false, true, false)
+    bounded_read_target_with_brackets(value, home_dir, cwd, false, true, false, true)
+}
+
+/// A shell word whose bracket class matches nothing reaches the program
+/// exactly as it was typed, so `app/blog/[slug]/page.tsx` names that Next.js
+/// route rather than a pattern. The caller proves the class cannot match
+/// before asking for this screen; every other glob metacharacter, and any
+/// bracketed path that does not resolve, stays rejected.
+pub(super) fn bounded_literal_bracket_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    allow_directory: bool,
+) -> bool {
+    // The screen below resolves the trimmed word, while the shell hands the
+    // program the word as it was typed: `app/blog/[slug]/page.tsx ` and
+    // `app/blog/[slug]/page.tsx` are two different names, and the first may
+    // be a link somewhere this crate would not read. A word that is not
+    // already its own trimmed form keeps its review rather than borrowing
+    // a neighbour's proof.
+    value == value.trim()
+        && bounded_read_target_with_brackets(
+            value,
+            home_dir,
+            cwd,
+            allow_directory,
+            true,
+            true,
+            false,
+        )
 }
 
 fn bounded_read_target_with_brackets(
@@ -121,6 +169,7 @@ fn bounded_read_target_with_brackets(
     allow_directory: bool,
     literal_brackets: bool,
     missing_notes: bool,
+    directory_listing: bool,
 ) -> bool {
     let path = value.trim();
     let path = path.strip_prefix(r"\\?\").unwrap_or(path);
@@ -160,8 +209,18 @@ fn bounded_read_target_with_brackets(
         return !parent_component && safe_read_target(path);
     };
     if let Ok(canonical) = std::fs::canonicalize(&candidate) {
-        return (canonical.is_file() || (allow_directory && canonical.is_dir()))
-            && (resolved_read_target_allowed(&candidate, &canonical, home_dir, cwd)
+        // A structured read tool handed a directory lists its entries, or
+        // says it is a directory; either way it returns no file's bytes, so
+        // the question is the listing one. A shell walk keeps its own root
+        // rules, so the listing screen answers only for that tool.
+        let listing = directory_listing
+            && canonical.is_dir()
+            && !guard_secure_fs::contains_symlink_component(&candidate)
+            && resolved_location_allowed(&canonical, home_dir, cwd, false)
+            && resolved_home_hidden_listing(&canonical, home_dir);
+        return (canonical.is_file() || ((allow_directory || listing) && canonical.is_dir()))
+            && (listing
+                || resolved_read_target_allowed(&candidate, &canonical, home_dir, cwd)
                 || package_source::installed_package_source(
                     &candidate, &canonical, home_dir, cwd,
                 ));
@@ -244,7 +303,27 @@ pub(super) fn resolved_path_allowed_for_operation(
     verified_temporary: bool,
     read_only: bool,
 ) -> bool {
-    if !resolved_location_allowed(canonical, home_dir, cwd, verified_temporary)
+    path_gate(canonical, home_dir, cwd, verified_temporary, read_only, true)
+        // A directory named for a login feature inside a repository is code,
+        // not a credential store; every other screen still runs on the path.
+        || (read_only
+            && feature_directories::feature_only_credential_name(canonical, home_dir)
+            && path_gate(canonical, home_dir, cwd, verified_temporary, read_only, false))
+}
+
+fn path_gate(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    verified_temporary: bool,
+    read_only: bool,
+    credential_names: bool,
+) -> bool {
+    // Reading a scratch file in the private temporary directory is routine.
+    let temporary = verified_temporary
+        || (read_only
+            && private_temporary::inside_private_temporary_directory(canonical, home_dir));
+    if !location_allowed(canonical, home_dir, cwd, temporary, credential_names)
         || !(guard_secure_fs::hidden_read_parts_allowed(canonical)
             || (read_only && guard_secure_fs::hidden_empty_work_tree_file(canonical))
             || (read_only && project_dotfile_read(canonical, home_dir))
@@ -258,7 +337,9 @@ pub(super) fn resolved_path_allowed_for_operation(
                     || git_ref_document(canonical, home_dir, cwd)
                     || git_config_document(canonical, cwd)
                     || worktree_gitfile(canonical)
-                    || scratch::workspace_scratch_read(canonical, home_dir, cwd)))
+                    || scratch::workspace_scratch_read(canonical, home_dir, cwd)
+                    || scratch::private_temporary_scratch_read(canonical, home_dir)
+                    || virtualenv_activation_script(canonical)))
             || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;
@@ -288,6 +369,46 @@ pub(super) fn resolved_read_target_allowed(
             && resolved_home_hidden_content_read(canonical, home_dir))
 }
 
+/// A Python virtual environment's activation script, proven by the
+/// environment's own marker file rather than by the directory's name.
+///
+/// `source .venv/bin/activate` is the first thing work in a Python project
+/// does, and the floor that decides what such a command may run has to read
+/// the script to learn it. `.venv` is a hidden component, so the hidden-path
+/// screen refused the read and the command kept no owners at all. PEP 405
+/// puts `pyvenv.cfg` directly above `bin/`, and only `venv`, `virtualenv` and
+/// `uv` write it, so that marker is what admits the read: a hidden directory
+/// called `.venv` with no marker beside it stays refused, and a marked
+/// environment under any other name reads. The path is already canonical, so
+/// no link can dress another file as an activation script.
+pub(super) fn virtualenv_activation_script(canonical: &std::path::Path) -> bool {
+    const ACTIVATION_SCRIPTS: [&str; 5] = [
+        "activate",
+        "activate.csh",
+        "activate.fish",
+        "activate.nu",
+        "activate.ps1",
+    ];
+    let lowered = |path: &std::path::Path| {
+        path.file_name()
+            .map(|name| name.to_string_lossy().to_ascii_lowercase())
+    };
+    if !lowered(canonical).is_some_and(|name| ACTIVATION_SCRIPTS.contains(&name.as_str())) {
+        return false;
+    }
+    let Some(binaries) = canonical.parent() else {
+        return false;
+    };
+    // POSIX environments keep their programs in `bin`, Windows ones in
+    // `Scripts`; the marker sits directly above either.
+    if !lowered(binaries).is_some_and(|name| name == "bin" || name == "scripts") {
+        return false;
+    }
+    binaries
+        .parent()
+        .is_some_and(|root| root.join("pyvenv.cfg").is_file())
+}
+
 /// A project's own dotfile in a checkout, read as the document it is.
 ///
 /// The home directory is handed over so a dotfiles repository cannot make the
@@ -304,6 +425,16 @@ pub(super) fn resolved_location_allowed(
     home_dir: Option<&str>,
     cwd: Option<&str>,
     verified_temporary: bool,
+) -> bool {
+    location_allowed(canonical, home_dir, cwd, verified_temporary, true)
+}
+
+fn location_allowed(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    verified_temporary: bool,
+    credential_names: bool,
 ) -> bool {
     let rendered = canonical.to_string_lossy().replace('\\', "/");
     let lowered = rendered.to_ascii_lowercase();
@@ -323,7 +454,7 @@ pub(super) fn resolved_location_allowed(
             .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/"))))
         || foreign_user_home(canonical, home_dir, cwd)
         || guard_secure_fs::sensitive_path_family(canonical).is_some()
-        || guard_secure_fs::credential_named_path(canonical))
+        || (credential_names && guard_secure_fs::credential_named_path(canonical)))
 }
 
 pub(super) fn foreign_user_home(

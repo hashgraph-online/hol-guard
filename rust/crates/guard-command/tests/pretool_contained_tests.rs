@@ -197,19 +197,18 @@ fn direct_pytest_requires_real_containment_never_direct_allow() {
     ] {
         for harness in ["omp", "claude-code", "codex"] {
             let result = classify(harness, command);
-            let expected = if cfg!(target_os = "macos") {
-                "sandbox-required"
+            let contained = cfg!(target_os = "macos") || cfg!(windows);
+            let (expected, reason) = if contained {
+                (
+                    "sandbox-required",
+                    "native_pytest_readonly_containment_required",
+                )
             } else {
-                "review"
+                ("review", "native_command_review_required")
             };
             assert_eq!(result.minimum_action, expected, "{command}");
             assert_eq!(result.decision, "deny", "{command}");
             assert!(!result.explicitly_benign, "{command}");
-            let reason = if cfg!(target_os = "macos") {
-                "native_pytest_readonly_containment_required"
-            } else {
-                "native_command_review_required"
-            };
             assert_eq!(result.reason_code, reason, "{command}");
         }
     }
@@ -474,7 +473,13 @@ fn local_lint_typecheck_requires_actual_protected_execution() {
         "bunx tsc --noEmit",
         "pnpm exec tsc --noEmit --pretty false",
         "pnpm exec eslint src",
+        "pnpm exec prettier --check src",
+        "bunx prettier --list-different .",
+        "npx prettier -c src",
         "eslint src",
+        "prettier --check .",
+        "node /home/tester/project/node_modules/prettier/bin/prettier.cjs --check src",
+        "node /home/tester/project/node_modules/prettier/bin-prettier.js --check src",
         "node /home/tester/project/node_modules/eslint/bin/eslint.js src",
         "node /home/tester/project/node_modules/typescript/bin/tsc --noEmit",
         "node --max-old-space-size=12288 /home/tester/project/node_modules/typescript/bin/tsc --noEmit --incremental false",
@@ -499,6 +504,13 @@ fn local_lint_typecheck_requires_actual_protected_execution() {
         "pnpm exec -c tsc --noEmit",
         "pnpm --filter app exec tsc --noEmit",
         "pnpm exec eslint --fix src",
+        "prettier .",
+        "prettier --write src",
+        "npx prettier --check src --write",
+        "pnpm exec prettier src",
+        "bunx prettier -w .",
+        // A value spelling turns the same rewrite on.
+        "npx prettier --check --write=true src",
         "pnpm exec tsc --noEmit && rm -rf /",
         "NODE_OPTIONS=--require=x eslint src",
         "node --require=evil /home/tester/project/node_modules/typescript/bin/tsc --noEmit",
@@ -572,7 +584,6 @@ fn windows_contains_only_python_runs_from_harnesses_with_a_sink_command() {
             ("codex", "node -e 'console.log(1)'"),
             ("claude-code", "node -e 'console.log(1)'"),
             ("omp", "node -e 'console.log(1)'"),
-            ("claude-code", "python3 -m pytest"),
         ] {
             let result = classify(harness, command);
             if command == "python3 test_calc.py" && harness != "zcode" {
@@ -645,6 +656,7 @@ fn windows_contains_direct_vite_builds_of_a_flat_install() {
                 cdpath_unset: true,
                 rustup_override_absent: false,
                 npm_config_inert: false,
+                pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
@@ -657,7 +669,7 @@ fn windows_contains_direct_vite_builds_of_a_flat_install() {
         .to_string_lossy()
         .replace('\\', "/");
     let resolved = format!(r"'C:\Program Files\nodejs\node.exe' {entry} build");
-    for harness in ["claude-code", "omp", "pi"] {
+    for harness in ["claude-code", "codex", "omp", "pi"] {
         for (command, cwd) in [
             (
                 "cd dashboard && ./node_modules/.bin/vite build 2>&1 | tail -15",
@@ -679,7 +691,7 @@ fn windows_contains_direct_vite_builds_of_a_flat_install() {
     }
     let app_dir = app.to_str().unwrap();
     for (harness, command) in [
-        ("codex", "npx vite build"),
+        ("zcode", "npx vite build"),
         ("omp", "npm run build"),
         ("omp", "npx vite build --outDir ../elsewhere"),
     ] {

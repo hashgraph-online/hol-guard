@@ -23,6 +23,7 @@ from ..codex_config import dump_toml, read_config_bytes, read_toml_payload
 from ..codex_hook_command_line import encode_hook_config_argument, render_hook_command
 from ..codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND, NATIVE_CODEX_HOOK_FEATURE, python_bridge_argv
 from ..codex_hook_file_integrity import validate_regular_file
+from ..codex_hook_identity import CodexHookIdentityUnavailableError
 from ..codex_hook_integrity import (
     atomic_write_bytes,
     atomic_write_text,
@@ -37,9 +38,10 @@ from ..codex_hook_integrity import (
 )
 from ..codex_hook_inventory import (
     CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE,
+    CodexHookGroupQuestion,
     CodexHookInventory,
-    canonical_codex_hook_conflict_keys,
-    canonical_codex_hook_group_identity,
+    canonical_codex_hook_group_conflict_keys,
+    canonical_codex_hook_group_identities,
     enumerate_codex_hooks,
 )
 from ..codex_hook_launch_runtime import isolated_daemon_start_command, isolated_guard_cli_command
@@ -72,6 +74,7 @@ from ..codex_hook_registration import (
     remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
 )
 from ..codex_hook_rollback import require_unchanged_config_for_rollback, rollback_file_identity
+from ..codex_hook_self_binding import self_bound_hook_bindings
 from ..codex_hook_sources import parse_json_object, parse_toml_object
 from ..codex_hook_sources import (
     require_hook_inventory_sources_unchanged as _require_hook_inventory_sources_unchanged,
@@ -450,6 +453,49 @@ def _current_install_legacy_bindings(context: HarnessContext, hooks: dict[str, o
     )
 
 
+def _recorded_handler_commands(bindings: Sequence[Mapping[str, object]]) -> list[str]:
+    """The handler commands the authenticated manifest says Guard wrote here."""
+
+    commands: list[str] = []
+    for binding in bindings:
+        handler = binding.get("handler")
+        if not isinstance(handler, Mapping):
+            continue
+        command = handler.get("command")
+        if isinstance(command, str):
+            commands.append(command)
+    return commands
+
+
+def _current_install_self_bindings(
+    context: HarnessContext,
+    hooks: Mapping[str, object],
+    *,
+    authenticated_bindings: Sequence[Mapping[str, object]] = (),
+) -> list[dict[str, object]]:
+    """Select the handlers an earlier generation of this same install left behind.
+
+    A Guard handler counts as ours only when it names this Guard home and runs
+    a program inside a root this install controls - the native bridge under
+    the Guard home, or the bridge script inside this install's package. A
+    reinstall replaces those rather than refusing to touch an owner it cannot
+    identify. A Guard-shaped handler launched from anywhere else keeps its
+    conflict, because its spelling proves nothing about who wrote it.
+
+    The one handler containment does not get to decide is one still running a
+    command the authenticated manifest records, which therefore differs from
+    its recorded entry somewhere other than the command. That is an edit made
+    to Guard's own registration from outside Guard, and it is reported rather
+    than silently rewritten.
+    """
+
+    return self_bound_hook_bindings(
+        hooks,
+        guard_home=_runtime_guard_home(context),
+        recorded_commands=_recorded_handler_commands(authenticated_bindings),
+    )
+
+
 def _wire_bindings(bindings: Sequence[Mapping[str, object]]) -> list[dict[str, object]]:
     """Ownership bindings the native request can carry.
 
@@ -479,6 +525,43 @@ _CODEX_HOOK_MIGRATION_CONFLICT = "codex_hook_migration_conflict"
 _CODEX_HOOK_MIGRATION_READBACK_MISMATCH = "codex_hook_migration_readback_mismatch"
 
 
+def _unidentified_migration(error: CodexHookIdentityUnavailableError) -> RuntimeError:
+    """The failure a migration reports when it has no identity to compare.
+
+    The error carries its own code, so a definition the resident will not read
+    stays distinguishable from a resident that could not answer at all.
+    """
+
+    return RuntimeError(
+        f"{error.code}: Guard's native runtime did not identify the Codex hooks this migration compares. "
+        "Repair whichever the code names, the Guard installation or the hook definition, before retrying "
+        "migration."
+    )
+
+
+def _group_identities(questions: Sequence[CodexHookGroupQuestion]) -> tuple[str, ...]:
+    """Ask the resident for each group's identity, failing the caller closed.
+
+    The resident owns hook identity, so a migration that cannot reach it has no
+    way to tell an incoming group from one already written. It stops with the
+    reason code rather than merging on a locally guessed identity.
+    """
+
+    try:
+        return canonical_codex_hook_group_identities(questions)
+    except CodexHookIdentityUnavailableError as error:
+        raise _unidentified_migration(error) from error
+
+
+def _group_conflict_keys(questions: Sequence[CodexHookGroupQuestion]) -> tuple[tuple[str, ...], ...]:
+    """Ask the resident for each group's conflict keys, failing the caller closed."""
+
+    try:
+        return canonical_codex_hook_group_conflict_keys(questions)
+    except CodexHookIdentityUnavailableError as error:
+        raise _unidentified_migration(error) from error
+
+
 def _append_unique_hook_groups(
     existing_groups: object,
     incoming_groups: object,
@@ -490,48 +573,33 @@ def _append_unique_hook_groups(
     merged = list(existing_groups) if isinstance(existing_groups, list) else []
     if not isinstance(incoming_groups, list):
         return merged
-    identities = {
-        canonical_codex_hook_group_identity(
+    # Both sides are known before the first comparison, so the resident is
+    # asked about every group once rather than once per comparison.
+    settled = [group for group in merged if isinstance(group, Mapping)]
+    questions = [
+        _hook_group_question(
+            group,
+            event_name=event_name,
             source_scope=source_scope,
             source_hooks_enabled=source_hooks_enabled,
-            event_name=event_name,
-            group=group,
         )
-        for group in merged
-        if isinstance(group, Mapping)
-    }
-    conflict_keys = {
-        key
-        for group in merged
-        if isinstance(group, Mapping)
-        for key in canonical_codex_hook_conflict_keys(
-            source_scope=source_scope,
-            source_hooks_enabled=source_hooks_enabled,
-            event_name=event_name,
-            group=group,
-        )
-    }
+        for group in (*settled, *(group for group in incoming_groups if isinstance(group, Mapping)))
+    ]
+    group_identities = _group_identities(questions)
+    group_conflicts = _group_conflict_keys(questions)
+    identities = set(group_identities[: len(settled)])
+    conflict_keys = {key for keys in group_conflicts[: len(settled)] for key in keys}
+    position = len(settled)
     for group in incoming_groups:
         if not isinstance(group, Mapping):
             if group not in merged:
                 merged.append(group)
             continue
-        identity = canonical_codex_hook_group_identity(
-            source_scope=source_scope,
-            source_hooks_enabled=source_hooks_enabled,
-            event_name=event_name,
-            group=group,
-        )
+        identity = group_identities[position]
+        incoming_conflicts = set(group_conflicts[position])
+        position += 1
         if identity in identities:
             continue
-        incoming_conflicts = set(
-            canonical_codex_hook_conflict_keys(
-                source_scope=source_scope,
-                source_hooks_enabled=source_hooks_enabled,
-                event_name=event_name,
-                group=group,
-            )
-        )
         if incoming_conflicts & conflict_keys:
             raise RuntimeError(
                 f"{_CODEX_HOOK_MIGRATION_CONFLICT}: Codex hook sources define the same {event_name!r} "
@@ -561,6 +629,10 @@ def _migrate_hooks_json_into_config(
     cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(json_hooks, owned_bindings)
     legacy_bindings = _current_install_legacy_bindings(context, cleaned_json_hooks)
     cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(cleaned_json_hooks, legacy_bindings)
+    # The manifest authenticates the config entries, not hooks.json, so no
+    # recorded command holds a JSON handler back, matching its inventory.
+    self_bindings = _current_install_self_bindings(context, cleaned_json_hooks)
+    cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(cleaned_json_hooks, self_bindings)
     source_hooks_enabled = _payload_has_hooks_feature_enabled(config_payload)
     changed = False
     for event_name, groups in cleaned_json_hooks.items():
@@ -590,21 +662,44 @@ def _canonical_hook_semantics(
     if not isinstance(hooks, Mapping):
         return {}
     source_hooks_enabled = _payload_has_hooks_feature_enabled(payload)
-    semantics: dict[str, tuple[str, ...]] = {}
+    counts: list[tuple[str, int]] = []
+    questions: list[CodexHookGroupQuestion] = []
     for event_name, groups in hooks.items():
         if not isinstance(event_name, str) or not isinstance(groups, list):
             continue
-        semantics[event_name] = tuple(
-            canonical_codex_hook_group_identity(
+        mappings = [group for group in groups if isinstance(group, Mapping)]
+        counts.append((event_name, len(mappings)))
+        questions.extend(
+            _hook_group_question(
+                group,
+                event_name=event_name,
                 source_scope=source_scope,
                 source_hooks_enabled=source_hooks_enabled,
-                event_name=event_name,
-                group=group,
             )
-            for group in groups
-            if isinstance(group, Mapping)
+            for group in mappings
         )
+    identities = _group_identities(questions)
+    semantics: dict[str, tuple[str, ...]] = {}
+    start = 0
+    for event_name, count in counts:
+        semantics[event_name] = identities[start : start + count]
+        start += count
     return semantics
+
+
+def _hook_group_question(
+    group: Mapping[str, object],
+    *,
+    event_name: str,
+    source_scope: str,
+    source_hooks_enabled: bool,
+) -> CodexHookGroupQuestion:
+    return CodexHookGroupQuestion(
+        source_scope=source_scope,
+        source_hooks_enabled=source_hooks_enabled,
+        event_name=event_name,
+        group=group,
+    )
 
 
 def _require_hook_semantics_readback(
@@ -634,18 +729,22 @@ def _migration_group_identities(
     hooks = payload.get("hooks")
     if not isinstance(hooks, Mapping):
         return set()
-    return {
-        canonical_codex_hook_group_identity(
-            source_scope=source_scope,
-            source_hooks_enabled=source_hooks_enabled,
-            event_name=event_name,
-            group=group,
+    return set(
+        _group_identities(
+            [
+                _hook_group_question(
+                    group,
+                    event_name=event_name,
+                    source_scope=source_scope,
+                    source_hooks_enabled=source_hooks_enabled,
+                )
+                for event_name, groups in hooks.items()
+                if isinstance(event_name, str) and isinstance(groups, list)
+                for group in groups
+                if isinstance(group, Mapping)
+            ]
         )
-        for event_name, groups in hooks.items()
-        if isinstance(event_name, str) and isinstance(groups, list)
-        for group in groups
-        if isinstance(group, Mapping)
-    }
+    )
 
 
 def _unmanaged_migration_payload(
@@ -660,6 +759,8 @@ def _unmanaged_migration_payload(
     cleaned_hooks, _ = _remove_manifest_bound_hook_events(hooks, owned_bindings)
     legacy_bindings = _current_install_legacy_bindings(context, cleaned_hooks)
     cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, legacy_bindings)
+    self_bindings = _current_install_self_bindings(context, cleaned_hooks)
+    cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, self_bindings)
     return {"hooks": cleaned_hooks} if cleaned_hooks else {}
 
 
@@ -936,8 +1037,9 @@ def _codex_hook_inventory(
     context: HarnessContext,
     authenticated_bindings: Sequence[Mapping[str, object]] = (),
 ) -> CodexHookInventory:
-    hooks = payload.get("hooks")
-    legacy_bindings = _current_install_legacy_bindings(context, hooks if isinstance(hooks, dict) else {})
+    raw_hooks = payload.get("hooks")
+    hooks: dict[str, object] = raw_hooks if isinstance(raw_hooks, dict) else {}
+    legacy_bindings = _current_install_legacy_bindings(context, hooks)
     return enumerate_codex_hooks(
         payload,
         source_path=source_path,
@@ -946,6 +1048,7 @@ def _codex_hook_inventory(
         source_hooks_enabled=source_hooks_enabled,
         authenticated_bindings=authenticated_bindings,
         legacy_bindings=legacy_bindings,
+        self_bindings=_current_install_self_bindings(context, hooks, authenticated_bindings=authenticated_bindings),
     )
 
 
@@ -1944,10 +2047,12 @@ class CodexHarnessAdapter(HarnessAdapter):
         cleaned_hooks, _ = _remove_manifest_bound_hook_events(hooks, owned_bindings)
         legacy_bindings = _current_install_legacy_bindings(context, cleaned_hooks)
         cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, legacy_bindings)
+        self_bindings = _current_install_self_bindings(context, cleaned_hooks, authenticated_bindings=owned_bindings)
+        cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, self_bindings)
         install_managed_codex_hook_groups(
             cleaned_hooks,
             _managed_hook_groups(context),
-            current_guard_home=context.guard_home,
+            current_guard_home=_runtime_guard_home(context),
         )
         # Hook state is keyed by position, so the groups just rewritten moved
         # the keys of the hooks Guard leaves alone. Each one follows its

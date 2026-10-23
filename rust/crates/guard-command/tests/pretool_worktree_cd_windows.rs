@@ -86,6 +86,7 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
                 cdpath_unset: false,
                 rustup_override_absent: false,
                 npm_config_inert: false,
+                pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
@@ -102,7 +103,9 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
         "allow"
     );
     for command in [
-        // Another directory than the one Git creates.
+        // The chain proof covers reads in the checkout Git creates. A `cd`
+        // anywhere else, even the agent's own source checkout, leaves the
+        // read floor in place: Windows has no workspace sandbox to lift it.
         format!("{add} && cd {source} && git log -1"),
         // A different spelling of the parent stays unproved.
         format!("{add} && cd {} && git log -1", fresh.to_lowercase()),

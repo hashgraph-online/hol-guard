@@ -1,0 +1,457 @@
+{
+ "recorded_at": "2026-03-01T12:00:00.123456+00:00",
+ "scenarios": [
+  {
+   "after": {
+    "native_hook_decision_receipts": [
+     {
+      "authority": "rust",
+      "command_extensions_json": null,
+      "deadline_budget_ms": 750,
+      "decision": "allow",
+      "decision_id": "9ff79f388eed78901ed8da84196abc78036a05bfe01f521973c90b6944931212",
+      "event_name": "PreToolUse",
+      "harness": "claude-code",
+      "model_output_action": "allow_original",
+      "observe_mode": 0,
+      "observed_policy_action": null,
+      "payload_kind": "inline",
+      "policy_action": "allow",
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "policy_generation": 7,
+      "reason_code": "native_allow",
+      "recorded_at": "2026-03-01T12:00:00.123456+00:00",
+      "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "request_id": "req.1",
+      "reviewed_output_sha256": null,
+      "rule_digest": null,
+      "runtime_identity": null,
+      "schema": "guard-native-hook-decision-receipt.v1",
+      "source_ref_external_allowed": 0,
+      "version": 1,
+      "workspace_bound": 1
+     }
+    ],
+    "native_prompt_decision_receipts": []
+   },
+   "error": null,
+   "name": "pre_tool_minimal",
+   "receipt_texts": [
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"9ff79f388eed78901ed8da84196abc78036a05bfe01f521973c90b6944931212\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"PreToolUse\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"allow_original\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_allow\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": 750}"
+   ]
+  },
+  {
+   "after": {
+    "native_hook_decision_receipts": [
+     {
+      "authority": "rust",
+      "command_extensions_json": "{\"catalog_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"control_effective_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"control_revision\":4,\"managed_control_revision\":0,\"observation_count\":2,\"observations_digest\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"program_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"schema\":\"guard.native-command-receipt-binding.v1\",\"trust_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"uncertainty_count\":0}",
+      "deadline_budget_ms": 750,
+      "decision": "deny",
+      "decision_id": "a5c5ecf43242239e9199e50fed78a6ea9b3b27ae4a8ab1922b4883245f238cfd",
+      "event_name": "PostToolUse",
+      "harness": "claude-code",
+      "model_output_action": "block",
+      "observe_mode": 1,
+      "observed_policy_action": "review",
+      "payload_kind": "inline",
+      "policy_action": "block",
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "policy_generation": 7,
+      "reason_code": "native_allow",
+      "recorded_at": "2026-03-01T12:00:00.123456+00:00",
+      "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "request_id": "req.1",
+      "reviewed_output_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "rule_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "runtime_identity": "1111111111111111111111111111111111111111111111111111111111111111",
+      "schema": "guard-native-hook-decision-receipt.v1",
+      "source_ref_external_allowed": 0,
+      "version": 1,
+      "workspace_bound": 1
+     }
+    ],
+    "native_prompt_decision_receipts": []
+   },
+   "error": null,
+   "name": "post_tool_every_optional_field",
+   "receipt_texts": [
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"a5c5ecf43242239e9199e50fed78a6ea9b3b27ae4a8ab1922b4883245f238cfd\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"PostToolUse\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": \"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\", \"runtime_identity\": \"1111111111111111111111111111111111111111111111111111111111111111\", \"decision\": \"deny\", \"model_output_action\": \"block\", \"policy_action\": \"block\", \"observed_policy_action\": \"review\", \"reason_code\": \"native_allow\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": \"2222222222222222222222222222222222222222222222222222222222222222\", \"observe_mode\": true, \"deadline_budget_ms\": 750, \"command_extensions\": {\"schema\": \"guard.native-command-receipt-binding.v1\", \"program_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"catalog_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"trust_digest\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"control_revision\": 4, \"managed_control_revision\": 0, \"control_effective_digest\": \"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\", \"observations_digest\": \"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\", \"observation_count\": 2, \"uncertainty_count\": 0}, \"origin_authentication\": \"3333333333333333333333333333333333333333333333333333333333333333\", \"execution_intent_digest\": \"4444444444444444444444444444444444444444444444444444444444444444\", \"review_anchor_digest\": \"5555555555555555555555555555555555555555555555555555555555555555\", \"business_review_binding\": \"6666666666666666666666666666666666666666666666666666666666666666\"}"
+   ]
+  },
+  {
+   "after": {
+    "native_hook_decision_receipts": [],
+    "native_prompt_decision_receipts": [
+     {
+      "authority": "rust",
+      "command_extensions_json": null,
+      "deadline_budget_ms": 750,
+      "decision": "allow",
+      "decision_id": "6d93df33aff1954563dfadaaf877b4996fe80ced19ccd4b87e5045cfaae48b6a",
+      "event_name": "UserPromptSubmit",
+      "harness": "claude-code",
+      "model_output_action": "not_applicable",
+      "observe_mode": 0,
+      "observed_policy_action": null,
+      "payload_kind": "inline",
+      "policy_action": "allow",
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "policy_generation": 7,
+      "prompt_risk_classes_json": "[\"local_env_read\",\"exfil_intent\",\"guard_bypass_intent\"]",
+      "reason_code": "native_prompt_review",
+      "recorded_at": "2026-03-01T12:00:00.123456+00:00",
+      "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "request_id": "req.1",
+      "reviewed_output_sha256": null,
+      "rule_digest": null,
+      "runtime_identity": null,
+      "schema": "guard-native-hook-decision-receipt.v1",
+      "source_ref_external_allowed": 0,
+      "version": 1,
+      "workspace_bound": 1
+     }
+    ]
+   },
+   "error": null,
+   "name": "prompt_with_risk_classes",
+   "receipt_texts": [
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"6d93df33aff1954563dfadaaf877b4996fe80ced19ccd4b87e5045cfaae48b6a\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"UserPromptSubmit\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"not_applicable\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_prompt_review\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": 750, \"prompt_risk_classes\": [\"local_env_read\", \"exfil_intent\", \"guard_bypass_intent\"]}"
+   ]
+  },
+  {
+   "after": {
+    "native_hook_decision_receipts": [],
+    "native_prompt_decision_receipts": [
+     {
+      "authority": "rust",
+      "command_extensions_json": null,
+      "deadline_budget_ms": 750,
+      "decision": "allow",
+      "decision_id": "9b5a2baa3710af42826941ad91a498922cee1ebd4e7b80619513579ffba1a956",
+      "event_name": "UserPromptSubmit",
+      "harness": "claude-code",
+      "model_output_action": "not_applicable",
+      "observe_mode": 0,
+      "observed_policy_action": null,
+      "payload_kind": "inline",
+      "policy_action": "allow",
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "policy_generation": 7,
+      "prompt_risk_classes_json": "[]",
+      "reason_code": "native_prompt_review",
+      "recorded_at": "2026-03-01T12:00:00.123456+00:00",
+      "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "request_id": "req.1",
+      "reviewed_output_sha256": null,
+      "rule_digest": null,
+      "runtime_identity": null,
+      "schema": "guard-native-hook-decision-receipt.v1",
+      "source_ref_external_allowed": 0,
+      "version": 1,
+      "workspace_bound": 1
+     }
+    ]
+   },
+   "error": null,
+   "name": "prompt_without_risk_classes",
+   "receipt_texts": [
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"9b5a2baa3710af42826941ad91a498922cee1ebd4e7b80619513579ffba1a956\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"UserPromptSubmit\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"not_applicable\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_prompt_review\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": 750}"
+   ]
+  },
+  {
+   "after": {
+    "native_hook_decision_receipts": [
+     {
+      "authority": "rust",
+      "command_extensions_json": null,
+      "deadline_budget_ms": 750,
+      "decision": "allow",
+      "decision_id": "4b01d95357f22a6b5af1f0bb60f7871205bd42192cfa20b177648849e01b1bc6",
+      "event_name": "PostToolUse",
+      "harness": "claude-code",
+      "model_output_action": "allow_original",
+      "observe_mode": 0,
+      "observed_policy_action": null,
+      "payload_kind": "inline",
+      "policy_action": "allow",
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "policy_generation": 7,
+      "reason_code": "native_allow",
+      "recorded_at": "2026-03-01T12:00:00.123456+00:00",
+      "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "request_id": "req.1",
+      "reviewed_output_sha256": null,
+      "rule_digest": null,
+      "runtime_identity": null,
+      "schema": "guard-native-hook-decision-receipt.v1",
+      "source_ref_external_allowed": 0,
+      "version": 1,
+      "workspace_bound": 1
+     },
+     {
+      "authority": "rust",
+      "command_extensions_json": null,
+      "deadline_budget_ms": 750,
+      "decision": "allow",
+      "decision_id": "9ff79f388eed78901ed8da84196abc78036a05bfe01f521973c90b6944931212",
+      "event_name": "PreToolUse",
+      "harness": "claude-code",
+      "model_output_action": "allow_original",
+      "observe_mode": 0,
+      "observed_policy_action": null,
+      "payload_kind": "inline",
+      "policy_action": "allow",
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "policy_generation": 7,
+      "reason_code": "native_allow",
+      "recorded_at": "2026-03-01T12:00:00.123456+00:00",
+      "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "request_id": "req.1",
+      "reviewed_output_sha256": null,
+      "rule_digest": null,
+      "runtime_identity": null,
+      "schema": "guard-native-hook-decision-receipt.v1",
+      "source_ref_external_allowed": 0,
+      "version": 1,
+      "workspace_bound": 1
+     }
+    ],
+    "native_prompt_decision_receipts": [
+     {
+      "authority": "rust",
+      "command_extensions_json": null,
+      "deadline_budget_ms": 750,
+      "decision": "allow",
+      "decision_id": "9b5a2baa3710af42826941ad91a498922cee1ebd4e7b80619513579ffba1a956",
+      "event_name": "UserPromptSubmit",
+      "harness": "claude-code",
+      "model_output_action": "not_applicable",
+      "observe_mode": 0,
+      "observed_policy_action": null,
+      "payload_kind": "inline",
+      "policy_action": "allow",
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "policy_generation": 7,
+      "prompt_risk_classes_json": "[]",
+      "reason_code": "native_prompt_review",
+      "recorded_at": "2026-03-01T12:00:00.123456+00:00",
+      "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "request_id": "req.1",
+      "reviewed_output_sha256": null,
+      "rule_digest": null,
+      "runtime_identity": null,
+      "schema": "guard-native-hook-decision-receipt.v1",
+      "source_ref_external_allowed": 0,
+      "version": 1,
+      "workspace_bound": 1
+     }
+    ]
+   },
+   "error": null,
+   "name": "both_tables_in_one_database",
+   "receipt_texts": [
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"9ff79f388eed78901ed8da84196abc78036a05bfe01f521973c90b6944931212\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"PreToolUse\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"allow_original\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_allow\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": 750}",
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"9b5a2baa3710af42826941ad91a498922cee1ebd4e7b80619513579ffba1a956\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"UserPromptSubmit\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"not_applicable\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_prompt_review\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": 750}",
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"4b01d95357f22a6b5af1f0bb60f7871205bd42192cfa20b177648849e01b1bc6\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"PostToolUse\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"allow_original\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_allow\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": 750}"
+   ]
+  },
+  {
+   "after": {
+    "native_hook_decision_receipts": [
+     {
+      "authority": "rust",
+      "command_extensions_json": null,
+      "deadline_budget_ms": 750,
+      "decision": "allow",
+      "decision_id": "9ff79f388eed78901ed8da84196abc78036a05bfe01f521973c90b6944931212",
+      "event_name": "PreToolUse",
+      "harness": "claude-code",
+      "model_output_action": "allow_original",
+      "observe_mode": 0,
+      "observed_policy_action": null,
+      "payload_kind": "inline",
+      "policy_action": "allow",
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "policy_generation": 7,
+      "reason_code": "native_allow",
+      "recorded_at": "2026-03-01T12:00:00.123456+00:00",
+      "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "request_id": "req.1",
+      "reviewed_output_sha256": null,
+      "rule_digest": null,
+      "runtime_identity": null,
+      "schema": "guard-native-hook-decision-receipt.v1",
+      "source_ref_external_allowed": 0,
+      "version": 1,
+      "workspace_bound": 1
+     }
+    ],
+    "native_prompt_decision_receipts": []
+   },
+   "error": null,
+   "name": "repeated_receipt_is_ignored",
+   "receipt_texts": [
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"9ff79f388eed78901ed8da84196abc78036a05bfe01f521973c90b6944931212\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"PreToolUse\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"allow_original\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_allow\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": 750}",
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"9ff79f388eed78901ed8da84196abc78036a05bfe01f521973c90b6944931212\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"PreToolUse\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"allow_original\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_allow\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": 750}"
+   ]
+  },
+  {
+   "after": {
+    "native_hook_decision_receipts": [
+     {
+      "authority": "rust",
+      "command_extensions_json": null,
+      "deadline_budget_ms": 750,
+      "decision": "allow",
+      "decision_id": "2dd26dfcf923a0162573bf1dc5a29dfec0aafb8dbb8532e1e0889906ce36cb33",
+      "event_name": "PreToolUse",
+      "harness": "claude-code",
+      "model_output_action": "allow_original",
+      "observe_mode": 0,
+      "observed_policy_action": null,
+      "payload_kind": "source_file_ref",
+      "policy_action": "allow",
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "policy_generation": 7,
+      "reason_code": "native_allow",
+      "recorded_at": "2026-03-01T12:00:00.123456+00:00",
+      "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "request_id": "req.1",
+      "reviewed_output_sha256": null,
+      "rule_digest": null,
+      "runtime_identity": null,
+      "schema": "guard-native-hook-decision-receipt.v1",
+      "source_ref_external_allowed": 0,
+      "version": 1,
+      "workspace_bound": 1
+     },
+     {
+      "authority": "rust",
+      "command_extensions_json": null,
+      "deadline_budget_ms": 750,
+      "decision": "allow",
+      "decision_id": "9ff79f388eed78901ed8da84196abc78036a05bfe01f521973c90b6944931212",
+      "event_name": "PreToolUse",
+      "harness": "claude-code",
+      "model_output_action": "allow_original",
+      "observe_mode": 0,
+      "observed_policy_action": null,
+      "payload_kind": "inline",
+      "policy_action": "allow",
+      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "policy_generation": 7,
+      "reason_code": "native_allow",
+      "recorded_at": "2026-03-01T12:00:00.123456+00:00",
+      "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "request_id": "req.1",
+      "reviewed_output_sha256": null,
+      "rule_digest": null,
+      "runtime_identity": null,
+      "schema": "guard-native-hook-decision-receipt.v1",
+      "source_ref_external_allowed": 0,
+      "version": 1,
+      "workspace_bound": 1
+     }
+    ],
+    "native_prompt_decision_receipts": []
+   },
+   "error": null,
+   "name": "payload_kind_keeps_its_own_row",
+   "receipt_texts": [
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"9ff79f388eed78901ed8da84196abc78036a05bfe01f521973c90b6944931212\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"PreToolUse\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"allow_original\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_allow\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": 750}",
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"2dd26dfcf923a0162573bf1dc5a29dfec0aafb8dbb8532e1e0889906ce36cb33\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"PreToolUse\", \"payload_kind\": \"source_file_ref\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"allow_original\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_allow\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": 750}"
+   ]
+  },
+  {
+   "after": {
+    "native_hook_decision_receipts": [
+     {
+      "authority": "rust",
+      "command_extensions_json": null,
+      "deadline_budget_ms": null,
+      "decision": "allow",
+      "decision_id": "f4641fd468f3cc4a38adb2a5a7cf36cfb6c11f8f7f7127535ed33ec448fc04ab",
+      "event_name": "PreToolUse",
+      "harness": "claude-code",
+      "model_output_action": "allow_original",
+      "observe_mode": 0,
+      "observed_policy_action": null,
+      "payload_kind": "inline",
+      "policy_action": "allow",
+      "policy_digest": null,
+      "policy_generation": 7,
+      "reason_code": "native_allow",
+      "recorded_at": "2026-03-01T12:00:00.123456+00:00",
+      "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "request_id": "req.1",
+      "reviewed_output_sha256": null,
+      "rule_digest": null,
+      "runtime_identity": null,
+      "schema": "guard-native-hook-decision-receipt.v1",
+      "source_ref_external_allowed": 0,
+      "version": 1,
+      "workspace_bound": 1
+     }
+    ],
+    "native_prompt_decision_receipts": []
+   },
+   "error": null,
+   "name": "unbound_deadline_and_no_policy_digest",
+   "receipt_texts": [
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"f4641fd468f3cc4a38adb2a5a7cf36cfb6c11f8f7f7127535ed33ec448fc04ab\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"PreToolUse\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": null, \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"allow_original\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_allow\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": null}"
+   ]
+  },
+  {
+   "after": {
+    "native_hook_decision_receipts": [],
+    "native_prompt_decision_receipts": []
+   },
+   "error": "native decision receipt is invalid",
+   "name": "decision_id_does_not_match_the_body",
+   "receipt_texts": [
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"7777777777777777777777777777777777777777777777777777777777777777\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"PreToolUse\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"allow_original\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_allow\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": 750}"
+   ]
+  },
+  {
+   "after": {
+    "native_hook_decision_receipts": [],
+    "native_prompt_decision_receipts": []
+   },
+   "error": "native decision receipt is invalid",
+   "name": "unknown_field",
+   "receipt_texts": [
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"9ff79f388eed78901ed8da84196abc78036a05bfe01f521973c90b6944931212\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"PreToolUse\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"allow_original\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_allow\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": 750, \"unexpected\": \"value\"}"
+   ]
+  },
+  {
+   "after": {
+    "native_hook_decision_receipts": [],
+    "native_prompt_decision_receipts": []
+   },
+   "error": "native decision receipt is invalid",
+   "name": "binding_digest_is_not_hex",
+   "receipt_texts": [
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"7f12e6aedc8c37668f6a73ed6089c4a8049e5ac438e2314977bfbae27e92ccd6\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"PreToolUse\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"allow_original\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_allow\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": 750, \"command_extensions\": {\"schema\": \"guard.native-command-receipt-binding.v1\", \"program_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"catalog_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"trust_digest\": \"not-hex\", \"control_revision\": 4, \"managed_control_revision\": 0, \"control_effective_digest\": \"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\", \"observations_digest\": \"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\", \"observation_count\": 2, \"uncertainty_count\": 0}}"
+   ]
+  },
+  {
+   "after": {
+    "native_hook_decision_receipts": [],
+    "native_prompt_decision_receipts": []
+   },
+   "error": "native decision receipt is invalid",
+   "name": "prompt_risk_classes_out_of_order",
+   "receipt_texts": [
+    "{\"schema\": \"guard-native-hook-decision-receipt.v1\", \"version\": 1, \"authority\": \"rust\", \"decision_id\": \"964c043f32210b5483bce945d81e0c8e847527c7caf96807db211bf18e0e858c\", \"request_id\": \"req.1\", \"request_digest\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"harness\": \"claude-code\", \"event_name\": \"UserPromptSubmit\", \"payload_kind\": \"inline\", \"policy_generation\": 7, \"policy_digest\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"rule_digest\": null, \"runtime_identity\": null, \"decision\": \"allow\", \"model_output_action\": \"not_applicable\", \"policy_action\": \"allow\", \"observed_policy_action\": null, \"reason_code\": \"native_prompt_review\", \"workspace_bound\": true, \"source_ref_external_allowed\": false, \"reviewed_output_sha256\": null, \"observe_mode\": false, \"deadline_budget_ms\": 750, \"prompt_risk_classes\": [\"exfil_intent\", \"local_env_read\"]}"
+   ]
+  }
+ ],
+ "schema": "guard-store-native-receipt-vectors.v1",
+ "schema_sql": [
+  "CREATE TABLE native_hook_decision_receipts (\n      decision_id text primary key,\n      schema text not null check (schema = 'guard-native-hook-decision-receipt.v1'),\n      version integer not null check (version = 1),\n      authority text not null check (authority = 'rust'),\n      request_id text not null,\n      request_digest text not null,\n      harness text not null,\n      event_name text not null check (event_name in ('PreToolUse', 'PostToolUse')),\n      payload_kind text not null,\n      policy_generation integer not null,\n      policy_digest text,\n      rule_digest text,\n      runtime_identity text,\n      decision text not null check (decision in ('allow', 'deny')),\n      model_output_action text not null,\n      policy_action text,\n      observed_policy_action text,\n      reason_code text not null,\n      workspace_bound integer not null check (workspace_bound in (0, 1)),\n      source_ref_external_allowed integer not null check (source_ref_external_allowed in (0, 1)),\n      reviewed_output_sha256 text,\n      observe_mode integer not null check (observe_mode in (0, 1)),\n      deadline_budget_ms integer,\n      command_extensions_json text check (command_extensions_json is null or length(command_extensions_json) between 2 and 2048),\n      \n      recorded_at text not null\n    )",
+  "CREATE TABLE native_prompt_decision_receipts (\n      decision_id text primary key,\n      schema text not null check (schema = 'guard-native-hook-decision-receipt.v1'),\n      version integer not null check (version = 1),\n      authority text not null check (authority = 'rust'),\n      request_id text not null,\n      request_digest text not null,\n      harness text not null,\n      event_name text not null check (event_name = 'UserPromptSubmit'),\n      payload_kind text not null,\n      policy_generation integer not null,\n      policy_digest text,\n      rule_digest text,\n      runtime_identity text,\n      decision text not null check (decision in ('allow', 'deny')),\n      model_output_action text not null,\n      policy_action text,\n      observed_policy_action text,\n      reason_code text not null,\n      workspace_bound integer not null check (workspace_bound in (0, 1)),\n      source_ref_external_allowed integer not null check (source_ref_external_allowed in (0, 1)),\n      reviewed_output_sha256 text,\n      observe_mode integer not null check (observe_mode in (0, 1)),\n      deadline_budget_ms integer,\n      command_extensions_json text check (command_extensions_json is null or length(command_extensions_json) between 2 and 2048),\n      prompt_risk_classes_json text not null check (length(prompt_risk_classes_json) between 2 and 256),\n      recorded_at text not null\n    )",
+  "CREATE INDEX idx_native_hook_decision_receipts_recorded_at\n        on native_hook_decision_receipts (recorded_at)\n        ",
+  "CREATE INDEX idx_native_prompt_decision_receipts_recorded_at\n        on native_prompt_decision_receipts (recorded_at)\n        "
+ ]
+}

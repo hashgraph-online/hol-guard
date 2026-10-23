@@ -6,7 +6,10 @@
 
 use crate::CommandModelRequestV1;
 use guard_contracts::PreToolResultV1;
-use targets::{bounded_write, relative_saved_reads, safe_output_target};
+use targets::{
+    bounded_write, plan_note_output_target, relative_saved_reads, safe_output_target,
+    sibling_heredoc_target,
+};
 
 #[path = "redirect_git_chain.rs"]
 pub(super) mod git_chain;
@@ -63,6 +66,8 @@ pub(super) fn project(
     let mut escaped = false;
     let mut heredocs: Vec<(String, bool)> = Vec::new();
     let mut saw_heredoc = false;
+    // The single file a plain `< path` redirect feeds the first command.
+    let mut input_source: Option<String> = None;
     let mut removed = false;
     let mut targets: Vec<String> = Vec::new();
     let mut bounded_writes = true;
@@ -131,9 +136,14 @@ pub(super) fn project(
                 removed = true;
                 continue;
             }
-            '<' => {
+            '<' if chars.get(index + 1) == Some(&'<') => {
                 index = remove_quoted_heredoc(&chars, index, &mut out, &mut heredocs)?;
                 saw_heredoc = true;
+                removed = true;
+                continue;
+            }
+            '<' => {
+                index = remove_input_redirect(&chars, index, &out, separated, &mut input_source)?;
                 removed = true;
                 continue;
             }
@@ -157,6 +167,14 @@ pub(super) fn project(
     if same_command_aside_from_descriptor_spacing(raw, &command) {
         return None;
     }
+    // `cmd < file` reads `file` and hands its bytes to `cmd` on standard
+    // input, which is what `cat file | cmd` does. Modelling it that way keeps
+    // the read under the proof `cat` already gets and leaves `cmd` an
+    // operand-free filter, the shape it actually runs in.
+    let command = match &input_source {
+        Some(source) => format!("cat {source} | {command}"),
+        None => command,
+    };
     let command = relative_saved_reads(command, &targets, context.cwd);
     let model = crate::parse_command(&CommandModelRequestV1 {
         command: command.clone(),
@@ -167,9 +185,14 @@ pub(super) fn project(
     .ok()?;
     // An earlier segment could cd or create a symlink before the shell opens
     // a target, so a chain may only write absolute temp files beside peers.
-    let temporary_chain = temporary_writes && super::super::chain_temporary::peers_only(&model);
+    let temporary_chain =
+        temporary_writes && super::super::chain_temporary::temporary_peers(&model);
     let chain = writes_file && model.segments.len() != 1 && !temporary_chain;
     let leading_write = chain && bounded_writes && !late_write && leading_chain::admits(&model);
+    // Plain peers cannot change directory, rename a file or create a link,
+    // so a write that follows one still opens the file the target check
+    // proved: `cp /tmp/a.ts /tmp/b.ts && cat /tmp/a.ts > src/c.ts`.
+    let peer_write = chain && bounded_writes && super::super::chain_temporary::peers_only(&model);
     scratch_writes &= targets.iter().all(|target| {
         crate::pretool::curl_reads::output_targets::scratch_output_target(target, context)
     });
@@ -180,7 +203,7 @@ pub(super) fn project(
     if model.confidence != "exact"
         || model.uncertainty_reason.is_some()
         || model.segments.is_empty()
-        || (chain && git_chain.is_none() && !leading_write && !init_chain)
+        || (chain && git_chain.is_none() && !leading_write && !init_chain && !peer_write)
     {
         return None;
     }
@@ -194,6 +217,21 @@ pub(super) fn project(
     {
         return None;
     }
+    // A quoted heredoc is literal data, but the bare `cat` that remains reads
+    // standard input, which only the workspace sandbox bounds. A plan note in
+    // the harness home and a repository beside the session's directory lie
+    // outside that sandbox, so the write checked above is all that is left to
+    // prove, and a no-op stands in for the command.
+    let command = if saw_heredoc
+        && bounded_writes
+        && writes_file
+        && targets.iter().all(|target| {
+            plan_note_output_target(target, context) || sibling_heredoc_target(target, context)
+        }) {
+        "true".to_owned()
+    } else {
+        command
+    };
     Some(RedirectProjection {
         command,
         writes_file,
@@ -249,6 +287,16 @@ pub(super) fn package_profile(reason: &str) -> bool {
             | "native_node_test_readonly_containment_required"
             | "native_node_build_output_containment_required"
     )
+}
+
+/// The read-only profiles a plain output redirect disqualifies and the
+/// workspace sandbox may take in their place. The package and Node tool
+/// profiles run a project's own tool; the pytest profile runs the suite the
+/// same workspace holds, and a chain as short as `pytest -q && echo done`
+/// already reaches the sandbox, because two segments earn no profile of their
+/// own. The single command belongs there for the same reason.
+pub(super) fn redirected_profile(reason: &str) -> bool {
+    package_profile(reason) || reason == "native_pytest_readonly_containment_required"
 }
 
 pub(super) fn join(
@@ -441,6 +489,54 @@ fn remove_output_redirect(
     );
     targets.push(target);
     out.push(' ');
+    Some(index)
+}
+
+/// Remove a plain `< path` input redirect, recording the file it reads.
+///
+/// Only the first command's own redirect is modelled: once a separator,
+/// pipe, group or substitution has been seen, the redirect belongs to a
+/// later command and prefixing a reader would misplace the read. `<<`,
+/// `<<<`, `<&` and `<>` are other forms and keep the fail-closed path, as
+/// does a second redirect or a target the shell would expand.
+fn remove_input_redirect(
+    chars: &[char],
+    start: usize,
+    out: &str,
+    separated: bool,
+    input_source: &mut Option<String>,
+) -> Option<usize> {
+    if separated
+        || input_source.is_some()
+        || matches!(chars.get(start + 1), Some('&' | '>'))
+        || !trailing_word(out).is_empty()
+    {
+        return None;
+    }
+    let mut index = start + 1;
+    while matches!(chars.get(index), Some(' ' | '\t')) {
+        index += 1;
+    }
+    let target_start = index;
+    while chars
+        .get(index)
+        .is_some_and(|value| !value.is_whitespace() && !matches!(value, ';' | '|' | '&' | ')'))
+    {
+        index += 1;
+    }
+    let target: String = chars[target_start..index].iter().collect();
+    if target.is_empty()
+        || target.len() > 4096
+        || target.starts_with('-')
+        || !target
+            .chars()
+            .all(|value| value.is_ascii_alphanumeric() || "._-/+@%,=:~".contains(value))
+    {
+        return None;
+    }
+    // The guard above leaves `out` empty or ended by its own separator, so
+    // the removed redirect needs none of its own.
+    *input_source = Some(target);
     Some(index)
 }
 

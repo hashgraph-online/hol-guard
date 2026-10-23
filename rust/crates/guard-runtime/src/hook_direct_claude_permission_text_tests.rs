@@ -1,6 +1,10 @@
-//! Vectors recorded from the Python helpers behind the daemon's Claude Code
-//! `PermissionRequest` and permission prompt `Notification` replies
-//! (`scripts/record_claude_permission_text_vectors.py`).
+//! Vectors recorded from the Python helpers that used to answer the daemon's
+//! Claude Code `PermissionRequest` and permission prompt `Notification`.
+//!
+//! The corpus is frozen: those helpers now ask the resident for the same text,
+//! so re-recording would only read this port's own answers back. The recorder
+//! retired with them; a change here has to be argued against the text a user
+//! sees, not against a Python copy that no longer decides anything.
 
 use serde_json::{Map, Value};
 

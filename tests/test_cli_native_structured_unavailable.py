@@ -85,7 +85,6 @@ def _emit_unavailable(
     event_name: str,
     reason_code: str,
     config: _Config,
-    recording_only: bool = False,
 ) -> tuple[dict[str, object], int]:
     emitted: dict[str, object] = {}
 
@@ -101,13 +100,11 @@ def _emit_unavailable(
     args = _Args(harness=harness)
     rc = availability._emit_native_unavailable(
         args,
-        payload={"hook_event_name": event_name},
         workspace=context.workspace_dir,
         context=context,
         event_name=event_name,
         reason_code=reason_code,
         worker=_OverlayWorker(config),
-        recording_only=recording_only,
     )
     assert emitted["command"] == "hook"
     assert emitted["as_json"] is True
@@ -181,6 +178,7 @@ def _native_success_result() -> tuple[dict[str, object], int]:
     return {
         "decision": "allow",
         "model_output_action": "allow_original",
+        "output_masked": False,
         "reason": "native edge allowed",
         "reason_code": "native_allow",
         "reviewed_output_sha256": "a" * 64,
@@ -233,6 +231,8 @@ def test_cli_native_success_projects_worker_structured_mediation_without_mutatin
     assert response["model_output_action"] == "allow_original"
     assert response["reviewed_output_sha256"] == "a" * 64
     assert response["reviewed_excerpt"] == "native output"
+    assert response["native_edge_output_masked"] is False
+    assert response["decision"] == "allow"
     assert response["existing_field"] == "preserved"
 
 
@@ -276,33 +276,32 @@ def test_cli_native_success_projects_managed_structured_withhold_and_keeps_optio
     assert optional_worker_result == native_result
 
 
-@pytest.mark.parametrize(
-    ("recording_only", "decision", "reason_code"),
-    [
-        (False, "block", "native_prompt_unavailable"),
-        (True, "block", "native_prompt_unavailable"),
-    ],
-)
-def test_cli_native_unavailable_preserves_native_recording_posture(
+def test_cli_native_unavailable_blocks_the_prompt(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
-    recording_only: bool,
-    decision: str,
-    reason_code: str,
 ) -> None:
     response, rc = _emit_unavailable(
         monkeypatch,
         tmp_path,
         harness="pi",
         event_name="UserPromptSubmit",
-        reason_code=reason_code,
+        reason_code="native_prompt_unavailable",
         config=_optional_config(),
-        recording_only=recording_only,
     )
 
     # pi/omp are envelope-driven: a preemptive (UserPromptSubmit) block rides
     # the decision envelope and exits 0 — nonzero rc reads as a hook error.
     # Gauntlet-verified: omp deny arrives as decision==deny while host exits 0.
     assert rc == 0
-    assert response["decision"] == decision
-    assert response["reason_code"] == reason_code
+    assert response["decision"] == "block"
+    assert response["reason_code"] == "native_prompt_unavailable"
+
+
+def test_cli_native_edge_reply_without_a_masking_answer_withholds_the_output() -> None:
+    # The edge decides masking. A reply this build cannot read its answer from
+    # keeps the output away from the model rather than guessing from the words
+    # that happen to be present.
+    response = _project_worker_result({"decision": "allow", "model_output_action": "allow_original"})
+
+    assert response["native_edge_output_masked"] is True
+    assert response["decision"] == "block"

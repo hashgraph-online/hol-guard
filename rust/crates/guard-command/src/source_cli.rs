@@ -4,15 +4,24 @@
 
 use crate::native_command_program::packaged_command_program_bytes;
 use crate::native_command_program::source::{
-    compare_programs, compile_build_request, descriptor_schema, evaluate_batch, run_fixtures,
-    source_schema, MAX_SOURCE_INPUT_BYTES,
+    compare_programs, compile_build_request, compile_pack_stream, compile_source_stream,
+    descriptor_schema, evaluate_batch, run_fixtures, source_schema, MAX_SOURCE_INPUT_BYTES,
 };
 use serde_json::{json, Value};
 use std::io::{BufRead, Read, Write};
 
+#[cfg(guard_source_bootstrap)]
+#[path = "source_compiler_receipt.rs"]
+mod receipt;
+
+pub fn compiler_info() -> Value {
+    json!({"schema":"guard.source-compiler-capabilities.v1",
+        "implementation_digest":env!("GUARD_COMMAND_SOURCE_IMPLEMENTATION"),
+        "embedded_catalog":!cfg!(guard_source_bootstrap)})
+}
+
 #[cfg(not(guard_source_bootstrap))]
-static EXPORTED_TRUST_MAP: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/trust-class-map.v1.json"));
+static EXPORTED_TRUST_MAP: &[u8] = guard_command_catalog_data::TRUST_MAP_JSON;
 // The bootstrap shadow lib produces no packaged output; the empty slice keeps
 // `include_bytes!` valid and `export-trust` fails closed like the embedded
 // program and catalog bootstrap paths.
@@ -20,10 +29,7 @@ static EXPORTED_TRUST_MAP: &[u8] =
 static EXPORTED_TRUST_MAP: &[u8] = &[];
 
 #[cfg(not(guard_source_bootstrap))]
-static EXPORTED_BUILD: &[u8] = include_bytes!(concat!(
-    env!("OUT_DIR"),
-    "/native-command-build.v1.json.zst"
-));
+static EXPORTED_BUILD: &[u8] = guard_command_catalog_data::BUILD_JSON_ZST;
 
 fn exported_build_bytes() -> &'static [u8] {
     #[cfg(not(guard_source_bootstrap))]
@@ -33,8 +39,8 @@ fn exported_build_bytes() -> &'static [u8] {
             .get_or_init(|| {
                 crate::packaged_blob::decode(
                     EXPORTED_BUILD,
-                    env!("GUARD_PACKAGED_BUILD_LEN"),
-                    env!("GUARD_PACKAGED_BUILD_SHA256"),
+                    guard_command_catalog_data::BUILD_JSON_LEN,
+                    guard_command_catalog_data::BUILD_JSON_SHA256,
                 )
             })
             .as_ref()
@@ -116,23 +122,45 @@ pub fn is_command(arguments: &[String]) -> bool {
         return false;
     };
     match operation {
-        "export-trust"
+        "compiler-info"
+        | "compile-bootstrap-stream"
+        | "export-trust"
         | "export-built"
+        | "authoring-context"
+        | "authoring-index"
+        | "authoring-admission"
+        | "bundle-metadata"
+        | "bundle-compatibility"
         | "schema"
         | "descriptor-schema"
         | "github-classify"
         | "github-classify-serve"
         | "validate"
         | "compile"
+        | "compile-stream"
+        | "compile-packs"
         | "test"
         | "compare"
         | "evaluate-batch" => arguments.len() == 1,
         "check" => arguments.len() == 2,
+        "check-pack-cache" => arguments.len() == 3,
         _ => false,
     }
 }
 
 fn run(arguments: &[String]) -> Result<Value, &'static str> {
+    if arguments == ["bundle-compatibility"] {
+        return crate::bundle_metadata::compatibility_stream();
+    }
+    if arguments == ["authoring-index"] {
+        return crate::native_command_program::source::authoring_index();
+    }
+    if arguments == ["authoring-context"] {
+        return crate::native_command_program::source::authoring_context();
+    }
+    if arguments == ["compiler-info"] {
+        return Ok(compiler_info());
+    }
     if arguments == ["export-trust"] {
         return serde_json::from_slice(EXPORTED_TRUST_MAP)
             .map_err(|_| "command_source_trust_output_invalid");
@@ -165,9 +193,31 @@ fn run(arguments: &[String]) -> Result<Value, &'static str> {
     let Some(operation) = arguments.first().map(String::as_str) else {
         return Err("command_source_usage_expected_schema_validate_compile_check_or_test");
     };
+    if operation == "check-pack-cache" {
+        if arguments.len() != 3 {
+            return Err("command_pack_cache_usage_invalid");
+        }
+        let program = crate::native_command_program::NativeCommandProgram::from_pack_cache(
+            std::path::Path::new(&arguments[1]),
+            &arguments[2],
+            crate::native_command_program::PackAdmissionBudget::resident(),
+        )?;
+        return Ok(
+            json!({"schema":"guard.command-pack-cache-check.v1", "engine":env!("GUARD_COMMAND_SOURCE_IMPLEMENTATION"),
+            "program_digest":program.program_digest,"catalog_digest":program.catalog_digest,"trust_digest":program.trust_digest,
+            "extensions":program.extensions.len(),"rules":program.rules.len()}),
+        );
+    }
     if !matches!(
         operation,
-        "validate" | "compile" | "check" | "test" | "compare" | "evaluate-batch"
+        "validate"
+            | "compile"
+            | "check"
+            | "test"
+            | "compare"
+            | "evaluate-batch"
+            | "authoring-admission"
+            | "bundle-metadata"
     ) || arguments.len() != if operation == "check" { 2 } else { 1 }
     {
         return Err("command_source_usage_expected_schema_validate_compile_check_or_test");
@@ -187,6 +237,12 @@ fn run(arguments: &[String]) -> Result<Value, &'static str> {
         .map_err(|_| "command_source_input_read_failed")?;
     if bytes.len() > MAX_SOURCE_INPUT_BYTES {
         return Err("command_source_bytes_invalid");
+    }
+    if operation == "bundle-metadata" {
+        return crate::bundle_metadata::evaluate(&bytes);
+    }
+    if operation == "authoring-admission" {
+        return crate::native_command_program::source::authoring_admission(&bytes);
     }
     if operation == "test" {
         return run_fixtures(&bytes);
@@ -221,7 +277,39 @@ pub fn main(arguments: Vec<String>) -> i32 {
     if arguments == ["github-classify-serve"] {
         return github_classify_serve();
     }
-    let (value, code) = match run(&arguments) {
+    let result = if arguments == ["compile-bootstrap-stream"] {
+        #[cfg(guard_source_bootstrap)]
+        {
+            receipt::compile(std::io::stdin().lock())
+        }
+        #[cfg(not(guard_source_bootstrap))]
+        {
+            Err((
+                "command_source_bootstrap_operation_unsupported",
+                String::new(),
+            ))
+        }
+    } else if arguments == ["compile-packs"] {
+        compile_pack_stream(std::io::stdin().lock(), std::io::stdout().lock())
+            .map_err(|code| (code, String::new()))
+    } else if arguments == ["compile-stream"] {
+        compile_source_stream(std::io::stdin().lock())
+            .and_then(|output| {
+                serde_json::to_value(output).map_err(|_| "command_source_encoding_failed".into())
+            })
+            .map_err(|error| {
+                (
+                    error.code,
+                    error
+                        .record
+                        .map(|index| format!("/records/{index}"))
+                        .unwrap_or_default(),
+                )
+            })
+    } else {
+        run(&arguments).map_err(|code| (code, String::new()))
+    };
+    let (value, code) = match result {
         Ok(value) => {
             let code = if value.get("ok") == Some(&Value::Bool(false)) {
                 1
@@ -230,7 +318,7 @@ pub fn main(arguments: Vec<String>) -> i32 {
             };
             (value, code)
         }
-        Err(error) => (json!({"ok":false,"code":error,"pointer":""}), 2),
+        Err((error, pointer)) => (json!({"ok":false,"code":error,"pointer":pointer}), 2),
     };
     let mut stdout = std::io::stdout().lock();
     if serde_json::to_writer(&mut stdout, &value).is_err() || stdout.write_all(b"\n").is_err() {
@@ -275,6 +363,7 @@ mod tests {
             vec!["github-classify-serve"],
             vec!["validate"],
             vec!["compile"],
+            vec!["compile-stream"],
             vec!["test"],
             vec!["compare"],
             vec!["evaluate-batch"],

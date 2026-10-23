@@ -31,10 +31,7 @@ fn home() -> PathBuf {
         .join(format!(
             "home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let home = root.join("home");
     write(home.join("project/main.py"), "print('retry')\n");
@@ -126,7 +123,7 @@ fn repository_key_stores_and_links_still_ask() {
 #[test]
 fn listings_and_other_hidden_entries_are_unchanged() {
     let home = home();
-    write(home.join("other-project/.env"), "synthetic\n");
+    write(home.join("other-project/.env"), "retry synthetic\n");
     assert_ne!(shell(&home, "grep -rln retry ~/other-project"), "allow");
     assert_ne!(shell(&home, "grep -rn retry ~/.ssh"), "allow");
 }

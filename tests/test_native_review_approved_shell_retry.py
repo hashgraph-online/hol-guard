@@ -13,17 +13,17 @@ Four rounds, each with its own command and its own grant:
   is reused, which is the contract working as intended;
 * the identical command under a fresh ``tool_use_id``, which is what a real
   Claude Code retry sends, since the model emits a new tool-use block:
-  reviewed again. ``request_payload_identity`` drops the transport call id
-  from the review anchor only for the ``pi`` and ``omp`` harnesses, so every
-  other harness anchors its approval to an id its own retry will not repeat;
+  allowed, and the approval is spent. ``request_payload_identity`` drops the
+  transport call id from the review anchor, so the approval reaches the retry
+  the model actually sends and only one of them; a later identical attempt is
+  reviewed again;
 * a reworded command: reviewed again, the approval binds the exact action;
-* an ordinary ``git`` command: its row is queued with no retry contract at
-  all, because ``payload_reuse`` binds a retry only for the commands in
-  ``DIRECT_REUSABLE_COMMANDS`` and ``ARGV_BOUND_COMMANDS``, and ``git`` is in
-  neither. Approving that row cannot carry even a byte-identical retry.
+* an ordinary ``git status`` command whose row has no once-retry contract:
+  attempting once approval is rejected without recording consent, and the
+  byte-identical retry remains stopped.
 
-The last three are recorded here as today's behaviour, not as behaviour this
-test endorses; they are hashgraph-online/hol-guard#3837.
+The reworded case records the exact-action boundary. An unavailable retry must
+never acquire a misleading saved once decision.
 
 Under the default ``blocked_request_mode = "safe-alternative"`` a review is
 rendered to the agent as a plain block with ``prompted`` false, so the queued
@@ -32,6 +32,7 @@ inbox row, not the response, says whether an attempt was reviewed.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -87,6 +88,7 @@ def _approve_then_retry(
     use_id: str,
     retry_command: str | None = None,
     retry_use_id: str | None = None,
+    later_use_id: str | None = None,
 ) -> dict[str, Any]:
     """Review one command, grant that row, and report what its retry got.
 
@@ -96,7 +98,15 @@ def _approve_then_retry(
     same artifact, and with the working directory known a path operand is one
     of the things a row is bound to.
     """
-    first = worker.review_http_payload(payload=_payload(command, use_id, workspace), **kwargs)
+    # The HTTP bridge supplies a bounded deadline. Supplying it here also
+    # exercises the existing fresh-ACK retry when a grant republishes policy.
+    from codex_plugin_scanner.guard.daemon.hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
+
+    first = worker.review_http_payload(
+        payload=_payload(command, use_id, workspace),
+        deadline=time.monotonic() + WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS,
+        **kwargs,
+    )
     queued = _queued(store, seen)
     assert first["policy_action"] != "allow", first
     assert len(queued) == 1, (first, queued)
@@ -104,14 +114,27 @@ def _approve_then_retry(
     _grant(store, queued[0]["request_id"], workspace)
 
     retry_payload = _payload(retry_command or command, retry_use_id or use_id, workspace)
-    retry = worker.review_http_payload(payload=retry_payload, **kwargs)
+    retry = worker.review_http_payload(
+        payload=retry_payload,
+        deadline=time.monotonic() + WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS,
+        **kwargs,
+    )
     requeued = _queued(store, seen)
-    return {
+    outcome: dict[str, Any] = {
         "policy_action": retry["policy_action"],
         "reason_code": retry.get("reason_code"),
         "granted_binding": queued[0]["artifact_hash"],
         "requeued_bindings": [row["artifact_hash"] for row in requeued],
     }
+    if later_use_id is not None:
+        later = worker.review_http_payload(
+            payload=_payload(retry_command or command, later_use_id, workspace),
+            deadline=time.monotonic() + WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS,
+            **kwargs,
+        )
+        outcome["later_policy_action"] = later["policy_action"]
+        outcome["later_requeued"] = len(_queued(store, seen))
+    return outcome
 
 
 def test_an_approval_carries_only_the_request_it_was_queued_for(
@@ -149,6 +172,7 @@ def test_an_approval_carries_only_the_request_it_was_queued_for(
             command="wc -c notes.txt",
             use_id="toolu_wc_first",
             retry_use_id="toolu_wc_retry",
+            later_use_id="toolu_wc_later",
         )
         reworded = _approve_then_retry(
             worker,
@@ -160,29 +184,30 @@ def test_an_approval_carries_only_the_request_it_was_queued_for(
             use_id="toolu_read",
             retry_command="head -c 200 ledger.txt",
         )
-        unbindable = _approve_then_retry(
+        unproven = _approve_then_retry(
             worker, store, kwargs, workspace, seen, command="git status --short", use_id="toolu_git"
         )
     finally:
         worker.close()
 
-    outcomes = {"same_id": same_id, "new_id": new_id, "reworded": reworded, "unbindable": unbindable}
+    outcomes = {"same_id": same_id, "new_id": new_id, "reworded": reworded, "unproven": unproven}
     # The whole point of the grant: the request it was queued for runs, once.
     assert same_id["granted_binding"].startswith(RETRY_CONTRACT), outcomes
     assert same_id["policy_action"] == "allow", outcomes
     assert same_id["requeued_bindings"] == [], outcomes
-    # #3837: the retry the model actually sends carries a new tool-use id, and
-    # the review anchor keeps that id for every harness but pi and omp, so the
-    # approval the operator just gave does not cover it.
+    # The retry the model actually sends carries a new tool-use id, and the
+    # review anchor leaves that transport id out, so the approval the operator
+    # just gave covers it: once, and the next identical attempt is reviewed.
     assert new_id["granted_binding"].startswith(RETRY_CONTRACT), outcomes
-    assert new_id["policy_action"] != "allow", outcomes
-    assert len(new_id["requeued_bindings"]) == 1, outcomes
-    assert new_id["requeued_bindings"] != [new_id["granted_binding"]], outcomes
+    assert new_id["policy_action"] == "allow", outcomes
+    assert new_id["requeued_bindings"] == [], outcomes
+    assert new_id["later_policy_action"] != "allow", outcomes
+    assert new_id["later_requeued"] == 1, outcomes
     # Same intent, the model's own wording: a different action, so a new review.
     assert reworded["policy_action"] != "allow", outcomes
     assert len(reworded["requeued_bindings"]) == 1, outcomes
-    # #3837 at its sharpest: a reviewed ``git`` command queues a row with no
-    # retry contract — its artifact hash is the bare request id — so approving
-    # it cannot carry the identical retry under the identical tool-use id.
-    assert not unbindable["granted_binding"].startswith(RETRY_CONTRACT), outcomes
-    assert unbindable["policy_action"] != "allow", outcomes
+    # Guard cannot prove what git status runs, but every review can be
+    # approved: the identical retry runs (docs/guard/approval-invariant.md).
+    assert unproven["granted_binding"].startswith(RETRY_CONTRACT), outcomes
+    assert unproven["policy_action"] == "allow", outcomes
+    assert unproven["requeued_bindings"] == [], outcomes

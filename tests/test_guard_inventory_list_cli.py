@@ -1,4 +1,4 @@
-"""``hol-guard extensions list`` and ``hol-guard mcp list`` read the local inventory."""
+"""``hol-guard extensions list`` reads the local inventory fleet posture reports from."""
 
 from __future__ import annotations
 
@@ -62,9 +62,9 @@ def _seed(home: Path) -> None:
     _record(store, harness="codex", artifact_type="skill", name="review-skill")
 
 
-@pytest.mark.parametrize("command", ["extensions", "mcp"])
-def test_list_with_an_empty_inventory(command: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_list_with_an_empty_inventory(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     home = tmp_path / "home"
+    command = "extensions"
 
     rc, out, _ = _run(capsys, command, "list", "--home", str(home), "--json")
     payload = json.loads(out)
@@ -78,25 +78,6 @@ def test_list_with_an_empty_inventory(command: str, tmp_path: Path, capsys: pyte
     assert rc == 0
     assert "0 in the local Guard inventory" in out
     assert "Guard has not recorded any yet." in out
-
-
-def test_mcp_list_shows_only_mcp_servers_sorted_by_harness_and_name(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    home = tmp_path / "home"
-    _seed(home)
-
-    rc, out, _ = _run(capsys, "mcp", "list", "--home", str(home), "--json")
-    payload = json.loads(out)
-
-    assert rc == 0
-    assert payload["kind"] == "mcp"
-    assert payload["count"] == 2
-    assert [(item["harness"], item["name"]) for item in payload["items"]] == [
-        ("codex", "github"),
-        ("opencode", "filesystem"),
-    ]
-    assert {item["artifact_type"] for item in payload["items"]} == {"mcp_server"}
 
 
 def test_extensions_list_shows_plugins_and_extensions_only(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -120,7 +101,7 @@ def test_json_items_have_a_stable_shape(tmp_path: Path, capsys: pytest.CaptureFi
     home = tmp_path / "home"
     _seed(home)
 
-    _, out, _ = _run(capsys, "mcp", "list", "--home", str(home), "--json")
+    _, out, _ = _run(capsys, "extensions", "list", "--home", str(home), "--json")
     payload = json.loads(out)
     item = payload["items"][0]
 
@@ -136,7 +117,7 @@ def test_json_items_have_a_stable_shape(tmp_path: Path, capsys: pytest.CaptureFi
         "first_seen_at",
         "last_seen_at",
     }
-    assert item["source_scope"] == "project"
+    assert item["source_scope"] == "global"
     assert item["policy_action"] == "allow"
     assert item["first_seen_at"] == "2026-10-16T12:00:00Z"
 
@@ -144,14 +125,6 @@ def test_json_items_have_a_stable_shape(tmp_path: Path, capsys: pytest.CaptureFi
 def test_table_output_lists_each_item(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     home = tmp_path / "home"
     _seed(home)
-
-    rc, out, _ = _run(capsys, "mcp", "list", "--home", str(home))
-    assert rc == 0
-    assert "MCP servers" in out
-    assert "2 in the local Guard inventory" in out
-    assert "filesystem" in out
-    assert "github" in out
-    assert "notify" not in out
 
     rc, out, _ = _run(capsys, "extensions", "list", "--home", str(home))
     assert rc == 0
@@ -166,15 +139,15 @@ def test_list_hides_artifacts_marked_removed(tmp_path: Path, capsys: pytest.Capt
     _seed(home)
     GuardStore(home).mark_inventory_removed(
         harness="opencode",
-        artifact_id="opencode:global:mcp_server:filesystem",
+        artifact_id="opencode:global:plugin:notify",
         policy_action="allow",
         artifact_hash="a" * 64,
         now=_LATER,
     )
 
-    _, out, _ = _run(capsys, "mcp", "list", "--home", str(home), "--json")
+    _, out, _ = _run(capsys, "extensions", "list", "--home", str(home), "--json")
 
-    assert [item["name"] for item in json.loads(out)["items"]] == ["github"]
+    assert [item["name"] for item in json.loads(out)["items"]] == ["gemini-ext", "local-plugin"]
 
 
 def test_list_is_read_only_and_leaves_fleet_posture_state_alone(
@@ -225,25 +198,20 @@ def test_list_selection_matches_what_fleet_posture_reports(tmp_path: Path, capsy
         if item["kind"] in {"plugin", "mcp_server"}
     ]
 
-    _, mcp_out, _ = _run(capsys, "mcp", "list", "--home", str(home), "--json")
     _, ext_out, _ = _run(capsys, "extensions", "list", "--home", str(home), "--json")
-    mcp = json.loads(mcp_out)
     extensions = json.loads(ext_out)
-    listed = [(item["harness"], item["name"]) for item in mcp["items"] + extensions["items"]]
+    listed = [(item["harness"], item["name"]) for item in extensions["items"]]
 
-    assert sorted(listed) == sorted((harness, name) for harness, name, _ in reported)
-    assert mcp["count"] == 2
+    assert sorted(listed) == sorted((harness, name) for harness, name, kind in reported if kind == "plugin")
     assert extensions["count"] == 3
-    assert "stray" not in mcp_out
-    assert "bad-time" not in mcp_out
 
 
 def test_table_shows_markup_in_names_literally(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     home = tmp_path / "home"
     store = GuardStore(home)
-    _record(store, harness="codex", artifact_type="mcp_server", name="[bold red]loud[/bold red]")
+    _record(store, harness="opencode", artifact_type="plugin", name="[bold red]loud[/bold red]")
 
-    rc, out, _ = _run(capsys, "mcp", "list", "--home", str(home))
+    rc, out, _ = _run(capsys, "extensions", "list", "--home", str(home))
 
     assert rc == 0
     assert "[bold" in out  # the cell may wrap, but the brackets must survive
@@ -253,10 +221,12 @@ def test_table_shows_markup_in_names_literally(tmp_path: Path, capsys: pytest.Ca
 def test_output_goes_to_the_callers_stream(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     home = tmp_path / "home"
     _seed(home)
-    args = _build_parser("hol-guard", program_mode="guard").parse_args(["mcp", "list", "--home", str(home), "--json"])
+    args = _build_parser("hol-guard", program_mode="guard").parse_args(
+        ["extensions", "list", "--home", str(home), "--json"]
+    )
     stream = io.StringIO()
 
     assert run_guard_command(args, output_stream=stream) == 0
 
-    assert json.loads(stream.getvalue())["count"] == 2
+    assert json.loads(stream.getvalue())["count"] == 3
     assert capsys.readouterr().out == ""

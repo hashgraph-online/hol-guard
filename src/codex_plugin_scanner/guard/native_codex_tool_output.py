@@ -37,7 +37,12 @@ from .native_runtime_resilience import (
 )
 
 _MAX_REQUEST_BYTES = 256 * 1024
-_MAX_POST_TOOL_REQUEST_BYTES = 6 * 1024 * 1024
+# The largest envelope a post-tool review will frame, which is more than
+# ``CODEX_POST_TOOL_OUTPUT_MAX_BYTES``: that bound counts the op's own canonical
+# request and this counts the envelope around it. Held under the transport's
+# frame limit so a request past it is refused for its size rather than as a
+# malformed frame.
+_MAX_POST_TOOL_REQUEST_BYTES = 6 * 1024 * 1024 - 64 * 1024
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _FEATURE = "codex-tool-output-v1"
 _REQUEST_SCHEMA = "guard-codex-tool-output-request.v1"
@@ -94,6 +99,9 @@ def codex_tool_output_native(
     home_dir: str | os.PathLike[str] | None = None,
     exec_context: bool = False,
     body: dict[str, object] | None = None,
+    prompt_text: str | None = None,
+    config_path: str | os.PathLike[str] | None = None,
+    deadline_ms: int = 0,
     timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
 ) -> ToolOutputAnswer:
     """Ask the resident for one Codex tool-output verdict."""
@@ -127,6 +135,24 @@ def codex_tool_output_native(
             action.update({"command": command, "cwd": _anchored(cwd), "home_dir": _anchored(home_dir)})
             if kind == "secret_like_source_name":
                 action["exec_context"] = exec_context
+        elif kind == "prompt_credential_file":
+            action.update(
+                {
+                    "prompt_text": prompt_text or "",
+                    "cwd": _anchored(cwd),
+                    "config_path": str(config_path or ""),
+                    "deadline_ms": int(deadline_ms),
+                }
+            )
+        elif kind == "prompt_attachment":
+            action.update(
+                {
+                    "prompt_text": prompt_text or "",
+                    "home_dir": str(home_dir or ""),
+                    "config_path": str(config_path or ""),
+                    "deadline_ms": int(deadline_ms),
+                }
+            )
         elif kind in {"git_pathspec_identity", "local_content_tail", "git_metadata"}:
             action.update({"command": command, "cwd": _anchored(cwd)})
         else:
@@ -168,7 +194,15 @@ def codex_tool_output_native(
         ).encode("utf-8")
     except (TypeError, ValueError):
         return _deny("native_codex_tool_output_invalid")
-    limit = _MAX_POST_TOOL_REQUEST_BYTES if kind == "post_tool_output" else _MAX_REQUEST_BYTES
+    # A harness accepts up to a megabyte of hook input, so a prompt review
+    # carries whatever the user pasted. Holding a prompt to the ordinary
+    # request limit turned a long one into a blocking "native runtime
+    # unavailable" artifact, which is a review the user did not need.
+    limit = (
+        _MAX_POST_TOOL_REQUEST_BYTES
+        if kind in {"post_tool_output", "prompt_credential_file", "prompt_attachment"}
+        else _MAX_REQUEST_BYTES
+    )
     if len(resident) > limit or time.monotonic() >= effective_deadline:
         return _deny(_UNAVAILABLE)
     output = native_resident_client_request(

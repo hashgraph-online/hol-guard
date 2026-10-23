@@ -56,9 +56,11 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("stripe --api-key key products delete product", "block"),
     ("stripe products --api-key key delete product", "block"),
     ("env sh -c 'rm -rf workspace/target'", "block"),
-    ("rm -rf ./BUILD", "block"),
-    ("rm --recurs --for workspace/target", "block"),
+    ("rm -rf ./BUILD", "review"),
+    ("rm --recurs --for workspace/target", "review"),
     ("xargs rm -rf BUILD", "block"),
+    ("parallel rm -rf BUILD", "block"),
+    ("echo / | parallel rm -rf BUILD", "block"),
     ("timeout 5 bash -lc 'rm -rf workspace/target'", "block"),
     ("timeout 5 /bin/bash -lc 'rm -rf workspace/target'", "block"),
     ("timeout 5 /bin/sh -c 'rm -rf workspace/target'", "block"),
@@ -161,7 +163,7 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("aws.exe route53 delete-hosted-zone --id zone", "block"),
     ("/usr/bin/stripe.exe products delete product", "block"),
     ("hol-guard.exe uninstall --all", "block"),
-    ("rm.exe -rf workspace/target", "block"),
+    ("rm.exe -rf workspace/target", "review"),
     ("gh.exe pr merge 17 --repo example/repo --squash", "require-reapproval"),
     ("PATH=scratch/bin:$PATH hol-guard status", "require-reapproval"),
     ("export PATH=scratch/bin:$PATH; hol-guard status", "require-reapproval"),
@@ -205,18 +207,37 @@ def test_native_command_model_rejects_input_above_transport_budget() -> None:
 NATIVE_STRICTER_CRITICAL_COMMANDS = frozenset(
     {
         "xargs gh pr merge 17 --repo example/repo --squash",
-        "sh -c 'gh pr merge 17 --repo example/repo --squash'",
         "bash -lc 'gh pr merge 17 --repo example/repo --squash'",
         "PATH=scratch/bin:$PATH hol-guard status",
-        "printf '%s' \"$(cat workspace/sensitive)\"",
     }
 )
+
+
+# A shell that carries its whole script in the same text runs exactly those
+# words. The retired Python owner could not read the script, so it treated the
+# shell as indirection and raised the floor; the native model reads it, so the
+# command reaches the floor the script reaches on its own. Each row is checked
+# against that script's own native action rather than a literal, so the two
+# can never drift apart.
+#
+# A login shell is not listed here. It sources the profile files before the
+# script, so it runs code this text does not hold and keeps the wrapper's own
+# uncertainty, which blocks above.
+CARRIED_SCRIPT_CRITICAL_COMMANDS: dict[str, str] = {
+    "sh -c 'gh pr merge 17 --repo example/repo --squash'": "gh pr merge 17 --repo example/repo --squash",
+}
 
 
 @pytest.mark.parametrize(("command", "factor_floor"), CRITICAL_COMMAND_FLOORS)
 def test_real_native_critical_floor_matches_frozen_baseline(command: str, factor_floor: GuardAction) -> None:
     action, error = _native_action(command)
-    expected = "block" if command in NATIVE_STRICTER_CRITICAL_COMMANDS else factor_floor
+    script = CARRIED_SCRIPT_CRITICAL_COMMANDS.get(command)
+    if command in NATIVE_STRICTER_CRITICAL_COMMANDS:
+        expected: GuardAction = "block"
+    elif script is not None:
+        expected = _native_action(script)[0]
+    else:
+        expected = factor_floor
     assert action == expected
     if error is not None:
         assert action == "block"

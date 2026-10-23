@@ -212,14 +212,16 @@ fn runtime_sessions(url: &str) -> String {
     with_path(&parsed, &next, &parsed.query, "")
 }
 
-fn supply_chain_bundle(url: &str, workspace_id: &str) -> String {
+/// A workspace-scoped bundle endpoint beside the receipts route, such as
+/// `supply-chain/bundle` or `network/bundle`.
+fn workspace_bundle(url: &str, workspace_id: &str, resource: &str) -> String {
     let parsed = urlsplit(&receipts(url));
     let path = rstrip_slash(&parsed.path);
     let next = match path {
-        REGISTRY_RECEIPTS_SYNC => "/registry/api/v1/guard/supply-chain/bundle".to_owned(),
-        API_RECEIPTS_SYNC => "/api/guard/supply-chain/bundle".to_owned(),
-        RECEIPTS_SYNC => "/guard/supply-chain/bundle".to_owned(),
-        other => format!("{other}/supply-chain/bundle"),
+        REGISTRY_RECEIPTS_SYNC => format!("/registry/api/v1/guard/{resource}"),
+        API_RECEIPTS_SYNC => format!("/api/guard/{resource}"),
+        RECEIPTS_SYNC => format!("/guard/{resource}"),
+        other => format!("{other}/{resource}"),
     };
     let mut pairs: Vec<(String, String)> = parse_qsl(&parsed.query)
         .into_iter()
@@ -273,7 +275,12 @@ pub(crate) fn sync_url(args: &Value) -> KindResult {
         "runtime_sessions" => runtime_sessions(url),
         "guard_events" => guard_events(url),
         "supply_chain_index" => supply_chain_index(url),
-        "supply_chain_bundle" => supply_chain_bundle(url, text("workspace_id")?),
+        "supply_chain_bundle" => {
+            workspace_bundle(url, text("workspace_id")?, "supply-chain/bundle")
+        }
+        "network_protection_bundle" => {
+            workspace_bundle(url, text("workspace_id")?, "network/bundle")
+        }
         "supply_chain_partition" => {
             let partition = args
                 .get("partition")

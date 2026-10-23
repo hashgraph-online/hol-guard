@@ -155,8 +155,8 @@ When a machine is connected to Guard Cloud, [fleet posture](./fleet-posture.md) 
 the local inventory. Only five item kinds are reported: `skill`, `mcp_server`, `plugin` (plugins, plugin files
 and extensions), `package` and `hook`. Agents, commands, instructions and rules, prompts, themes, marketplace
 entries, host rows and other settings files stay local, even when Guard detects them. This table lists, per
-harness, the reported kinds that Guard's detectors produce today. `hol-guard extensions list` and
-`hol-guard mcp list` print the plugin and MCP rows from the same local inventory.
+harness, the reported kinds that Guard's detectors produce today. `hol-guard extensions list` prints the
+plugin rows from the same local inventory. `hol-guard mcp list` prints the MCP servers the Protect page lists.
 
 | Harness | Reported to Cloud |
 | --- | --- |

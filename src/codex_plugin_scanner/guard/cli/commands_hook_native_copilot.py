@@ -47,8 +47,7 @@ def run_native_copilot_pretool(
     action_envelope: GuardActionEnvelope | None,
     config: GuardConfig,
     context: HarnessContext,
-    copilot_hook_stage: str | None,
-    copilot_runtime_tool_call: tuple[GuardArtifact, str, object] | None,
+    copilot_runtime_tool_call: tuple[GuardArtifact, str, object],
     output_stream: TextIO | None = None,
     payload: Mapping[str, object],
     runtime_workspace: Path | None,
@@ -57,9 +56,7 @@ def run_native_copilot_pretool(
         Callable[[], tuple[GuardConfig, GuardArtifact, str, object] | None] | None
     ) = None,
     native_edge_result: Mapping[str, object] | None = None,
-) -> int | None:
-    if copilot_runtime_tool_call is None or copilot_hook_stage != "pretooluse":
-        return None
+) -> int:
     return _settle_copilot_tool_call(
         args,
         stage="pre_tool_use",
@@ -128,7 +125,7 @@ def _settle_copilot_tool_call(
     native_edge_result: Mapping[str, object] | None = None,
     guard_home: Path | None = None,
     managed_install: dict[str, object] | None = None,
-) -> int | None:
+) -> int:
     from ..blocked_request_mode import asks_for_approval
     from ..native_policy_snapshot_acked import recording_only_from_acked_snapshot
 

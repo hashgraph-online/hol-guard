@@ -1,22 +1,111 @@
-//! Node package-manager work admitted to the workspace sandbox.
+//! Package-manager work admitted to the workspace sandbox.
 //!
 //! Scripts, builds, tests and version probes run workspace code the sandbox
 //! bounds. Registry verbs and every other package ecosystem keep their
 //! existing admission.
 //!
-//! Cargo stays out even with a committed `Cargo.lock` and `--locked`. Its
-//! `build.rs` scripts and proc macros run dependency code like npm scripts,
-//! but a Node project keeps its tools and dependencies in `node_modules`
-//! inside the workspace. A rustup toolchain lives in `~/.rustup` and crate
-//! sources in `~/.cargo/registry`, beside `~/.cargo/credentials.toml`, all
-//! outside what the sandbox may read, so a contained `cargo check` cannot
-//! start. Admitting it needs read grants for those trees first.
+//! `uv run` joins them because its project environment is the workspace's own
+//! `.venv`: the interpreter it starts is already an executable root, and a
+//! synced environment needs neither the network nor uv's host cache. The
+//! sandbox has no network, so everything that would have to fetch keeps the
+//! admission it has today rather than failing inside it: uv's installing
+//! verbs, an option that adds a dependency or re-resolves one, a script
+//! carrying its own dependency block, and a project whose `.venv` uv has yet
+//! to materialize. Which project a verb reads moves with `--directory`,
+//! `--project` and a `cd` ahead of it, so the environment is looked for where
+//! the command will actually stand.
+//!
+//! A Python manager's queries are read by [`super::python`], `go` and `cargo`
+//! by [`super::compiled`], and Composer's and Bundler's project verbs by
+//! [`super::vendored`], each of which this module dispatches to.
+
 use crate::CanonicalCommandV1;
+use std::path::{Path, PathBuf};
 
 // Node package managers. Their scripts, builds, tests and version probes run
 // workspace code, which the sandbox bounds like any other local command.
 const NODE_MANAGERS: &[&str] = &["npm", "pnpm", "yarn", "bun"];
+// The runners that fetch the package they name. Only the caller's proof that
+// every one of them starts an installed project tool makes them local work.
+const PACKAGE_RUNNERS: &[&str] = &["npx", "bunx", "pnpx"];
 pub(super) const NODE_PACKAGE_EXTENSION: &str = "command.package.node";
+const PYTHON_PACKAGE_EXTENSION: &str = "command.package.python";
+const GO_PACKAGE_EXTENSION: &str = "command.package.go";
+const RUST_PACKAGE_EXTENSION: &str = "command.package.rust";
+const PHP_PACKAGE_EXTENSION: &str = "command.package.php";
+const RUBY_PACKAGE_EXTENSION: &str = "command.package.ruby";
+const JVM_PACKAGE_EXTENSION: &str = "command.package.jvm";
+// The package-firewall permissions that mark a manager's use. They record
+// which ecosystem ran, not a risk the run carries, so a local verb below one
+// of them is still ordinary workspace work.
+pub(crate) const PACKAGE_EXTENSIONS: &[&str] = &[
+    NODE_PACKAGE_EXTENSION,
+    PYTHON_PACKAGE_EXTENSION,
+    GO_PACKAGE_EXTENSION,
+    RUST_PACKAGE_EXTENSION,
+    PHP_PACKAGE_EXTENSION,
+    RUBY_PACKAGE_EXTENSION,
+    JVM_PACKAGE_EXTENSION,
+];
+// The Python managers the package firewall watches. Each can install what it
+// runs, so only the queries and runner verbs [`super::python`] admits are
+// local work; `uv` is the exception below.
+const PYTHON_MANAGERS: &[&str] = &["pip", "pip3", "pipx", "uvx", "poetry", "pipenv"];
+// uv drives a project environment the workspace holds. Only the verbs that
+// read it are local: `add`, `tool`, `sync` and the rest reach a registry, and
+// `pip` is local for the queries [`super::python`] admits.
+const UV_LOCAL_VERBS: &[&str] = &["run", "tree", "export", "version", "pip"];
+// uv options a local verb may carry: each changes what the verb reads, never
+// what it has to fetch. The list is an allowlist because uv's installing
+// options are many and grow: an option this module does not know keeps the
+// command out, where it keeps the admission it has today.
+const UV_VERB_FLAGS: &[&str] = &[
+    "--frozen",
+    "--locked",
+    "--no-sync",
+    "--no-dev",
+    "--no-hashes",
+    "--no-header",
+    "--no-annotate",
+    "--no-emit-project",
+    "--all-packages",
+    "--short",
+    "--invert",
+    "--no-dedupe",
+];
+// The same, for the options that take a value of their own. Their value is
+// read as the option's, never as the verb's operand, so a fetching option
+// behind one of them cannot pass unseen.
+const UV_VERB_VALUE_OPTIONS: &[&str] = &[
+    "--env-file",
+    "--package",
+    "--depth",
+    "--format",
+    "--output-file",
+    "--no-emit-package",
+    "--prune",
+];
+// uv's global options that change nothing a local verb reads. They may stand
+// before the verb, so skipping them finds the verb behind them.
+const UV_GLOBAL_FLAGS: &[&str] = &[
+    "--offline",
+    "--no-cache",
+    "--native-tls",
+    "--no-progress",
+    "--no-config",
+    "--preview",
+    "--quiet",
+    "-q",
+    "--verbose",
+    "-v",
+];
+// uv's global options that move the project a verb works on, so the
+// environment the check below looks for moves with them.
+const UV_PROJECT_OPTIONS: &[&str] = &["--directory", "--project"];
+// How much of a script is read to find the dependency block. PEP 723 allows
+// the block anywhere in the file, so the whole script is read, up to a bound
+// that keeps a hook from paging in an arbitrarily large one.
+const SCRIPT_BYTES: u64 = 1 << 20;
 // Verbs that fetch from, or publish to, a registry. Without network they would
 // fail silently, so they keep supply-chain admission or consent instead. This
 // excludes by effect; local verbs and script names are never enumerated.
@@ -103,12 +192,180 @@ const REGISTRY_VERBS: &[&str] = &[
     "doctor",
 ];
 
-/// Whether every package-manager segment is a Node manager running a local
-/// verb. A registry verb anywhere before `--` keeps the whole command out, so
+/// Where a literal `target` below the workspace moves a run that stands in
+/// `directory`, or `None` when the sandbox cannot follow it there.
+fn entered(directory: &Path, target: &str, workspace: &Path) -> Option<PathBuf> {
+    super::cd::below(target, workspace).then(|| {
+        let path = Path::new(target);
+        if path.is_absolute() {
+            path.to_owned()
+        } else {
+            directory.join(path)
+        }
+    })
+}
+
+/// What a `uv` command was told to do: where its verb stands, the directory
+/// the verb runs in, the project whose environment it reads, and the operand
+/// that follows the verb's own options.
+struct UvCommand {
+    verb: usize,
+    directory: PathBuf,
+    project: PathBuf,
+    operand: Option<usize>,
+}
+
+/// Read `arguments` as far as the verb's first operand. `--directory` moves
+/// the run itself and `--project` only the project a verb reads, and either
+/// may stand on one side of the verb or the other. An option this module does
+/// not know hides what the command does, so the command reads as nothing.
+fn uv_command(arguments: &[&str], directory: &Path, workspace: &Path) -> Option<UvCommand> {
+    let mut moved: Option<&str> = None;
+    let mut named: Option<&str> = None;
+    let mut verb: Option<usize> = None;
+    let mut operand = None;
+    let mut index = 0;
+    while let Some(argument) = arguments.get(index) {
+        let separator = *argument == "--";
+        if !argument.starts_with('-') || separator {
+            if verb.is_none() {
+                if separator {
+                    return None;
+                }
+                verb = Some(index);
+                index += 1;
+                continue;
+            }
+            let first = index + usize::from(separator);
+            operand = (first < arguments.len()).then_some(first);
+            break;
+        }
+        let (name, value, step) = match argument.split_once('=') {
+            Some((name, value)) => (name, Some(value), 1),
+            None => (*argument, arguments.get(index + 1).copied(), 2),
+        };
+        if value.is_none() || !argument.contains('=') {
+            let known = UV_GLOBAL_FLAGS.contains(&name)
+                || (verb.is_some() && UV_VERB_FLAGS.contains(&name));
+            if known {
+                index += 1;
+                continue;
+            }
+        }
+        let value = value?;
+        if UV_PROJECT_OPTIONS.contains(&name) {
+            // Wherever the two stand, uv enters `--directory` before it reads
+            // `--project`, and of each only the last one counts.
+            if name == "--directory" {
+                moved = Some(value);
+            } else {
+                named = Some(value);
+            }
+        } else if !(verb.is_some() && UV_VERB_VALUE_OPTIONS.contains(&name)) {
+            return None;
+        }
+        index += step;
+    }
+    let verb = verb?;
+    let run = match moved {
+        Some(target) => entered(directory, target, workspace)?,
+        None => directory.to_owned(),
+    };
+    let project = match named {
+        Some(target) => entered(&run, target, workspace)?,
+        None => run.clone(),
+    };
+    Some(UvCommand {
+        verb,
+        directory: run,
+        project,
+        operand,
+    })
+}
+
+/// Whether `path` is a script that carries its own dependencies. uv installs
+/// those into a fresh environment before it runs the script, which the
+/// sandbox has no network for.
+fn declares_dependencies(path: &Path) -> bool {
+    use std::io::Read;
+    let Ok(file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut text = Vec::new();
+    if file.take(SCRIPT_BYTES).read_to_end(&mut text).is_err() {
+        return false;
+    }
+    String::from_utf8_lossy(&text)
+        .lines()
+        .any(|line| line.trim_end() == "# /// script")
+}
+
+/// Whether `uv` runs a local verb against an environment the project
+/// already holds. uv materializes a project environment before it runs
+/// anything, so without `.venv` the run would have to install, which the
+/// sandbox has no network for; those commands keep the admission they have.
+/// An operand uv has to write, fetch or install for keeps it for the same
+/// reason.
+fn local_uv_work(arguments: &[&str], directory: &Path, workspace: &Path) -> bool {
+    let Some(uv) = uv_command(arguments, directory, workspace) else {
+        return false;
+    };
+    let verb = arguments[uv.verb].to_ascii_lowercase();
+    if !UV_LOCAL_VERBS.contains(&verb.as_str()) {
+        return false;
+    }
+    if verb == "pip" {
+        return super::python::local_uv_pip_work(&arguments[uv.verb + 1..], &uv.project);
+    }
+    if let Some(operand) = uv.operand.map(|operand| arguments[operand]) {
+        // `uv version 2.0.0` writes the version into the project and locks it
+        // again, a script named by URL is downloaded before it runs, and a
+        // script carrying a dependency block has those installed first.
+        if verb == "version"
+            || operand.contains("://")
+            || declares_dependencies(&uv.directory.join(operand))
+        {
+            return false;
+        }
+    }
+    uv.project.join(".venv").is_dir()
+}
+
+/// Whether `name` runs Maven, by either spelling the JVM extension claims.
+/// A wrapper is the same build run through the version the project pins.
+fn maven_executable(name: &str) -> bool {
+    matches!(name, "mvn" | "mvnw" | "mvn.cmd" | "mvnw.cmd")
+}
+
+/// Whether any segment runs a manager this module decides a verb for. The
+/// fallback in [`local_package_work`] admits every executable that is not a
+/// package tool, which is right for the other half of a mixed command but is
+/// no evidence on its own that a manager did local work: `npx` names neither
+/// a manager nor a package tool, and the package it fetches is the point.
+pub(super) fn names_a_manager(model: &CanonicalCommandV1) -> bool {
+    model.segments.iter().any(|segment| {
+        segment.executable.as_deref().is_some_and(|executable| {
+            let name = super::super::executable_basename(executable).to_ascii_lowercase();
+            NODE_MANAGERS.contains(&name.as_str())
+                || PYTHON_MANAGERS.contains(&name.as_str())
+                || super::vendored::VENDORED_MANAGERS.contains(&name.as_str())
+                || matches!(name.as_str(), "uv" | "go" | "cargo")
+                || maven_executable(&name)
+        })
+    })
+}
+
+/// Whether every package-manager segment is a manager running a local verb.
+/// A registry verb anywhere before `--` keeps the whole command out, so
 /// option spellings that hide the verb from a parser cannot slip one through.
 /// With `installed_runners`, the caller has proved every package runner starts
 /// an installed project tool, so those segments count as local work.
-pub(super) fn local_package_work(model: &CanonicalCommandV1, installed_runners: bool) -> bool {
+pub(super) fn local_package_work(
+    model: &CanonicalCommandV1,
+    installed_runners: bool,
+    workspace: &Path,
+) -> bool {
+    let mut directory = Some(workspace.to_owned());
     model.segments.iter().all(|segment| {
         if installed_runners && super::runner::runner_arguments(segment).is_some() {
             return true;
@@ -117,8 +374,94 @@ pub(super) fn local_package_work(model: &CanonicalCommandV1, installed_runners: 
             return false;
         };
         let name = super::super::executable_basename(executable).to_ascii_lowercase();
+        // Which project a manager works on is the directory the chain stands
+        // in by the time it runs, so a move the checks cannot follow leaves
+        // no directory for the managers after it to be judged against.
+        if matches!(name.as_str(), "cd" | "pushd" | "popd") {
+            directory = match (&directory, segment.arguments.as_slice()) {
+                (Some(current), [target]) if name != "popd" => entered(current, target, workspace),
+                _ => None,
+            };
+            return true;
+        }
+        if name == "go" {
+            let Some(directory) = directory.as_deref() else {
+                return false;
+            };
+            let arguments: Vec<&str> = segment
+                .arguments
+                .iter()
+                .map(String::as_str)
+                .take_while(|argument| *argument != "--")
+                .collect();
+            return super::compiled::local_go_work(&arguments, directory);
+        }
+        if maven_executable(&name) {
+            let Some(directory) = directory.as_deref() else {
+                return false;
+            };
+            let arguments: Vec<&str> = segment
+                .arguments
+                .iter()
+                .map(String::as_str)
+                .take_while(|argument| *argument != "--")
+                .collect();
+            return super::compiled::local_maven_work(&arguments, directory);
+        }
+        if name == "cargo" {
+            let Some(directory) = directory.as_deref() else {
+                return false;
+            };
+            let arguments: Vec<&str> = segment
+                .arguments
+                .iter()
+                .map(String::as_str)
+                .take_while(|argument| *argument != "--")
+                .collect();
+            return super::compiled::local_cargo_work(&arguments, directory);
+        }
+        if PYTHON_MANAGERS.contains(&name.as_str()) {
+            let Some(directory) = directory.as_deref() else {
+                return false;
+            };
+            return super::python::local_python_work(
+                &name,
+                executable,
+                &segment.arguments,
+                directory,
+            );
+        }
+        if name == "uv" {
+            let Some(directory) = directory.as_deref() else {
+                return false;
+            };
+            let arguments: Vec<&str> = segment
+                .arguments
+                .iter()
+                .map(String::as_str)
+                .take_while(|argument| *argument != "--")
+                .collect();
+            return local_uv_work(&arguments, directory, workspace);
+        }
+        if super::vendored::VENDORED_MANAGERS.contains(&name.as_str()) {
+            let Some(directory) = directory.as_deref() else {
+                return false;
+            };
+            return super::vendored::local_vendored_work(
+                &name,
+                &segment.arguments,
+                &segment.environment_names,
+                directory,
+                workspace,
+            );
+        }
         if !NODE_MANAGERS.contains(&name.as_str()) {
-            return !super::super::generic::is_package_tool(executable);
+            // A runner still here was not proved to start an installed tool,
+            // so the package it names is one it fetches. The fallback below
+            // admits whatever is not a package tool, which a runner is not,
+            // so a manager's local verb beside it must not carry it in.
+            return !PACKAGE_RUNNERS.contains(&name.as_str())
+                && !super::super::generic::is_package_tool(executable);
         }
         let arguments: Vec<&str> = segment
             .arguments
@@ -155,3 +498,15 @@ pub(super) fn local_package_work(model: &CanonicalCommandV1, installed_runners: 
 #[cfg(test)]
 #[path = "workspace_contained_cargo_tests.rs"]
 mod cargo_tests;
+
+#[cfg(test)]
+#[path = "workspace_contained_uv_tests.rs"]
+mod uv_tests;
+
+#[cfg(test)]
+#[path = "workspace_contained_go_tests.rs"]
+mod go_tests;
+
+#[cfg(test)]
+#[path = "workspace_contained_maven_tests.rs"]
+mod maven_tests;

@@ -73,10 +73,7 @@ fn session(label: &str) -> Session {
     let home = std::fs::canonicalize(base).unwrap().join(format!(
         "guard-git-session-{label}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let cleanup = FixtureCleanup(home.clone());
     let org = home.join("org");
@@ -229,12 +226,12 @@ fn escaped_quote_alias_does_not_block_ordinary_git_operations() {
 }
 
 #[test]
-fn instead_of_origin_fetch_is_quiet_only_for_one_github_https_rewrite() {
+fn instead_of_origin_fetch_is_quiet_only_for_a_github_rewrite() {
     let session = session("instead-of");
     let fetch = format!("git -C {} fetch origin", session.primary.display());
     let allowed = "native_exact_safe_git_origin_refresh";
     session.config(&["remote.origin.url", "git@github.com:acme/app.git"]);
-    session.assert_not_allow(&fetch);
+    session.assert_allow(&fetch, allowed);
     session.config(&["url.https://github.com/.insteadOf", "git@github.com:"]);
     session.assert_allow(&fetch, allowed);
     session.config(&["url.https://github.com/.pushInsteadOf", "git@github.com:"]);
@@ -243,10 +240,17 @@ fn instead_of_origin_fetch_is_quiet_only_for_one_github_https_rewrite() {
     session.config(&["--unset-all", "url.https://github.com/.insteadOf"]);
     session.config(&["url.https://git.example/.insteadOf", "git@github.com:"]);
     session.assert_not_allow(&fetch);
+    session.config(&["--unset-all", "url.https://git.example/.insteadOf"]);
+    session.config(&["url.git@github.com:.insteadOf", "https://github.com/"]);
+    session.config(&["remote.origin.url", "https://github.com/acme/app.git"]);
+    session.assert_allow(&fetch, allowed);
+    session.config(&["--unset-all", "url.git@github.com:.insteadOf"]);
+    session.config(&["url.git@git.example:.insteadOf", "https://github.com/"]);
+    session.assert_not_allow(&fetch);
 }
 
 #[test]
-fn bloated_repository_config_keeps_fetch_quiet_but_not_repo_hooks_path() {
+fn bloated_repository_config_keeps_fetch_quiet_but_not_an_outside_hooks_path() {
     let session = session("bloated");
     let fetch = format!("git -C {} fetch origin", session.primary.display());
     let path = session.primary.join(".git/config");
@@ -259,6 +263,6 @@ fn bloated_repository_config_keeps_fetch_quiet_but_not_repo_hooks_path() {
     assert!(config.len() > 400_000);
     std::fs::write(&path, config).unwrap();
     session.assert_allow(&fetch, "native_exact_safe_git_origin_refresh");
-    session.config(&["core.hooksPath", "tracked-hooks"]);
+    session.config(&["core.hooksPath", "/tmp/tracked-hooks"]);
     session.assert_not_allow(&fetch);
 }

@@ -6,11 +6,11 @@ import json
 import sqlite3
 from typing import TYPE_CHECKING
 
-from .managed_controls_policy_bundle import (
-    MANAGED_CONTROLS_ACTIVE_STATE_KEY,
-    managed_controls_layers_from_activation_state,
-)
+from .managed_controls_policy_bundle import MANAGED_CONTROLS_ACTIVE_STATE_KEY
 from .runtime.extension_control_authority import ExtensionControlAuthorityError
+
+if TYPE_CHECKING:
+    from .runtime.extension_control_contract import ExtensionControlLayer
 
 
 class ManagedControlsStatusUnavailableError(RuntimeError):
@@ -29,6 +29,10 @@ class StoreManagedControlsStatusMixin:
 
         def _authority_key(self, *, required: bool) -> bytes | None: ...
 
+        def _managed_activation(
+            self, state: object, *, key: bytes, catalog_digest: str | None = None
+        ) -> tuple[tuple[ExtensionControlLayer, ...], int]: ...
+
     def managed_controls_public_status(self, *, catalog_digest: str) -> dict[str, object] | None:
         """Return a bounded projection; redact persistence and credential failures."""
 
@@ -39,11 +43,7 @@ class StoreManagedControlsStatusMixin:
             key = self._authority_key(required=False)
             if key is None:
                 return None
-            _layers, managed_revision = managed_controls_layers_from_activation_state(
-                state,
-                catalog_digest=catalog_digest,
-                authority_key=key,
-            )
+            _layers, managed_revision = self._managed_activation(state, key=key, catalog_digest=catalog_digest)
         except (json.JSONDecodeError, sqlite3.Error, ExtensionControlAuthorityError) as exc:
             raise ManagedControlsStatusUnavailableError("managed controls status unavailable") from exc
 

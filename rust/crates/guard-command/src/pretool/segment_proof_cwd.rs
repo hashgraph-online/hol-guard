@@ -95,6 +95,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                 cdpath_unset: context.cdpath_unset,
                 rustup_override_absent: context.rustup_override_absent,
                 npm_config_inert: context.npm_config_inert,
+                pip_config_inert: context.pip_config_inert,
                 shell_home_matches: context.shell_home_matches,
                 ripgrep_config_absent: context.ripgrep_config_absent,
                 psql_environment: context.psql_environment,
@@ -114,6 +115,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                     cdpath_unset: context.cdpath_unset,
                     rustup_override_absent: context.rustup_override_absent,
                     npm_config_inert: context.npm_config_inert,
+                    pip_config_inert: context.pip_config_inert,
                     shell_home_matches: context.shell_home_matches,
                     ripgrep_config_absent: context.ripgrep_config_absent,
                     psql_environment: context.psql_environment,
@@ -125,6 +127,9 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
 
 /// Executables a verified `cd` compound may run after the directory change.
 pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool {
+    if executable.is_some_and(super::super::digest_reads::digest_program) {
+        return true;
+    }
     matches!(
         executable,
         Some(

@@ -99,6 +99,12 @@ const VALID_RISK_ACTION_KEYS: &[&str] = &[
     "guard_bypass",
     "cloud_advisory",
     "encoded_exfiltration",
+    "package_unknown",
+    "package_lockfile_drift",
+    "package_direct_source",
+    "package_custom_registry",
+    "package_install",
+    "low_trust_artifact",
     // Native-only classifications used to preserve a strong intrinsic floor
     // even when a future policy snapshot elects to tune a broader action
     // class.

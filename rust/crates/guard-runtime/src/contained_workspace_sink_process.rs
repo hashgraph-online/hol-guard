@@ -21,23 +21,11 @@ use std::time::Duration;
 use nix::sys::signal::{kill, killpg, SigSet, Signal};
 use nix::unistd::Pid;
 
+use super::denial::{denial_note, loopback_denied};
 use super::{envelope, Failure, Outcome, LAUNCH_COMMAND, SANDBOX_UNAVAILABLE};
 
 const OUTPUT_LIMIT: usize = 1024 * 1024;
 const TRUNCATED: &str = "\n[HOL Guard truncated restricted pytest output]\n";
-const WRITE_DENIAL_NOTE: &str = concat!(
-    "This run hit a denied operation (EPERM or EROFS). HOL Guard runs this command ",
-    "in a workspace sandbox: the workspace and $TMPDIR are writable, except a few ",
-    "protected paths such as Git configuration, and there is no network or home ",
-    "access. Keep files the command writes inside the workspace or $TMPDIR and run ",
-    "it again."
-);
-const DENIAL_MARKERS: [&[u8]; 4] = [
-    b"eperm",
-    b"erofs",
-    b"operation not permitted",
-    b"read-only file system",
-];
 const CPU_SECONDS: u64 = 1200;
 const ADDRESS_SPACE_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 const FILE_SIZE_BYTES: u64 = 256 * 1024 * 1024;
@@ -129,6 +117,7 @@ pub(super) fn run_backend(
     scratch: &Path,
     signals: &Signals,
     timeout_seconds: u64,
+    on_loopback_denied: &dyn Fn(),
 ) -> Outcome<i32> {
     let deadline = std::time::Instant::now() + CEILING_BUDGET;
     let ceiling = envelope(crate::restricted_process_ceiling::evaluate(deadline))?
@@ -187,9 +176,14 @@ pub(super) fn run_backend(
         ));
     }
     let code = status.map_or(1, exit_code);
-    if code != 0 && (denied(&stdout_text) || denied(&stderr_text)) {
+    let outputs = [stdout_text.as_slice(), stderr_text.as_slice()];
+    let note = (code != 0).then(|| denial_note(&outputs)).flatten();
+    if note.is_some() && loopback_denied(&outputs) {
+        on_loopback_denied();
+    }
+    if let Some(note) = note {
         let mut stderr = std::io::stderr().lock();
-        let _ = writeln!(stderr, "\n[HOL Guard] {WRITE_DENIAL_NOTE}");
+        let _ = writeln!(stderr, "\n[HOL Guard] {note}");
         let _ = stderr.flush();
     }
     Ok(code)
@@ -255,15 +249,6 @@ fn display_text(raw: &[u8]) -> String {
             }
         })
         .collect()
-}
-
-fn denied(raw: &[u8]) -> bool {
-    let lowered = raw.to_ascii_lowercase();
-    DENIAL_MARKERS.iter().any(|marker| {
-        lowered
-            .windows(marker.len())
-            .any(|window| window == *marker)
-    })
 }
 
 /// The shell's view of `status`: the code, or 128 plus the signal.
@@ -439,13 +424,6 @@ mod tests {
     fn replayed_output_is_display_safe() {
         assert_eq!(display_text(b"a\r\nb\x1b[0m\tc\n"), "a\nb\u{fffd}[0m\tc\n");
         assert_eq!(display_text(b"\xff"), "\u{fffd}");
-    }
-
-    #[test]
-    fn denials_are_recognised_in_any_case() {
-        assert!(denied(b"OSError: [Errno 1] Operation not permitted"));
-        assert!(denied(b"EROFS: read-only"));
-        assert!(!denied(b"all tests passed"));
     }
 
     #[test]

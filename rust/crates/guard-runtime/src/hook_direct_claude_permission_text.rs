@@ -42,12 +42,15 @@ fn optional_string(value: Option<&Value>) -> Option<&str> {
 }
 
 /// `_optional_string` of a notice field; no notice reads as `{}`.
-fn notice_field<'a>(notice: Option<&'a Map<String, Value>>, key: &str) -> Option<&'a str> {
+pub(crate) fn notice_field<'a>(
+    notice: Option<&'a Map<String, Value>>,
+    key: &str,
+) -> Option<&'a str> {
     optional_string(notice?.get(key))
 }
 
 /// `ensure_terminal_punctuation`: stripped, ending in `.`, `!` or `?`.
-pub(super) fn ensure_terminal_punctuation(message: &str) -> String {
+pub(crate) fn ensure_terminal_punctuation(message: &str) -> String {
     let trimmed = python_strip(message);
     if trimmed.is_empty() {
         return String::new();
@@ -109,7 +112,7 @@ fn use_tool_name(text: &str) -> Option<&str> {
 
 /// `_claude_notification_tool_name`: the payload's tool name, else the tool
 /// a `message` or `title` names as `use <Tool>`.
-pub(super) fn notification_tool_name(payload: &Map<String, Value>) -> Option<String> {
+pub(crate) fn notification_tool_name(payload: &Map<String, Value>) -> Option<String> {
     if let Some(direct) = optional_string(payload.get("tool_name")) {
         return Some(direct.to_owned());
     }
@@ -121,7 +124,7 @@ pub(super) fn notification_tool_name(payload: &Map<String, Value>) -> Option<Str
 }
 
 /// `_claude_notification_tool_display_name`.
-pub(super) fn notification_tool_display_name(payload: &Map<String, Value>) -> Option<String> {
+pub(crate) fn notification_tool_display_name(payload: &Map<String, Value>) -> Option<String> {
     let name = notification_tool_name(payload)?;
     let stripped = python_strip(&name);
     (!stripped.is_empty()).then(|| stripped.to_owned())
@@ -151,7 +154,7 @@ fn approval_options(value: Option<&Value>) -> Vec<String> {
 
 /// `_claude_guard_approval_question_message`: the deny message that directs
 /// Claude to ask the Guard approval question.
-pub(super) fn guard_approval_question_message(notice: Option<&Map<String, Value>>) -> String {
+pub(crate) fn guard_approval_question_message(notice: Option<&Map<String, Value>>) -> String {
     let field = |key: &str| notice_field(notice, key);
     let tool_name = field("tool_name").unwrap_or("this tool");
     let header = field("approval_header").unwrap_or(APPROVAL_HEADER);
@@ -175,13 +178,13 @@ pub(super) fn guard_approval_question_message(notice: Option<&Map<String, Value>
 
 /// `_claude_permission_notice_prefers_ask_user_question`: every notice but a
 /// package request expects the Guard approval question.
-pub(super) fn notice_prefers_ask_user_question(notice: &Map<String, Value>) -> bool {
+pub(crate) fn notice_prefers_ask_user_question(notice: &Map<String, Value>) -> bool {
     optional_string(notice.get("artifact_type")) != Some("package_request")
 }
 
 /// `_claude_permission_prompt_system_message`: what the user sees while
 /// Claude is sent to the Guard approval question.
-pub(super) fn permission_prompt_system_message(
+pub(crate) fn permission_prompt_system_message(
     payload: &Map<String, Value>,
     notice: Option<&Map<String, Value>>,
 ) -> String {
@@ -217,7 +220,7 @@ pub(super) fn permission_prompt_system_message(
 
 /// `_claude_permission_request_system_message`: the review reason shown
 /// above Claude's own dialog.
-pub(super) fn permission_request_system_message(
+pub(crate) fn permission_request_system_message(
     payload: &Map<String, Value>,
     native_reason: &str,
 ) -> String {
@@ -281,7 +284,7 @@ pub(super) fn permission_request_response(
 
 /// `_claude_permission_prompt_additional_context`: the notice's Guard
 /// approval question, or the generic routing note without a notice.
-pub(super) fn permission_prompt_additional_context(notice: Option<&Map<String, Value>>) -> String {
+pub(crate) fn permission_prompt_additional_context(notice: Option<&Map<String, Value>>) -> String {
     match notice {
         Some(fields) => guard_approval_question_message(Some(fields)),
         None => DEFAULT_PROMPT_CONTEXT.to_owned(),

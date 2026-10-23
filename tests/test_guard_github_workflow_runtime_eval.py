@@ -23,12 +23,13 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
 )
 from codex_plugin_scanner.guard.runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
 from codex_plugin_scanner.guard.runtime.github_workflow_runtime import (
-    _capability_id,
     claim_resolved_github_workflow_authorization,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_base import _canonical_utc_timestamp
 from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import canonical_framed_payload, format_utc_timestamp
+from tests.github_workflow_test_support import capability_id as _capability_id
 from tests.github_workflow_test_support import native_lineage_verified as native_lineage_verified
 from tests.github_workflow_test_support import with_binding
 from tests.test_guard_github_workflow_runtime import _descriptor, _seed_resolved_request
@@ -81,7 +82,7 @@ def test_approval_resolution_implicit_timestamp_issues_claimable_capability(
         reason="reviewed exact maintenance task",
     )
 
-    assert resolved["resolved_at"] == _ISSUED.isoformat()
+    assert resolved["resolved_at"] == _canonical_utc_timestamp(_ISSUED.isoformat())
     authorization = claim_resolved_github_workflow_authorization(store, "request-github-1", descriptor)
     assert authorization is not None
     signed = store.lookup_workflow_capability(_capability_id("request-github-1"))
@@ -134,6 +135,7 @@ def test_workflow_approval_identity_accepts_exact_bytes_restored_after_drift(
             data_flow_action=None,
             scanner_action=None,
             current_action="require-reapproval",
+            risk_classes=(),
             data_flow_signals=(),
             scanner_evidence=(),
             workflow_approval_record=record(),

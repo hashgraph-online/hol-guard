@@ -408,7 +408,7 @@ def test_signed_policy_bundle_rejects_sync_only_keys_without_anchor() -> None:
     )
 
     assert validated_bundle is None
-    assert reason == "trusted_key_unavailable"
+    assert reason == "untrusted_signing_key"
 
 
 def test_validate_synced_policy_bundle_does_not_persist_unanchored_sync_keys() -> None:
@@ -687,8 +687,8 @@ def test_malformed_anchor_validity_never_becomes_an_unbounded_trust_window(
     )
 
     assert validated_bundle is None
-    assert reason == "trusted_key_unavailable"
-    assert anchored_keys == ()
+    assert reason == "untrusted_signing_key"
+    assert all(key.key_id != malformed_anchor["keyId"] for key in anchored_keys)
 
 
 def test_signed_policy_bundle_rejects_expired_signing_key() -> None:

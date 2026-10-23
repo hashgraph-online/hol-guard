@@ -5,6 +5,10 @@
 //! `PUT`/`CUT` operations and `+` body rows, then `*** End Patch`. Models
 //! often add unified-diff `-old` rows under a `PUT`; Oh My Pi drops them or
 //! keeps them as body text, and never reads them as a header or operation.
+//! Models also drop the `+` and write a bare row under a `PUT`, and Oh My Pi
+//! keeps that as body text too. A bare row is file content only while it
+//! cannot be read as anything else: it is not an operation, a `***` envelope
+//! line, a legacy `¶` header, or anything that opens with a bracket.
 //! The body rows are file content, not commands, so the edit gets the same
 //! bounded proof as a Codex `apply_patch`: every header must name a file that
 //! the native file write proof accepts and that is not agent instruction or
@@ -85,11 +89,29 @@ pub(super) fn hashline_targets(input: &str) -> Option<Vec<(String, bool)>> {
             in_put = line.starts_with("PUT ");
         }
         let body = line.starts_with('+') || (in_put && line.starts_with('-'));
-        if !in_file || !(operation || body) {
+        if !in_file {
             return None;
         }
+        if operation || body || (in_put && bare_body_row(line)) {
+            continue;
+        }
+        return None;
     }
     (!targets.is_empty()).then_some(targets)
+}
+
+/// A row under a `PUT` with no `+` that Oh My Pi keeps as file content: it
+/// does not read as an operation, an envelope line, a header or a legacy
+/// header, even after leading blanks. A row that opens with a bracket stays
+/// unproven, so an indented or decorated header can never pass as text.
+fn bare_body_row(line: &str) -> bool {
+    let row = line.trim_start();
+    let operation = ["PUT", "CUT", "REM", "MV"].iter().any(|name| {
+        row.strip_prefix(name).is_some_and(|rest| {
+            rest.is_empty() || rest.starts_with(|c: char| c.is_whitespace() || c == ':')
+        })
+    });
+    !operation && !row.starts_with("***") && !row.starts_with(['¶', '['])
 }
 
 /// Every header path in order, repeats included, the way Oh My Pi lists them

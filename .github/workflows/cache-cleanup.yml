@@ -32,14 +32,38 @@ jobs:
         with:
           persist-credentials: false
           ref: main
-      - name: Delete superseded main-branch caches
+      - name: Plan superseded main-branch cache cleanup
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          gh cache list --ref refs/heads/main --limit 5000 --json id,key,ref,createdAt,lastAccessedAt,version > "$RUNNER_TEMP/caches.json"
-          python3 scripts/ci/prune_superseded_caches.py "$RUNNER_TEMP/caches.json" > "$RUNNER_TEMP/prune.txt"
+          gh cache list --ref refs/heads/main --limit 5000 --json id,key,ref,createdAt,lastAccessedAt,version,sizeInBytes > "$RUNNER_TEMP/caches.json"
+          python3 scripts/ci/protected_runtime_archives.py --repository "$GH_REPO" --output "$RUNNER_TEMP/protected-archives.json"
+          python3 scripts/ci/prune_superseded_caches.py "$RUNNER_TEMP/caches.json" \
+            --protected-archives "$RUNNER_TEMP/protected-archives.json" \
+            --report "$RUNNER_TEMP/cache-prune-plan.json" > "$RUNNER_TEMP/prune.txt"
+      - name: Retain the cleanup plan before deleting any cache
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: cache-cleanup-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/caches.json
+            ${{ runner.temp }}/protected-archives.json
+            ${{ runner.temp }}/cache-prune-plan.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Delete planned main-branch caches
+        id: delete
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/protected_runtime_archives.py --repository "$GH_REPO" \
+            --verify-plan "$RUNNER_TEMP/cache-prune-plan.json" --output "$RUNNER_TEMP/cache-prune-verification.json"
+          jq -c '{source_verification, skipped_archives}' "$RUNNER_TEMP/cache-prune-verification.json"
+          jq -r '.selected[].id' "$RUNNER_TEMP/cache-prune-verification.json" > "$RUNNER_TEMP/prune.txt"
           deleted=0
           failed=0
           while read -r id; do
@@ -52,3 +76,11 @@ jobs:
             fi
           done < "$RUNNER_TEMP/prune.txt"
           echo "Deleted $deleted superseded or idle cache entries; $failed failed" >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain final source verification
+        if: always() && steps.delete.outcome != 'skipped'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: cache-cleanup-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cache-prune-verification.json
+          if-no-files-found: error
+          retention-days: 7

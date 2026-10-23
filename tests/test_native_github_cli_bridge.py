@@ -205,7 +205,7 @@ def test_malformed_result_records_bad_result(harness: _Harness, tamper: dict[str
 
 
 def test_unrecognized_capability_classifies_as_unknown(harness: _Harness) -> None:
-    from codex_plugin_scanner.guard.runtime import github_command_capabilities as capabilities
+    from tests import native_github_capability_support as capabilities
 
     harness.reply = lambda request: _good_reply(
         request,
@@ -216,10 +216,10 @@ def test_unrecognized_capability_classifies_as_unknown(harness: _Harness) -> Non
             "capabilities": ["teleport_remote"],
         },
     )
-    capabilities._NATIVE_CACHE.clear()
+    capabilities.reset_github_capability_cache()
     try:
-        assessment = capabilities.classify_github_cli(_ARGS)
+        assessment = capabilities.github_cli_assessment(_ARGS)
     finally:
-        capabilities._NATIVE_CACHE.clear()
+        capabilities.reset_github_capability_cache()
     assert assessment.capability == "unknown"
     assert assessment.reason_code == "github.native.malformed"

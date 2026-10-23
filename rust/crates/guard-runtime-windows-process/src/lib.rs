@@ -18,9 +18,14 @@ mod drives;
 #[cfg(windows)]
 mod known_folders;
 #[cfg(windows)]
+mod owner;
+#[cfg(windows)]
 mod registry;
 #[cfg(windows)]
 mod secure_storage;
+#[cfg(all(test, windows))]
+#[path = "../../../test_support/unique_nanos.rs"]
+mod unique_nanos;
 #[cfg(windows)]
 mod windows;
 
@@ -40,16 +45,19 @@ pub use windows::{
     is_single_link_file, is_single_link_handle, open_bound_executable_file,
     open_bound_regular_file, open_bound_replaceable_file, open_private_directory,
     open_private_file, open_skill_directory, path_is_within, path_stat, process_liveness,
-    process_start_marker, regular_file_id, remove_file_if_same, running_process_image_path,
-    running_process_start_marker, terminate_process, terminate_process_verified,
-    wait_for_process_exit, FileId, PathStat, PrivateDirectoryBinding,
+    process_parent_ids, process_start_marker, regular_file_id, remove_file_if_same,
+    running_process_image_path, running_process_start_marker, terminate_process,
+    terminate_process_verified, wait_for_process_exit, FileId, PathStat, PrivateDirectoryBinding,
 };
 
 #[cfg(windows)]
 pub use drives::local_drive_letters;
 
 #[cfg(windows)]
-pub use known_folders::{trusted_install_roots, windows_directory};
+pub use known_folders::{trusted_install_roots, user_profile_directory, windows_directory};
+
+#[cfg(windows)]
+pub use owner::owned_by_current_user;
 
 #[cfg(windows)]
 pub use registry::{read_machine_registry_string, MachineRegistryString};
@@ -88,6 +96,12 @@ pub fn wait_for_process_exit(_process_id: u32, _timeout: std::time::Duration) ->
 #[cfg(not(windows))]
 pub fn local_drive_letters() -> Option<Vec<char>> {
     None
+}
+
+/// Only Windows has owner SIDs.
+#[cfg(not(windows))]
+pub fn owned_by_current_user(_path: &Path) -> bool {
+    false
 }
 
 #[cfg(not(windows))]

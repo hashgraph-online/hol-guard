@@ -7,12 +7,17 @@ import sqlite3
 from typing import Final, cast
 
 from .runtime.extension_control_authority import ExtensionControlAuthorityError
+from .store_extension_control_authority_epoch import ensure_extension_control_authority_epoch
 
 EXTENSION_CONTROL_SCHEMA_VERSION: Final = 4
+PACK_ACTIVATION_SCHEMA_VERSION: Final = 5
+PACK_ACTIVATION_V2_SCHEMA_VERSION: Final = 6
 _SCHEMA_CHECKSUM_V1: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v1").hexdigest()
 _SCHEMA_CHECKSUM_V2: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v2").hexdigest()
 _SCHEMA_CHECKSUM_V3: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v3").hexdigest()
 _SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v4").hexdigest()
+_PACK_SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v5").hexdigest()
+_PACK_V2_SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v6").hexdigest()
 
 
 def extension_control_schema_marker_is_compatible(
@@ -26,6 +31,8 @@ def extension_control_schema_marker_is_compatible(
         (2, _SCHEMA_CHECKSUM_V2),
         (3, _SCHEMA_CHECKSUM_V3),
         (EXTENSION_CONTROL_SCHEMA_VERSION, _SCHEMA_CHECKSUM),
+        (PACK_ACTIVATION_SCHEMA_VERSION, _PACK_SCHEMA_CHECKSUM),
+        (PACK_ACTIVATION_V2_SCHEMA_VERSION, _PACK_V2_SCHEMA_CHECKSUM),
     }
 
 
@@ -33,7 +40,15 @@ def ensure_extension_control_authority_schema(
     connection: sqlite3.Connection,
     *,
     require_compatible: bool = True,
+    activate_packs: bool = False,
+    activation_format_v2: bool = False,
 ) -> bool:
+    activate_packs |= activation_format_v2
+    wanted_version = PACK_ACTIVATION_SCHEMA_VERSION if activate_packs else EXTENSION_CONTROL_SCHEMA_VERSION
+    wanted_checksum = _PACK_SCHEMA_CHECKSUM if activate_packs else _SCHEMA_CHECKSUM
+    if activation_format_v2:
+        wanted_version, wanted_checksum = PACK_ACTIVATION_V2_SCHEMA_VERSION, _PACK_V2_SCHEMA_CHECKSUM
+    pack_schema_active = activate_packs
     _ = connection.execute(
         """
         create table if not exists extension_control_schema_migration (
@@ -52,7 +67,7 @@ def ensure_extension_control_authority_schema(
     if row is None:
         _ = connection.execute(
             "insert into extension_control_schema_migration (singleton, version, checksum) values (1, ?, ?)",
-            (EXTENSION_CONTROL_SCHEMA_VERSION, _SCHEMA_CHECKSUM),
+            (wanted_version, wanted_checksum),
         )
     else:
         if isinstance(row, sqlite3.Row):
@@ -71,10 +86,11 @@ def ensure_extension_control_authority_schema(
             if require_compatible:
                 raise ExtensionControlAuthorityError("unsupported or invalid extension control schema")
             return False
-        if type(version_raw) is int and version_raw != EXTENSION_CONTROL_SCHEMA_VERSION:
+        pack_schema_active |= version_raw in {PACK_ACTIVATION_SCHEMA_VERSION, PACK_ACTIVATION_V2_SCHEMA_VERSION}
+        if type(version_raw) is int and version_raw < wanted_version:
             _ = connection.execute(
                 "update extension_control_schema_migration set version = ?, checksum = ? where singleton = 1",
-                (EXTENSION_CONTROL_SCHEMA_VERSION, _SCHEMA_CHECKSUM),
+                (wanted_version, wanted_checksum),
             )
 
     _ = connection.execute(
@@ -151,4 +167,35 @@ def ensure_extension_control_authority_schema(
         )
         """
     )
+    if pack_schema_active:
+        _ = connection.execute(
+            """
+            create table if not exists extension_command_pack_activation (
+                singleton integer primary key check (singleton = 1),
+                revision integer not null check (revision >= 0),
+                record_json text not null,
+                record_digest text not null,
+                record_mac text not null,
+                recorded_at text not null
+            )
+            """
+        )
+        _ = connection.execute(
+            """
+            create table if not exists extension_command_pack_pending (
+                control_revision integer primary key check (control_revision > 0),
+                record_json text not null,
+                record_digest text not null,
+                record_mac text not null,
+                link_json text not null,
+                link_digest text not null,
+                link_mac text not null
+            )
+            """
+        )
+        _ = connection.execute("""create table if not exists extension_control_pack_reservation_archive (
+            archive_id text primary key,
+            reservations_json text not null
+        )""")
+    ensure_extension_control_authority_epoch(connection)
     return True

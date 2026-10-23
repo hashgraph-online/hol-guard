@@ -50,8 +50,8 @@ from codex_plugin_scanner.guard.adapters import (
     kimi,
     opencode,
     opencode_artifacts,
-    opencode_install_snapshot,
 )
+from codex_plugin_scanner.guard.adapters._modules.opencode import opencode_install_snapshot
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.grok_executable import GrokExecutableResolution
 from codex_plugin_scanner.guard.models import GuardArtifact

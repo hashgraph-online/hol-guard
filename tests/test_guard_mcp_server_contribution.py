@@ -11,16 +11,59 @@ import pytest
 from codex_plugin_scanner.guard.runtime import mcp_server_contribution as mcp_module
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     load_mcp_contribution_payloads,
+    mcp_tool_state,
     validate_mcp_contribution,
 )
 
 _FILESYSTEM = Path(__file__).resolve().parents[1] / "contributions/mcp-servers/mcp.filesystem.json"
+_TETHER = _FILESYSTEM.with_name("mcp.tether.json")
 
 
 def _filesystem_payload() -> dict[str, object]:
     payload = json.loads(_FILESYSTEM.read_text(encoding="utf-8"))
     assert isinstance(payload, dict)
     return payload
+
+
+def _tether_payload() -> dict[str, object]:
+    """Read the authored Tether manifest so missing tools cannot hide behind fallback defaults."""
+    payload = json.loads(_TETHER.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def test_tether_contribution_is_external_opt_in() -> None:
+    """Keep Tether bound to its published package and explicit local opt-in."""
+    payload = _tether_payload()
+    validate_mcp_contribution(payload, filename=_TETHER.name)
+    assert payload["id"] == "mcp.tether"
+    assert payload["trustClass"] == "external"
+    assert payload["activation"] == "opt-in"
+    assert payload["launch"] == {"kind": "package-launcher", "command": "uvx", "package": "tether-memory"}
+
+
+def test_tether_declares_every_memory_tool_with_inherited_policy() -> None:
+    """Require all four memory verbs before checking their inherited states."""
+    payload = _tether_payload()
+    tools = payload.get("tools")
+    assert isinstance(tools, list)
+    declared = {item["name"]: item["state"] for item in tools}
+    required = {"remember", "recall", "link", "forget"}
+    assert required <= declared.keys()
+    for tool_name in required:
+        assert declared[tool_name] == "inherit"
+        assert mcp_tool_state(payload, tool_name) == "inherit"
+
+
+def test_tether_unknown_tool_inherits_policy() -> None:
+    """Check the fallback independently of the required memory-tool declarations."""
+    payload = _tether_payload()
+    tools = payload.get("tools")
+    assert isinstance(tools, list)
+    declared = {item["name"]: item["state"] for item in tools}
+    assert declared["other"] == "inherit"
+    assert "unknown_tool" not in declared
+    assert mcp_tool_state(payload, "unknown_tool") == "inherit"
 
 
 def test_filesystem_contribution_cannot_self_declare_trusted_library() -> None:

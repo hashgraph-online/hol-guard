@@ -116,6 +116,13 @@ function declaredScopesForAction(
   item: GuardApprovalRequest,
   action: ApprovalResolutionAction,
 ): DecisionScope[] | null {
+  if (action === "allow" && item.once_only_reason === "script_execution_binding_unavailable") {
+    return [];
+  }
+  if (action === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") &&
+      item.exact_action_persistence_eligible !== true) {
+    return [];
+  }
   if (hasScopeContractMetadata(item) && !hasCompleteScopeContractBinding(item)) {
     return [];
   }
@@ -134,6 +141,9 @@ export function requestSupportsScope(
   action: ApprovalResolutionAction,
   scope: DecisionScope,
 ): boolean {
+  if (action === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && scope !== "artifact") {
+    return false;
+  }
   const declaredScopes = declaredScopesForAction(item, action);
   if (declaredScopes !== null) {
     return declaredScopes.includes(scope);
@@ -157,7 +167,10 @@ export function scopeChoicesForRequest(
     item,
     action,
     action === "allow" ? DEFAULT_SCOPE_CHOICES : BLOCK_SCOPE_CHOICES,
-  );
+  ).map((choice) => action === "allow" && choice.value === "artifact" &&
+    item.scope_restrictions?.includes("retry_cannot_reuse_approval")
+      ? { ...choice, label: "Exact reviewed action", description: "Choose a duration below. This request requires persistent consent." }
+      : choice);
 }
 
 export const ADVANCED_SCOPE_VALUES = new Set<DecisionScope>(["global"]);
@@ -218,6 +231,24 @@ const ONCE_ONLY_REASON_COPY: Record<string, string> = {
     "Always allow is unavailable: this tool call has no stable command or file to remember. You can allow it once.",
   mutable_launcher:
     "Always allow is unavailable: this program can run other code or config, so Guard cannot prove what it will do next time. You can allow it once.",
+  node_package_manifest_unproven:
+    "Guard could not verify an installed package's resolution settings. Repair or reinstall the package before remembering this command.",
+  node_package_entrypoint_unproven:
+    "Guard could not bind the installed package entry point to the code it loads. This command cannot be remembered.",
+  node_package_exports_unproven:
+    "Guard cannot yet verify this package's export conditions or path patterns. This command cannot be remembered.",
+  node_package_native_addon_unproven:
+    "Guard has not bound the compiled dependency this package would load. This command cannot be remembered.",
+  node_runtime_package_mutation_unproven:
+    "Guard has not verified that later package loads are protected from this program's file writes. This command cannot be remembered.",
+  runner_code_closure_unproven:
+    "Guard could not bind all code loaded by this package runner and its command. This command cannot be remembered.",
+  python_runtime_module_unproven:
+    "Guard could not bind the installed Python implementation this program imports. This command cannot be remembered.",
+  python_runtime_bootstrap_unproven:
+    "Guard could not bind this Python runtime's startup code and native libraries. This command cannot be remembered.",
+  script_execution_binding_unavailable:
+    "This app cannot run a verified snapshot of this script through this approval. Keep it blocked until a supported execution route is available.",
   compound_command:
     "Always allow is unavailable: this command chains steps that Guard cannot verify one by one. You can allow it once.",
   guard_control: "Changes to Guard itself are always reviewed. You can allow this one time.",
@@ -265,6 +296,11 @@ export function taskCapabilityExplanation(item: GuardApprovalRequest): string | 
     return "Task access cannot override this blocked or protected Guard action.";
   }
   if (item.exact_action_persistence_eligible === true) {
+    return null;
+  }
+  if (item.scope_restrictions?.includes("retry_cannot_reuse_approval")) {
+    // Retry guidance and the scope controls explain unavailable delivery.
+    // The normal once-only explanation would falsely promise usable consent.
     return null;
   }
   if (eligibility.reason_codes.includes("task_capability_not_enabled")) {
@@ -320,6 +356,10 @@ export function buildDecisionPayload(input: {
     normalizedScope,
     input.persistExactAction === true,
   );
+  if (input.action === "allow" && input.item.scope_restrictions?.includes("retry_cannot_reuse_approval") &&
+      !persistExactAction) {
+    throw new Error("Guard cannot bind this app's retry to the reviewed action. A one-time approval is unavailable.");
+  }
   return {
     requestId: input.item.request_id,
     action: input.action,

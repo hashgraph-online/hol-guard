@@ -47,6 +47,37 @@ pub(super) fn execution_free_paging(
 ) -> Option<bool> {
     let remaining = crate::command_compatibility::git_inspection_arguments(arguments, context)?;
     let operation = remaining.first()?.as_str();
+    if operation == "stash" && pager_operation.is_none() {
+        return stash_execution_free(
+            executable,
+            arguments,
+            remaining,
+            context,
+            deadline,
+            execution_environment,
+            stdout_piped,
+        );
+    }
+    // `git notes show` hands the note to `git show`, which pages under
+    // `pager.show` where `pager.notes` left the choice open, so the proof runs
+    // under both keys. A listing runs nothing else.
+    if operation == "notes"
+        && pager_operation.is_none()
+        && super::git_side_record_reads::shows_a_note(&remaining[1..])
+    {
+        let prove = |pager: &str| {
+            execution_free_paging(
+                executable,
+                arguments,
+                Some(pager),
+                context,
+                deadline,
+                execution_environment,
+                stdout_piped,
+            )
+        };
+        return Some(prove("notes")? && prove("show")?);
+    }
     if !matches!(
         operation,
         "status"
@@ -58,6 +89,8 @@ pub(super) fn execution_free_paging(
             | "reflog"
             | "grep"
             | "branch"
+            | "tag"
+            | "clean"
             | "hash-object"
             | "config"
             | "merge-base"
@@ -66,6 +99,11 @@ pub(super) fn execution_free_paging(
             | "show-ref"
             | "for-each-ref"
             | "rev-list"
+            | "shortlog"
+            | "check-ignore"
+            | "apply"
+            | "bisect"
+            | "notes"
     ) {
         return None;
     }
@@ -86,6 +124,21 @@ pub(super) fn execution_free_paging(
     if matches!(operation, "blame" | "describe" | "reflog")
         && !super::git_history_reads::read_form(operation, &remaining[1..])
     {
+        return None;
+    }
+    if matches!(operation, "shortlog" | "check-ignore")
+        && !super::git_listing_reads::read_form(operation, &remaining[1..])
+    {
+        return None;
+    }
+    if matches!(operation, "bisect" | "notes")
+        && !super::git_side_record_reads::read_form(operation, &remaining[1..])
+    {
+        return None;
+    }
+    // Only the patch check reads; every other apply writes, and its own
+    // review decides it.
+    if operation == "apply" && !super::git_apply_check::is_check_only(&remaining[1..]) {
         return None;
     }
     // A plain configuration write is no read; its own proof decides it.
@@ -123,6 +176,55 @@ pub(super) fn execution_free_paging(
     })
 }
 
+/// A printing `git stash` form, proved as the read Git runs for it. `list`
+/// runs `git log -g refs/stash` and `show` prints the entry's diff, so each is
+/// held to that read's configuration proof twice: once under `pager.stash`,
+/// which decides whether the stash command pages at all, and once under the
+/// inner read's own pager key, which Git consults where `pager.stash` left
+/// the choice open. Every other stash spelling moves work and stays reviewed.
+fn stash_execution_free(
+    executable: &str,
+    arguments: &[String],
+    remaining: &[String],
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    stdout_piped: bool,
+) -> Option<bool> {
+    let rest: Vec<&str> = remaining[1..].iter().map(String::as_str).collect();
+    let inner: Vec<&str> = match rest.split_first() {
+        Some((&"list", options)) if super::git_stash_reads::list(options) => {
+            vec!["log", "-g", "--first-parent", "refs/stash"]
+        }
+        // The options are the diff options `show` passes through; the entry
+        // name is not a diff argument.
+        Some((&"show", options)) if super::git_stash_reads::show(options) => {
+            std::iter::once("diff")
+                .chain(options.iter().copied().filter(|word| word.starts_with('-')))
+                .collect()
+        }
+        _ => return None,
+    };
+    let leading = &arguments[..arguments.len().checked_sub(remaining.len())?];
+    let translated: Vec<String> = leading
+        .iter()
+        .cloned()
+        .chain(inner.into_iter().map(str::to_owned))
+        .collect();
+    let prove = |pager: Option<&str>| {
+        execution_free_paging(
+            executable,
+            &translated,
+            pager,
+            context,
+            deadline,
+            execution_environment,
+            stdout_piped,
+        )
+    };
+    Some(prove(Some("stash"))? && prove(None)?)
+}
+
 /// How the read would page: the configuration key the pager is proved under,
 /// and whether the caller already sends stdout down a pipe, which leaves Git
 /// no terminal to page to.
@@ -145,6 +247,16 @@ fn probe(
         stdout_piped,
     } = paging;
     let operation = remaining.first()?.as_str();
+    // `git notes show` execs `git show <note>`. A note is a blob when Git
+    // wrote it, but a notes tree names whatever object it was built with, so a
+    // commit there is rendered with the patch, diff driver and signature
+    // settings of `git show`. A listing prints names and object ids only.
+    let rendering =
+        if operation == "notes" && super::git_side_record_reads::shows_a_note(&remaining[1..]) {
+            "show"
+        } else {
+            operation
+        };
     // Configuration plus root, path and attribute inspection share this budget.
     // The caller's overall deadline remains the upper bound.
     let inspection_deadline = Instant::now() + super::git_probe::PROBE_BUDGET;
@@ -220,7 +332,7 @@ fn probe(
             "config",
             "--null",
             "--get-regexp",
-            "^(core\\.fsmonitor|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|grep\\.fallbacktonoindex|extensions\\.partialclone|remote\\..*\\.promisor)$",
+            "^(core\\.fsmonitor|core\\.excludesfile|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|grep\\.fallbacktonoindex|extensions\\.partialclone|remote\\..*\\.promisor)$",
         ])
 ,
         deadline, CONFIG_LIMIT,
@@ -238,7 +350,7 @@ fn probe(
     // claim to prove the complete signature-format/helper option grammar.
     if options.clone().any(|value| {
         value.as_str() == "--show-signature"
-            || (super::git_history_reads::verifies_signatures(operation) && value.contains("%G"))
+            || (super::git_history_reads::verifies_signatures(rendering) && value.contains("%G"))
             || value.starts_with("--remerge-diff")
             || value == "--diff-merges=remerge"
             || value == "--submodule=diff"
@@ -268,7 +380,11 @@ fn probe(
         .map(String::as_str)
         .filter(|value| value.starts_with('-'))
         .collect::<Vec<_>>();
-    let textconv_runs = !no_textconv && textconv::may_run(operation, &option_flags);
+    let textconv_runs = !no_textconv && textconv::may_run(rendering, &option_flags);
+    // An external driver renders a diff, so only a read that renders one can
+    // start it. A tag listing, a clean preview, a ref listing or an ignore
+    // check prints names, and a configured driver leaves all of them alone.
+    let renders_diff = matches!(rendering, "diff" | "log" | "show" | "reflog" | "stash");
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {
         let (key, value) = record.split_once('\n')?;
@@ -279,8 +395,10 @@ fn probe(
     // Like status, hash-object pages only when its own pager.* key says so;
     // config pages by default only for its listing forms.
     let pages_by_default = match operation {
+        // `clean` prints its preview, and `apply` its check report, without
+        // a pager.
         "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
-        | "for-each-ref" | "rev-list" | "describe" => false,
+        | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" => false,
         "config" => super::git_config_reads::pages_by_default(&remaining[1..]),
         _ => true,
     };
@@ -341,11 +459,23 @@ fn probe(
         let unsafe_value = match key {
             "extensions.partialclone" => !value.is_empty(),
             key if key.starts_with("remote.") && key.ends_with(".promisor") => !disabled,
-            // Reading the index can start the monitor; grep reads it too.
+            // Reading the index can start the monitor; grep reads it too, a
+            // clean preview refreshes the index before it walks the untracked
+            // tree, and a patch check refreshes it before it reads the files
+            // the patch names.
             "core.fsmonitor" => {
-                (matches!(operation, "status" | "diff" | "grep")
+                (matches!(operation, "status" | "diff" | "grep" | "clean" | "apply")
+                    || super::git_listing_reads::reads_index(operation, &remaining[1..])
                     || super::git_history_reads::cleans_working_tree(operation, &remaining[1..]))
                     && !disabled
+            }
+            // A verbose ignore check prints the rule that matched and the file
+            // it came from. The repository's own ignore files are part of the
+            // checkout, but a configured excludes file names anything, so the
+            // check keeps its review until someone reads that setting.
+            "core.excludesfile" => {
+                !value.is_empty()
+                    && super::git_listing_reads::prints_rule_source(operation, &remaining[1..])
             }
             "core.pager" => {
                 configured_paging
@@ -366,22 +496,22 @@ fn probe(
                         configured_paging
                     }
             }
-            "diff.external" => !no_external && !value.is_empty(),
+            "diff.external" => renders_diff && !no_external && !value.is_empty(),
             key if key.starts_with("diff.") && key.ends_with(".command") => {
-                !no_external && !value.is_empty()
+                renders_diff && !no_external && !value.is_empty()
             }
             key if key.starts_with("diff.") && key.ends_with(".textconv") => {
                 textconv_runs && !value.is_empty()
             }
             key if key.starts_with("filter.") => filtered && !value.is_empty() && !filters_unused,
             "format.pretty" => {
-                super::git_history_reads::verifies_signatures(operation) && value.contains("%G")
+                super::git_history_reads::verifies_signatures(rendering) && value.contains("%G")
             }
             key if key.starts_with("pretty.") => {
-                super::git_history_reads::verifies_signatures(operation) && value.contains("%G")
+                super::git_history_reads::verifies_signatures(rendering) && value.contains("%G")
             }
             "log.showsignature" => {
-                super::git_history_reads::verifies_signatures(operation) && !disabled
+                super::git_history_reads::verifies_signatures(rendering) && !disabled
             }
             // Outside a repository grep would search every file under cwd.
             "grep.fallbacktonoindex" => operation == "grep" && !disabled,
@@ -401,6 +531,9 @@ fn probe(
     }
     if operation == "config" {
         return super::git_config_reads::credential_free(&command, &remaining[1..], deadline);
+    }
+    if operation == "bisect" && !super::git_probe::bisect_log_inert(&command, deadline)? {
+        return Some(false);
     }
     if !super::git_probe::repository_inert(&command, operation, remaining, deadline)? {
         return Some(false);

@@ -266,19 +266,26 @@ impl Env<'_> {
         &self,
         request: &HookAuthorityStateRequestV1,
     ) -> Result<bool, &'static str> {
-        let state_key = required(&request.state_key)?;
+        let conversation_id = required(&request.conversation_id)?;
+        let command = required(&request.command)?;
+        let state_key = cursor_target(
+            conversation_id,
+            Some(command),
+            request.state_key.as_ref(),
+            cursor_allow_key,
+        )?;
         let payload = json!({
             "state_key": state_key,
-            "conversation_id": required(&request.conversation_id)?,
+            "conversation_id": conversation_id,
             "saved_at": self.now,
             "action": "allow",
             "artifact_id": required(&request.artifact_id)?,
             "artifact_hash": required(&request.artifact_hash)?,
             "artifact_name": required(&request.artifact_name)?,
-            "command": required(&request.command)?,
+            "command": command,
             "native_source": "cursor-native",
         });
-        Ok(self.store_signed(state_key, &payload, &CURSOR_ALLOW))
+        Ok(self.store_signed(&state_key, &payload, &CURSOR_ALLOW))
     }
 
     pub(super) fn cursor_load_allowance(

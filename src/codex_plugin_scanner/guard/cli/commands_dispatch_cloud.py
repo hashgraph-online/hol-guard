@@ -389,20 +389,24 @@ def _run_guard_cloud_command(
     if cloud_command == "sync-intel":
         try:
             payload = _validated_supply_chain_sync_payload(sync_supply_chain_bundle(store))
-        except GuardSyncNotConfiguredError as error:
-            message = _guard_sync_failure_message(error)
+        except (GuardSyncNotConfiguredError, RuntimeError) as error:
+            message = (
+                _guard_sync_failure_message(error) if isinstance(error, GuardSyncNotConfiguredError) else str(error)
+            )
+            # The network bundle has its own endpoint; a supply-chain failure
+            # must not stop it refreshing.
+            network_protection = sync_network_protection_bundle_best_effort(store)
             if getattr(args, "json", False):
-                _emit("cloud-sync-intel", {"synced": False, "error": message}, True)
+                _emit(
+                    "cloud-sync-intel",
+                    {"synced": False, "error": message, "network_protection": network_protection},
+                    True,
+                )
             else:
                 print(message, file=sys.stderr)
             return 1
-        except RuntimeError as error:
-            if getattr(args, "json", False):
-                _emit("cloud-sync-intel", {"synced": False, "error": str(error)}, True)
-            else:
-                print(str(error), file=sys.stderr)
-            return 1
         payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
+        payload["network_protection"] = sync_network_protection_bundle_best_effort(store)
         _emit("cloud-sync-intel", payload, getattr(args, "json", False))
         return 0
     if cloud_command == "status":

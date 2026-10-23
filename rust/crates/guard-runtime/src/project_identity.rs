@@ -165,8 +165,15 @@ fn is_symlink(metadata: &Option<Metadata>) -> bool {
         .is_some_and(|found| found.file_type().is_symlink())
 }
 
-/// `_workspace_path`: the stripped workspace, mirrored only where
-/// `expanduser().resolve(strict=False)` leaves it as it is.
+/// `_workspace_path`: the stripped workspace as
+/// `expanduser().resolve(strict=False)` leaves it.
+///
+/// An absolute name with no `~` to expand resolves to its real path, which
+/// is what `realpath` answers for a name that exists, so a workspace reached
+/// through a symlink is read as the directory it names rather than deferred.
+/// A name that does not exist resolves the part that does and appends the
+/// rest without reading it, and a loop or an unreadable parent answers the
+/// part reached so far; neither is reproduced here, so both stay unmirrored.
 fn workspace_path(workspace: &str) -> Mirror<Option<PathBuf>> {
     let stripped = python_strip(workspace);
     if stripped.is_empty() {
@@ -176,10 +183,7 @@ fn workspace_path(workspace: &str) -> Mirror<Option<PathBuf>> {
     if !cfg!(unix) || !stripped.starts_with('/') {
         return Err(Unmirrored);
     }
-    match fs::canonicalize(stripped) {
-        Ok(resolved) if resolved.as_os_str() == stripped => Ok(Some(resolved)),
-        _ => Err(Unmirrored),
-    }
+    fs::canonicalize(stripped).map(Some).map_err(|_| Unmirrored)
 }
 
 struct Repository<'w> {
@@ -376,6 +380,7 @@ fn derive(workspace: &str) -> Mirror<Option<String>> {
     };
     let key = cache::Key::new(
         python_strip(workspace),
+        &path,
         &repository.git_dir,
         &repository.config,
         &repository.head_log,

@@ -10,7 +10,6 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor_hook_config import _MANAGED_HOOK_EVENTS, _MANAGED_HOOK_TIMEOUT_SECONDS
-from codex_plugin_scanner.guard.adapters.cursor_hook_payload import cursor_hook_response_from_guard
 from codex_plugin_scanner.guard.adapters.cursor_hooks import (
     cursor_hook_script_source,
     cursor_native_hook_state,
@@ -127,16 +126,6 @@ def test_native_state_rejects_unsupported_event_after_install(tmp_path: Path) ->
     hooks_path.write_text(json.dumps(payload), encoding="utf-8")
     state = cursor_native_hook_state(context)
     assert (state["protection_active"], state["reason"]) == (False, "guard_cursor_hook_unsupported_event")
-
-
-@pytest.mark.parametrize(("policy_action", "permission"), [("review", "deny"), ("block", "deny"), ("allow", "allow")])
-def test_pretooluse_review_denies_because_cursor_ignores_ask(policy_action: str, permission: str) -> None:
-    response = cursor_hook_response_from_guard(
-        policy_action=policy_action, guard_payload={"reason": "protected path"}, hook_event_name="preToolUse"
-    )
-    assert response["permission"] == permission
-    if permission == "deny":
-        assert response["user_message"] and response["agent_message"]
 
 
 def test_generated_script_denies_pretooluse_review_and_keeps_shell_ask(tmp_path: Path) -> None:

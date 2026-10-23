@@ -234,6 +234,40 @@ pub fn review_codex_tool_output(ctx: &Ctx, action: &CodexToolOutputActionV1) -> 
             },
             Err(_) => ToolOutputOutcome::flag(false),
         },
+        Action::PromptCredentialFile(scope) => {
+            let found = crate::codex_prompt_credential_file::review_prompt_credential_file(
+                ctx,
+                &scope.prompt_text,
+                scope.cwd.as_deref(),
+                &scope.config_path,
+                scope.deadline_ms,
+            );
+            let answer = crate::codex_prompt_credential_file::answer(found);
+            match serde_json::to_string(&answer) {
+                Ok(value) => ToolOutputOutcome {
+                    allowed: true,
+                    value: Some(value),
+                },
+                Err(_) => ToolOutputOutcome::flag(false),
+            }
+        }
+        Action::PromptAttachment(scope) => {
+            let found = crate::codex_prompt_attachment::review_prompt_attachment(
+                ctx,
+                &scope.prompt_text,
+                &scope.home_dir,
+                &scope.config_path,
+                scope.deadline_ms,
+            );
+            let answer = crate::codex_prompt_attachment::answer(found);
+            match serde_json::to_string(&answer) {
+                Ok(value) => ToolOutputOutcome {
+                    allowed: true,
+                    value: Some(value),
+                },
+                Err(_) => ToolOutputOutcome::flag(false),
+            }
+        }
     }
 }
 

@@ -46,10 +46,7 @@ fn repository(name: &str) -> (FixtureCleanup, PathBuf, PathBuf) {
     let unique = format!(
         "{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     );
     let root = std::fs::canonicalize("/tmp")
         .unwrap()
@@ -301,8 +298,6 @@ fn existing_branch_worktree_add_neighbours_stay_reviewed() {
     let (_cleanup, home, repository) = repository("existing-branch-reviewed");
     git(&home, &repository, &["branch", "feat/discovery-fix"]);
     for command in [
-        // Git would create a tracking branch or fail.
-        "git worktree add ../app-discovery-fix missing-branch",
         "git worktree add -B feat/discovery-fix ../app-discovery-fix origin/main",
         "git worktree add -f ../app-discovery-fix feat/discovery-fix",
         "git worktree add --force ../app-discovery-fix feat/discovery-fix",

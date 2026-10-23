@@ -54,38 +54,26 @@ def _linked_worktree_root(candidate: Path, *, workspace: Path) -> Path | None:
     return None
 
 
-def verified_non_sensitive_codex_apply_patch(
+def apply_patch_targets_are_non_sensitive(
     *,
-    canonical_harness: str,
-    event_name: str | None,
     home_dir: Path | None,
     payload: Mapping[str, object],
-    runtime_artifact_checked: bool,
     runtime_workspace: Path | None,
 ) -> bool:
-    """Allow parsed workspace patches only after Guard's sensitive checks."""
+    """Whether every path a parsed Codex patch writes is non-sensitive.
 
-    if (
-        not runtime_artifact_checked
-        or runtime_workspace is None
-        or canonical_harness != "codex"
-        or event_name != "PreToolUse"
-    ):
-        return False
-    tool_name = payload.get("tool_name")
-    if not isinstance(tool_name, str) or tool_name.strip().lower() != "apply_patch":
+    The resident decides on its own that the call is a Codex ``apply_patch``
+    under a checked runtime artifact and that the patch text neither deletes
+    nor moves a file; this answers only the question that needs the host's
+    filesystem.
+    """
+
+    if runtime_workspace is None:
         return False
     tool_input = payload.get("tool_input", payload.get("arguments"))
     if not isinstance(tool_input, Mapping):
         return False
     typed_input = cast(Mapping[str, object], tool_input)
-    patch_texts = tuple(
-        value
-        for key in ("patch", "input", "command")
-        if isinstance((value := typed_input.get(key)), str) and value.strip()
-    )
-    if not patch_texts or any("*** Delete File:" in text or "*** Move to:" in text for text in patch_texts):
-        return False
     try:
         target_paths = apply_patch_target_paths(typed_input)
     except NativeHookAdapterError:
@@ -119,4 +107,4 @@ def verified_non_sensitive_codex_apply_patch(
     return True
 
 
-__all__ = ["verified_non_sensitive_codex_apply_patch"]
+__all__ = ["apply_patch_targets_are_non_sensitive"]

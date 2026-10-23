@@ -1,3 +1,6 @@
+#[path = "../../../test_support/unique_nanos.rs"]
+mod unique_nanos;
+
 use guard_contracts::NativeHookRequestV1;
 use guard_hook_core::review_post_tool;
 use serde_json::json;
@@ -7,10 +10,7 @@ struct TestRoot(std::path::PathBuf);
 
 impl TestRoot {
     fn new() -> Self {
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = crate::unique_nanos::unique_nanos();
         let mut attempt = 0;
         let root = loop {
             let root = std::env::temp_dir().join(format!(
@@ -224,6 +224,67 @@ fn resolved_directory_target_is_rechecked_before_inline_output_allow() {
     assert_ne!(
         selector_redirected_result.model_output_action,
         "allow_original"
+    );
+
+    // An ordinary feature folder inside the workspace shares a name with the
+    // external credential parts list. Its names-only listing stays visible.
+    let feature = workspace.join("src/lib/auth");
+    std::fs::create_dir_all(&feature).unwrap();
+    let mut feature_request = request(&workspace, "README.md\n");
+    feature_request
+        .payload
+        .as_object_mut()
+        .unwrap()
+        .remove("guard_source_ref");
+    feature_request.payload["tool_input"]["path"] = json!("src/lib/auth");
+    feature_request.payload["resolved_directory_target"] = json!(feature.to_string_lossy());
+    assert_eq!(
+        review_post_tool(&feature_request).model_output_action,
+        "allow_original"
+    );
+
+    // The same name inside the workspace pointing out of it is still refused.
+    let swapped = workspace.join("src/lib/secrets");
+    std::os::unix::fs::symlink(&credentials, &swapped).unwrap();
+    let mut swapped_request = feature_request.clone();
+    swapped_request.payload["tool_input"]["path"] = json!("src/lib/secrets");
+    swapped_request.payload["resolved_directory_target"] = json!(swapped.to_string_lossy());
+    assert_eq!(
+        review_post_tool(&swapped_request).reason_code,
+        "sensitive_path"
+    );
+
+    // A credential store inside the workspace keeps its review, both named
+    // directly and behind a feature-named link swapped in after PreToolUse.
+    let store = workspace.join("config/prod-secrets");
+    std::fs::create_dir_all(&store).unwrap();
+    let mut store_request = feature_request.clone();
+    store_request.payload["tool_input"]["path"] = json!("config/prod-secrets");
+    store_request.payload["resolved_directory_target"] = json!(store.to_string_lossy());
+    assert_eq!(
+        review_post_tool(&store_request).reason_code,
+        "sensitive_path"
+    );
+    let feature_link = workspace.join("src/lib/authorization");
+    std::os::unix::fs::symlink(&store, &feature_link).unwrap();
+    let mut feature_link_request = feature_request.clone();
+    feature_link_request.payload["tool_input"]["path"] = json!("src/lib/authorization");
+    feature_link_request.payload["resolved_directory_target"] =
+        json!(feature_link.to_string_lossy());
+    assert_eq!(
+        review_post_tool(&feature_link_request).reason_code,
+        "sensitive_path"
+    );
+
+    // So does a credential-named file inside the workspace.
+    let key_file = workspace.join("config/credentials");
+    std::fs::write(&key_file, "placeholder\n").unwrap();
+    let mut key_file_request = feature_request.clone();
+    key_file_request.payload["tool_input"]["path"] = json!("config/credentials");
+    key_file_request.payload["resolved_directory_target"] = json!(key_file.to_string_lossy());
+    assert_eq!(
+        review_post_tool(&key_file_request).reason_code,
+        "sensitive_path"
     );
 }
 

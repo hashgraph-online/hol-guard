@@ -7,6 +7,7 @@ import {
   previewLocalCliMutation,
   recognizeLocalCli,
   refreshMcpInventory,
+  unreviewedToolChangeCount,
   type LocalCliCommand,
   type LocalCliCommandState,
   type LocalCliItem,
@@ -19,12 +20,14 @@ import { McpDeclaredSkills } from "./mcp-declared-skills";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError } from "./components/protection-primitives";
 import { customExtensionContinuityView } from "../managed-controls/custom-extension-continuity";
-import { commandPermissionChanges, mcpCatalogCopy, mcpToolCanReceiveDirectAllow, rebaseCommandDraft } from "./mcp-catalog-state";
+import { catalogRevisionChanged, commandPermissionChanges, mcpCatalogCopy, mcpToolCanReceiveDirectAllow, rebaseCommandDraft } from "./mcp-catalog-state";
 import { McpProviderActions, type ProviderActionDraft } from "./mcp-provider-actions";
 import { ProviderWorkflows } from "./provider-workflows";
-import { bulkPolicyCopy, continuityCopy, customExtensionStateLabel, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, mcpPermissionStatusLabel, nativePublicationMessage, randomToken, SUGGESTED_RULES_NOTICE } from "./local-cli-panel-copy";
-import { customExtensionDisplayName, hasSuggestedRules, prefillSuggestedStates } from "./custom-extension-profile";
+import { bulkPolicyCopy, connectorGroupOutcomeCopy, continuityCopy, customExtensionStateLabel, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, FRESH_TOTP_REQUIRED_MESSAGE, isFreshTotpRequired, keepChoicesCopy, mcpPermissionStatusLabel, nativePublicationMessage, randomToken, SUGGESTED_RULES_NOTICE } from "./local-cli-panel-copy";
+import { connectorGroupOutcome, connectorSetupMatch, customExtensionDisplayName, hasSuggestedRules, prefillSuggestedStates, type ConnectorSetupLink } from "./custom-extension-profile";
+import { ConnectorSetupBanner } from "./connector-setup-banner";
 import { CustomExtensionReviewModal } from "./local-cli-review-modal";
+import { LocalCliCapabilities } from "./local-cli-capabilities";
 import { canForgetLocalCli, ForgetLocalCliButton, lastSeenCopy } from "./local-cli-forget";
 
 export { customExtensionStateLabel } from "./local-cli-panel-copy";
@@ -46,11 +49,16 @@ export function LocalCliDetail(props: {
   revision: number;
   continuity: LocalCliListResponse["cloud"];
   nativePublication?: LocalCliListResponse["native_publication"];
+  setupLink?: ConnectorSetupLink | null;
   onBack: () => void;
   onRefresh: () => Promise<void>;
 }) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const [pending, setPending] = useState<LocalCliState | null>(null);
+  // The catalog revision the open confirmation was made against; a save reviews only that listing.
+  const reviewedRevision = useRef<number | null>(null);
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
   const [commands, setCommands] = useState(() => prefillSuggestedStates(props.item));
   const [providerDrafts, setProviderDrafts] = useState<Record<string, ProviderActionDraft>>({});
   const previousItem = useRef(props.item);
@@ -60,13 +68,25 @@ export function LocalCliDetail(props: {
   const catalogController = useRef<AbortController | null>(null);
   useEffect(() => () => catalogController.current?.abort(), []);
   const [error, setError] = useState<string | null>(null);
+  const [freshTotpRequired, setFreshTotpRequired] = useState(false);
   const added = props.item.state !== "unset";
   const commandChanges = commandPermissionChanges(props.item.commands, commands);
   const commandsDirty = commandChanges.length > 0;
+  // Saving the current choices reviews tools the last listing flagged as new or changed.
+  const unreviewedTools = props.item.surface === "mcp" ? unreviewedToolChangeCount(props.item) : 0;
+  const [recommended, setRecommended] = useState(false);
+  const [setupOutcome, setSetupOutcome] = useState<string | null>(null);
   useEffect(() => {
     const previous = previousItem.current;
+    const catalogChanged = catalogRevisionChanged(previous, props.item);
+    if (catalogChanged && pendingRef.current !== null) {
+      // The confirmation does not show tools listed since it opened, so reopen it for the current catalog.
+      setPending(null);
+      setError("The tool list changed. Review the current tools again.");
+    }
     if (previous.cli_id !== props.item.cli_id || previous.identity_hash !== props.item.identity_hash) {
       setPending(null);
+      setSetupOutcome(null);
       setProviderDrafts({});
       setCatalogError(null);
       setError(previous.cli_id === props.item.cli_id ? "This extension changed. Review its permissions again." : null);
@@ -75,16 +95,30 @@ export function LocalCliDetail(props: {
       if (previous.cli_id !== props.item.cli_id || previous.identity_hash !== props.item.identity_hash) {
         return prefillSuggestedStates(props.item);
       }
-      const changed = previous.mcp_catalog?.revision !== props.item.mcp_catalog?.revision
-        ? props.item.mcp_catalog?.changes?.changed : [];
+      const changed = catalogChanged ? props.item.mcp_catalog?.changes?.changed : [];
       return rebaseCommandDraft(current, previous.commands, props.item.commands, changed);
     });
     previousItem.current = props.item;
   }, [props.item]);
-  const openPending = useCallback(async (state: LocalCliState) => {
+  const setupMatch = props.setupLink ? connectorSetupMatch(props.item, props.setupLink) : null;
+  const openPending = useCallback(async (state: LocalCliState, fromSetupLink = false) => {
+    setFreshTotpRequired(false);
+    const started = previousItem.current;
     await refreshApprovalGate();
+    if (catalogRevisionChanged(started, previousItem.current)) {
+      // The tool list changed during the approval check, so the draft was never reviewed against it.
+      setError("The tool list changed. Review the current tools again.");
+      return;
+    }
+    setRecommended(fromSetupLink);
+    reviewedRevision.current = started.mcp_catalog?.revision ?? null;
     setPending(state);
   }, [refreshApprovalGate]);
+  const requestRecommended = useCallback(() => {
+    // The recommended setup is the suggested command states, never an unsaved draft.
+    setCommands(prefillSuggestedStates(props.item));
+    return openPending("allowed", true);
+  }, [openPending, props.item]);
   const requestAdd = useCallback(() => openPending("allowed"), [openPending]);
   const requestAllow = useCallback(() => openPending("allowed"), [openPending]);
   const requestBlock = useCallback(() => openPending("blocked"), [openPending]);
@@ -143,23 +177,37 @@ export function LocalCliDetail(props: {
         state: pending,
         previous_revision: props.revision,
         session_nonce: randomToken(),
-        commands: commandStatesPayload(commands),
+        commands: commandStatesPayload(recommended ? prefillSuggestedStates(props.item) : commands),
+        // These choices were made against this catalog; saving them reviews its new and changed tools.
+        ...(pending !== "unset" && reviewedRevision.current !== null
+          ? { mcp_catalog_revision: reviewedRevision.current } : {}),
         ...(pending !== "unset" && Object.keys(providerDrafts).length > 0
           ? { provider_actions: Object.values(providerDrafts) } : {}),
+        // Same endpoint and proof as any other change; the daemon re-checks the request belongs to this connector.
+        ...(recommended && pending === "allowed" && props.setupLink && setupMatch === "ready"
+          ? { connector_group_request_id: props.setupLink.requestId } : {}),
         ...credentials,
       };
       await previewLocalCliMutation(payload);
-      await applyLocalCliMutation(payload);
+      const outcome = connectorGroupOutcome(await applyLocalCliMutation(payload));
+      // Only the apply that resolved the group keeps its outcome; any later change clears it.
+      setSetupOutcome(outcome ? connectorGroupOutcomeCopy(outcome) : null);
       setProviderDrafts({});
       await props.onRefresh();
       await refreshApprovalGate();
       setPending(null);
     } catch (caught) {
-      setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not update this custom extension.");
+      if (isFreshTotpRequired(caught)) {
+        setFreshTotpRequired(true);
+        await refreshApprovalGate().catch(() => undefined);
+        setError(FRESH_TOTP_REQUIRED_MESSAGE);
+      } else {
+        setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not update this custom extension.");
+      }
     } finally {
       setBusy(false);
     }
-  }, [commands, providerDrafts, pending, props, refreshApprovalGate]);
+  }, [commands, providerDrafts, pending, props, recommended, refreshApprovalGate, setupMatch]);
 
   useEffect(() => {
     void resolveApprovalGate({ failClosed: true }).catch(() => {
@@ -187,6 +235,11 @@ export function LocalCliDetail(props: {
             <span className="text-xs text-slate-500">{lastSeenCopy(props.item.last_seen_at)}</span>
           ) : null}
         </p>
+        {props.setupLink && setupMatch ? (
+          <ConnectorSetupBanner name={customExtensionDisplayName(props.item)} heldIdentityHash={props.setupLink.identityHash}
+            currentIdentityHash={props.item.identity_hash}
+            match={setupMatch} busy={busy} outcome={setupOutcome} onSetUp={requestRecommended} />
+        ) : null}
         {continuityCopy(props.item) ? (
           <div className="mt-3 max-w-2xl rounded-xl border border-slate-200 bg-slate-50 p-3" data-testid="custom-extension-continuity">
             <p className="text-sm font-semibold text-brand-dark">{continuityCopy(props.item)?.title}</p>
@@ -238,6 +291,9 @@ export function LocalCliDetail(props: {
           )}
         </div>
       </header>
+      {props.item.surface === "cli" && props.item.state === "allowed" ? (
+        <LocalCliCapabilities item={props.item} revision={props.revision} onRefresh={props.onRefresh} />
+      ) : null}
       {props.item.surface === "mcp" && added ? (
         <section className="mt-5 rounded-xl border border-slate-200 p-4" aria-labelledby="mcp-publication-heading">
           <h2 id="mcp-publication-heading" className="text-sm font-semibold text-brand-dark">{props.item.permission_scope === "configured-connection" ? "Policy status" : "Enforcement status"}</h2>
@@ -256,6 +312,7 @@ export function LocalCliDetail(props: {
         <section className="mt-6 border-b border-slate-200 pb-5" aria-labelledby="mcp-inventory-heading" aria-busy={catalogBusy}>
           <h2 id="mcp-inventory-heading" className="text-sm font-semibold text-brand-dark">{catalog.title}</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-brand-dark/75">{catalog.description}</p>
+          {props.item.remote_origin && !catalogBusy ? null : <>
           <p className="mt-2 text-xs leading-5 text-brand-dark/75">Refresh starts this connection’s configured server to list tools. It does not grant execution permission.</p>
           <button
             type="button"
@@ -267,6 +324,7 @@ export function LocalCliDetail(props: {
           </button>
           {catalogBusy ? <button type="button" onClick={() => catalogController.current?.abort()}
             className="ml-3 min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark">Cancel refresh</button> : null}
+          </>}
           {catalogError ? <p role="alert" className="mt-3 max-w-2xl text-sm leading-6 text-red-700">{catalogError}</p> : null}
           {props.item.mcp_catalog ? (
             <p className="mt-2 text-xs leading-5 text-brand-dark/75">
@@ -303,6 +361,8 @@ export function LocalCliDetail(props: {
           <details className="mt-3 text-sm text-brand-dark/75">
             <summary className="min-h-11 cursor-pointer py-3 font-semibold">Connection details</summary>
             <p className="break-all font-mono text-xs leading-6">{props.item.example_label}</p>
+            {props.item.remote_origin
+              ? <p className="mt-2 break-all">Last seen remote origin: <span className="font-mono text-xs">{props.item.remote_origin}</span></p> : null}
             <p className="mt-2">Protocol: {props.item.mcp_catalog?.protocol_version ?? "Not verified"}</p>
             <p className="mt-2">Permission scope: {props.item.permission_scope === "configured-connection"
               ? "This configured host connection. Provider account and native host-hook binding are not verified."
@@ -370,6 +430,16 @@ export function LocalCliDetail(props: {
               Execution wrappers and unlisted tools keep their separate review settings.
             </p>
           ) : null}
+          {added && !commandsDirty && unreviewedTools > 0 ? (
+            <div className="guard-review-bar" data-testid="custom-extension-keep-choices">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-brand-dark">{keepChoicesCopy(unreviewedTools)}</p>
+                <button type="button" disabled={busy} className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white" onClick={requestSaveCommands}>
+                  Keep these choices
+                </button>
+              </div>
+            </div>
+          ) : null}
           {commandsDirty ? (
             <div className="guard-review-bar" data-testid="custom-extension-review-bar">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -405,6 +475,7 @@ export function LocalCliDetail(props: {
           busy={busy}
           error={error}
           approvalGate={resolvedApprovalGate}
+          requireFreshTotp={freshTotpRequired}
           onCancel={clearPending}
           onConfirm={confirmChange}
         />

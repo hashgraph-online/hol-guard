@@ -11,6 +11,7 @@ import {
   isLocalCliId,
   normalizeLocalCliItem,
   normalizeLocalCliList,
+  readJson,
   preferredPackageScriptExtension,
   seenSuggestionMeta,
   suggestedCustomExtensions,
@@ -21,7 +22,9 @@ import {
   suggestedPackageScriptExtensions,
   suggestedSeenExtensions,
   waitForMcpDiscoveryJob,
+  unreviewedToolChangeCount,
 } from "./local-cli-api";
+import { keepChoicesCopy } from "./protection-center/local-cli-panel-copy";
 import { packageScriptQueryFrom } from "./protection-center/add-custom-extension-project";
 import { parseProtectionRoute, localCliHref, addCustomExtensionHref } from "./local-cli-links";
 import { fetchLocalCliApi } from "./guard-api";
@@ -404,4 +407,25 @@ assert.equal(addedCustomExtensions(mixedValidity.items).length, 2);
   }
   assert.match(requested, /\/v1\/local-clis\/forget$/);
   await assert.rejects(fetchLocalCliApi("/v1/local-clis/forget-all"), /Invalid local CLI API path/);
+}
+
+{
+  const failure = (status: number, body: unknown) => readJson(new Response(JSON.stringify(body), { status }));
+  await assert.rejects(failure(401, { error: "unauthorized" }), /could not confirm this dashboard session\. Reload this page/);
+  await assert.rejects(failure(401, { error: "unauthorized", message: " " }), /could not confirm this dashboard session/);
+  await assert.rejects(failure(409, { error: "revision_conflict", message: "Reload first." }), /Reload first\./);
+  await assert.rejects(failure(500, { error: "internal" }), /could not update this custom extension/);
+}
+
+{
+  // New and changed tools count until a saved choice reviews them; removed and
+  // stale ones do not ask for a choice.
+  const changes = { added: ["read", "write"], changed: ["delete"], removed: ["old"], stale: ["slow"] };
+  const listed = { ...item, surface: "mcp" as const, mcp_catalog: { ...item.mcp_catalog, changes } } as typeof item;
+  assert.equal(unreviewedToolChangeCount(listed), 3);
+  const reviewed = { ...listed, mcp_catalog: { ...listed.mcp_catalog, changes: { added: [], changed: [], removed: ["old"], stale: [] } } } as typeof item;
+  assert.equal(unreviewedToolChangeCount(reviewed), 0);
+  assert.equal(unreviewedToolChangeCount({ ...item, mcp_catalog: undefined } as typeof item), 0);
+  assert.equal(keepChoicesCopy(1), "1 tool is new or changed since you last saved. Keep the choices shown to mark them reviewed.");
+  assert.equal(keepChoicesCopy(55), "55 tools are new or changed since you last saved. Keep the choices shown to mark them reviewed.");
 }

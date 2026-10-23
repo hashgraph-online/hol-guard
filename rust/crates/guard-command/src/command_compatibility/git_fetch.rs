@@ -6,9 +6,10 @@ const MAX_REF_LENGTH: usize = 256;
 
 /// True only for a plain named-origin refresh: a bare `git` invocation with no
 /// global options, wrappers, or environment, the literal `origin` remote,
-/// quiet/prune style flags, and simple named refs. This mirrors Python's
-/// `origin_shaped_git_fetch_args`. It does not prove repository configuration,
-/// so the observation stays a review rule an administrator must allow.
+/// quiet/prune/dry-run style flags, and simple named refs. It reads the shape
+/// the retired `origin_shaped_git_fetch_args` read, plus the dry run that
+/// describes the same refresh. It does not prove repository configuration, so
+/// the observation stays a review rule an administrator must allow.
 pub(super) fn plain_origin_refresh(segment: &CommandSegmentV1, command_index: usize) -> bool {
     if command_index != 0
         || segment.executable.as_deref() != Some("git")
@@ -47,9 +48,12 @@ pub(super) fn origin_shaped_arguments(arguments: &[String]) -> bool {
     let mut remote_seen = false;
     let mut refs = 0usize;
     for argument in arguments {
+        // `--dry-run` reports what the same refresh would bring and updates
+        // no ref, so it is the refresh these flags already describe. Fetch
+        // spells it long only: its `-n` is `--no-tags`.
         if matches!(
             argument.as_str(),
-            "-q" | "--quiet" | "--no-tags" | "--prune" | "-p"
+            "-q" | "--quiet" | "--no-tags" | "-n" | "--prune" | "-p" | "--dry-run"
         ) {
             continue;
         }
@@ -97,6 +101,9 @@ mod tests {
             "git fetch --quiet origin",
             "git fetch -q origin main release/3.0",
             "git fetch origin --prune --no-tags",
+            "git fetch --dry-run origin",
+            "git fetch origin main --dry-run",
+            "git fetch -n origin",
         ] {
             assert!(plain_origin_refresh(&segment(command), 0), "{command}");
         }
@@ -113,6 +120,7 @@ mod tests {
             "git fetch origin -c core.sshCommand=payload",
             "git fetch origin --config=x=y",
             "git fetch origin --force",
+            "git fetch origin --dry-run=payload",
             "git fetch origin +main:main",
             "git fetch origin $HOME",
             "git -c core.sshCommand=payload fetch origin",

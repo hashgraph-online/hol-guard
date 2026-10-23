@@ -29,7 +29,7 @@ from .native_context import _resolve_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
 from .native_store_policy import _payload
 
-CISCO_PREFLIGHT_FEATURE = "cisco-preflight-v1"
+CISCO_PREFLIGHT_FEATURE = "cisco-preflight-v2"
 _REQUEST_SCHEMA = "guard-cisco-preflight-request.v1"
 _RESULT_SCHEMA = "guard-cisco-preflight-result.v1"
 _TIMEOUT_SECONDS = 10.0
@@ -131,12 +131,20 @@ def scan_action_for_cisco_evidence(
     *,
     workspace: Path | str | None,
     approved_scan_roots: Iterable[Path | str] = (),
+    shell_cwds: Iterable[object] = (),
     mode: str = "auto",
     sources: Iterable[str] = ("skill", "mcp"),
     timeout_seconds: float = _DEFAULT_SCANNER_TIMEOUT_SECONDS,
     guard_home: Path | None = None,
 ) -> tuple[GuardRiskSignalV3, ...]:
-    """Cisco preflight evidence for the skill or MCP files an action changes."""
+    """Cisco preflight evidence for the skill or MCP files an action changes.
+
+    ``shell_cwds`` are the shell working directories the caller proved for this
+    action. A relative target resolves against one of them, so the resident
+    plans the action against each in turn and approves the rest for every one
+    of those plans. It derives the scan roots, so the directories are passed as
+    the caller read them.
+    """
 
     requested = frozenset(sources)
     if action.action_type not in _FILE_ACTIONS or not any(
@@ -159,6 +167,7 @@ def scan_action_for_cisco_evidence(
             "cwd": cwd,
             "home": home,
             "approved_scan_roots": [str(root) for root in approved_scan_roots],
+            "shell_cwds": [value for value in shell_cwds if isinstance(value, str)],
             "target_paths": list(action.target_paths),
             "sources": sorted(requested),
         },

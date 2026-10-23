@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
+from functools import cache
 from pathlib import Path
 
 import pytest
@@ -16,17 +18,20 @@ from codex_plugin_scanner.guard.temporary_mcp_approvals import temporary_mcp_gra
 
 from . import mcp_extension_driver as extension_driver
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .mcp_case_batches import package_case_batches
 from .mcp_recorded_expectations import expected_decision, recorded
 from .test_guard_mcp_server_grants import _artifact, _AuthorityStore, _layer
 from .test_guard_temporary_mcp_approvals import _artifact as _browser_click_artifact
 from .test_guard_temporary_mcp_approvals import _evaluate
 
 _ACTIONS = ("allow", "warn", "review", "require-reapproval", "block")
+_LOCKDOWN_REASON = "This MCP tool is blocked by its authenticated extension authority."
+_MCP_SOURCES = Path(__file__).resolve().parents[1] / "contributions" / "mcp-servers"
 
 
-def _package_cases() -> list[tuple[str, str, str, str, str]]:
+def _cases_from(payloads) -> list[tuple[str, str, str, str, str]]:
     cases: list[tuple[str, str, str, str, str]] = []
-    for payload in load_mcp_contribution_payloads():
+    for payload in payloads:
         launch = payload["launch"]
         if launch["kind"] != "package-launcher":
             continue
@@ -36,12 +41,31 @@ def _package_cases() -> list[tuple[str, str, str, str, str]]:
     return cases
 
 
+def _package_cases(root: Path | None = None) -> list[tuple[str, str, str, str, str]]:
+    return _cases_from(load_mcp_contribution_payloads(root))
+
+
+# Collection precedes the fixtures that route authenticated native metadata, and
+# validating a contribution asks the resident for its URL grammar. Parametrize
+# from the source files as written; every test compares these cases with the
+# resident-validated load, so a contribution validation would change still fails.
+_SOURCE_PACKAGE_CASES = _cases_from(
+    json.loads(path.read_text(encoding="utf-8")) for path in sorted(_MCP_SOURCES.glob("mcp.*.json"))
+)
+
+
+@pytest.fixture(scope="module")
+def native_package_cases():
+    """Defer the per-worker inventory load until function fixtures route native calls."""
+    return cache(_package_cases)
+
+
 def _identity(command: str, package: str):
     args = ("-y", package) if command == "npx" else (package,)
     return build_mcp_server_identity(config_path="", command=command, args=args, transport="stdio")
 
 
-def test_recorded_expectations_cover_every_state_lockdown_and_action() -> None:
+def test_recorded_expectations_cover_every_state_lockdown_and_action(native_package_cases) -> None:
     rows = {(row["state"], row["lockdown"], row["action"]) for row in recorded()["decision_table"]}
     assert rows == {
         (state, lockdown, action)
@@ -49,21 +73,34 @@ def test_recorded_expectations_cover_every_state_lockdown_and_action() -> None:
         for lockdown in (False, True)
         for action in _ACTIONS
     }
-    assert {state for *_rest, state in _package_cases()} <= {"allow", "review", "block", "inherit"}
+    native_cases = native_package_cases()
+    assert {state for *_rest, state in native_cases} <= {"allow", "review", "block", "inherit"}
+    assert sorted(native_cases) == sorted(_SOURCE_PACKAGE_CASES)
 
 
 @pytest.mark.parametrize("lockdown", [False, True])
-def test_resident_matches_the_recorded_expectations_for_every_bundled_package(lockdown: bool) -> None:
+@pytest.mark.parametrize(
+    "case_batch", package_case_batches(_SOURCE_PACKAGE_CASES), ids=lambda cases: cases[0][0] + "-" + cases[0][3]
+)
+def test_resident_matches_the_recorded_expectations_for_every_bundled_package(
+    lockdown: bool, case_batch: list[tuple[str, str, str, str, str]], native_package_cases
+) -> None:
+    selected = set(case_batch)
+    native_batch = [case for case in native_package_cases() if case in selected]
+    assert sorted(native_batch) == sorted(case_batch)
     mismatches: list[str] = []
-    shared_home = _AuthorityStore()  # one resident for the whole matrix
-    for mcp_id, command, package, tool, state in _package_cases():
+    for mcp_id, command, package, tool, state in native_batch:
         catalog_id = "command." + mcp_id.replace(".", "-")
         layer = _layer(ControlLayerKind.LOCAL_ADMIN, catalog_id, ControlState.ENABLED, lockdown=lockdown)
         store = _AuthorityStore((layer,))
-        store.guard_home, store.path = shared_home.guard_home, shared_home.path
         artifact = _artifact(_identity(command, package), tool)
         for action in _ACTIONS:
-            expected = expected_decision(state, lockdown, action)
+            if lockdown:
+                # The resident enforces the authenticated global lockdown before any
+                # per-tool state: every call is blocked unless the request already is.
+                expected = None if action == "block" else ("block", recorded()["source"], _LOCKDOWN_REASON)
+            else:
+                expected = expected_decision(state, lockdown, action)
             actual = extension_driver.apply_contributed_mcp_decision(store, artifact, action)
             if expected != actual:
                 mismatches.append(f"{mcp_id} {tool} {action}: {expected} != {actual}")

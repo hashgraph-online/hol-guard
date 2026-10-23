@@ -1,4 +1,4 @@
-//! Data contract matching Python's `_ExecutableContractBase`.
+//! Data contract for the executable flag matchers.
 //!
 //! The trusted compiler emits normalized values. Validation rejects ambiguous
 //! inverse pairs and contradictory requirements before interpreting a program.

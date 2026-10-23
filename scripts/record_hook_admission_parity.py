@@ -2,8 +2,10 @@
 
 The vectors pin the behaviour of the pure helpers the daemon runs before a
 runtime hook reaches the native edge (lane selection, scheduler client key,
-payload size, remaining-budget hints, deadline math, workspace and workdir
-normalisation).  A native handler that replaces them must reproduce every vector.
+payload size, remaining-budget hints, deadline math, and the workspace and
+workdir spellings it reads out of a request).  A native handler that replaces
+them must reproduce every vector.  What a spelling means is the runtime's to
+settle: `rust/crates/guard-runtime/src/hook_path_rules_tests.rs` pins that.
 Run without arguments to rewrite the fixture; the test module compares it.
 """
 
@@ -111,15 +113,12 @@ def _vectors() -> dict[str, object]:
                 "remaining_payload_keys": sorted(working),
             }
         )
-    workspaces = [
-        {"value": value, "normalized": handler._normalized_hook_workspace_string(value)} for value in WORKSPACE_STRINGS
-    ]
+    workspaces = [{"value": value, "spelling": handler._hook_workspace_spelling(value)} for value in WORKSPACE_STRINGS]
     workdirs = []
     for payload in WORKDIR_PAYLOADS:
         provided, workdir = handler._runtime_hook_exec_command_workdir(payload)
         workdirs.append({"payload": payload, "provided": provided, "workdir": workdir})
     deadlines = _deadline_vectors(server, RuntimeHookDeadline)
-    directory_authority = _directory_authority_vectors()
     return {
         "schema": "hook-admission-parity.v1",
         "lane": lane,
@@ -129,7 +128,6 @@ def _vectors() -> dict[str, object]:
         "workspace_string": workspaces,
         "exec_command_workdir": workdirs,
         "deadline": deadlines,
-        "directory_authority": directory_authority,
     }
 
 
@@ -168,45 +166,6 @@ def _deadline_vectors(server: object, deadline_type: type) -> list[dict[str, obj
             )
     finally:
         from_hint.__kwdefaults__["monotonic"] = original
-    return vectors
-
-
-DIRECTORY_CANDIDATES: list[str] = [
-    "",
-    "relative/dir",
-    "~no-such-user-for-parity",
-    "{root}",
-    "{root}/",
-    "{root}/a",
-    "{root}/a/./b",
-    "{root}/a/../b",
-    "{root}/../escape",
-    "{root}-sibling",
-    "{root}/a/..",
-]
-
-
-def _directory_authority_vectors() -> list[dict[str, object]]:
-    """Record accepted canonical paths and rejection reasons of the directory validator."""
-    import tempfile
-
-    from codex_plugin_scanner.guard.directory_path_authority import (
-        DirectoryPathTrustError,
-        validate_guard_directory_path,
-    )
-
-    vectors: list[dict[str, object]] = []
-    with tempfile.TemporaryDirectory() as raw_root:
-        root = Path(raw_root).resolve()
-        for template in DIRECTORY_CANDIDATES:
-            candidate = template.replace("{root}", root.as_posix())
-            try:
-                accepted = validate_guard_directory_path(candidate, (root,))
-            except DirectoryPathTrustError as error:
-                outcome: dict[str, object] = {"rejected": error.reason}
-            else:
-                outcome = {"accepted": Path(accepted).relative_to(root).as_posix()}
-            vectors.append({"candidate": template, **outcome})
     return vectors
 
 

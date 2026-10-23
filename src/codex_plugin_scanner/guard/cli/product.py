@@ -16,6 +16,7 @@ from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
 from ..models import GuardArtifact, HarnessDetection
 from ..native_consumer_artifact_project import NativeConsumerProjectError
 from ..redaction import redact_local_path
+from ..runtime.connector_setup_items import connector_setup_status
 from ..store import GuardStore
 from ..synced_policy import synced_policy_bundle_validation
 from .connect_flow import (
@@ -134,6 +135,7 @@ def _build_guard_product_payload(
         "managed_harnesses": managed_harnesses,
         "recommended_harness": recommended["harness"] if recommended is not None else None,
         "harnesses": harnesses,
+        "connector_setup": connector_setup_status(store, approval_center_url),
     }
     payload.update(_build_cloud_context(store))
     if include_steps:

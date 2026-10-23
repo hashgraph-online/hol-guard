@@ -22,8 +22,11 @@ pytest_plugins = [
     "tests.bundle_first_cloud",
     "tests.approval_mode_fixtures",
     "tests.approval_reuse_fixtures",
+    "tests.containment_resident",
     "tests.native_runtime_fixtures",
+    "tests.native_object_runtime",
     "tests.native_resident_teardown",
+    "tests.optional_command_catalog_fixtures",
 ]
 
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
@@ -34,6 +37,13 @@ if not use_installed_package and str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 if str(SUPPORT_PATH) not in sys.path:
     sys.path.insert(0, str(SUPPORT_PATH))
+
+
+# The runtime refuses to compile an uninstalled bundle unless a caller that owns
+# a checkout stages it. The suite runs against this checkout, so it registers one.
+from tests.development_authoring_staging import register_checkout_staging  # noqa: E402
+
+register_checkout_staging()
 
 existing_pythonpath = os.environ.get("PYTHONPATH", "")
 pythonpath_entries = [entry for entry in existing_pythonpath.split(os.pathsep) if entry]
@@ -69,11 +79,42 @@ def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> bool:
     monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
     monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
     monkeypatch.setenv("HOL_GUARD_RESIDENT_TEST_SEAMS", "1")
+    # Catalog sync ships on. Tests that exercise it opt in explicitly, so the
+    # rest keep a runtime session without catalog posture.
+    if "GUARD_EXTENSION_CATALOG_SYNC_V1" not in os.environ:
+        monkeypatch.setenv("GUARD_EXTENSION_CATALOG_SYNC_V1", "false")
     if "HOL_GUARD_NATIVE" not in os.environ:
         regression = os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1"
         monkeypatch.setenv("HOL_GUARD_NATIVE", "force" if regression else "auto")
         return not regression
     return False
+
+
+@pytest.fixture(autouse=True)
+def _fresh_verified_runtime_copy() -> Iterator[None]:
+    """Start each test without the process's reused runtime copy."""
+    from codex_plugin_scanner.guard.extension_builder import native_executable_root
+
+    native_executable_root.release_copies()
+    yield
+    native_executable_root.release_copies()
+
+
+@pytest.fixture(autouse=True)
+def _checkout_runtime_judges_distribution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let a source checkout validate distribution roots with the pinned runtime."""
+    from tests.native_distribution_support import route_distribution
+
+    route_distribution(monkeypatch)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep reused native answers from crossing tests that stub native replies."""
+    from codex_plugin_scanner.guard.catalog_delivery import installed_bundle, object_native
+
+    for module in (installed_bundle, object_native):
+        monkeypatch.setattr(module, "_ANSWERS", type(module._ANSWERS)())
 
 
 @pytest.fixture(autouse=True)

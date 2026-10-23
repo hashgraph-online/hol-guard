@@ -19,9 +19,20 @@ pub(super) fn resolve_chdir(value: &str, context: super::super::PathContext<'_>)
         .then(|| canonical.to_str().map(str::to_owned))?
 }
 
+/// Whether the command creates the directories leading to its destination.
+/// `git worktree add` does, so a destination below missing parents is still
+/// ordinary. `git clone` is reviewed on the same proof but names a parent
+/// that has to be there already, so missing components keep their review.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(in crate::pretool) enum MissingParents {
+    Created,
+    Required,
+}
+
 pub(in crate::pretool) fn fresh_destination(
     value: &str,
     context: super::super::PathContext<'_>,
+    missing_parents: MissingParents,
 ) -> Option<PathBuf> {
     let home = std::fs::canonicalize(Path::new(context.home_dir?)).ok()?;
     let cwd = std::fs::canonicalize(Path::new(context.cwd?)).ok()?;
@@ -51,20 +62,37 @@ pub(in crate::pretool) fn fresh_destination(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         _ => return None,
     }
+    // Git creates missing parents. Check links only through the nearest
+    // existing ancestor, then retain every missing component in the final
+    // destination so the home and protected-path screens still judge it.
+    let mut existing_parent = parent;
+    loop {
+        match std::fs::symlink_metadata(existing_parent) {
+            Ok(_) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                existing_parent = existing_parent.parent()?;
+            }
+            Err(_) => return None,
+        }
+    }
+    if missing_parents == MissingParents::Required && existing_parent != parent {
+        return None;
+    }
     // The parent may be reached through a symlink, as `/tmp` is on macOS.
     // Everything below judges the canonical directory exactly as if it had
     // been spelled, so a link cannot lead anywhere the spelling could not;
     // a link someone else could swap before Git runs is never followed.
-    if !fixed_symlinks(parent, &home) {
+    if !fixed_symlinks(existing_parent, &home) {
         return None;
     }
-    let canonical_parent = std::fs::canonicalize(parent).ok()?;
+    let destination = super::super::worktree_writes::canonical_write_target(&target)?;
+    let canonical_parent = destination.parent()?;
     // A checkout below the shared temporary directory, where the user owns
     // every directory on the way, is as private as one below home. Directly
     // in the sticky root or the user's own temporary directory, the leaf
     // must not exist yet, which the check above already proves.
-    let temporary = super::super::git_routes::temporary_checkout_parent(&canonical_parent, context);
-    if !canonical_parent.is_dir() {
+    let temporary = fresh_temporary_parent(canonical_parent, context);
+    if !existing_parent.is_dir() {
         return None;
     }
     if !canonical_parent.starts_with(&home) && !temporary {
@@ -74,11 +102,13 @@ pub(in crate::pretool) fn fresh_destination(
     if leaf.starts_with('.') || leaf == ".." {
         return None;
     }
-    let destination = canonical_parent.join(leaf);
+    // Windows canonical paths carry a `\\?\` prefix, which the write check
+    // refuses as a wildcard, so it sees the drive path the prefix stands for.
+    let spelled = crate::runtime_read_paths::strip_verbatim_prefix(destination.clone());
     if protected_worktree_destination(&destination)
         || !(temporary
             || super::super::safe_writes::bounded_native_file_write_target(
-                destination.to_str()?,
+                spelled.to_str()?,
                 context.home_dir,
                 context.cwd,
             ))
@@ -86,6 +116,40 @@ pub(in crate::pretool) fn fresh_destination(
         return None;
     }
     Some(destination)
+}
+
+/// Missing intermediate directories are safe only below an existing private
+/// temporary ancestor. A shared sticky root may hold a fresh checkout leaf,
+/// but cannot vouch for an intermediate directory another user could plant.
+pub(in crate::pretool) fn fresh_temporary_parent(
+    parent: &Path,
+    context: super::super::PathContext<'_>,
+) -> bool {
+    if super::super::git_routes::temporary_checkout_parent(parent, context) {
+        return true;
+    }
+    let mut existing = parent;
+    loop {
+        match std::fs::symlink_metadata(existing) {
+            Ok(metadata) => {
+                return metadata.is_dir()
+                    && super::super::git_routes::private_temporary_parent(existing, context);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                if existing
+                    .file_name()
+                    .is_none_or(|name| name.to_string_lossy().starts_with('.'))
+                {
+                    return false;
+                }
+                let Some(ancestor) = existing.parent() else {
+                    return false;
+                };
+                existing = ancestor;
+            }
+            Err(_) => return false,
+        }
+    }
 }
 
 /// Whether every symlink on the way to `path` sits where only root or the

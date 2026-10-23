@@ -25,7 +25,9 @@ from ci.gauntlet.input_evidence import redact_value
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.benign_fp_gate_connectors import allow_ready_cli
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
+from tests.benign_fp_gate_projects import host_tool_path
 from tests.gauntlet_replay import (
     ENVIRONMENTS,
     GATE_DOCUMENT,
@@ -37,6 +39,7 @@ from tests.gauntlet_replay import (
     failure_reasons,
     judge,
     payload_input,
+    source_ref_payload,
     write_global_gitconfig,
 )
 from tests.native_gate_retry import review_with_unavailable_retry
@@ -86,14 +89,12 @@ def replay_environment(
     patch.setenv("HOL_GUARD_NATIVE_BINARY", binary)
     for key, value in environment_overlay(request.param, fixture.home).items():
         patch.setenv(key, value)
-    # The `bun -e` proof resolves `bun` from PATH outside the workspace. Hosted runners ship no
-    # Bun, so put a stand-in where Bun's installer does; a real Bun earlier on PATH still wins.
-    bun = fixture.home / ".bun" / "bin" / "bun"
-    bun.parent.mkdir(parents=True, exist_ok=True)
-    bun.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    bun.chmod(0o755)
-    patch.setenv("PATH", os.pathsep.join([os.environ.get("PATH", ""), str(bun.parent)]))
-    worker = HookWorker(store=GuardStore(fixture.guard_home), workspace=fixture.worktree)
+    # Match the Gauntlet replay environment in both replay gates: the host tools a hosted runner
+    # cannot offer, such as Bun for the native `bun -e` proof and a Node the sandbox may run.
+    patch.setenv("PATH", host_tool_path(fixture.home, os.environ.get("PATH", "")))
+    store = GuardStore(fixture.guard_home)
+    allow_ready_cli(store, fixture.home)
+    worker = HookWorker(store=store, workspace=fixture.worktree)
     try:
         yield request.param, fixture, worker
     finally:
@@ -119,6 +120,9 @@ def _replay(case: ReplayCase, fixture: BenignFixture, worker: HookWorker) -> tup
     }
     if case.tool_response is not None:
         payload["tool_response"] = case.tool_response
+    if case.source_ref:
+        spelled = str(resolved.get("path") or resolved["file_path"])
+        payload["guard_source_ref"] = source_ref_payload(spelled, fixture.cwd(case.cwd))
     if case.harness == "cursor":
         payload.update(cursor_hook_fields(case.tool, payload))
     # Approval baselines stay from before the first attempt, so a retry never hides a row.

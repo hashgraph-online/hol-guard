@@ -8,15 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
-    _hook_runtime_artifact,
-    _routine_semver_spec_matches,
-)
+from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime.shell_command_wrappers import is_trusted_absolute_command_path
 from tests.developer_inspection_test_support import assert_leading_cd_inspection_allowed
 from tests.git_execution_test_support import assert_host_git_proof_result
 from tests.native_command_test_support import RealNativeReviewFixture, real_native_review_fixture
+from tests.shell_wrapper_test_support import native_trusted_absolute_path
 
 
 @pytest.fixture(autouse=True)
@@ -353,22 +350,6 @@ def test_local_runner_override_requests_still_require_review(tmp_path: Path, run
     assert artifact is not None
 
 
-@pytest.mark.parametrize(
-    ("specifier", "version", "expected"),
-    (
-        ("4.1.8", "4.1.8", True),
-        ("^4.1.8", "4.9.0", True),
-        ("^4.1.8", "5.0.0", False),
-        ("^0.2.3", "0.2.9", True),
-        ("^0.2.3", "0.3.0", False),
-        ("~4.1.8", "4.1.9", True),
-        ("~4.1.8", "4.2.0", False),
-    ),
-)
-def test_routine_runner_semver_matching(specifier: str, version: str, expected: bool) -> None:
-    assert _routine_semver_spec_matches(specifier, version) is expected
-
-
 def test_compound_git_and_filesystem_inspection_requires_host_binary_proof(tmp_path: Path) -> None:
     home = tmp_path / "home"
     workspace = home / "projects" / "workspace"
@@ -405,7 +386,7 @@ def test_compound_stdin_only_python_observer_requires_host_binary_proof(tmp_path
     if windows_host:
         # The compound host recognizer has no Windows executable ACL proof.
         # A stdin-only script cannot waive the launch identity requirement.
-        assert not is_trusted_absolute_command_path(Path(sys.executable), cwd=workspace, home_dir=home)
+        assert not native_trusted_absolute_path(Path(sys.executable), cwd=workspace, home_dir=home)
         assert artifact is not None
         assert artifact.metadata["compound_segment_count"] == 3
         # Whichever floor fires first is accepted (unresolved leading-cd root, untrusted

@@ -28,12 +28,14 @@ pub(crate) fn kind_name(kind: &Kind) -> &'static str {
     match kind {
         Kind::BuildApprovalContextToken { .. } => "build_approval_context_token",
         Kind::ValidateApprovalContextTokens { .. } => "validate_approval_context_tokens",
+        Kind::ApprovalContextTokenWellFormed { .. } => "approval_context_token_well_formed",
         Kind::ConfiguredEnvironmentHash { .. } => "configured_environment_hash",
         Kind::ConfiguredHeadersHash { .. } => "configured_headers_hash",
         Kind::LaunchArgvDigest { .. } => "launch_argv_digest",
         Kind::CanonicalSha256 { .. } => "canonical_sha256",
         Kind::OpaqueMaterialDigest { .. } => "opaque_material_digest",
         Kind::McpRedactJson { .. } => "mcp_redact_json",
+        Kind::NativeBashReplyValidation { .. } => "native_bash_reply_validation",
         Kind::McpLaunchEnvironment { .. } => "mcp_launch_environment",
         Kind::PackageExecutionContextFromEvidence { .. } => {
             "package_execution_context_from_evidence"
@@ -56,6 +58,8 @@ pub(crate) fn kind_name(kind: &Kind) -> &'static str {
         Kind::RuntimeLaunchIdentity { .. } => "runtime_launch_identity",
         Kind::RuntimeLaunchIdentityMatches { .. } => "runtime_launch_identity_matches",
         Kind::RuntimeLaunchIdentityProjection { .. } => "runtime_launch_identity_projection",
+        Kind::GuardRunLaunchPlans { .. } => "guard_run_launch_plans",
+        Kind::GuardRunAuthorizedPrefixes { .. } => "guard_run_authorized_prefixes",
         Kind::McpToolCatalogFingerprint { .. } => "mcp_tool_catalog_fingerprint",
         Kind::RuntimeHookApprovalContext { .. } => "runtime_hook_approval_context",
         Kind::GenericHookApprovalContext { .. } => "generic_hook_approval_context",
@@ -84,17 +88,25 @@ fn required_output(kind: &str) -> Option<&'static str> {
 fn nullable_output(kind: &str) -> Option<&'static str> {
     Some(match kind {
         "custom_extension_continuity" => "custom_extension_continuity",
+        "guard_run_launch_plans" | "guard_run_authorized_prefixes" => "guard_run_launch",
         "managed_controls_policy_fields" => "managed_controls_policy_fields",
         "validate_approval_context_tokens" => "validation_reason",
+        "approval_context_token_well_formed" => "approval_context_token_well_formed",
         "package_execution_context_from_evidence"
         | "package_execution_context_from_scanner_evidence" => "package_context",
         "local_cli_identify" => "local_cli_identities",
+        "native_bash_reply_validation" => "native_bash_reply_valid",
         _ => return None,
     })
 }
 
 /// Fields that only make sense for exactly one request kind.
-const KIND_GATED_FIELDS: [(&str, &str); 8] = [
+const KIND_GATED_FIELDS: [(&str, &str); 10] = [
+    ("native_bash_reply_valid", "native_bash_reply_validation"),
+    (
+        "approval_context_token_well_formed",
+        "approval_context_token_well_formed",
+    ),
     ("local_cli_identity", "local_cli_identity"),
     (
         "managed_controls_policy_fields",
@@ -161,6 +173,17 @@ fn present<'a>(payload: &'a Map<String, Value>, field: &str) -> Option<&'a Value
 }
 
 fn fields_valid(kind: &str, payload: &Map<String, Value>) -> bool {
+    if payload
+        .get("native_bash_reply_valid")
+        .is_some_and(|value| !value.is_boolean())
+    {
+        return false;
+    }
+    if present(payload, "approval_context_token_well_formed")
+        .is_some_and(|verdict| !verdict.is_boolean())
+    {
+        return false;
+    }
     if present(payload, "package_context").is_some_and(|context| !valid_package_context(context)) {
         return false;
     }

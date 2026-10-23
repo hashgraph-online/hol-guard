@@ -72,6 +72,14 @@ def test_pretool_response_matches_recorded_documents() -> None:
 
 
 def _resident_returning(monkeypatch: pytest.MonkeyPatch, payloads: list[dict[str, Any]]) -> None:
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=object(),
+        capabilities=SimpleNamespace(features={"resident-protocol-v2", decision.HOOK_DECISION_FEATURE}),
+    )
+    monkeypatch.setattr(shared, "native_runtime_status", lambda: status)
+    monkeypatch.setattr(shared, "record_resident", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(shared, "_resolve_digest_home", lambda _home: Path("/tmp/hook-decision-home"))
     monkeypatch.setattr(shared, "ensure_resident_prerequisite", lambda _home: True)
 
@@ -140,6 +148,24 @@ def test_malformed_answers_raise(monkeypatch: pytest.MonkeyPatch, payloads: list
     _resident_returning(monkeypatch, payloads)
     with pytest.raises(decision.NativeHookDecisionError):
         decision.native_copilot_settle(_INPUTS, lambda: False)
+
+
+def test_a_settlement_demands_the_edge_reason_capability(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A settlement carries `native_edge`, which now names the reason the edge
+    # result reached its action and denies unknown fields, so a resident built
+    # before the field is replaced rather than asked. Both rounds demand it.
+    asked: list[str] = []
+    payloads = [_ASK, {"kind": "copilot_settle", "needs_facts": [], "plan": _PLAN}]
+    _resident_returning(monkeypatch, payloads)
+    inner = decision._resident_request
+
+    def transport(*, required_feature: str, **kwargs: Any) -> dict[str, Any]:
+        asked.append(required_feature)
+        return inner(required_feature=required_feature, **kwargs)
+
+    monkeypatch.setattr(decision, "_resident_request", transport)
+    decision.native_copilot_settle(_INPUTS, lambda: False)
+    assert asked == [decision.HOOK_DECISION_NATIVE_EDGE_REASON_FEATURE] * 2
 
 
 def test_acked_fact_is_asked_once(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -273,9 +299,7 @@ def test_transport_runs_recorded_effects_in_order(monkeypatch: pytest.MonkeyPatc
         args = SimpleNamespace(harness="copilot", json=vector["json_requested"])
         tool_call = (artifact, facts["artifact_hash"], None)
         if vector["inputs"]["stage"] == "pre_tool_use":
-            exit_code = copilot.run_native_copilot_pretool(
-                args, copilot_hook_stage="pretooluse", copilot_runtime_tool_call=tool_call, **common
-            )
+            exit_code = copilot.run_native_copilot_pretool(args, copilot_runtime_tool_call=tool_call, **common)
             documents = [json.loads(line) for line in stream.getvalue().splitlines()]
             assert documents == vector["pretool_documents"], vector["name"]
         else:
@@ -324,7 +348,6 @@ def test_unknown_effect_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
             action_envelope=None,
             config=SimpleNamespace(receipt_redaction_level="standard"),
             context=SimpleNamespace(guard_home=Path("/tmp/copilot-home"), home_dir=None),
-            copilot_hook_stage="pretooluse",
             copilot_runtime_tool_call=(artifact, "sha256:a", None),
             payload={},
             runtime_workspace=None,

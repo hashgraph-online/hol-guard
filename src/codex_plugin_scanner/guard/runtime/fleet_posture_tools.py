@@ -34,7 +34,7 @@ DIAGNOSTICS_TTL_SECONDS = 600
 _LOGGER = logging.getLogger(__name__)
 
 _SETUP_STATUSES = frozenset({"active", "broken", "partial", "not_found"})
-_VERSION_PATTERN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*$")
+_VERSION_PATTERN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[A-Za-z.+-][0-9A-Za-z.+-]*)?$")
 _PRERELEASE_PATTERN = re.compile(r"[0-9](a|b|rc|dev|alpha|beta)[0-9]*", re.IGNORECASE)
 
 
@@ -67,6 +67,12 @@ def _arch() -> str:
     if machine in {"x86_64", "amd64", "x64"}:
         return "x86_64"
     return "unknown"
+
+
+def device_display_name(store: GuardStore, label: str) -> str:
+    """The machine name Guard Cloud shows; see ``GuardStore.device_display_name``."""
+
+    return store.device_display_name(label)
 
 
 def machine_section(*, include_os_version: bool, hash_key: bytes) -> dict[str, object]:

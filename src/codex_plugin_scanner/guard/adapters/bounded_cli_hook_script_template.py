@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from ._modules.grok.grok_hook_invocation_template import GROK_HOOK_INVOCATION_TEMPLATE
+from ._modules.grok.grok_hook_readiness_template import GROK_HOOK_READINESS_TEMPLATE
 from .bounded_cli_hook_script_native import BOUNDED_HOOK_NATIVE_TEMPLATE
-from .grok_hook_invocation_template import GROK_HOOK_INVOCATION_TEMPLATE
-from .grok_hook_readiness_template import GROK_HOOK_READINESS_TEMPLATE
 from .hook_http_deadline import HOOK_HTTP_DEADLINE_TEMPLATE
 from .hook_input_reader import HOOK_INPUT_READER_TEMPLATE
 
@@ -30,13 +30,17 @@ from urllib.parse import quote, urlparse
 GUARD_HOME = __GUARD_HOME__
 HARNESS = __HARNESS__
 TIMEOUT_SECONDS = __TIMEOUT_SECONDS__
-_HOOK_DEADLINE_MONOTONIC = _HOOK_STARTED_MONOTONIC + TIMEOUT_SECONDS
+_HOOK_REMAINING_SECONDS = TIMEOUT_SECONDS
 # The native runtime hands over a hook it did not answer with the time it
 # already spent; that time comes out of this client's budget, never added.
 _NATIVE_ELAPSED_MS = os.environ.pop("HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS", "")
 _NATIVE_DAEMON_TRIED = os.environ.pop("HOL_GUARD_BOUNDED_NATIVE_DAEMON_TRIED", None) == "1"
 if _NATIVE_ELAPSED_MS.isascii() and _NATIVE_ELAPSED_MS.isdigit():
-    _HOOK_DEADLINE_MONOTONIC -= min(int(_NATIVE_ELAPSED_MS) / 1000.0, float(TIMEOUT_SECONDS))
+    try:
+        _HOOK_REMAINING_SECONDS -= min(int(_NATIVE_ELAPSED_MS) / 1000.0, float(TIMEOUT_SECONDS))
+    except (ValueError, OverflowError):
+        _HOOK_REMAINING_SECONDS = 0.0
+_HOOK_DEADLINE_MONOTONIC = _HOOK_STARTED_MONOTONIC + _HOOK_REMAINING_SECONDS
 __HOOK_INPUT_READER__
 __HOOK_HTTP_DEADLINE__
 _MAX_RESPONSE_BYTES = 1_000_000

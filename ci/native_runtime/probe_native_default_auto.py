@@ -45,6 +45,7 @@ from scripts.native_probe_receipts import (
     wait_for_receipt_corpus,
     wait_for_route_corpus,
 )
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS
 from scripts.native_slo_adapter import is_allowed
 from scripts.native_slo_contract import MAX_READINESS_P95_MS, proof_environment_violations
 
@@ -146,7 +147,7 @@ def _stop_native_process(runtime: Path, guard_home: Path) -> bool:
             (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
             check=False,
             capture_output=True,
-            timeout=2,
+            timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
         print("native_default_auto_probe_cleanup_timeout", file=sys.stderr)
@@ -343,12 +344,10 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
         )
         writer = daemon._server.runtime_hook_evidence_writer
         # Count the route corpus receipts before the mode invariants send their
-        # own PostToolUse requests, which write receipts of their own.
-        evidence_stats = wait_for_receipt_corpus(
-            writer,
-            expected=len(route_receipts),
-            timeout_seconds=45.0 if os.name == "nt" else 5.0,
-        )
+        # own PostToolUse requests, which write receipts of their own. A busy
+        # store sends records through the writer's retry backoff on any
+        # platform; the wait ends as soon as the corpus is durable.
+        evidence_stats = wait_for_receipt_corpus(writer, expected=len(route_receipts), timeout_seconds=45.0)
         mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
     finally:
         daemon.stop()

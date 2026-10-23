@@ -26,6 +26,10 @@ use crate::shell_execution_context::*;
 use crate::shell_execution_context_support::*;
 use crate::typescript_launch_evidence::*;
 
+#[path = "package_intent_parser/routine_local_runner.rs"]
+mod routine_local_runner;
+use routine_local_runner::*;
+
 #[path = "package_intent_parser/managers_js.rs"]
 mod managers_js;
 use managers_js::*;
@@ -54,6 +58,10 @@ use shell_normalization::*;
 mod redaction_and_combination;
 use redaction_and_combination::*;
 
+#[path = "package_intent_parser/runner_options.rs"]
+mod runner_options;
+use runner_options::*;
+
 #[path = "package_intent_parser/local_execution.rs"]
 mod local_execution;
 use local_execution::*;
@@ -69,6 +77,10 @@ mod tests;
 #[cfg(test)]
 #[path = "package_intent_parser/uvx_value_options_tests.rs"]
 mod uvx_value_options_tests;
+
+#[cfg(test)]
+#[path = "package_intent_parser/routine_local_runner_tests.rs"]
+mod routine_local_runner_tests;
 
 #[cfg(test)]
 #[path = "package_intent_parser/bun_value_options_tests.rs"]
@@ -128,10 +140,6 @@ static ENV_REFERENCE_RE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("env reference regex")
 });
 
-// package_intent_parser.py :67  `_LOCAL_EXECUTION_COMMANDS`
-static LOCAL_EXECUTION_COMMANDS: LazyLock<HashSet<&'static str>> =
-    LazyLock::new(|| ["bunx", "npx"].into_iter().collect());
-
 // package_intent_parser.py :68-97  `_PACKAGE_COMMAND_NAMES`
 static PACKAGE_COMMAND_NAMES: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     [
@@ -142,15 +150,6 @@ static PACKAGE_COMMAND_NAMES: LazyLock<HashSet<&'static str>> = LazyLock::new(||
     .into_iter()
     .collect()
 });
-
-// package_intent_parser.py :98-103  `_LOCAL_EXECUTION_FLAGS_BY_COMMAND`
-fn local_execution_flags(command: &str) -> &'static [&'static str] {
-    match command {
-        "bunx" => &["--bun", "--no-install"],
-        "npx" => &["--no", "--no-install"],
-        _ => &[],
-    }
-}
 
 // package_intent_parser.py :104  `_LOCAL_EXECUTABLE_PACKAGE_ALIASES`
 fn local_executable_package_alias(name: &str) -> &str {
@@ -353,7 +352,12 @@ pub fn parse_package_intent(
             intents.push(i);
         }
     }
-    combine_package_intents(&intents)
+    // The routine-runner verdict reads the manifests, lockfiles and executable
+    // this parser already resolved, so it is computed here rather than sent
+    // back for a second round trip.
+    let mut intent = combine_package_intents(&intents)?;
+    intent.routine_local_runner = routine_local_runner(&intent);
+    Some(intent)
 }
 
 /// Dispatch to the non-local-execution intent parsers.
@@ -464,6 +468,7 @@ fn build_intent(
         execution_context_hashes: Vec::new(),
         execution_context_cwds: Vec::new(),
         execution_context_reason_codes: Vec::new(),
+        routine_local_runner: false,
     }
 }
 

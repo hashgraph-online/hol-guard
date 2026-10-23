@@ -79,36 +79,7 @@ mod policy_enforcement_business;
 
 #[cfg(test)]
 #[path = "policy_enforcement_tests.rs"]
-mod tests;
-const VALID_ACTIONS: &[&str] = &[
-    "allow",
-    "warn",
-    "review",
-    "require-reapproval",
-    "sandbox-required",
-    "block",
-];
-
-const VALID_RISK_KEYS: &[&str] = &[
-    "local_secret_read",
-    "credential_exfiltration",
-    "data_flow_exfiltration",
-    "destructive_shell",
-    "encoded_execution",
-    "network_egress",
-    "prompt_injection",
-    "mcp_dangerous_tool",
-    "malicious_skill",
-    "package_script",
-    "persistence",
-    "guard_bypass",
-    "cloud_advisory",
-    "encoded_exfiltration",
-    "execution",
-    "supply_chain",
-    "policy_bypass",
-];
-
+pub(crate) mod tests;
 const MAX_SELECTOR_VALUE_BYTES: usize = 4 * 1024;
 const MAX_FACT_DEPTH: usize = 32;
 const MAX_FACT_NODES: usize = 2_048;
@@ -367,134 +338,10 @@ pub(crate) fn apply_pre_tool_policy(
     Ok(output)
 }
 
-#[path = "policy_enforcement_post_action.rs"]
-mod post_action;
-use post_action::post_action_type;
 #[path = "policy_enforcement_omp_eval.rs"]
 mod eval_output;
-
-/// Apply the authenticated policy to a Rust-owned PostTool result. The
-/// source/content decision is intrinsic and therefore remains strongest even
-/// when the configured policy says `allow`.
-pub(crate) fn apply_post_tool_policy(
-    snapshot: &AdmittedPolicySnapshot,
-    request: &NativeHookRequestV1,
-    payload_kind: GuardHookPayloadKindV2,
-    mut response: HookReviewResponseV1,
-) -> Result<HookReviewResponseV1, String> {
-    if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
-        return Err("native_policy_mode_invalid".to_owned());
-    }
-    let task_metadata = payload_kind == GuardHookPayloadKindV2::Inline
-        && guard_command::pretool::bounded_task_metadata_output(&request.payload, &request.harness);
-    let omp_output_action = (payload_kind == GuardHookPayloadKindV2::Inline)
-        .then(|| eval_output::bounded_output_action(request))
-        .flatten();
-    let classified_action = post_action_type(request, payload_kind)?;
-    let action_type = if task_metadata {
-        PreToolActionTypeV1::Harness
-    } else if let Some(action) = omp_output_action {
-        // The complete input was re-proved as reads or a report. The output
-        // scan result and every applicable installed policy floor still join below.
-        action
-    } else {
-        classified_action
-    };
-    let intrinsic = response
-        .observed_policy_action
-        .as_deref()
-        .or(response.policy_action.as_deref())
-        .unwrap_or(if response.decision == "deny" {
-            "block"
-        } else if response.model_output_action == "replace_with_reviewed_excerpt" {
-            "review"
-        } else {
-            "allow"
-        })
-        .to_owned();
-    if action_rank(&intrinsic).is_none() {
-        return Err("native_post_tool_policy_invalid_result".to_owned());
-    }
-    let harness = normalized_harness(&request.harness);
-    let facts = payload_facts(
-        &request.payload,
-        &harness,
-        action_type,
-        &response.reason_code,
-    )?;
-    let (floor, floor_cause) = policy_floor_with_cause(
-        &snapshot.effective_policy,
-        &snapshot.compiled,
-        &harness,
-        action_type,
-        &FloorInput {
-            facts: &facts,
-            reason_code: if (task_metadata
-                || omp_output_action == Some(PreToolActionTypeV1::Harness))
-                && matches!(
-                    response.reason_code.as_str(),
-                    "output_scan_allow" | "source_full_scan_allow"
-                ) {
-                "native_agent_task_metadata"
-            } else {
-                &response.reason_code
-            },
-            prompt_classes: &[],
-            benign_prompt: false,
-            package_scripts_disabled: false,
-        },
-    )?;
-    let effective = join_action(&intrinsic, &floor)?;
-    response.policy_action = Some(effective.clone());
-    if snapshot.mode == "observe" {
-        // Observe never stops the harness: every outcome is rewritten to an
-        // allow-original response carrying the canonical proof digest (or none
-        // when the output is truncated or excerpt-only). Intrinsic
-        // allow-original responses keep their decision and effective floor;
-        // anything else is recorded as a warn with the intrinsic action kept in
-        // observed_policy_action.
-        let canonical_digest = guard_hook_core::canonical_observed_output_sha256(&request.payload);
-        if response.decision == "allow" && response.model_output_action == "allow_original" {
-            response.reviewed_output_sha256 = canonical_digest;
-            return Ok(response);
-        }
-        response.decision = "allow".to_owned();
-        response.model_output_action = "allow_original".to_owned();
-        response.policy_action = Some("warn".to_owned());
-        response.reviewed_output_sha256 = canonical_digest;
-        response.observed_policy_action = Some(intrinsic);
-        response.observe_mode = true;
-        return Ok(response);
-    }
-    if effective == "allow" {
-        return Ok(response);
-    }
-    if effective == "warn" && response.decision == "allow" {
-        if intrinsic != "warn" {
-            // A warn floor over a proven allow is the silent policy warning,
-            // as on PreToolUse: the receipt keeps the warn and its code, and
-            // the harness renders nothing.
-            response.reason_code = "native_policy_warning".to_owned();
-            response.reason = None;
-        }
-        return Ok(response);
-    }
-    if intrinsic == "review"
-        && effective == "review"
-        && response.decision == "allow"
-        && response.model_output_action == "replace_with_reviewed_excerpt"
-    {
-        // A reviewed excerpt already satisfies the intrinsic review floor.
-        return Ok(response);
-    }
-    if intrinsic == "block" && response.decision == "deny" {
-        return Ok(response);
-    }
-    // Name the setting only when the policy floor, not the intrinsic
-    // result, set the outcome.
-    let cause = (action_rank(&floor) > action_rank(&intrinsic)).then_some(floor_cause);
-    let (reason_code, reason) = policy_override_reason(&effective, cause, false);
-    let mut denied = HookReviewResponseV1::deny(reason_code, reason);
-    denied.policy_action = Some(effective);
-    Ok(denied)
-}
+#[path = "policy_enforcement_post.rs"]
+mod post;
+#[cfg(test)]
+pub(crate) use post::apply_post_tool_policy;
+pub(crate) use post::apply_post_tool_policy_with_delivery;

@@ -11,11 +11,15 @@ path = "src/main.rs"
 
 [dependencies]
 guard-command = { path = "../guard-command" }
+guard-contained-process = { path = "../guard-contained-process" }
 guard-contracts = { path = "../guard-contracts" }
 guard-google-identity = { path = "../guard-google-identity" }
 guard-hook-core = { path = "../guard-hook-core" }
 guard-policy-snapshot = { path = "../guard-policy-snapshot" }
+guard-policy-bundle = { path = "../guard-policy-bundle" }
 guard-rule-contract = { path = "../guard-rule-contract" }
+guard-adapter-detection = { path = "../guard-adapter-detection" }
+guard-runtime-pyjson = { path = "../guard-runtime-pyjson" }
 guard-scanner = { path = "../guard-scanner" }
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
 caseless.workspace = true
@@ -45,6 +49,7 @@ hmac.workspace = true
 sha2.workspace = true
 sha1.workspace = true
 pbkdf2.workspace = true
+pep440_rs.workspace = true
 scrypt.workspace = true
 base32ct.workspace = true
 sysinfo.workspace = true
@@ -59,7 +64,6 @@ libproc = "0.14.11"
 security-framework = "3.7.0"
 
 [target.'cfg(windows)'.dependencies]
-guard-contained-process = { path = "../guard-contained-process" }
 windows-permissions.workspace = true
 
 [target.'cfg(all(unix, target_os = "linux"))'.dependencies]

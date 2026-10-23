@@ -37,7 +37,7 @@ test("Watch scope accepts inert bash defaults without allowing execution overrid
   }
 });
 
-test("Watch scope accepts 18.4.12's inert service-mode defaults but nothing that acts", () => {
+test("Watch scope accepts 18.11.3's inert service-mode defaults but nothing that acts", () => {
   // The exact live shape: materialized defaults that OMP itself normalizes away.
   expect(permittedWatchInput("bash", {
     i: "Run the fixture", command: WATCH_COMMAND, timeout: 120,

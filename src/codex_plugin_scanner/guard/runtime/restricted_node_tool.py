@@ -26,16 +26,24 @@ from .restricted_vite_output import config_bundle_directory, declared_vite_outpu
 from .restricted_vitest import run_restricted_node_plan
 from .secret_sensitivity import classify_secret_path
 
-_ENTRIES = {"eslint": "eslint/bin/eslint.js", "tsc": "typescript/bin/tsc", "vite": "vite/bin/vite.js"}
+# Each tool names the entrypoints its published versions install. Prettier 3
+# moved its executable into `bin/`, and version 2 remains common enough to name.
+_ENTRIES: dict[str, tuple[str, ...]] = {
+    "eslint": ("eslint/bin/eslint.js",),
+    "tsc": ("typescript/bin/tsc",),
+    "vite": ("vite/bin/vite.js",),
+    "prettier": ("prettier/bin/prettier.cjs", "prettier/bin-prettier.js"),
+}
+# Prettier reports in these two modes and rewrites files in every other one.
+_PRETTIER_CHECKS = {"--check", "-c", "--list-different", "-l"}
 
-# How much longer than the build's own deadline this waits for the native
-# runner. The runner counts that deadline against the build alone: staging a
-# private copy of the workspace and publishing the output roots both happen
-# outside it. Killing the runner on the same number would land in the middle of
-# publishing, with the previous output already removed and the new one half
-# written, and would leave the staged copy behind. The runner stops the build
-# itself, so this only has to outlast the copying around it.
-_WINDOWS_BUILD_GRACE_SECONDS = 120
+# How much longer than the run's own deadline this waits for the native
+# runner. The runner counts that deadline against the tool alone: staging a
+# private copy of the workspace and publishing a build's output roots both
+# happen outside it. Killing the runner on the same number would land in the
+# middle of publishing, with the previous output already removed and the new
+# one half written, and would leave the staged copy behind.
+_WINDOWS_STAGING_GRACE_SECONDS = 120
 
 
 def _program_name(argument: str) -> str:
@@ -61,6 +69,118 @@ def is_local_package_entry(argument: str, package_entry: str) -> bool:
     """`node_modules/<entry>`, `./node_modules/<entry>` or `<dir>/node_modules/<entry>`."""
     prefix = argument.removesuffix("node_modules/" + package_entry)
     return prefix != argument and (prefix == "" or prefix.endswith("/"))
+
+
+def _tool_entry(name: str, cwd: Path, workspace: Path) -> tuple[Path, str]:
+    """The `node_modules` directory holding the tool and its path below it.
+
+    A tool may publish its executable under more than one name across major
+    versions, so look for every spelling and keep the one the nearest project
+    installs: a package that pins its own major is what the command would run,
+    not a copy hoisted further up a monorepo. When no project has any of them,
+    name the first spelling so the caller reports a missing dependency.
+    """
+    installed = []
+    for relative in _ENTRIES[name]:
+        try:
+            modules = nearest_project_root(cwd, workspace, "node_modules/" + relative) / "node_modules"
+        except OSError:
+            continue
+        if (modules / relative).is_file():
+            installed.append((len(modules.parts), modules, relative))
+    if installed:
+        # Deepest wins, and a tie keeps the order the spellings are declared in.
+        depth = max(entry[0] for entry in installed)
+        _, modules, relative = next(entry for entry in installed if entry[0] == depth)
+        return modules, relative
+    first = _ENTRIES[name][0]
+    return nearest_project_root(cwd, workspace, "node_modules/" + first) / "node_modules", first
+
+
+# Subcommands pnpm and Yarn classic run themselves. Both only fall back to a
+# manifest script when the bare word is not one of their own, so a project that
+# defines a `check` or `exec` script does not change what `yarn check` or
+# `pnpm exec` runs. `test` and `start` are left out: those two are the script.
+_MANAGER_SUBCOMMANDS = frozenset(
+    {
+        "add",
+        "audit",
+        "autoclean",
+        "bin",
+        "cache",
+        "check",
+        "config",
+        "create",
+        "dedupe",
+        "deploy",
+        "dlx",
+        "doctor",
+        "env",
+        "exec",
+        "fetch",
+        "generate-lock-entry",
+        "global",
+        "help",
+        "i",
+        "import",
+        "info",
+        "init",
+        "install",
+        "licenses",
+        "link",
+        "list",
+        "login",
+        "logout",
+        "ls",
+        "node",
+        "outdated",
+        "owner",
+        "pack",
+        "patch",
+        "pkg",
+        "policies",
+        "prune",
+        "publish",
+        "rebuild",
+        "remove",
+        "rm",
+        "root",
+        "run",
+        "server",
+        "setup",
+        "store",
+        "tag",
+        "team",
+        "unlink",
+        "unplug",
+        "up",
+        "update",
+        "upgrade",
+        "upgrade-interactive",
+        "version",
+        "versions",
+        "why",
+        "whoami",
+        "workspace",
+        "workspaces",
+    }
+)
+
+
+def _script_task(manager: str, args: Sequence[str]) -> str | None:
+    """The script a package-manager command names.
+
+    npm and Bun need the explicit `run`. pnpm and Yarn also run a script named
+    directly, and a project that documents `pnpm lint` or `yarn build` means
+    the same script, so both spellings resolve the same way here. The name the
+    project chose decides nothing: the body behind it still has to be one of
+    the tools below, in a mode that only reports.
+    """
+    if len(args) == 2 and args[0] == "run":
+        return args[1]
+    if len(args) == 1 and manager in {"pnpm", "yarn"} and args[0] not in _MANAGER_SUBCOMMANDS:
+        return args[0]
+    return None
 
 
 def _package_directory(directory: Path, workspace: Path) -> bool:
@@ -207,7 +327,7 @@ def _vite_output(args: Sequence[str], *, workspace: Path, cwd: Path) -> Path:
     return output
 
 
-def _prepare_windows_build(
+def _prepare_windows_tool(
     name: str,
     args: Sequence[str],
     runtime_args: Sequence[str],
@@ -216,32 +336,44 @@ def _prepare_windows_build(
     workspace: Path,
     cwd: Path,
 ) -> RestrictedPytestPlan:
-    """Windows stages the build in an AppContainer; the resident resolves Node and Vite.
+    """Windows stages the run in an AppContainer; the resident resolves Node and the tool.
 
     The private copy is writable, so Vite bundles its config in place and no
-    config loader or bundle directory is added.
+    config loader or bundle directory is added, and ESLint, TypeScript and
+    Prettier write their caches where they expect them. Only a build names an
+    output root; a reporting run declares none and its copy is discarded whole.
     """
-    if name != "vite":
-        raise RestrictedPytestError(
-            PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Only Vite builds run contained on Windows."
-        )
+    build = name == "vite"
     result = restricted_native(
         "prepare_node_build",
         {
             "workspace": workspace,
             "cwd": cwd,
+            "tool": name,
             "runtime_arguments": list(runtime_args),
             "arguments": list(args),
             "expected_entry": None if expected_entry is None else expected_entry.as_posix(),
         },
         dict,
     )
-    plan = decode_native_plan(result, (NODE_BUILD_OUTPUT_PROFILE_VERSION,))
+    profile = NODE_BUILD_OUTPUT_PROFILE_VERSION if build else NODE_TOOL_READ_ONLY_PROFILE_VERSION
+    plan = decode_native_plan(result, (profile,))
+    if not build:
+        return plan
     return replace(plan, output_roots=(_vite_output(args, workspace=plan.workspace, cwd=plan.cwd),))
 
 
+def _manager_local_run(name: str, args: tuple[str, ...]) -> tuple[str, ...] | None:
+    """The arguments from the tool on when `name args` is a manager's `exec` spelling."""
+    exec_verbs = {"npm": ("exec", "x"), "pnpm": ("exec",), "yarn": ("exec",)}.get(name, ())
+    if not args or args[0] not in exec_verbs:
+        return None
+    rest = args[1:]
+    return rest[1:] if rest[:1] == ("--",) else rest
+
+
 def prepare_restricted_node_tool(
-    command: Sequence[str], *, workspace: Path, cwd: Path | None = None
+    command: Sequence[str], *, workspace: Path, cwd: Path | None = None, home_dir: Path | None = None
 ) -> RestrictedPytestPlan:
     argv = _normalized_command(command)
     name, args = _program_name(argv[0]), argv[1:]
@@ -250,17 +382,18 @@ def prepare_restricted_node_tool(
     if name == "bun" and args[:1] == ("x",):
         # `bun x` is Bun's spelling of `bunx`.
         name, args = "bunx", args[1:]
-    if name == "pnpm" and args[:1] == ("exec",):
-        # `pnpm exec` is pnpm's spelling of a local-bin run. A pnpm option before
-        # the tool (`-c` runs a shell, `-r`/`--filter` fan out) is not accepted.
-        if len(args) < 2 or args[1].startswith("-"):
+    local_run = _manager_local_run(name, args)
+    if local_run is not None:
+        # `npm exec`, `npm x`, `pnpm exec` and `yarn exec` are each manager's
+        # spelling of a local-bin run. A manager option before the tool (`-c`
+        # runs a shell, `-r`/`--filter` fan out) is not accepted.
+        if not local_run or local_run[0].startswith("-"):
             raise RestrictedPytestError("node_tool_invalid_command", "Missing local runner.")
-        name, args = args[1], args[2:]
-    elif name in {"bun", "npm", "pnpm"}:
-        if len(args) != 2 or args[0] != "run" or args[1] not in {"lint", "typecheck", "build"}:
-            raise RestrictedPytestError(
-                "node_tool_invalid_command", "Only direct lint/typecheck scripts are supported."
-            )
+        name, args = local_run[0], local_run[1:]
+    elif name in {"bun", "npm", "pnpm", "yarn"}:
+        task = _script_task(name, args)
+        if task is None:
+            raise RestrictedPytestError("node_tool_invalid_command", "Only a single named package script is supported.")
         if sys.platform == "win32":
             raise RestrictedPytestError(
                 PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Package scripts do not run contained on Windows yet."
@@ -268,11 +401,11 @@ def prepare_restricted_node_tool(
         package = nearest_project_root(cwd or workspace, workspace, "package.json")
         manifest, _digest = read_json_with_integrity(package / "package.json")
         scripts = manifest.get("scripts") if isinstance(manifest, dict) else None
-        if isinstance(scripts, dict) and any(scripts.get(phase + args[1]) for phase in ("pre", "post")):
+        if isinstance(scripts, dict) and any(scripts.get(phase + task) for phase in ("pre", "post")):
             raise RestrictedPytestError(
                 "node_tool_invalid_command", "This script has lifecycle actions that need separate evaluation."
             )
-        script = scripts.get(args[1]) if isinstance(scripts, dict) else None
+        script = scripts.get(task) if isinstance(scripts, dict) else None
         if not isinstance(script, str):
             raise RestrictedPytestError("node_tool_invalid_command", "The requested local script is unavailable.")
         try:
@@ -297,34 +430,59 @@ def prepare_restricted_node_tool(
         if not args:
             raise RestrictedPytestError("node_tool_invalid_command", "Missing local entrypoint.")
         expected_entry = Path(args[0])
-        name = next((tool for tool, entry in _ENTRIES.items() if is_local_package_entry(args[0], entry)), "")
+        name = next(
+            (
+                tool
+                for tool, entries in _ENTRIES.items()
+                if any(is_local_package_entry(args[0], entry) for entry in entries)
+            ),
+            "",
+        )
         args = args[1:]
     if (
         name not in _ENTRIES
         or (name == "tsc" and "--noEmit" not in args)
         or (name == "vite" and (not args or args[0] != "build"))
+        or (name == "prettier" and not _PRETTIER_CHECKS.intersection(args))
     ):
         raise RestrictedPytestError(
-            "node_tool_invalid_command", "Only local ESLint and no-emit TypeScript are supported."
+            "node_tool_invalid_command",
+            "Only local ESLint, no-emit TypeScript and Prettier in a checking mode are supported.",
         )
     if any(
         token
-        in {";", "&&", "||", "|", "|&", "&", "--fix", "--fix-dry-run", "--output-file", "-o", "--emitDeclarationOnly"}
-        or token.startswith(("--fix=", "--output-file="))
+        in {
+            ";",
+            "&&",
+            "||",
+            "|",
+            "|&",
+            "&",
+            "--fix",
+            "--fix-dry-run",
+            "--output-file",
+            "-o",
+            "--emitDeclarationOnly",
+            "--write",
+            "-w",
+        }
+        # A value spelling enables the same write: `--write=true` turns
+        # Prettier's rewrite on just as `--write` does.
+        or token.startswith(("--fix=", "--output-file=", "--write="))
         for token in args
     ):
         raise RestrictedPytestError("node_tool_invalid_command", "The lint/typecheck input has write or shell effects.")
     if sys.platform == "win32":
-        return _prepare_windows_build(
+        return _prepare_windows_tool(
             name, args, runtime_args, expected_entry, workspace=workspace, cwd=cwd or workspace
         )
-    base = prepare_restricted_node_test(["node", "--test"], workspace=workspace, cwd=cwd)
+    base = prepare_restricted_node_test(["node", "--test"], workspace=workspace, cwd=cwd, home_dir=home_dir)
     output_roots = ()
     if name == "vite":
         output_roots = (_vite_output(args, workspace=base.workspace, cwd=base.cwd),)
     try:
-        modules = nearest_project_root(base.cwd, base.workspace, "node_modules/" + _ENTRIES[name]) / "node_modules"
-        entry = (modules / _ENTRIES[name]).resolve(strict=True)
+        modules, relative = _tool_entry(name, base.cwd, base.workspace)
+        entry = (modules / relative).resolve(strict=True)
         if not entry.is_file() or not _path_is_within(entry, modules):
             raise OSError("external tool entrypoint")
         # A relative entrypoint names a file below the command's directory.
@@ -362,7 +520,7 @@ def run_restricted_node_tool(
     merge_stderr: bool = False,
 ) -> int:
     if plan.backend == "windows-appcontainer":
-        return _run_windows_node_build(plan, timeout_seconds=timeout_seconds, merge_stderr=merge_stderr)
+        return _run_windows_node_tool(plan, timeout_seconds=timeout_seconds, merge_stderr=merge_stderr)
     for root in plan.output_roots:
         # Vite creates this directory itself; a sandbox grant needs it first.
         if root.name == ".vite-temp":
@@ -375,21 +533,26 @@ def run_restricted_node_tool(
     )
 
 
-def _run_windows_node_build(plan: RestrictedPytestPlan, *, timeout_seconds: int, merge_stderr: bool) -> int:
-    """The native runner stages the build and publishes only the output roots."""
+def _run_windows_node_tool(plan: RestrictedPytestPlan, *, timeout_seconds: int, merge_stderr: bool) -> int:
+    """The native runner stages the run and publishes only the output roots.
+
+    A build names those roots; a reporting run names none, so its staged copy
+    leaves no trace in the workspace at all.
+    """
+    build = plan.profile_version == NODE_BUILD_OUTPUT_PROFILE_VERSION
     if (
         sys.platform != "win32"
-        or plan.profile_version != NODE_BUILD_OUTPUT_PROFILE_VERSION
-        or not plan.output_roots
+        or plan.profile_version not in {NODE_BUILD_OUTPUT_PROFILE_VERSION, NODE_TOOL_READ_ONLY_PROFILE_VERSION}
+        or bool(plan.output_roots) != build
         or not 0 < timeout_seconds <= 86400
     ):
-        raise RestrictedPytestError("node_tool_invalid_command", "Unexpected protected build plan.")
+        raise RestrictedPytestError("node_tool_invalid_command", "Unexpected protected run plan.")
     outputs = [option for root in plan.output_roots for option in ("--output", str(root))]
     argv = [
         str(plan.backend_executable),
         "contained-readonly-windows",
         "--profile",
-        NODE_BUILD_OUTPUT_PROFILE_VERSION,
+        plan.profile_version,
         "--workspace",
         str(plan.workspace),
         "--cwd",
@@ -403,7 +566,7 @@ def _run_windows_node_build(plan: RestrictedPytestPlan, *, timeout_seconds: int,
     return _run_backend_process(
         argv,
         env=os.environ,
-        timeout_seconds=timeout_seconds + _WINDOWS_BUILD_GRACE_SECONDS,
+        timeout_seconds=timeout_seconds + _WINDOWS_STAGING_GRACE_SECONDS,
         cwd=plan.cwd,
         merge_stderr=merge_stderr,
     )

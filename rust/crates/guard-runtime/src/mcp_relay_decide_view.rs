@@ -19,7 +19,7 @@ use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
 
-const VIEW_SCHEMA: &str = "guard-mcp-relay-view.v1";
+const VIEW_SCHEMA: &str = "guard-mcp-relay-view.v2";
 const VIEW_MISSING: &str = "mcp_relay_view_missing";
 const VIEW_INVALID: &str = "mcp_relay_view_invalid";
 const HARNESS_UNBOUND: &str = "mcp_relay_harness_unbound";
@@ -29,16 +29,16 @@ const REDACTION_LEVELS: [&str; 3] = ["full", "partial", "none"];
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RelayViewV1 {
+struct RelayViewV2 {
     schema: String,
-    harnesses: BTreeMap<String, HarnessViewV1>,
+    harnesses: BTreeMap<String, HarnessViewV2>,
     #[serde(default)]
     extension_layers: Option<Vec<ContributedMcpLayerV1>>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct HarnessViewV1 {
+struct HarnessViewV2 {
     /// `_tool_call_configuration` of the harness config.
     config: Map<String, Value>,
     /// The fields `build_tool_call_identity` binds into the approval token.
@@ -60,7 +60,7 @@ pub(super) struct HarnessView {
 }
 
 /// A parsed view, or why it defers every call.
-type Parsed = Arc<Result<RelayViewV1, &'static str>>;
+type Parsed = Arc<Result<RelayViewV2, &'static str>>;
 
 /// The view parsed for the last binding a call read. The weak reference keeps
 /// that binding's allocation, so no later binding can share its address, and
@@ -101,16 +101,16 @@ pub(super) fn harness_view(
     select(&parse(view)?, harness)
 }
 
-fn parse(view: Option<&Value>) -> Result<RelayViewV1, &'static str> {
+fn parse(view: Option<&Value>) -> Result<RelayViewV2, &'static str> {
     let view = view.ok_or(VIEW_MISSING)?;
-    let parsed = RelayViewV1::deserialize(view).map_err(|_| VIEW_INVALID)?;
+    let parsed = RelayViewV2::deserialize(view).map_err(|_| VIEW_INVALID)?;
     if parsed.schema != VIEW_SCHEMA {
         return Err(VIEW_INVALID);
     }
     Ok(parsed)
 }
 
-fn select(parsed: &RelayViewV1, harness: &str) -> Result<HarnessView, &'static str> {
+fn select(parsed: &RelayViewV2, harness: &str) -> Result<HarnessView, &'static str> {
     let entry = parsed.harnesses.get(harness).ok_or(HARNESS_UNBOUND)?;
     let mode = entry
         .config

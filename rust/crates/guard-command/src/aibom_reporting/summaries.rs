@@ -9,7 +9,6 @@ use super::*;
 /// Returns `(layer_summary, trust, drift)`.
 pub fn summarize_aibom_layers(
     snapshots: &[GuardAgentInventorySnapshot],
-    _deps: &ReportingDeps<'_>,
     generated_at: &str,
 ) -> (Map<String, Value>, Map<String, Value>, Map<String, Value>) {
     let mut counts: std::collections::BTreeMap<String, i64> = [

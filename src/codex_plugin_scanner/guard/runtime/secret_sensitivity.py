@@ -46,22 +46,6 @@ def classify_secret_path(
     return None if result is None else SecretPathMatch(**result)
 
 
-def classify_secret_paths_batch(
-    paths: list[str], *, cwd: Path | None = None, home_dir: Path | None = None, deadline_monotonic: float | None = None
-) -> tuple[SecretPathMatch | None, ...]:
-    """Present one bounded native classification batch without recomputing it."""
-    result = content_query(
-        "path_batch",
-        {"paths": paths, "cwd": str(cwd) if cwd is not None else None, "home_dir": str(home_dir or Path.home())},
-        deadline_monotonic=deadline_monotonic,
-    )
-    if len(result) != len(paths):
-        from ..native_content_sensitivity import NativeContentSensitivityError
-
-        raise NativeContentSensitivityError("native_content_sensitivity_batch_unbound")
-    return tuple(None if item is None else SecretPathMatch(**item) for item in result)
-
-
 def classify_secret_content(
     text: str | None, *, suppress_samples: bool = True, documentation_sample_context: bool = False
 ) -> tuple[SecretContentMatch, ...]:

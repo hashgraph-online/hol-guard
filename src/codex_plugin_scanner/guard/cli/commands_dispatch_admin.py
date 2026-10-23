@@ -31,8 +31,11 @@ if TYPE_CHECKING:
 from ..adapters.diagnostic_probes import without_command_probes
 from ..approval_gate_nudge import approval_gate_posture
 from ..daemon.bounded_http import daemon_admission_snapshot
+from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
+from ..native_aibom_summaries import NativeAibomSummariesError
 from ..native_runtime_admission import native_resident_admission_snapshot
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
+from ..runtime.connector_setup_items import connector_setup_status
 from ..shims import package_shim_dashboard_status
 from ._commands_shared import *
 from .commands_dispatch_trust import build_trust_doctor_payload
@@ -158,6 +161,12 @@ def _run_guard_approvals_command(
 ) -> int:
     store = _require_guard_store(store)
     approvals_command = getattr(args, "approvals_command", None)
+    if approvals_command == "wait":
+        from .approval_wait import run_approval_wait_command
+
+        payload, exit_code = run_approval_wait_command(args, store=store)
+        _emit("approvals", payload, getattr(args, "json", False))
+        return exit_code
     if approvals_command == "open":
         payload, exit_code = run_approval_open_command(args, store=store)
         _emit("approvals", payload, getattr(args, "json", False))
@@ -332,6 +341,7 @@ def _run_guard_doctor_command(
             "tables": store.list_table_names(),
             "adapters": detected_harnesses,
             "runtime_detector_registry": _runtime_detector_registry_payload(config),
+            "connector_setup": connector_setup_status(store, load_guard_daemon_endpoint_url(guard_home)),
         }
     if getattr(args, "perf", False):
         payload["detector_perf"] = _runtime_detector_perf_payload(config)
@@ -399,7 +409,7 @@ def _run_guard_doctor_command(
         )
         native_runtime_repair = repair[0] if repair is not None else None
     with nullcontext() if args.harness else without_command_probes():
-        availability = doctor_native_availability()
+        availability = doctor_native_availability(guard_home)
     native_runtime: dict[str, object] = {
         "availability": availability,
         "admission": native_resident_admission_snapshot(),
@@ -413,8 +423,14 @@ def _run_guard_doctor_command(
     payload["native_runtime"] = native_runtime
     payload["trust"] = build_trust_doctor_payload(store)
     payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
+    from ..native_inventory_url_redaction import NativeInventoryUrlRedactionError
+
     with nullcontext() if args.harness else without_command_probes():
-        payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
+        try:
+            payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
+        except (NativeAibomSummariesError, NativeInventoryUrlRedactionError) as error:
+            # The rest of the report still diagnoses why the resident is missing.
+            payload["aibom"] = {"available": False, "error": str(error)}
     from ..harness_posture import harness_posture_summary
     from ..protection_coverage import protection_is_in_effect
     from ..protection_posture import protection_status_fields

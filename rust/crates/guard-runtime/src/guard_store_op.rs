@@ -42,12 +42,16 @@ use crate::guard_store_cmd_feedback as feedback;
 use crate::guard_store_cmd_lifecycle as lifecycle;
 use crate::guard_store_cmd_maintenance as maintenance;
 use crate::guard_store_cmd_privacy as privacy;
+use crate::guard_store_composio_catalog as composio_catalog;
 use crate::guard_store_connect as connect;
+use crate::guard_store_connector_context as connector_context;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
 use crate::guard_store_inventory as inventory;
 use crate::guard_store_local_cli as local_cli;
 use crate::guard_store_local_cli_grants as local_cli_grants;
+use crate::guard_store_local_mcp_declarations as local_mcp_declarations;
 use crate::guard_store_local_mcp_observation as local_mcp;
+use crate::guard_store_native_receipts as native_receipts;
 use crate::guard_store_native_review_consume as native_review_consume;
 use crate::guard_store_observed_mcp as observed_mcp;
 use crate::guard_store_outbox_binding::{
@@ -70,7 +74,7 @@ use crate::guard_store_storage_maintenance as storage_maintenance;
 use crate::guard_store_tool_call_evidence as tool_call_evidence;
 use crate::guard_store_wfcap_wire as wfcap;
 
-const MAX_BUSY_TIMEOUT_MS: u64 = 600_000;
+pub(crate) const MAX_BUSY_TIMEOUT_MS: u64 = 600_000;
 const CACHE_SIZE_KIB: i64 = 256 * 1024;
 const MMAP_SIZE_BYTES: i64 = 1024 * 1024 * 1024;
 
@@ -82,11 +86,23 @@ fn request_digest(request: &GuardStoreRequestV1) -> Result<String, &'static str>
     Ok(format!("sha256:{}", digest_bytes(&bytes)))
 }
 
+#[cfg(test)]
 pub(crate) fn evaluate_guard_store_request(
     request: &GuardStoreRequestV1,
 ) -> Result<Vec<u8>, String> {
+    evaluate_guard_store_request_with_owner(request, None)
+}
+
+pub(crate) fn evaluate_guard_store_request_with_owner(
+    request: &GuardStoreRequestV1,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest(request).map_err(str::to_owned)?;
-    let (status, code, payload, generation) = match evaluate(request) {
+    let outcome = match owner {
+        Some(owner) => evaluate_with_owner(request, Some(owner)),
+        None => evaluate(request),
+    };
+    let (status, code, payload, generation) = match outcome {
         Ok((payload, generation)) => ("ok".to_owned(), "ok".to_owned(), Some(payload), generation),
         Err(error) => {
             let payload = Some(json!({ "message": error.message() }));
@@ -105,6 +121,13 @@ pub(crate) fn evaluate_guard_store_request(
 }
 
 pub(crate) fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Option<i64>)> {
+    evaluate_with_owner(request, None)
+}
+
+fn evaluate_with_owner(
+    request: &GuardStoreRequestV1,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> StoreResult<(Value, Option<i64>)> {
     let invalid = |code| Err(StoreError::Invalid(code));
     if request.schema != GUARD_STORE_REQUEST_SCHEMA {
         return invalid("native_guard_store_schema_mismatch");
@@ -153,6 +176,7 @@ pub(crate) fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Opt
         &request.guard_home,
         &request.method,
         &args,
+        owner,
     );
     let payload = match outcome {
         Ok(payload) => payload,
@@ -291,6 +315,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "find_artifact_inventory_item"
         | "get_artifact_capability"
         | "list_receipts"
+        | "observed_mcp_history"
         | "list_receipts_since_rowid"
         | "latest_receipt_rowid"
         | "get_receipt"
@@ -372,6 +397,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "next_aibom_trust_attestation_sequence"
         | "add_receipt"
         | "record_tool_call_evidence"
+        | "record_native_decision_receipt"
         | "set_receipt_action_envelope"
         | "update_receipt_policy_decision"
         | "update_receipt_approval_context"
@@ -384,11 +410,14 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "record_local_cli_observation"
         | "replace_local_cli_commands"
         | "forget_local_cli_observation"
+        | "record_connector_setup_context"
         | "local_cli_replay_allowed"
         | "prune_inactive_local_cli_observations"
         | "cache_advisories" => Kind::Write,
         "find_local_mcp_observation" => Kind::Read,
-        "ensure_local_mcp_observation" => Kind::Write,
+        "ensure_local_mcp_observation"
+        | "reconcile_remote_mcp_declarations"
+        | "record_composio_discovery" => Kind::Write,
         _ if connect::is_state_read(method) => Kind::Read,
         _ if connect::handles(method) => Kind::Write,
         _ => return None,
@@ -401,6 +430,7 @@ fn dispatch(
     guard_home: &str,
     method: &str,
     args: &Args,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> StoreResult<Value> {
     match method {
         "review_event_outbox_status" => queries::status(connection, source, args),
@@ -486,6 +516,7 @@ fn dispatch(
         "count_command_shadow_observations" => privacy::count_shadow(connection),
         "list_command_shadow_observations" => privacy::list_shadow(connection, args),
         "observed_mcp_tool_actions" => observed_mcp::observed_mcp_tool_actions(connection),
+        "observed_mcp_history" => observed_mcp::observed_mcp_history(connection, args),
         "read_local_cli_grant" => local_cli_grants::read_grant(connection, args),
         "read_local_cli_command_catalog" => {
             local_cli_grants::read_command_catalog(connection, args)
@@ -511,10 +542,17 @@ fn dispatch(
         "record_local_cli_observation" => local_cli::record_observation(connection, args),
         "replace_local_cli_commands" => local_cli::replace_commands(connection, args),
         "forget_local_cli_observation" => local_cli::forget_observation(connection, args),
+        "record_connector_setup_context" => connector_context::record_context(connection, args),
         "local_cli_replay_allowed" => local_cli::replay_allowed_op(connection, args),
         "prune_inactive_local_cli_observations" => local_cli::prune_inactive(connection, args),
         "find_local_mcp_observation" => local_mcp::find_observation(connection, args),
         "ensure_local_mcp_observation" => local_mcp::ensure_observation(connection, args),
+        "reconcile_remote_mcp_declarations" => {
+            local_mcp_declarations::reconcile_remote_declarations(connection, args)
+        }
+        "record_composio_discovery" => {
+            composio_catalog::record_composio_discovery(connection, args)
+        }
         "upsert_guard_session" => sessions::upsert_session(connection, args),
         "get_guard_session" => sessions::get_session(connection, args),
         "list_guard_sessions" => sessions::list_sessions(connection, args),
@@ -551,6 +589,9 @@ fn dispatch(
         "record_tool_call_evidence" => {
             tool_call_evidence::record_tool_call_evidence(connection, args)
         }
+        "record_native_decision_receipt" => {
+            native_receipts::record_native_decision_receipt(connection, args)
+        }
         "set_receipt_action_envelope" => receipt_writes::set_action_envelope(connection, args),
         "update_receipt_policy_decision" => {
             receipt_writes::update_policy_decision(connection, args)
@@ -566,17 +607,17 @@ fn dispatch(
         "latest_receipt_rowid" => receipt_reads::latest_rowid(connection, args),
         "get_receipt" => receipt_reads::get_receipt(connection, args),
         "get_approval_request" => {
-            approval_reads::get_approval_request(connection, guard_home, args)
+            approval_reads::get_approval_request(connection, guard_home, args, owner)
         }
         "list_approval_requests" => {
-            approval_reads::list_approval_requests(connection, guard_home, args)
+            approval_reads::list_approval_requests(connection, guard_home, args, owner)
         }
         "list_approval_request_page" => {
             approval_pages::list_approval_request_page(connection, guard_home, args)
         }
         "count_approval_requests" => approval_pages::count_approval_requests(connection, args),
         "get_next_pending_request" => {
-            approval_pages::get_next_pending_request(connection, guard_home, args)
+            approval_pages::get_next_pending_request(connection, guard_home, args, owner)
         }
         "get_approval_extension_allow_hint" => {
             approval_metadata::get_approval_extension_allow_hint(connection, args)
@@ -596,10 +637,12 @@ fn dispatch(
             resolve_harness_native_approval_request(connection, guard_home, args)
         }
         "resolve_request_with_queue_result" => {
-            queue_result::resolve_request_with_queue_result(connection, guard_home, args)
+            queue_result::resolve_request_with_queue_result(connection, guard_home, args, owner)
         }
         "resolve_native_workspace_review_request" => {
-            queue_result::resolve_native_workspace_review_request(connection, guard_home, args)
+            queue_result::resolve_native_workspace_review_request(
+                connection, guard_home, args, owner,
+            )
         }
         "resolve_matching_duplicate_requests" => {
             resolve_matching_duplicate_requests(connection, source, guard_home, args)

@@ -389,7 +389,6 @@ pub fn remove_guard_profile_blocks(context: &ShimContext) -> ShimResult<Value> {
 mod tests {
     use std::collections::BTreeMap;
     use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::super::{ShimContext, ShimFacts};
     use super::{ensure_package_shim_path_in_shell_profile, is_transient_path};
@@ -422,10 +421,7 @@ mod tests {
 
     #[test]
     fn caller_transient_bit_governs_profile_writes_without_changing_the_path_check() {
-        let stamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
+        let stamp = crate::unique_nanos::unique_nanos();
         let home = std::env::temp_dir().join(format!("hol-guard-shim-profile-{stamp}"));
         let profile = home.join(".zshrc");
         let transient_home = format!("/tmp/hol-guard-shim-profile-{stamp}");

@@ -28,6 +28,7 @@ from typing import Protocol, cast
 
 from ..native_policy_snapshot_direct_lane import DIRECT_HOOK_EVIDENCE_FEATURE
 from .hook_direct_counters import HookCounterLog
+from .hook_policy_fence_window import record_direct_fence_wait
 
 _DRAIN_SCHEMA = "guard-hook-direct-evidence.v1"
 _DRAIN_INTERVAL_SECONDS = 0.25
@@ -112,6 +113,8 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
     if _hook_harness_is_unmanaged(host, harness):
         # The daemon passes an unmanaged harness through without recording.
         return True
+    # A hook the resident held through a policy update's fence reports its wait.
+    record_direct_fence_wait(host.store, record.get("fence_wait_ms"))
     accepted = validate_native_decision_receipt(receipt) if receipt is not None else None
     if accepted is not None:
         submit = getattr(host.activity_writer, "submit_native_decision_receipt", None)

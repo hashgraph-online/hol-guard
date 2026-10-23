@@ -19,6 +19,7 @@ _TOKENS = {
     "{{workspace}}": "${PARENT}",
     "{{root}}": "${GAUNTLET_ROOT}",
     "{{scratch}}": "${SCRATCH}",
+    "{{stage}}": "${STAGE}",
 }
 
 
@@ -49,3 +50,16 @@ def test_gauntlet_native_shell_commands_have_static_gate_cases() -> None:
     assert commands, "no native-tools allow commands found"
     missing = sorted(commands - _gate_commands())
     assert not missing, f"add these Gauntlet allow commands to the benign false-positive gate: {missing}"
+
+
+def test_registry_manifest_queries_and_their_negative_controls_are_gate_cases() -> None:
+    """A registry manifest query is a read; creating a manifest list or redirecting the query is not."""
+    ids = {case["id"] for case in json.loads(_GATE.read_text(encoding="utf-8"))["cases"]}
+    assert {
+        "docker-imagetools-inspect-digest",
+        "docker-imagetools-inspect-digest-head",
+        "docker-imagetools-inspect-raw-head",
+        "neg-docker-imagetools-create",
+        "neg-docker-imagetools-inspect-builder",
+        "neg-docker-imagetools-inspect-remote-host",
+    } <= ids

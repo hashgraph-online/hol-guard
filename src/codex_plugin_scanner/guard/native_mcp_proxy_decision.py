@@ -29,6 +29,14 @@ from .native_runtime_resilience import native_record_resident_failure, native_re
 
 MCP_PROXY_DECISION_FEATURE = "mcp-proxy-decision-v1"
 MCP_PROXY_ARCHIVE_VERIFY_FEATURE = "mcp-proxy-archive-verify-v1"
+MCP_PROXY_ARCHIVE_BINDING_REQUIRED_FEATURE = "mcp-proxy-archive-binding-required-v1"
+# The resident also classifies the answer to an inline approval prompt. An older
+# resident rejects that query as an unknown check, so a caller asks for it by name.
+MCP_PROXY_INLINE_APPROVAL_REPLY_FEATURE = "mcp-proxy-inline-approval-reply-v1"
+# The resident spells the sensitive read's artifact content hash itself, from
+# the artifact fields the context query carries. An older resident rejects
+# those fields as unknown, so a caller asks for it by name.
+MCP_SENSITIVE_READ_ARTIFACT_FEATURE = "mcp-sensitive-read-artifact-v1"
 _REQUEST_SCHEMA = "guard-mcp-proxy-decision-request.v1"
 _RESULT_SCHEMA = "guard-mcp-proxy-decision-result.v1"
 _OPERATION = "mcp_proxy_decide"
@@ -212,6 +220,43 @@ def native_external_archive_bind(
     return bound
 
 
+def _evaluation_entries(evaluation: object, name: str) -> list[object]:
+    """One list-valued field of an evaluation, as the resident reads it.
+
+    Anything that is not a list or a tuple carries no entries, exactly as the
+    callers that used to read these fields themselves treated it.
+    """
+
+    value = getattr(evaluation, name, ())
+    return list(value) if isinstance(value, (list, tuple)) else []
+
+
+def native_external_archive_binding_required(evaluation: object, *, guard_home: Path) -> bool:
+    """Whether ``evaluation`` only permits a request bound to its verified archives.
+
+    The evaluator owns what its own reasons mean, so the answer comes from the
+    resident. An unreachable resident answers ``True``: demanding a binding the
+    caller cannot produce blocks the install, which is the closed direction.
+    """
+
+    try:
+        payload = native_mcp_proxy_decide(
+            {
+                "check": "external_archive_binding_required",
+                "evaluation": {
+                    name: _evaluation_entries(evaluation, name)
+                    for name in ("external_archive_source_hashes", "reasons", "packages")
+                },
+            },
+            guard_home=guard_home,
+            required_feature=MCP_PROXY_ARCHIVE_BINDING_REQUIRED_FEATURE,
+        )
+    except (NativeMcpProxyDecisionError, TypeError, ValueError):
+        return True
+    required = payload.get("required")
+    return required if isinstance(required, bool) else True
+
+
 def native_package_reason_signals(reasons: Sequence[object], *, guard_home: Path) -> tuple[dict[str, Any], ...]:
     """The risk signals the resident projects from a package evaluation's reasons."""
 
@@ -223,3 +268,99 @@ def native_package_reason_signals(reasons: Sequence[object], *, guard_home: Path
     if not isinstance(signals, list):
         raise _fail("native_mcp_proxy_decision_payload_invalid")
     return tuple(signals)
+
+
+def native_inline_approval_reply(
+    payload: object,
+    *,
+    tool_name: str,
+    server_name: str,
+    guard_home: Path,
+) -> dict[str, Any]:
+    """What the client's answer to one inline approval prompt means.
+
+    The resident owns the classification and the block a refused or malformed
+    answer produces, so the proxy reads neither a second time. It answers with
+    the ``inline_approval`` fact the route consumes and, for a block, the
+    decision source, event decision and reason that name it.
+    """
+
+    answer = native_mcp_proxy_decide(
+        {
+            "check": "inline_approval_reply",
+            "payload": _inline_approval_payload(payload),
+            "tool_name": tool_name,
+            "server_name": server_name,
+        },
+        guard_home=guard_home,
+        required_feature=MCP_PROXY_INLINE_APPROVAL_REPLY_FEATURE,
+    )
+    classified = answer.get("inline_approval")
+    block = answer.get("block")
+    if classified not in _INLINE_APPROVAL_KINDS or not _block_matches(classified, block):
+        raise _fail("native_mcp_proxy_decision_payload_invalid")
+    return {"inline_approval": classified, "block": block}
+
+
+def _inline_approval_payload(result: object) -> Any:
+    """The two fields the resident classifies an inline answer on.
+
+    The client wrote the rest of the elicitation result, so forwarding it whole
+    sends unbounded foreign data through the request digest: a ``_meta`` block
+    or an integer wider than 64 bits round-trips differently on the resident's
+    side and reads as a resident failure rather than the answer the user gave.
+    Only ``action`` and ``content.decision`` decide anything, so only those are
+    sent, each kept when it is the string the classifier reads and dropped
+    otherwise -- which is the same answer the resident gave reading the field
+    itself. A result that is not a mapping stays one the resident reads as
+    invalid.
+    """
+
+    if not isinstance(result, Mapping):
+        return None
+    projected: dict[str, Any] = {}
+    action = result.get("action")
+    if isinstance(action, str):
+        projected["action"] = action
+    content = result.get("content")
+    if isinstance(content, Mapping):
+        decision = content.get("decision")
+        projected["content"] = {"decision": decision} if isinstance(decision, str) else {}
+    return projected
+
+
+_INLINE_APPROVAL_KINDS = frozenset({"allow", "denied", "fallthrough"})
+
+
+def _block_matches(classified: str, block: object) -> bool:
+    """Whether the block agrees with the classification it arrived with.
+
+    Only a denial carries a block, and a denial carries nothing else. Reading
+    the two independently let an answer that classified as ``allow`` arrive
+    beside a fully named denial block: the route would take the allow and drop
+    the block. A classification and a block that disagree are no answer at all.
+    """
+
+    if classified != "denied":
+        return block is None
+    return isinstance(block, dict) and all(
+        isinstance(block.get(field), str) for field in ("decision_source", "event_decision", "reason")
+    )
+
+
+def native_inline_approval_reply_available() -> bool:
+    """Whether this resident classifies the answer to an inline prompt.
+
+    An older resident rejects the query as an unknown check, which fails closed
+    -- correct, but only after the prompt was raised and answered. A caller asks
+    this before it prompts so an answer it cannot use is never collected.
+    """
+
+    status = native_runtime_status()
+    capabilities = status.capabilities
+    return bool(
+        status.available
+        and status.compatible
+        and capabilities is not None
+        and MCP_PROXY_INLINE_APPROVAL_REPLY_FEATURE in capabilities.features
+    )

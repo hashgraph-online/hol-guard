@@ -1,0 +1,414 @@
+/*
+ * Home hero, particle mark and "How Guard protects you" walkthrough.
+ * Kept out of styles.css so the shared stylesheet stays navigable.
+ */
+
+/* ---------------------------------------------------------------- Home hero (dark surface, echoes the sidebar header gradient) */
+.guard-hero {
+  --guard-hero-accent: rgba(72, 223, 123, 0.22);
+  box-shadow: 0 18px 40px -24px rgba(63, 65, 116, 0.55);
+  background:
+    radial-gradient(circle at 16% 0%, rgba(255, 255, 255, 0.12), transparent 40%),
+    radial-gradient(circle at 100% 100%, var(--guard-hero-accent), transparent 42%),
+    linear-gradient(135deg, #4467c8 0%, #3f4174 52%, #2a2c55 100%);
+}
+
+.guard-hero[data-status="review"] {
+  --guard-hero-accent: rgba(245, 158, 11, 0.26);
+}
+
+.guard-hero[data-status="setup"] {
+  --guard-hero-accent: rgba(85, 153, 254, 0.3);
+}
+
+.guard-hero-label p {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.guard-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.1);
+  padding: 4px 12px;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: #ffffff;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+}
+
+.guard-hero-badge i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #8fc0ff;
+  box-shadow: 0 0 0 3px rgba(85, 153, 254, 0.3);
+}
+
+.guard-hero-badge--clear {
+  background: rgba(72, 223, 123, 0.16);
+  border-color: rgba(72, 223, 123, 0.45);
+}
+
+.guard-hero-badge--clear i {
+  background: var(--brand-green);
+  box-shadow: 0 0 0 3px rgba(72, 223, 123, 0.25);
+}
+
+.guard-hero-badge--review {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(255, 213, 138, 0.5);
+}
+
+.guard-hero-badge--review i {
+  background: #ffd58a;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
+}
+
+/* CTAs inside the hero: the primary action is white on the dark surface, the secondary is translucent */
+.guard-hero-ctas > [data-primary="true"] {
+  background: #ffffff;
+  color: var(--brand-dark);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+}
+
+.guard-hero-ctas > [data-primary="true"]:hover {
+  background: #eef2ff;
+}
+
+.guard-hero-ctas > :not([data-primary="true"]) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+}
+
+.guard-hero-ctas > :not([data-primary="true"]):hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.guard-hero-ctas > :focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.guard-hero-title {
+  text-wrap: balance;
+}
+
+.guard-hero-fact::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.55;
+  vertical-align: 2px;
+}
+
+.guard-hero-stage {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  aspect-ratio: 1 / 1;
+  margin-inline: auto;
+}
+
+@media (max-width: 1023px) {
+  .guard-hero-stage {
+    max-width: 280px;
+  }
+}
+
+.guard-hero-halo {
+  position: absolute;
+  inset: 6%;
+  border-radius: 999px;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.16) 0%, rgba(143, 192, 255, 0.16) 40%, rgba(72, 223, 123, 0.06) 62%, transparent 72%);
+  filter: blur(2px);
+}
+
+.guard-hero-canvas {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: pan-y;
+}
+
+.guard-hero-fallback {
+  position: absolute;
+  inset: 8%;
+  display: none;
+}
+
+.guard-hero-fallback svg {
+  width: 100%;
+  height: 100%;
+}
+
+.guard-hero-stage--fallback .guard-hero-canvas {
+  display: none;
+}
+
+.guard-hero-stage--fallback .guard-hero-fallback {
+  display: block;
+}
+
+.guard-hero-live {
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.guard-hero-live i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--brand-green);
+  box-shadow: 0 0 0 3px rgba(72, 223, 123, 0.22);
+}
+
+.guard-hero[data-status="review"] .guard-hero-live i {
+  background: var(--evidence-stopped);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.22);
+}
+
+.guard-hero[data-status="setup"] .guard-hero-live i {
+  background: var(--brand-blue);
+  box-shadow: 0 0 0 3px rgba(85, 153, 254, 0.22);
+}
+
+/* ---------------------------------------------------------------- Home: "How Guard protects you" sample session */
+/* Outcome colours follow Evidence: allowed green, stopped amber, reviewed blue. */
+.guard-checkpoint {
+  --checkpoint-color: var(--brand-dark);
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--checkpoint-color) 12%, transparent) 0%, transparent 70%);
+  transition: background 320ms var(--ease-out-quart);
+}
+
+@media (min-width: 1024px) {
+  .guard-checkpoint {
+    width: 112px;
+    height: 112px;
+    margin-bottom: 4px;
+  }
+}
+
+.guard-checkpoint[data-state="checking"] { --checkpoint-color: var(--brand-blue); }
+.guard-checkpoint[data-state="ran"] { --checkpoint-color: var(--evidence-allowed); }
+.guard-checkpoint[data-state="stopped"] { --checkpoint-color: var(--evidence-stopped); }
+.guard-checkpoint[data-state="asking"],
+.guard-checkpoint[data-state="reviewed"] { --checkpoint-color: var(--evidence-reviewed); }
+
+.guard-checkpoint-mark {
+  display: block;
+  width: 72%;
+  height: 72%;
+}
+
+.guard-checkpoint-mark svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.guard-checkpoint-mark circle,
+.guard-checkpoint-mark line {
+  transition:
+    fill 320ms var(--ease-out-quart),
+    stroke 320ms var(--ease-out-quart);
+}
+
+/* Checking: the outer nodes light up in turn, like Guard reading the action */
+.guard-checkpoint[data-state="checking"] .bm-bar-spoke,
+.guard-checkpoint[data-state="checking"] .bm-bar-radial {
+  stroke: var(--brand-blue);
+}
+
+.guard-checkpoint[data-state="checking"] .bm-node-outer {
+  animation: guard-checkpoint-scan 720ms ease-in-out infinite;
+}
+
+.guard-checkpoint[data-state="checking"] .bm-node-outer:nth-of-type(2) { animation-delay: 120ms; }
+.guard-checkpoint[data-state="checking"] .bm-node-outer:nth-of-type(3) { animation-delay: 240ms; }
+.guard-checkpoint[data-state="checking"] .bm-node-outer:nth-of-type(4) { animation-delay: 360ms; }
+.guard-checkpoint[data-state="checking"] .bm-node-outer:nth-of-type(5) { animation-delay: 480ms; }
+.guard-checkpoint[data-state="checking"] .bm-node-outer:nth-of-type(6) { animation-delay: 600ms; }
+
+.guard-checkpoint[data-state="ran"] circle { fill: var(--brand-green-text); }
+
+.guard-checkpoint[data-state="stopped"] circle,
+.guard-checkpoint[data-state="stopped"] .bm-bar-spoke,
+.guard-checkpoint[data-state="stopped"] .bm-bar-ring {
+  fill: var(--evidence-stopped);
+  stroke: var(--evidence-stopped);
+}
+
+.guard-checkpoint[data-state="asking"] circle,
+.guard-checkpoint[data-state="asking"] .bm-bar-spoke,
+.guard-checkpoint[data-state="reviewed"] circle {
+  fill: var(--brand-blue);
+  stroke: var(--brand-blue);
+}
+
+.guard-checkpoint[data-state="asking"] .guard-checkpoint-mark {
+  animation: guard-checkpoint-breathe 1.8s ease-in-out infinite;
+}
+
+/* One ring per decision, so each verdict lands visibly */
+.guard-checkpoint-ripple {
+  position: absolute;
+  inset: 8%;
+  border-radius: 999px;
+  border: 2px solid var(--checkpoint-color);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.guard-checkpoint:not([data-state="idle"]):not([data-state="checking"]) .guard-checkpoint-ripple {
+  animation: guard-checkpoint-ripple 700ms var(--ease-out-quart) both;
+}
+
+.guard-checkpoint-title[data-state="ran"] { color: var(--brand-green-text); }
+.guard-checkpoint-title[data-state="stopped"] { color: #b45309; }
+.guard-checkpoint-title[data-state="asking"],
+.guard-checkpoint-title[data-state="reviewed"] { color: var(--brand-blue); }
+
+@media (min-width: 1024px) {
+  .guard-session-feed {
+    min-height: 456px;
+  }
+}
+
+.guard-session-row {
+  animation: guard-session-row-in 320ms var(--ease-out-quart) both;
+  transition: background-color 240ms var(--ease-out-quart);
+}
+
+.guard-session-row[data-tone="stopped"] {
+  background: rgba(255, 251, 235, 0.85);
+}
+
+.guard-session-row[data-tone="ask"] {
+  background: color-mix(in srgb, var(--brand-blue) 4%, white);
+}
+
+.guard-session-row[data-inspected] {
+  box-shadow: inset 3px 0 0 var(--brand-blue);
+  background: var(--surface-1);
+}
+
+.guard-session-row[data-tone="stopped"] .guard-session-icon {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.guard-session-row[data-tone="ask"] .guard-session-icon {
+  background: color-mix(in srgb, var(--brand-blue) 14%, white);
+  color: var(--brand-blue);
+}
+
+.guard-session-detail {
+  animation: guard-session-row-in 280ms var(--ease-out-quart) both;
+}
+
+.guard-session-chip {
+  transition:
+    background-color 200ms,
+    color 200ms,
+    border-color 200ms;
+}
+
+.guard-session-chip[data-status="waiting"] {
+  animation: guard-session-waiting 1.6s ease-in-out infinite;
+}
+
+.guard-session-spinner {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--brand-blue) 25%, transparent);
+  border-top-color: var(--brand-blue);
+  animation: guard-session-spin 700ms linear infinite;
+}
+
+.guard-session-status[data-phase="waiting"] {
+  color: var(--brand-blue);
+  font-weight: 600;
+}
+
+.guard-session-count {
+  animation: guard-session-count-in 260ms var(--ease-out-quart) both;
+}
+
+@keyframes guard-checkpoint-scan {
+  0%, 100% { fill: var(--brand-dark); }
+  40% { fill: var(--brand-blue); }
+}
+
+@keyframes guard-checkpoint-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes guard-checkpoint-ripple {
+  0% { opacity: 0.7; transform: scale(0.75); }
+  100% { opacity: 0; transform: scale(1.35); }
+}
+
+@keyframes guard-session-row-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes guard-session-count-in {
+  from { opacity: 0.35; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes guard-session-waiting {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brand-blue) 35%, transparent); }
+  50% { box-shadow: 0 0 0 4px transparent; }
+}
+
+@keyframes guard-session-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guard-checkpoint *,
+  .guard-session-row,
+  .guard-session-detail,
+  .guard-session-count,
+  .guard-session-chip,
+  .guard-session-spinner {
+    animation: none !important;
+  }
+}

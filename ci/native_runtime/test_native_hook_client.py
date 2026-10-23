@@ -22,6 +22,7 @@ from native_hook_client_support import native_runtime as _native_runtime_fixture
 
 from ci.native_runtime.native_process_test_support import process_is_alive
 from codex_plugin_scanner.guard.native_command_control_binding import load_native_command_program_metadata
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS
 
 
 def _read_stream_frame(client: subprocess.Popen[bytes], timeout: float = 3) -> bytes:
@@ -177,7 +178,7 @@ def test_native_hook_client_stop_reaps_managed_processes(
         (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
         check=False,
         capture_output=True,
-        timeout=3,
+        timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
     )
     assert result.returncode == 0, result.stderr
     deadline = time.monotonic() + 2
@@ -227,8 +228,10 @@ def test_native_hook_client_rejects_self_authenticated_forged_state(
     tmp_path: Path,
 ) -> None:
     runtime, state_dir = native_runtime
+    # Build the request first: its store read must not meet the forged state.
+    request = _request(runtime, state_dir.parent)
     _write_forged_state(runtime, state_dir)
-    response = _invoke(runtime, state_dir, _request(runtime, state_dir.parent))
+    response = _invoke(runtime, state_dir, request)
     assert response["authority"] == "rust"
     assert _result(response)["minimum_action"] == "allow"
     assert len(_state_files(state_dir)) == 1
@@ -295,3 +298,69 @@ def test_native_hook_client_restart_budget_opens_circuit(
     )
     assert blocked.returncode != 0
     assert b"native_resident_restart_circuit_open" in blocked.stderr
+
+
+def _await_ownerless_resident_exit(process_id: int) -> None:
+    """Wait for a resident whose one-shot client is gone to shut itself down."""
+    deadline = time.monotonic() + 30
+    while process_is_alive(process_id):
+        assert time.monotonic() < deadline, "ownerless resident outlived its lease"
+        time.sleep(0.05)
+
+
+def test_repeated_one_shot_clients_never_open_the_restart_budget_circuit(
+    native_runtime: tuple[Path, Path],
+) -> None:
+    """A CLI-only harness cold-spawns a resident per hook call, and that is not a crash loop."""
+    runtime, state_dir = native_runtime
+    request = _request(runtime, state_dir.parent)
+    observed_generations: set[int] = set()
+    for call_index in range(6):
+        response = _invoke(runtime, state_dir, request)
+        assert response["authority"] == "rust"
+        assert _result(response)["minimum_action"] == "allow"
+        state_files = _state_files(state_dir)
+        assert len(state_files) == 1
+        state = json.loads(state_files[0].read_text(encoding="utf-8"))
+        generation = state["generation"]
+        assert isinstance(generation, int)
+        observed_generations.add(generation)
+        assert len(observed_generations) == call_index + 1
+        process_id = state["process_id"]
+        assert isinstance(process_id, int) and process_id > 0
+        _await_ownerless_resident_exit(process_id)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="flock-based owner lock probe is POSIX only")
+def test_foreign_resident_owner_never_spends_the_restart_budget(
+    native_runtime: tuple[Path, Path],
+) -> None:
+    import fcntl
+
+    runtime, state_dir = native_runtime
+    request = _request(runtime, state_dir.parent)
+    assert _result(_invoke(runtime, state_dir, request))["minimum_action"] == "allow"
+    _terminate_state_process(_state_files(state_dir)[-1])
+    # Another Guard install's resident holds the home-wide owner lock.
+    with (state_dir / "managed-resident-owner.v1.lock").open("r+b") as owner:
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                fcntl.flock(owner.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                assert time.monotonic() < deadline, "terminated resident kept the owner lock"
+                time.sleep(0.05)
+        for _attempt in range(4):
+            blocked = subprocess.run(
+                (str(runtime), "hook-client", "--stdin", str(state_dir)),
+                input=request,
+                check=False,
+                capture_output=True,
+                timeout=10,
+            )
+            assert blocked.returncode != 0
+            assert b"native_resident_owner_busy" in blocked.stderr
+            assert b"native_resident_restart_circuit_open" not in blocked.stderr
+    recovered = _invoke(runtime, state_dir, request)
+    assert _result(recovered)["minimum_action"] == "allow"

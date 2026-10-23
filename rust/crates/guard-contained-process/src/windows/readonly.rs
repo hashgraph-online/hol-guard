@@ -52,6 +52,8 @@ pub struct ReadonlySnapshotRun<'a> {
     pub workspace: &'a Path,
     /// Working directory inside `workspace`.
     pub cwd: &'a Path,
+    /// Absolute for an installed runtime, or relative to the workspace for an
+    /// executable the snapshot copy itself holds.
     pub executable: &'a Path,
     pub arguments: &'a [OsString],
     pub environment: &'a [(OsString, OsString)],
@@ -143,7 +145,15 @@ pub fn run_readonly_snapshot(run: ReadonlySnapshotRun<'_>) -> io::Result<Capture
         &mut Budget::default(),
     )?;
     drop(workspace);
-    let mut executable = run.executable.to_path_buf();
+    // A relative executable is one the snapshot itself holds: a virtual
+    // environment's own interpreter, which the caller could not name
+    // absolutely because the snapshot root is created here.
+    let mut executable = if run.executable.is_relative() {
+        bound_fs::relative_components(run.executable)?;
+        snapshot.join(run.executable)
+    } else {
+        run.executable.to_path_buf()
+    };
     if let Some(build) = &run.build {
         let limits = Limits {
             withhold: build.withhold_dependency,

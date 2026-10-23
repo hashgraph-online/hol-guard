@@ -126,6 +126,7 @@ fn evaluate_with_path(
             cdpath_unset: false,
             rustup_override_absent: false,
             npm_config_inert: false,
+            pip_config_inert: false,
             shell_home_matches: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),
@@ -167,10 +168,7 @@ fn native_worktree_proof_admits_only_fresh_local_branch_creation() {
     let root = std::fs::canonicalize(root_directory).unwrap().join(format!(
         "guard-git-worktree-proof-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let repository = root.join("repository");
     let _cleanup = FixtureCleanup(root.clone());

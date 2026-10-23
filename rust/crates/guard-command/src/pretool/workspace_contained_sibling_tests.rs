@@ -40,6 +40,7 @@ fn reason(harness: &str, home: &Path, cwd: &Path, command: &str) -> String {
 
 /// The stamped shell environment a harness sends with a command, naming the
 /// HOME the shell would expand `~` from.
+#[cfg(unix)]
 fn environment(home: &Path) -> guard_contracts::GuardExecutionEnvironmentV1 {
     guard_contracts::GuardExecutionEnvironmentV1 {
         path: std::env::var("PATH").unwrap_or_default(),
@@ -59,6 +60,7 @@ fn environment(home: &Path) -> guard_contracts::GuardExecutionEnvironmentV1 {
 /// that HOME is the declared one. The runtime rebuilds the path context from
 /// that stamp, so the fixture's home has to arrive stamped: without it the
 /// runtime reads its own HOME, which is never a fixture's.
+#[cfg(unix)]
 fn home_result(
     harness: &str,
     home: &Path,
@@ -80,6 +82,7 @@ fn home_result(
             cdpath_unset: false,
             rustup_override_absent: false,
             npm_config_inert: false,
+            pip_config_inert: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),
         },
@@ -90,6 +93,7 @@ fn home_result(
 /// What the containment screens read besides the command itself, so a
 /// spelling that loses containment names the evidence that refused it
 /// rather than only the reason it ended with.
+#[cfg(unix)]
 fn evidence(result: &guard_contracts::PreToolResultV1) -> String {
     let Some(extensions) = result.command_extensions.as_ref() else {
         return format!("{} without extension evidence", result.reason_code);
@@ -190,6 +194,7 @@ fn the_home_projection_answers_for_a_sibling_root() {
         cdpath_unset: false,
         rustup_override_absent: false,
         npm_config_inert: false,
+        pip_config_inert: false,
         ripgrep_config_absent: false,
         psql_environment: Default::default(),
     };
@@ -228,6 +233,9 @@ fn a_list_after_cd_into_a_sibling_root_runs_contained_there() {
         format!("cd {} && npm run build && ls dist", tree.display()),
         // A removal is contained there exactly as it is in the session's own root.
         format!("cd {} && ls && rm notes.txt", tree.display()),
+        // Git in a linked worktree is bounded as it is in the root itself: the
+        // sink grants the shared Git directory the worktree's index lives in.
+        format!("cd {} && git add -A && git status", tree.display()),
         format!(
             "cd {} && npm run build && cat package.json",
             other.display()
@@ -287,10 +295,6 @@ fn a_sibling_cd_the_sink_would_not_rebase_keeps_its_review() {
         format!("cd {}/plain; npm run build", projects.display()),
         format!("cd {}/plain 2>/dev/null; npm run build", projects.display()),
         // The rest still faces every check it would from that root.
-        format!(
-            "cd {}/app-report && git add -A && git status",
-            projects.display()
-        ),
         format!(
             "cd {}/app-report && npm run build && curl https://example.com",
             projects.display()
@@ -554,6 +558,11 @@ fn a_script_in_a_sibling_repository_runs_contained_from_its_root() {
             "bun {0}/node_modules/vite/bin/vite.js build --root {0}",
             other.display()
         ),
+        // A heap size ahead of the script leaves the script as the program.
+        format!(
+            "node --max-old-space-size=4096 {}/node_modules/vite/bin/vite.js build",
+            other.display()
+        ),
     ] {
         assert_eq!(
             contained(&reason("omp", &home, &main, &command)),
@@ -579,6 +588,11 @@ fn a_script_outside_a_sibling_repository_keeps_its_review() {
         format!("jq . {}/package.json", tree.display()),
         format!("rg -n report {}/scripts", tree.display()),
         format!("python3 -c 1 {}", script.display()),
+        format!(
+            "node --max-old-space-size=4096 {}/node_modules/vite/bin/vite.js {}/probe.py",
+            tree.parent().unwrap().join("other").display(),
+            loose.display()
+        ),
     ] {
         assert!(
             !contained(&reason("omp", &home, &main, &command)),

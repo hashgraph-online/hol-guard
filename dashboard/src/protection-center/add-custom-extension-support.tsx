@@ -8,10 +8,13 @@ function enrollableCount(item: LocalCliItem): number {
 
 export type EnrollStep = "pick" | "review" | "confirm";
 
+/** Tool-level MCP records: seen in agent calls, or a remote server from a harness config. */
+const OBSERVED_MCP_LABEL_SUFFIXES = [" · observed tools", " · configured server"];
+
 export function isObservedMcpItem(item: LocalCliItem | null): boolean {
   return item?.surface === "mcp"
     && item.example_label.startsWith("mcp__")
-    && item.source_label?.endsWith(" · observed tools") === true;
+    && OBSERVED_MCP_LABEL_SUFFIXES.some((suffix) => item.source_label?.endsWith(suffix) === true);
 }
 
 export function addDialogSubmitLabel(input: {

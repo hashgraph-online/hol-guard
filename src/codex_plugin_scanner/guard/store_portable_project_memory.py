@@ -5,9 +5,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
-from .action_lattice import guard_action_severity
 from .project_identity import (
     enrich_project_identity_metadata,
     is_portable_project_identity,
@@ -15,14 +14,14 @@ from .project_identity import (
     resolve_portable_project_identity,
 )
 from .store_base import PolicyDecisionLookupResult
-from .store_policy import _DEGRADED_AUTHORITY_REVISION, _most_restrictive_policy_lookup
+from .store_policy import _DEGRADED_AUTHORITY_REVISION
 from .store_policy import POLICY_DECISION_LOOKUP_FEATURE as _LOOKUP
 from .store_policy import POLICY_LOOKUP_MEMORY_FEATURE as _MEMORY
+from .store_policy import PORTABLE_COMPOSITION_LOOKUP_FEATURE as _PORTABLE_COMPOSITION
 from .store_policy import RUNTIME_SAVED_REUSE_FEATURE as _SAVED_REUSE
 
 _PROJECT_IDENTITY_CACHE_MAX_ITEMS = 128
 _PROJECT_IDENTITY_CACHE: dict[tuple[str, int], str] = {}
-_PORTABLE_PERMISSION_FLOOR = guard_action_severity("review")
 
 
 def _cached_portable_project_identity(workspace: str) -> str | None:
@@ -51,48 +50,6 @@ def _cached_portable_project_identity(workspace: str) -> str | None:
 
 def _text(value: object) -> str | None:
     return value if isinstance(value, str) else None
-
-
-def _portable_lookup_without_permission_elevation(
-    lookup: PolicyDecisionLookupResult,
-) -> PolicyDecisionLookupResult:
-    """Keep portable selectors restrictive-only and never reuse one-shot authority.
-
-    Git metadata lives inside the workspace and can be forged by that
-    workspace. A portable selector is therefore useful for carrying managed
-    restrictions across clones, but it cannot safely prove that a permissive
-    approval belongs to the current local workspace. Local-path authority is
-    the only source allowed to lower enforcement below review.
-    """
-    decision = lookup.get("decision")
-    if not isinstance(decision, dict):
-        return lookup
-    approval_id = decision.get("approval_id")
-    action_severity = guard_action_severity(decision.get("action"), unknown_action="block")
-    if approval_id is not None or action_severity < _PORTABLE_PERMISSION_FLOOR:
-        return {**lookup, "decision": None}
-    return lookup
-
-
-def _without_authority_revision(lookup: PolicyDecisionLookupResult) -> PolicyDecisionLookupResult:
-    """Remove the preview-only authority revision from an enforcement result."""
-    decision = lookup.get("decision")
-    if not isinstance(decision, dict) or "_approval_authority_revision" not in decision:
-        return lookup
-    sanitized_decision = dict(decision)
-    sanitized_decision.pop("_approval_authority_revision", None)
-    return {**lookup, "decision": sanitized_decision}
-
-
-def _restrictive_only_lookup(lookup: PolicyDecisionLookupResult) -> PolicyDecisionLookupResult:
-    """Fail closed after a saved allow cannot be atomically claimed."""
-    decision = lookup.get("decision")
-    sanitized = _without_authority_revision(lookup)
-    if not isinstance(decision, dict):
-        return sanitized
-    if guard_action_severity(decision.get("action"), unknown_action="block") >= _PORTABLE_PERMISSION_FLOOR:
-        return sanitized
-    return {**sanitized, "decision": None}
 
 
 # Store mixins are composed dynamically in ``GuardStore``. Sibling mixins use
@@ -342,6 +299,13 @@ class StorePortableProjectMemoryMixin:
         consume_one_shot: bool = True,
         local_once_only: bool = False,
     ) -> PolicyDecisionLookupResult:
+        """Resolve the lookup with this clone's portable project identity composed in.
+
+        Python keeps deriving the identity because
+        ``_portable_project_workspace`` answers ``None`` for a workspace whose
+        identity the resident would have to defer on, which a store lookup has
+        no way to do.
+        """
         portable_workspace = None if local_once_only else self._portable_project_workspace(workspace)
         if portable_workspace is None:
             return super().resolve_policy_decision_lookup(
@@ -356,68 +320,37 @@ class StorePortableProjectMemoryMixin:
                 local_once_only=local_once_only,
             )
 
-        # Portable Git metadata is classification, not authentication. Always
-        # inspect portable authority without consuming it, then discard any
-        # one-shot or permission-lowering decision before composition. This
-        # prevents a forged repository identity from inheriting an allow/warn
-        # or burning reusable one-shot authority belonging to another clone.
-        portable_preview = _portable_lookup_without_permission_elevation(
-            super().resolve_policy_decision_lookup(
-                harness,
-                artifact_id,
-                artifact_hash=artifact_hash,
-                workspace=portable_workspace,
-                publisher=publisher,
-                now=now,
-                runtime_exact_match_context=runtime_exact_match_context,
-                consume_one_shot=False,
-            )
-        )
-        normalized_workspace = workspace.strip() if isinstance(workspace, str) else None
-        if portable_workspace == normalized_workspace:
-            return portable_preview if not consume_one_shot else _without_authority_revision(portable_preview)
-
-        # Preview local authority as well. A local one-shot must not be claimed
-        # before a stronger portable restriction has had a chance to win.
-        local_preview = super().resolve_policy_decision_lookup(
-            harness,
-            artifact_id,
+        # Portable Git metadata is classification, not authentication: it lives
+        # inside the workspace and can be forged by that workspace. The resident
+        # therefore previews the portable selector without consuming it, discards
+        # any one-shot or permission-lowering decision it carries, composes that
+        # with the local preview most restrictive, and only then claims the
+        # effective allow — all over one store connection, under its own write
+        # lock. Composing here instead would make Python choose the verdict and
+        # would leave a window between the preview and the claim.
+        evidence = self.policy_lookup_evidence(now=now, claim_binding=consume_one_shot)
+        if evidence.degraded_trust_status is not None:
+            return {
+                "decision": None,
+                "ignored_local_integrity": None,
+                "trust_status": evidence.degraded_trust_status,
+                "authority_revision": _DEGRADED_AUTHORITY_REVISION,
+            }
+        request = self.policy_decision_lookup_request(
+            evidence,
+            harness=harness,
+            artifact_id=artifact_id,
             artifact_hash=artifact_hash,
             workspace=workspace,
             publisher=publisher,
-            now=now,
             runtime_exact_match_context=runtime_exact_match_context,
-            consume_one_shot=False,
+            consume_one_shot=consume_one_shot,
+            portable_workspace=portable_workspace,
         )
-        effective_preview = _most_restrictive_policy_lookup([local_preview, portable_preview])
-        if not consume_one_shot:
-            return effective_preview
-
-        effective_decision = effective_preview.get("decision")
-        if not isinstance(effective_decision, dict) or effective_decision.get("action") != "allow":
-            return _without_authority_revision(effective_preview)
-
-        # Portable permission-lowering decisions were removed above, so any
-        # effective allow came from local authority. Claim that exact preview
-        # atomically. The embedded authority revision prevents a stale allow
-        # from surviving a concurrent policy or approval change.
-        if self.claim_approval_reuse_decision(effective_decision, now=now):
-            return _without_authority_revision(effective_preview)
-
-        # Authority changed between preview and claim. Recompute without
-        # consuming anything and retain only restrictive policy; a permission
-        # can be presented again on the caller's next approval cycle.
-        refreshed = self.resolve_policy_decision_lookup(
-            harness,
-            artifact_id,
-            artifact_hash=artifact_hash,
-            workspace=workspace,
-            publisher=publisher,
-            now=now,
-            runtime_exact_match_context=runtime_exact_match_context,
-            consume_one_shot=False,
+        return cast(
+            "PolicyDecisionLookupResult",
+            self.send_policy_decision_lookup(request, required_feature=_PORTABLE_COMPOSITION),
         )
-        return _restrictive_only_lookup(refreshed)
 
     @staticmethod
     def _portable_project_workspace(workspace: str | None) -> str | None:

@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from . import native_git_execution_safety
+from .models import GuardArtifact
 from .native_direct_tool_context import _facts
 from .native_git_execution_safety import _environment_snapshot
 from .native_request_context import NativeRequestContextFailure, _call
@@ -28,7 +29,6 @@ from .runtime.secret_file_request_services.request_models import (
 from .runtime.secret_sensitivity import SecretPathMatch
 
 if TYPE_CHECKING:
-    from .models import GuardArtifact
     from .runtime.actions import GuardActionEnvelope
     from .runtime.command_evaluation import CompositeCommandEvaluation
     from .runtime.command_model import CanonicalCommand
@@ -302,10 +302,171 @@ def native_sensitive_file_write_request(
         cwd=cwd,
         home_dir=home_dir or Path.home(),
     )
-    if result is None:
+    return _write_match(result)
+
+
+# Every key the resident puts on an artifact wire. The ones a sensitive-request
+# artifact never carries — command, args, url, transport, publisher and the
+# runtime-private metadata — are sent as their empty forms and must still be
+# present, so a reply that quietly grew or lost a field is a malformed reply
+# rather than an artifact missing a field nobody checked.
+_ARTIFACT_FIELDS = frozenset(
+    {
+        "artifact_id",
+        "name",
+        "harness",
+        "artifact_type",
+        "source_scope",
+        "config_path",
+        "command",
+        "args",
+        "url",
+        "transport",
+        "publisher",
+        "metadata",
+        "runtime_private_metadata",
+    }
+)
+
+
+def _write_match(value: object) -> FileWriteRequestMatch | None:
+    if value is None:
         return None
-    wire = _object(result, _WRITE_FIELDS)
+    wire = _object(value, _WRITE_FIELDS)
     return FileWriteRequestMatch(**{name: _text(value) for name, value in wire.items()})
+
+
+def _artifact(value: object) -> GuardArtifact:
+    """A Guard artifact the resident built, or a raise.
+
+    An artifact that will not decode is not an absent artifact: the request it
+    describes was found, and reading a malformed reply as "nothing to review"
+    would drop the review.
+    """
+
+    wire = _object(value, _ARTIFACT_FIELDS)
+    # A file request artifact carries no launch fields; a reply that fills one
+    # has drifted from the builder and would otherwise lose that data silently.
+    if any(wire[name] is not None for name in ("command", "url", "transport", "publisher")):
+        raise _invalid()
+    if wire["args"] != [] or wire["runtime_private_metadata"] != {}:
+        raise _invalid()
+    metadata = wire["metadata"]
+    if not isinstance(metadata, dict) or not all(isinstance(key, str) for key in metadata):
+        raise _invalid()
+    return GuardArtifact(
+        artifact_id=_text(wire["artifact_id"]),
+        name=_text(wire["name"]),
+        harness=_text(wire["harness"]),
+        artifact_type=_text(wire["artifact_type"]),
+        source_scope=_text(wire["source_scope"]),
+        config_path=_text(wire["config_path"]),
+        metadata=dict(metadata),
+    )
+
+
+def _request_and_artifact(result: object) -> tuple[Any, GuardArtifact | None]:
+    wire = _object(result, frozenset({"match", "artifact"}))
+    if wire["match"] is None:
+        if wire["artifact"] is not None:
+            raise _invalid()
+        return None, None
+    if wire["artifact"] is None:
+        raise _invalid()
+    return wire["match"], _artifact(wire["artifact"])
+
+
+def native_sensitive_file_read_request_artifact(
+    tool_name: object,
+    arguments: object,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    harness: str,
+    config_path: str,
+    source_scope: str,
+) -> tuple[FileReadRequestMatch | None, GuardArtifact | None]:
+    """The sensitive file-read request a tool call makes, and the review it earns.
+
+    Both come back from one call because the artifact names the request: a
+    second round trip could describe a request the caller no longer acts on,
+    and the artifact id is the key a saved approval binds under.
+    """
+
+    match, artifact = _request_and_artifact(
+        _ask(
+            "file_read_artifact",
+            {
+                "tool_name": tool_name,
+                "arguments": arguments,
+                "harness": harness,
+                "config_path": config_path,
+                "source_scope": source_scope,
+            },
+            cwd=cwd,
+            home_dir=home_dir or Path.home(),
+        )
+    )
+    return _read_match(match), artifact
+
+
+def native_sensitive_file_read_request_artifact_from_action(
+    action: GuardActionEnvelope,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    harness: str,
+    config_path: str,
+    source_scope: str,
+) -> tuple[FileReadRequestMatch | None, GuardArtifact | None]:
+    projection = {
+        "action_type": action.action_type,
+        "tool_name": action.tool_name,
+        "target_paths": list(action.target_paths),
+    }
+    match, artifact = _request_and_artifact(
+        _ask(
+            "file_read_from_action_artifact",
+            {
+                "action": projection,
+                "harness": harness,
+                "config_path": config_path,
+                "source_scope": source_scope,
+            },
+            cwd=cwd,
+            home_dir=home_dir or Path.home(),
+        )
+    )
+    return _read_match(match), artifact
+
+
+def native_sensitive_file_write_request_artifact(
+    tool_name: object,
+    arguments: object,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    protected_paths: dict[str, str] | None,
+    harness: str,
+    config_path: str,
+    source_scope: str,
+) -> tuple[FileWriteRequestMatch | None, GuardArtifact | None]:
+    match, artifact = _request_and_artifact(
+        _ask(
+            "file_write_artifact",
+            {
+                "tool_name": tool_name,
+                "arguments": arguments,
+                "protected_paths": protected_paths,
+                "harness": harness,
+                "config_path": config_path,
+                "source_scope": source_scope,
+            },
+            cwd=cwd,
+            home_dir=home_dir or Path.home(),
+        )
+    )
+    return _write_match(match), artifact
 
 
 def native_command_list_candidate_texts(values: list[str], *, preserve_items: bool) -> tuple[str, ...]:

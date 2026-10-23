@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters._modules.zcode.zcode_hooks import prepare_zcode_hook_payload
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.grok_hooks import prepare_grok_hook_payload
-from codex_plugin_scanner.guard.adapters.zcode_hooks import prepare_zcode_hook_payload
 from codex_plugin_scanner.guard.cli import commands_hook
 from codex_plugin_scanner.guard.cli.commands_support_workspace import _workspace_from_hook_payload
 from codex_plugin_scanner.guard.config import GuardConfig

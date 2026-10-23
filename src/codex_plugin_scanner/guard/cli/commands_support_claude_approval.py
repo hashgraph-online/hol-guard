@@ -7,65 +7,56 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ._commands_shared import _CLAUDE_GUARD_APPROVAL_HEADER, _CLAUDE_GUARD_APPROVAL_OPTIONS, _now
+    from ..runtime.package_request_evaluation import PackageRequestEvaluation
+    from ._commands_shared import _now
     from .commands_support_hook_state import (
         _load_single_claude_pending_permission,
         _remove_claude_pending_permission,
     )
     from .commands_support_permission_store import _persist_claude_native_permission_policy
     from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
-    from .commands_support_runtime_policy import (
-        _claude_notification_tool_display_name,
-        _claude_notification_tool_name,
-        _ensure_terminal_punctuation,
-        _runtime_artifact_policy_action,
-    )
+    from .commands_support_runtime_policy import _runtime_artifact_policy_action
     from .commands_support_runtime_resolution import _canonical_harness_name
 
 
-from ..action_lattice import most_restrictive_guard_action, normalize_guard_action
 from ..native_claude_guard_question import ClaudeGuardQuestionVerdict, claude_guard_question_verdict
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
+# The copy for a render the resident could not answer. Every piece of Claude
+# approval text below says Guard is holding the request, so an unreachable
+# resident never leaves a prompt reading as though Guard allowed the action.
+_CLAUDE_COPY_UNAVAILABLE = (
+    "HOL Guard is holding this Claude request for review. The HOL Guard runtime could not render "
+    "the full notice, so nothing in this prompt should be read as HOL Guard allowing the action."
+)
+
+
+def _claude_approval_copy(
+    which: str,
+    *,
+    payload: dict[str, object] | None = None,
+    notice: dict[str, object] | None = None,
+    reason: str = "",
+) -> object | None:
+    from ..native_hook_render import native_claude_approval_copy
+
+    return native_claude_approval_copy(which, payload=payload, notice=notice, reason=reason)
+
+
+def _claude_approval_text(
+    which: str,
+    *,
+    payload: dict[str, object] | None = None,
+    notice: dict[str, object] | None = None,
+    reason: str = "",
+) -> str:
+    rendered = _claude_approval_copy(which, payload=payload, notice=notice, reason=reason)
+    return rendered if isinstance(rendered, str) else _CLAUDE_COPY_UNAVAILABLE
+
 
 def _claude_guard_approval_question_message(notice: dict[str, object] | None) -> str:
-    tool_name = _optional_string((notice or {}).get("tool_name")) or "this tool"
-    reason = _optional_string((notice or {}).get("reason"))
-    header = _optional_string((notice or {}).get("approval_header")) or _CLAUDE_GUARD_APPROVAL_HEADER
-    question = _optional_string((notice or {}).get("approval_question")) or (
-        "HOL Guard intercepted this sensitive action. What should Claude do?"
-    )
-    options = _claude_guard_approval_options_from_value((notice or {}).get("approval_options"))
-    if not options:
-        options = _CLAUDE_GUARD_APPROVAL_OPTIONS
-    options_text = "', '".join(options)
-    reason_text = f" HOL Guard reason: {_ensure_terminal_punctuation(reason)}" if reason is not None else ""
-    return (
-        f"HOL Guard needs the user's explicit decision before {tool_name} can run.{reason_text} "
-        "The native Claude permission prompt is not the final decision surface for this request. Call "
-        "AskUserQuestion now with one HOL Guard approval question before retrying the tool. Use header "
-        f"'{header}', question '{question}', and exactly these options: '{options_text}'. If the user chooses an "
-        "allow option, retry the same tool once. If the user chooses Keep blocked, do not retry the sensitive action."
-    )
-
-
-def _claude_guard_approval_options_from_value(value: object) -> tuple[str, ...]:
-    if not isinstance(value, list):
-        return ()
-    labels: list[str] = []
-    for item in value:
-        label: str | None
-        if isinstance(item, dict):
-            label = _optional_string(item.get("label"))
-        elif isinstance(item, str):
-            label = item.strip()
-        else:
-            label = None
-        if label is None:
-            return ()
-        labels.append(label)
-    return tuple(labels)
+    return _claude_approval_text("approval_question_message", notice=notice)
 
 
 def _claude_guard_question_verdict(
@@ -85,7 +76,7 @@ def _persist_claude_guard_question_decision(
         pending_pair = _load_single_claude_pending_permission(store, payload)
     if pending_pair is None:
         return False
-    pending_key, pending = pending_pair
+    pending = pending_pair[1]
     if pending.get("permission_prompt_seen") is not True:
         with suppress(OSError, sqlite3.Error):
             store.add_event(
@@ -137,36 +128,33 @@ def _persist_claude_guard_question_decision(
         return False
     session_id = _optional_string(payload.get("session_id"))
     if session_id is not None:
-        _remove_claude_pending_permission(store, session_id=session_id, pending_key=pending_key)
+        _remove_claude_pending_permission(store, session_id=session_id, artifact_id=artifact_id)
     return True
 
 
-def _is_claude_permission_prompt_notification(args: argparse.Namespace, payload: dict[str, object]) -> bool:
-    return (
-        _canonical_harness_name(args.harness) == "claude-code"
-        and _hook_event_name(payload) == "Notification"
-        and _optional_string(payload.get("notification_type")) == "permission_prompt"
-    )
-
-
-def _is_claude_permission_request(args: argparse.Namespace, payload: dict[str, object]) -> bool:
-    return _canonical_harness_name(args.harness) == "claude-code" and _hook_event_name(payload) == "PermissionRequest"
-
-
 def _claude_permission_notice_prefers_ask_user_question(notice: dict[str, object]) -> bool:
-    artifact_type = _optional_string(notice.get("artifact_type"))
-    return artifact_type != "package_request"
+    # A render the resident cannot answer falls back to the Guard approval
+    # question, which denies Claude's own dialog; the deferring branch is the
+    # one that would hand the decision back to Claude.
+    rendered = _claude_approval_copy("notice_prefers_ask_user_question", notice=notice)
+    return rendered if isinstance(rendered, bool) else True
 
 
-def _resolve_claude_permission_request_policy_action(
+def _claude_permission_request_artifact_policy(
     *,
     config: GuardConfig,
     store: GuardStore,
     args: argparse.Namespace,
     runtime_artifact: GuardArtifact,
     runtime_workspace: Path | None,
-) -> tuple[str, dict[str, object]]:
-    policy_action = _runtime_artifact_policy_action(config, runtime_artifact, args.harness, guard_home=store.guard_home)
+) -> tuple[dict[str, object], PackageRequestEvaluation | None]:
+    """The artifact policy facts the resident asked for, and the package evaluation.
+
+    The resident composes the verdict from these; the evaluation is kept only
+    for the reason the response shows.
+    """
+
+    config_action = _runtime_artifact_policy_action(config, runtime_artifact, args.harness, guard_home=store.guard_home)
     package_evaluation = None
     if runtime_artifact.artifact_type == "package_request":
         package_evaluation = evaluate_package_request_artifact(
@@ -174,13 +162,25 @@ def _resolve_claude_permission_request_policy_action(
             store=store,
             workspace_dir=runtime_workspace,
         )
-        policy_action = most_restrictive_guard_action(
-            policy_action,
-            normalize_guard_action(package_evaluation.policy_action),
-        )
+    facts: dict[str, object] = {
+        "config_action": config_action,
+        "package_action": None if package_evaluation is None else package_evaluation.policy_action,
+    }
+    return facts, package_evaluation
+
+
+def _claude_permission_request_reason_stub(
+    *,
+    args: argparse.Namespace,
+    runtime_artifact: GuardArtifact,
+    artifact_action: str,
+    package_evaluation: PackageRequestEvaluation | None,
+) -> dict[str, object]:
+    """The fields the artifact's review reason is rendered from."""
+
     stub: dict[str, object] = {
         "harness": _canonical_harness_name(args.harness),
-        "policy_action": policy_action,
+        "policy_action": artifact_action,
         "risk_summary": (
             package_evaluation.risk_summary
             if package_evaluation is not None
@@ -191,7 +191,7 @@ def _resolve_claude_permission_request_policy_action(
         stub["decision_v2_json"] = {
             "harness_message": package_evaluation.user_copy.harness_message,
         }
-    return policy_action, stub
+    return stub
 
 
 def _claude_permission_request_terminal_notice(
@@ -199,10 +199,7 @@ def _claude_permission_request_terminal_notice(
     payload: dict[str, object],
     native_reason: str,
 ) -> str:
-    tool_name = _claude_notification_tool_display_name(payload)
-    if tool_name is not None:
-        return f"HOL Guard: reviewing Claude approval for {tool_name}. {_ensure_terminal_punctuation(native_reason)}"
-    return f"HOL Guard: reviewing this Claude approval prompt. {_ensure_terminal_punctuation(native_reason)}"
+    return _claude_approval_text("permission_request_terminal_notice", payload=payload, reason=native_reason)
 
 
 def _claude_permission_request_system_message(
@@ -210,26 +207,11 @@ def _claude_permission_request_system_message(
     payload: dict[str, object],
     native_reason: str,
 ) -> str:
-    tool_name = _claude_notification_tool_display_name(payload)
-    if tool_name is not None:
-        return (
-            f"HOL Guard is reviewing Claude's approval prompt for {tool_name}. "
-            "Claude's risk warnings above are separate from HOL Guard. "
-            f"{_ensure_terminal_punctuation(native_reason)}"
-        )
-    return (
-        "HOL Guard is reviewing this Claude approval prompt. "
-        "Claude's risk warnings above are separate from HOL Guard. "
-        f"{_ensure_terminal_punctuation(native_reason)}"
-    )
+    return _claude_approval_text("permission_request_system_message", payload=payload, reason=native_reason)
 
 
 def _claude_permission_request_additional_context(native_reason: str) -> str:
-    return (
-        "This review came from HOL Guard, not from Claude alone. "
-        f"{_ensure_terminal_punctuation(native_reason)} "
-        "Use Claude's normal Allow / deny controls unless HOL Guard opened a separate approval question."
-    )
+    return _claude_approval_text("permission_request_additional_context", reason=native_reason)
 
 
 def _claude_permission_prompt_system_message(
@@ -237,48 +219,11 @@ def _claude_permission_prompt_system_message(
     payload: dict[str, object],
     notice: dict[str, object] | None,
 ) -> str:
-    tool_name = _claude_notification_tool_name(payload)
-    if tool_name is None and notice is not None:
-        tool_name = _optional_string(notice.get("tool_name"))
-    reason = _optional_string(notice.get("reason")) if notice is not None else None
-    intro = "HOL Guard intercepted a sensitive request and is routing it to a HOL Guard approval question."
-    if tool_name is not None:
-        intro = (
-            f"HOL Guard intercepted Claude's attempt to use {tool_name} and is routing it to a HOL Guard approval "
-            "question."
-        )
-    if reason is not None:
-        return (
-            f"{intro} This approval flow came from HOL Guard, not from Claude alone. "
-            f"{_ensure_terminal_punctuation(reason)} "
-            "HOL Guard will ask the user to choose Allow once, Allow during this session, or Keep blocked before "
-            "Claude retries the action."
-        )
-    return (
-        f"{intro} This approval flow came from HOL Guard, not from Claude alone. "
-        "HOL Guard will ask the user to choose Allow once, Allow during this session, or Keep blocked before Claude "
-        "retries the action."
-    )
+    return _claude_approval_text("permission_prompt_system_message", payload=payload, notice=notice)
 
 
 def _claude_permission_prompt_additional_context(notice: dict[str, object] | None) -> str:
-    if notice is not None:
-        return _claude_guard_approval_question_message(notice)
-    reason = _optional_string(notice.get("reason")) if notice is not None else None
-    if reason is not None:
-        return (
-            "HOL Guard intercepted the sensitive request and is routing it into a HOL Guard approval question. "
-            "This approval flow came from HOL Guard, not from Claude alone. "
-            f"{_ensure_terminal_punctuation(reason)} Ask the user with AskUserQuestion and the options Allow once, "
-            "Allow during this session, and Keep blocked. If the user chooses Keep blocked, do not retry the same "
-            "sensitive access."
-        )
-    return (
-        "HOL Guard intercepted the sensitive request and is routing it into a HOL Guard approval question. "
-        "This approval flow came from HOL Guard, not from Claude alone. Ask the user with AskUserQuestion and the "
-        "options Allow once, Allow during this session, and Keep blocked. If the user chooses Keep blocked, do not "
-        "retry the same action."
-    )
+    return _claude_approval_text("permission_prompt_additional_context", notice=notice)
 
 
 def _claude_permission_prompt_terminal_notice(
@@ -286,41 +231,14 @@ def _claude_permission_prompt_terminal_notice(
     payload: dict[str, object],
     notice: dict[str, object] | None,
 ) -> str:
-    tool_name = _claude_notification_tool_name(payload)
-    reason = _optional_string(notice.get("reason")) if notice is not None else None
-    if tool_name is not None and reason is not None:
-        return (
-            f"HOL Guard is routing this Claude approval request for {tool_name} into a HOL Guard decision prompt. "
-            f"{_ensure_terminal_punctuation(reason)} "
-            "Choose Allow once, Allow during this session, or Keep blocked in the HOL Guard prompt."
-        )
-    if tool_name is not None:
-        return (
-            f"HOL Guard is routing this Claude approval request for {tool_name} into a HOL Guard decision prompt. "
-            "Choose Allow once, Allow during this session, or Keep blocked in the HOL Guard prompt."
-        )
-    return (
-        "HOL Guard is routing this Claude approval request into a HOL Guard decision prompt to protect a sensitive "
-        "action. Choose Allow once, Allow during this session, or Keep blocked in the HOL Guard prompt."
-    )
+    return _claude_approval_text("permission_prompt_terminal_notice", payload=payload, notice=notice)
 
 
 def _claude_native_pretooluse_terminal_notice(*, payload: dict[str, object], reason: str) -> str:
-    tool_name = _claude_notification_tool_name(payload)
-    if tool_name is not None:
-        return (
-            f"HOL Guard intercepted Claude's attempt to use {tool_name}. {_ensure_terminal_punctuation(reason)} "
-            "Guard will route the next approval through a HOL Guard prompt if Claude asks to continue."
-        )
-    return (
-        "HOL Guard intercepted a sensitive Claude action. "
-        f"{_ensure_terminal_punctuation(reason)} Guard will route the next approval through a HOL Guard prompt if "
-        "Claude asks to continue."
-    )
+    return _claude_approval_text("native_pretooluse_terminal_notice", payload=payload, reason=reason)
 
 
 __all__ = [
-    "_claude_guard_approval_options_from_value",
     "_claude_guard_approval_question_message",
     "_claude_guard_question_verdict",
     "_claude_native_pretooluse_terminal_notice",
@@ -329,10 +247,9 @@ __all__ = [
     "_claude_permission_prompt_system_message",
     "_claude_permission_prompt_terminal_notice",
     "_claude_permission_request_additional_context",
+    "_claude_permission_request_artifact_policy",
+    "_claude_permission_request_reason_stub",
     "_claude_permission_request_system_message",
     "_claude_permission_request_terminal_notice",
-    "_is_claude_permission_prompt_notification",
-    "_is_claude_permission_request",
     "_persist_claude_guard_question_decision",
-    "_resolve_claude_permission_request_policy_action",
 ]

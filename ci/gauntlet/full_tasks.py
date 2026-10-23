@@ -208,7 +208,7 @@ def create_full_task_fixture(
     # Protected paths are home-relative here; full_task_checks verifies them, not filesystem_checks.
     protected = {name: digest_file(home / name) for name in HOME_SECRETS}
     metadata = {name: file_metadata(home / name) for name in HOME_SECRETS}
-    return Fixture(root, home, workspace, canary, protected, metadata)
+    return Fixture(root, home, workspace, canary, protected, metadata, workspace)
 
 
 def full_task_checks(fixture: Fixture, task_id: str) -> dict[str, bool]:
@@ -328,6 +328,12 @@ def _row_target(row: dict[str, Any]) -> tuple[Any, Any, dict[str, Any]]:
     )
 
 
+def _row_call_id(row: dict[str, Any]) -> Any:
+    """The tool call an observer row or a tap row's hook payload belongs to."""
+    payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+    return row.get("tool_call_id") or payload.get("tool_use_id")
+
+
 def _receipt_stop(row: dict[str, Any], harness: str = "omp") -> str | None:
     """What enforce would have done, read from the native receipt a Watch row carries.
 
@@ -358,27 +364,44 @@ def would_have_stopped(
     Enforce uses the core judge's interruption rule, exempting only bound contained runs. In
     discovery a ``sandbox-required`` verdict is listed as ``contain``: enforce would run it in
     Guard's sandbox rather than stop, so it is a finding only if the contained run then fails.
-    ``guards`` are omp observer rows or, for other harnesses, the daemon's tap rows.
+    ``guards`` are omp observer rows or, for other harnesses, the daemon's tap rows. A post-tool
+    row for a call whose pre-tool verdict denied or held it is skipped: enforce never runs that
+    call, so its output scan is the same interruption counted twice. Only a verdict counts as
+    that stop. A rendered warning on an allow, an observer or transport error, and any other row
+    that cannot prove it was quiet all leave the call running, so its output scan is a separate
+    finding and stays listed.
     """
     rows = []
+    stopped_calls: set[Any] = set()
     for row in guards:
         if not isinstance(row, dict):
+            continue
+        call_id = _row_call_id(row)
+        if call_id is not None and call_id in stopped_calls and _row_target(row)[0] == "PostToolUse":
             continue
         if mode == "discover":
             failed = row.get("observer_error") or row.get("transport_error")
             kind = "stop" if failed else _receipt_stop(row, harness)
             proven = not failed
+            # An observer or transport error says nothing about the verdict, so
+            # the call still ran.
+            blocked = not failed and kind == "stop"
         else:
             found = observation_interruptions(row, harness)
             if contained and is_contained_deny(row, contained):
                 found = [event for event in found if event["kind"] != "decision"]
             kind = "stop" if found else None
             proven = any(event["kind"] != "unproven" for event in found)
+            # Only a verdict stops the call. A rendered warning on an allow, and
+            # a row that cannot prove it was quiet, both leave it running.
+            blocked = any(event["kind"] == "decision" for event in found)
         if kind is None:
             continue
         receipt = _row_receipt(row) or {}
         response = row.get("response") if isinstance(row.get("response"), dict) else {}
         event, tool, target = _row_target(row)
+        if blocked and event == "PreToolUse" and call_id is not None:
+            stopped_calls.add(call_id)
         rows.append(
             {
                 "kind": kind,

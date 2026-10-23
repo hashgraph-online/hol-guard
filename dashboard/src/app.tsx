@@ -32,10 +32,12 @@ import { harnessDisplayName, normalizeHarnessSlug } from "./approval-center-util
 import { ErrorBoundary } from "./error-boundary";
 import { lazyWorkspace } from "./lazy-workspace";
 import { runAutomaticProtectionRepair } from "./protection-repair-flow";
-import { selectNextAfterResolution } from "./queue-state";
+import { selectNextAfterResolution, type QueueGroup } from "./queue-state";
+import { BulkBlockError, blockRequestsOnce, bulkBlockFailureMessage, bulkBlockSummary } from "./bulk-block-requests";
 import { useRouteFocus } from "./use-route-focus";
 import { commitDashboardLocation, useDashboardPathname } from "./dashboard-location";
 
+const HOME_QUEUE_PREVIEW_LIMIT = 50;
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => import("./home-dashboard").then((m) => ({ default: m.HomeWorkspace })));
 const FleetWorkspace = lazyWorkspace("fleet-workspace", () => import("./fleet-workspace").then((m) => ({ default: m.FleetWorkspace })));
 const SettingsWorkspace = lazyWorkspace("settings-workspace", () => import("./settings-workspace").then((m) => ({ default: m.SettingsWorkspace })));
@@ -52,6 +54,9 @@ const PolicyWorkspacePage = lazyWorkspace("policy-workspace-page", () =>
 );
 const AboutWorkspace = lazyWorkspace("about-workspace", () =>
   import("./about/about-workspace").then((m) => ({ default: m.AboutWorkspace }))
+);
+const ReleasesWorkspace = lazyWorkspace("releases-workspace", () =>
+  import("./releases/releases-workspace").then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace("protection-repair-page", () =>
   import("./protection-repair-page").then((m) => ({ default: m.ProtectionRepairPage }))
@@ -155,6 +160,7 @@ export function viewTitle(view: AppView): string {
   if (view === "policy") return "Rules & exceptions";
   if (view === "feed-health") return "Feed Health";
   if (view === "about") return "About";
+  if (view === "releases") return "Releases";
   if (view === "extensions") return "Extensions";
   if (view === "protection-repair") return "Repair protection";
   return "App detail";
@@ -208,6 +214,9 @@ export function resolveView(pathname: string): AppView {
   }
   if (pathname === "/about") {
     return "about";
+  }
+  if (pathname === "/releases") {
+    return "releases";
   }
   if (
     pathname === "/inbox" ||
@@ -301,7 +310,8 @@ export function App() {
   const latestRefresh = useRef<Promise<{ snapshot: GuardRuntimeSnapshot | null; complete: boolean }> | null>(null);
   const bulkApproveInFlight = useRef(false);
   const queuedItems = requests.kind === "ready" ? requests.items : [];
-  const activeRequestId = requestId ?? queuedItems[0]?.request_id ?? null;
+  // Home only previews the queue, so it never opens a request's detail on its own.
+  const activeRequestId = requestId ?? (view === "home" ? null : queuedItems[0]?.request_id) ?? null;
 
   useEffect(() => {
     if (activeRequestId === null) {
@@ -353,6 +363,7 @@ export function App() {
     let clearedQueue = false;
     const needsFullQueue = view === "inbox" && requestId === null;
     const needsQueuePage = view === "inbox" || requestId !== null;
+    const needsHomePreview = view === "home" && requestId === null;
     const needsRuntimeReceipts =
       view === "home" ||
       view === "fleet" ||
@@ -392,6 +403,19 @@ export function App() {
             if (!cancelled && !resolutionInFlight.current) {
               const message = error instanceof Error ? error.message : queueErrorMessage;
               setRequests({ kind: "error", message });
+            }
+          });
+      } else if (needsHomePreview) {
+        // Home previews the first few paused actions and their age; a failed preview leaves Home usable.
+        pendingRequests = fetchApprovalPage({ status: "pending", limit: HOME_QUEUE_PREVIEW_LIMIT })
+          .then((page) => {
+            if (!cancelled && !resolutionInFlight.current) {
+              setRequests({ kind: "ready", items: page.items });
+            }
+          })
+          .catch(() => {
+            if (!cancelled && !resolutionInFlight.current) {
+              setRequests({ kind: "ready", items: [] });
             }
           });
       } else {
@@ -459,7 +483,7 @@ export function App() {
         }
       })
       .catch(() => {});
-    if (view === "about") {
+    if (view === "about" || view === "releases") {
       fetchGuardUpdateStatus()
         .then((status) => {
           if (!cancelled && status.current_version) {
@@ -845,6 +869,29 @@ export function App() {
     }
   }, [refreshApprovalGate, refreshStateAfterAction, setResolutionMessage]);
 
+  const handleBulkBlock = useCallback(async (selected: QueueGroup[]) => {
+    // A decision already being saved could resolve one of these requests
+    // under the batch and make it look like a failure.
+    if (bulkApproveInFlight.current || resolutionInFlight.current) {
+      throw new Error("Another decision is still being saved. Try again in a moment.");
+    }
+    bulkApproveInFlight.current = true;
+    resolutionInFlight.current = true;
+    const queued = new Map((requests.kind === "ready" ? requests.items : []).map((item) => [item.request_id, item]));
+    try {
+      const outcome = await blockRequestsOnce(selected, (id) => queued.get(id), resolveRequestWithQueueResult);
+      resolutionInFlight.current = false;
+      await refreshStateAfterAction();
+      if (outcome.failed > 0) {
+        throw new BulkBlockError(bulkBlockFailureMessage(outcome), outcome.failedIds);
+      }
+      setResolutionMessage(bulkBlockSummary(outcome));
+    } finally {
+      resolutionInFlight.current = false;
+      bulkApproveInFlight.current = false;
+    }
+  }, [refreshStateAfterAction, requests, setResolutionMessage]);
+
   const handleRetry = useCallback(() => {
     setRuntime({ kind: "loading" });
     setRequests({ kind: "loading" });
@@ -1011,6 +1058,8 @@ export function App() {
             onConfirmClear={handleConfirmClear}
             onCancelClear={handleCancelClear}
             onOpenHelp={handleOpenHelp}
+            onOpenRequest={handleOpenRequest}
+            onConnectHarness={handleConnectHarness}
           />
         </Suspense>
       }
@@ -1019,6 +1068,7 @@ export function App() {
       onOpenRequest={handleOpenRequest}
       onResolve={handleResolve}
       onBulkApprove={handleBulkApprove}
+      onBulkBlock={handleBulkBlock}
       onRetry={handleRetry}
       onRetryDetail={() => setDetailRefreshKey((key) => key + 1)}
       onRepair={handleRepair}
@@ -1086,6 +1136,13 @@ export function App() {
         ) : null
       }
       policyContent={policyContent}
+      releasesContent={
+        view === "releases" ? (
+          <Suspense fallback={<LazyFallback />}>
+            <ReleasesWorkspace installedVersion={guardVersion} />
+          </Suspense>
+        ) : null
+      }
       aboutContent={
         <Suspense fallback={<LazyFallback />}>
           <AboutWorkspace runtimeSummary={

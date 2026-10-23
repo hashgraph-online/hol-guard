@@ -28,6 +28,23 @@ def _spawn_package_shim_sqlite_lock_holder(
     monkeypatch.setattr(module, "Process", context.Process)
 
 
+@pytest.fixture(autouse=True)
+def _forget_remembered_directories() -> None:
+    """Keep one test's settled directories out of the next test's answers.
+
+    Both memos are process-global and witnessed by filesystem identity, and a
+    temporary directory removed by one test can be recreated with the same
+    device and inode for the next one. Clearing them between tests keeps each
+    case asking the runtime for itself.
+    """
+
+    from codex_plugin_scanner.guard.native_directory_trust import clear_remembered_directory_trust
+    from codex_plugin_scanner.guard.path_resolution_cache import clear_cached_realpaths
+
+    clear_remembered_directory_trust()
+    clear_cached_realpaths()
+
+
 _GUARD_POST_TOOL_DIAGNOSTIC_TEST = (
     "tests/test_guard_runtime.py::TestGuardRuntime::"
     "test_codex_post_tool_use_blocks_double_quoted_command_substitution_search"

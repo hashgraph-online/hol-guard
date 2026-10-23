@@ -1181,7 +1181,7 @@
       "event_id": 1,
       "event_name": "approval.created",
       "occurred_at": "2026-03-01T12:00:00+00:00",
-      "payload_json": "{\"request_id\": \"r-new\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"review\", \"recommended_scope\": null, \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
+      "payload_json": "{\"request_id\": \"r-new\", \"harness\": \"codex\", \"artifact_id\": \"native-review:codex:cmd\", \"artifact_name\": \"Bash\", \"artifact_type\": \"native_review\", \"policy_action\": \"review\", \"recommended_scope\": \"artifact\", \"source_scope\": \"workspace\", \"workspace\": \"/work/space\", \"publisher\": null}"
      }
     ],
     "guard_review_outbox_events": [
@@ -1214,7 +1214,7 @@
     "guard_events": [],
     "guard_review_outbox_events": []
    },
-   "name": "scope_guard_control_not_overridable",
+   "name": "scope_guard_control_approvable",
    "native_defers": false,
    "now": "2026-03-01T12:00:00+00:00",
    "queued": {
@@ -1225,7 +1225,7 @@
     "harness": "codex",
     "policy_action": "review",
     "publisher": null,
-    "recommended_scope": null,
+    "recommended_scope": "artifact",
     "request_id": "r-new",
     "source_scope": "workspace",
     "workspace": "/work/space"

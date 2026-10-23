@@ -12,7 +12,7 @@ const MAX_COMMAND_BYTES: usize = 8192;
 /// spaces, or `None` unless the command has exactly one unquoted `(` and one
 /// unquoted `)` that open a group at the start of the command or after `&&`,
 /// `||`, `;` or a newline and close it as the last non-blank character.
-pub(super) fn unwrap(command: &str) -> Option<String> {
+pub(crate) fn unwrap(command: &str) -> Option<String> {
     let command = command.trim();
     if command.len() > MAX_COMMAND_BYTES
         || command.contains("<<")
@@ -74,8 +74,9 @@ fn unquoted_parentheses(chars: &[char]) -> Option<(usize, usize)> {
     (open < close).then_some((open, close))
 }
 
-/// Whether the `(` at `open` begins a new element of the command list.
-fn opens_list_element(chars: &[char], open: usize) -> bool {
+/// Whether the group opened at `open` begins a new element of the command
+/// list. Shared with the brace group recognizer, which opens the same way.
+pub(super) fn opens_list_element(chars: &[char], open: usize) -> bool {
     let before: Vec<char> = chars[..open]
         .iter()
         .rev()

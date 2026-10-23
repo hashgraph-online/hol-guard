@@ -45,6 +45,7 @@ _NATIVE_DIAGNOSTIC_LINE = re.compile(
     rb"context_runtime_executable_identity|context_runtime_launch_identity|"
     rb"context_runtime_launch_identity_matches|executable_digest"
     rb") status=(start|ok|error) elapsed_ms=[0-9]{1,20}"
+    rb"|native_resident_note name=(discovery|client)_[a-z_]{1,48} value=[0-9]{1,20}"
 )
 
 

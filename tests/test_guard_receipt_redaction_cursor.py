@@ -637,7 +637,9 @@ def test_relaxed_redaction_sync_adds_recent_blocked_command_detail_backfill(tmp_
         "receipts": 1,
         "queried": 1,
         "before_rowid": 1,
-        "complete": True,
+        # A page that came back short may be one the store shortened to a size
+        # the runtime can reply with, so only an empty page ends the walk.
+        "complete": False,
     }
 
 

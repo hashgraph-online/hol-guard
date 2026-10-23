@@ -21,7 +21,14 @@ pub const CODEX_TOOL_OUTPUT_FEATURE: &str = "codex-tool-output-v1";
 pub const CODEX_TOOL_OUTPUT_MAX_BYTES: usize = 256 * 1024;
 /// Canonical request bound for a post-tool output review, which carries the
 /// collected tool response.
-pub const CODEX_POST_TOOL_OUTPUT_MAX_BYTES: usize = 6 * 1024 * 1024;
+///
+/// Held under [`MAX_NATIVE_REQUEST_BYTES`](crate::MAX_NATIVE_REQUEST_BYTES),
+/// which the transport enforces on the frame before this op ever sees it. The
+/// bound counts this request's canonical serialization and the limit counts
+/// the sender's own, so a bound equal to the limit leaves no room for the two
+/// to differ: a review at the edge would be refused as a malformed frame
+/// instead of being told its own size is why.
+pub const CODEX_POST_TOOL_OUTPUT_MAX_BYTES: usize = 6 * 1024 * 1024 - 64 * 1024;
 
 /// One command reviewed with a working directory and an optional home.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -67,6 +74,32 @@ pub struct CodexCommandTextV1 {
     pub command: String,
 }
 
+/// One prompt reviewed for a credential-looking local file it names: the
+/// prompt text, the working directory relative names resolve against, and the
+/// configuration path the artifact records.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CodexPromptFileScopeV1 {
+    pub prompt_text: String,
+    pub cwd: Option<String>,
+    pub config_path: String,
+    /// Budget for the content scan, bounded again by the op.
+    pub deadline_ms: u64,
+}
+
+/// The Codex attachment scan's scope: the prompt text, the caller's home
+/// directory the managed attachment root sits under, and the configuration
+/// path the artifact records.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct CodexPromptAttachmentScopeV1 {
+    pub prompt_text: String,
+    pub home_dir: String,
+    pub config_path: String,
+    /// Budget for the streaming scan, bounded again by the op.
+    pub deadline_ms: u64,
+}
+
 /// One post-tool hook payload projection: the commands, tool input and
 /// collected response text the credential-output review reads.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -96,6 +129,13 @@ pub enum CodexToolOutputActionV1 {
     GitMetadata(CodexCommandCwdV1),
     /// The credential-looking post-tool output artifact (`value`).
     PostToolOutput(CodexPostToolOutputV1),
+    /// The credential-looking prompt-file artifact (`value`): the prompt asks
+    /// the harness to read a local dotfile whose content scans as credentials.
+    PromptCredentialFile(CodexPromptFileScopeV1),
+    /// The guarded-instruction Codex attachment artifact (`value`): the prompt
+    /// names a file under the managed attachment root whose text carries
+    /// instructions Guard holds for review.
+    PromptAttachment(CodexPromptAttachmentScopeV1),
 }
 
 /// Observed caller facts.

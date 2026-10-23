@@ -14,10 +14,7 @@ fn home(name: &str) -> PathBuf {
         .join(format!(
             "{name}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let home = root.join("home");
     for directory in [
@@ -171,6 +168,9 @@ fn listing_a_missing_path_in_a_sibling_checkout_proceeds() {
             "ls ../project-wt/node_modules 2>/dev/null",
             "ls ../../work/project-wt/node_modules/pkg",
             "ls -la ../project-wt; ls ../project-wt/node_modules 2>/dev/null; cat .gitignore",
+            // A checkout without workflows is probed by the `.github` name.
+            "ls ../project-wt/.github/workflows/ 2>/dev/null",
+            "ls ../project-wt/.github",
         ] {
             assert_eq!(
                 action(&home, harness, command),
@@ -186,6 +186,8 @@ fn listing_a_missing_path_in_a_sibling_checkout_proceeds() {
         "ls ../project-wt/.env-missing",
         "ls ../../.ssh/missing",
         "ls ../../.codex/missing",
+        "ls ../project-wt/.github/.env-missing",
+        "ls ../project-wt/.githubx/missing",
         "ls ~/../missing",
     ] {
         assert_ne!(action(&home, "zcode", command), "allow", "{command}");
@@ -273,10 +275,7 @@ fn a_skills_link_to_home_stays_closed_when_home_is_spelled_through_a_symlink() {
     std::os::unix::fs::symlink(&canonical, canonical.join(".agents/skills")).unwrap();
     let alias = canonical.parent().unwrap().join(format!(
         "home-alias-{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     std::os::unix::fs::symlink(&canonical, &alias).unwrap();
     assert_ne!(alias.canonicalize().unwrap(), alias);
@@ -286,4 +285,55 @@ fn a_skills_link_to_home_stays_closed_when_home_is_spelled_through_a_symlink() {
         "allow"
     );
     assert_eq!(action(&alias, "zcode", "ls ~/.codex/skills/notes"), "allow");
+}
+
+#[test]
+fn a_names_only_find_below_a_sibling_github_directory_proceeds() {
+    let home = home("sibling-github-find");
+    let sibling = home.join("work/service-api");
+    let leaky = home.join("work/leaky-api");
+    let docs = home.join("work/docs-site");
+    for directory in [
+        docs.join(".git"),
+        sibling.join(".git"),
+        sibling.join(".github/workflows"),
+        leaky.join(".git"),
+        leaky.join(".github/workflows"),
+    ] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    std::fs::write(sibling.join(".github/workflows/ci.yml"), "name: ci\n").unwrap();
+    std::fs::write(leaky.join(".github/.env"), "TOKEN=x\n").unwrap();
+    for harness in ["omp", "zcode", "claude-code", "codex"] {
+        for command in [
+            format!(
+                "find {}/.github -name \"*.yml\" -o -name \"*.yaml\" 2>/dev/null",
+                sibling.display()
+            ),
+            format!("find {}/.github -type f", sibling.display()),
+            // A checkout without workflows prints only an error.
+            format!(
+                "find {}/.github -name \"*.yml\" 2>/dev/null",
+                docs.display()
+            ),
+        ] {
+            assert_eq!(
+                action(&home, harness, &command),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
+    }
+    for command in [
+        // A hidden entry below the metadata directory, an action, or a parent
+        // step keeps the walk at review.
+        format!("find {}/.github -name \"*.yml\"", leaky.display()),
+        format!(
+            "find {}/.github -name \"*.yml\" -exec cat {{}} \\;",
+            sibling.display()
+        ),
+        "find ../service-api/.github -name \"*.yml\"".to_owned(),
+    ] {
+        assert_ne!(action(&home, "zcode", &command), "allow", "{command}");
+    }
 }

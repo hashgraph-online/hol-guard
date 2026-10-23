@@ -1,10 +1,11 @@
 #![cfg(unix)]
 
-//! In a linked worktree, `git rebase --continue` after a resolved conflict
-//! and a commit the agent signs with `-S` are local writes when the rebase
-//! state names no program and the signing program is the user's installed
-//! one. An `exec` step, a saved strategy or signing key, `--skip`, `--abort`
-//! and a repository or untrusted signing program keep the review.
+//! In a linked worktree, `git rebase <upstream>`, `git rebase --continue`
+//! after a resolved conflict and a commit the agent signs with `-S` are local
+//! writes when no rebase state or configuration names a program and the
+//! signing program is the user's installed one. An `exec` step, a saved
+//! strategy or signing key, the apply backend, `--skip`, `--abort` and a
+//! repository or untrusted signing program keep the review.
 
 use crate::pretool_git_session_ops::{executable_hook, git, session, Session};
 use std::path::Path;
@@ -42,10 +43,7 @@ fn stopped_rebase(session: &Session, options: &[&str]) {
     git(home, tree, &["add", "later.txt"]);
     git(home, tree, &["commit", "--quiet", "-m", "later change"]);
     let primary = &session.primary;
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let stamp = crate::unique_nanos::unique_nanos();
     std::fs::write(primary.join("tracked.txt"), format!("main {stamp}\n")).unwrap();
     git(home, primary, &["commit", "--quiet", "-am", "main change"]);
     let mut arguments = vec!["rebase"];
@@ -73,13 +71,19 @@ fn allowed(session: &Session, command: &str) -> Result<(), String> {
         .ok_or(format!("{command}: {}", result.reason_code))
 }
 
+/// The command raises no review: Git's own write proof allows it, or the
+/// workspace sandbox runs it contained in the linked worktree.
+fn quiet(session: &Session, command: &str) -> Result<(), String> {
+    session.quiet_at(command, &session.worktree, WRITE)
+}
+
 #[test]
 fn rebase_continue_is_quiet_only_with_replay_steps_and_no_programs() {
     let session = session("rebase-continue");
     let resume = "git rebase --continue 2>&1 | tail -2; git status | head -3";
     stopped_rebase(&session, &[]);
-    allowed(&session, resume).unwrap();
-    allowed(&session, "git add tracked.txt && git rebase --continue").unwrap();
+    quiet(&session, resume).unwrap();
+    quiet(&session, "git add tracked.txt && git rebase --continue").unwrap();
     for command in [
         "git rebase --skip",
         "git rebase --abort",
@@ -101,7 +105,7 @@ fn rebase_continue_is_quiet_only_with_replay_steps_and_no_programs() {
         assert!(allowed(&session, resume).is_err(), "{key}");
         session.config(&["--unset-all", key]);
     }
-    allowed(&session, resume).unwrap();
+    quiet(&session, resume).unwrap();
     executable_hook(&session.primary.join(".git/hooks/post-rewrite"));
     assert!(allowed(&session, resume).is_err());
     std::fs::remove_file(session.primary.join(".git/hooks/post-rewrite")).unwrap();
@@ -124,6 +128,62 @@ fn rebase_continue_is_quiet_only_with_replay_steps_and_no_programs() {
 }
 
 #[test]
+fn starting_a_rebase_onto_a_local_ref_is_a_local_write() {
+    let session = session("rebase-start");
+    for command in [
+        "git rebase main",
+        "git rebase -q main",
+        "git rebase main 2>&1 | tail -2",
+        "git add tracked.txt && git commit -m 'fix: x' && git rebase main",
+    ] {
+        quiet(&session, command).unwrap();
+    }
+    // Options that run a program, replay somewhere else or write over the
+    // working tree, and a second operand that checks a branch out first.
+    for command in [
+        "git rebase -i main",
+        "git rebase --interactive main",
+        "git rebase -x id main",
+        "git rebase --exec=id main",
+        "git rebase --onto main topic",
+        "git rebase --root",
+        "git rebase -s ort main",
+        "git rebase -X theirs main",
+        "git rebase -S main",
+        "git rebase --autostash main",
+        "git rebase main fix/report-lane",
+        "git -c core.hooksPath=/tmp/hooks rebase main",
+        "git rebase main; rm -rf build",
+    ] {
+        assert!(allowed(&session, command).is_err(), "{command}");
+    }
+    // Configuration that replays with `git am` and its own hooks, or that
+    // names a program the replayed commits would start.
+    for (key, value) in [
+        ("rebase.backend", "apply"),
+        ("merge.custom.driver", "sh -c id"),
+        ("commit.gpgSign", "true"),
+        ("hook.post-rewrite.command", "id"),
+    ] {
+        session.config(&[key, value]);
+        assert!(allowed(&session, "git rebase main").is_err(), "{key}");
+        session.config(&["--unset-all", key]);
+    }
+    session.config(&["rebase.backend", "merge"]);
+    quiet(&session, "git rebase main").unwrap();
+    session.config(&["--unset-all", "rebase.backend"]);
+    executable_hook(&session.primary.join(".git/hooks/post-rewrite"));
+    assert!(allowed(&session, "git rebase main").is_err());
+    std::fs::remove_file(session.primary.join(".git/hooks/post-rewrite")).unwrap();
+    // A rebase already in progress carries a saved todo list this form does
+    // not read.
+    stopped_rebase(&session, &[]);
+    assert!(allowed(&session, "git rebase main").is_err());
+    git_may_fail(&session.home, &session.worktree, &["rebase", "--abort"]);
+    quiet(&session, "git rebase main").unwrap();
+}
+
+#[test]
 fn signed_commits_need_the_users_installed_signing_program() {
     let session = session("signed-commit");
     let home = &session.home;
@@ -140,7 +200,7 @@ fn signed_commits_need_the_users_installed_signing_program() {
         "git commit --gpg-sign -m x",
         "git commit --amend --no-edit --gpg-sign=ABCDEF",
     ] {
-        allowed(&session, command).unwrap();
+        quiet(&session, command).unwrap();
     }
     // The repository may not choose the program, its format or the key.
     for (key, value) in [
@@ -167,7 +227,7 @@ fn signed_commits_need_the_users_installed_signing_program() {
         global(&["--unset-all", key]);
         global(&["gpg.format", "ssh"]);
     }
-    allowed(&session, "git commit -S -m x").unwrap();
+    quiet(&session, "git commit -S -m x").unwrap();
     assert!(allowed(&session, "git -c gpg.ssh.program=/tmp/x commit -S -m x").is_err());
 }
 
@@ -184,14 +244,14 @@ fn commit_signing_by_default_only_holds_writes_that_create_commits() {
     // Staging and starting a branch sign nothing, whatever the signing setup.
     session.config(&["gpg.program", "/tmp/gpg"]);
     for command in ["git add tracked.txt", "git switch -c gpgsign-probe"] {
-        allowed(&session, command).unwrap();
+        quiet(&session, command).unwrap();
     }
     // A commit signs as if asked with `-S`, so the repository may not pick
     // the program.
     assert!(allowed(&session, "git commit -m x").is_err());
     session.config(&["--unset-all", "gpg.program"]);
     global(&["gpg.format", "ssh"]);
-    allowed(&session, "git commit -m x").unwrap();
+    quiet(&session, "git commit -m x").unwrap();
     global(&["gpg.ssh.program", "/tmp/gpg"]);
     assert!(allowed(&session, "git commit -m x").is_err());
 }

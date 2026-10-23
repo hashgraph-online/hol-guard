@@ -119,6 +119,38 @@ pub(crate) struct PinnedImage {
     directory: Option<tempfile::TempDir>,
     binding: std::sync::Arc<crate::bound_fs::Directory>,
     mode_lease: Option<RootModeLease>,
+    readonly_system_root: bool,
+}
+#[cfg(target_os = "macos")]
+impl PinnedImage {
+    pub(crate) fn on_readonly_system_root(&self) -> io::Result<bool> {
+        Ok(self.readonly_system_root && on_readonly_root(&self.file)?)
+    }
+
+    pub(crate) fn hardened_binding(
+        &self,
+        expected: &str,
+    ) -> io::Result<crate::macos_code_image::Binding> {
+        self.binding.verify()?;
+        let current = crate::bound_fs::open_executable(&self.path)?;
+        if crate::bound_fs::identity(&current)? != crate::bound_fs::identity(&self.file)? {
+            return Err(crate::bound_fs::changed());
+        }
+        let mut image = self.file.try_clone()?;
+        if crate::bound_fs::digest_executable(&mut image, MAX_BYTES as usize)? != expected {
+            return Err(crate::bound_fs::changed());
+        }
+        let binding = crate::macos_code_image::static_binding(&self.path)?;
+        self.binding.verify()?;
+        let current = crate::bound_fs::open_executable(&self.path)?;
+        let mut image = self.file.try_clone()?;
+        if crate::bound_fs::identity(&current)? != crate::bound_fs::identity(&self.file)?
+            || crate::bound_fs::digest_executable(&mut image, MAX_BYTES as usize)? != expected
+        {
+            return Err(crate::bound_fs::changed());
+        }
+        Ok(binding)
+    }
 }
 #[cfg(target_os = "macos")]
 impl Drop for PinnedImage {
@@ -214,6 +246,7 @@ pub(crate) fn seal_executable(
             directory: None,
             binding: source_directory,
             mode_lease: None,
+            readonly_system_root: true,
         });
     }
     if let Some(root) = root {
@@ -251,6 +284,7 @@ pub(crate) fn seal_executable(
             directory: None,
             binding: source_directory,
             mode_lease: Some(mode_lease),
+            readonly_system_root: false,
         });
     }
     let directory = tempfile::Builder::new()
@@ -281,6 +315,7 @@ pub(crate) fn seal_executable(
         directory: Some(directory),
         binding,
         mode_lease: Some(mode_lease),
+        readonly_system_root: false,
     })
 }
 

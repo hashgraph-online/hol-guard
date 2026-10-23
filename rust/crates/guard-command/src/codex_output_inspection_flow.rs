@@ -246,6 +246,25 @@ fn stem_has_compound_secret_segment(stem: &str, split_compound: bool) -> bool {
     })
 }
 
+/// Whether the stem ends in the secret word, as `service-token`, `npm_secret`
+/// or `deploy-private-key` does. The head noun names what the file holds, so
+/// it reads as a credential source wherever it sits. A leading secret word
+/// names the subject instead — `token-discipline.md` is a document about
+/// tokens — and only the in-project exemption, which needs a caller cwd, could
+/// take that back. Listed stems carry their own separator (`private-key`), so
+/// match the whole suffix rather than one split segment.
+fn stem_ends_with_secret_segment(stem: &str) -> bool {
+    let lowered = stem.to_lowercase();
+    SECRET_LIKE_SOURCE_NAME_STEMS.iter().any(|word| {
+        lowered.len() > word.len()
+            && lowered.ends_with(word)
+            && matches!(
+                lowered.as_bytes()[lowered.len() - word.len() - 1],
+                b'-' | b'_'
+            )
+    })
+}
+
 /// `codex_scan_targets_secret_like_source_name`; `recurse` carries the caller's
 /// own execution-context policy for chain and pipeline splits.
 pub(crate) fn scan_targets_secret_like_source_name(
@@ -262,28 +281,33 @@ pub(crate) fn scan_targets_secret_like_source_name(
     let Some(parts) = shlex_split(command_text) else {
         return false;
     };
-    for part in source_inspection_target_tokens(&parts) {
-        let stripped = strip_quotes(py_strip(&part));
-        if stripped.is_empty() {
-            continue;
-        }
-        let name_full = PyPath::new(stripped).name().to_lowercase();
-        let name = name_full.trim_start_matches('.').to_owned();
-        let name_stem = PyPath::new(&name).stem().to_owned();
-        let stem = if name_stem.is_empty() {
-            name.clone()
-        } else {
-            name_stem
-        };
-        let exact = SECRET_LIKE_SOURCE_NAME_STEMS.contains(&stem.to_lowercase().as_str());
-        let compound = stem_has_compound_secret_segment(&stem, scope.cwd.is_some());
-        if !exact && !compound && !name.starts_with("id_") {
-            continue;
-        }
-        if compound && scope.cwd.is_some() && target_is_source_like(stripped, scope, false) {
-            continue;
-        }
-        return true;
+    source_inspection_target_tokens(&parts)
+        .into_iter()
+        .any(|part| target_name_is_secret_like(strip_quotes(py_strip(&part)), scope))
+}
+
+/// Whether one target names a credential source: `secrets.json`, `.netrc`,
+/// `id_rsa`, `service-token.ts` outside a project. Callers that hold the
+/// target itself, rather than a command line, use this directly.
+pub(crate) fn target_name_is_secret_like(target: &str, scope: Scope) -> bool {
+    if target.is_empty() {
+        return false;
     }
-    false
+    let name_full = PyPath::new(target).name().to_lowercase();
+    let name = name_full.trim_start_matches('.').to_owned();
+    let name_stem = PyPath::new(&name).stem().to_owned();
+    let stem = if name_stem.is_empty() {
+        name.clone()
+    } else {
+        name_stem
+    };
+    let exact = SECRET_LIKE_SOURCE_NAME_STEMS.contains(&stem.to_lowercase().as_str());
+    let compound = stem_has_compound_secret_segment(&stem, scope.cwd.is_some())
+        || (scope.cwd.is_none()
+            && PyPath::new(target).is_absolute()
+            && stem_ends_with_secret_segment(&stem));
+    if !exact && !compound && !name.starts_with("id_") {
+        return false;
+    }
+    !(compound && scope.cwd.is_some() && target_is_source_like(target, scope, false))
 }

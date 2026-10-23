@@ -79,9 +79,11 @@ def test_publication_staging_works_without_a_nonexistent_mcp_resource_directory(
     """Verify publication staging works without a nonexistent MCP resource directory."""
     workflow = yaml.safe_load((ROOT / ".github/workflows/extension-artifact-regen.yml").read_text())
     step = next(
-        item for item in workflow["jobs"]["regen"]["steps"] if item.get("name") == "Build the immutable snapshot"
+        item
+        for item in workflow["jobs"]["regen"]["steps"]
+        if item.get("name") == "Build immutable public directory and policy packs"
     )
-    assert "scripts/extension_artifact_bundle.py" in step["run"]
+    assert "scripts/build_extension_delivery.py" in step["run"]
     assert "git add" not in step["run"]
     source_files = set(bundle.FILES) - {"contracts/extensions/trust-class-map.v1.json"}
     for name in source_files:

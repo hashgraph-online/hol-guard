@@ -181,6 +181,8 @@ fn fetch_inside_a_linked_sibling_worktree_is_quiet() {
         ),
         format!("cd {linked} && git fetch origin main"),
         format!("git -C {primary} fetch origin main 2>&1 | tail -2"),
+        // A dry run reports the same refresh and updates no ref.
+        format!("cd {linked} && git fetch --dry-run origin main"),
     ] {
         assert_allow_at(&session, &session.org, &command, REFRESH);
     }
@@ -242,10 +244,7 @@ fn fresh_temporary_leaf(label: &str) -> std::path::PathBuf {
     let unique = format!(
         "{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     );
     std::fs::canonicalize("/tmp")
         .unwrap()

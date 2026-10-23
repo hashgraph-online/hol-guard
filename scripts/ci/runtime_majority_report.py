@@ -15,6 +15,7 @@ import argparse
 import fnmatch
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -48,6 +49,7 @@ from scripts.ci.runtime_majority_wiring import build_files, compute_wired  # noq
 SCHEMA: Final = "hol-guard.runtime-majority-report.v1"
 SCOPE_SCHEMA: Final = "hol-guard.runtime-majority-scope.v1"
 DEFAULT_SCOPE: Final = "docs/guard/contracts/runtime-majority-scope.v1.json"
+_GLOB: Final = re.compile(r"[*?\[]")
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -223,6 +225,27 @@ def _tree_total(repo: Path, patterns: list[str]) -> int:
     return total
 
 
+def _stale_scope_paths(repo: Path, scope: dict[str, Any]) -> list[str]:
+    """Literal scope paths that no longer exist.
+
+    Reviewed-runtime and exclusion entries carry the review that justified a
+    module's classification. A glob keeps covering whatever still matches it,
+    but a literal path for a retired module is a review of nothing: it outlives
+    the module and makes the contract read as though the module were still
+    there. Report those so a retirement has to drop its own entries.
+    """
+
+    literals: list[str] = []
+    for key in ("reviewed_runtime", "exclusions"):
+        for entry in scope["python"].get(key, []):
+            paths = entry.get("path")
+            paths = [paths] if isinstance(paths, str) else paths
+            if not isinstance(paths, list):
+                continue
+            literals += [item for item in paths if isinstance(item, str) and not _GLOB.search(item)]
+    return sorted({item for item in literals if not (repo / item).exists()})
+
+
 def build_report(repo: Path, scope_path: Path, *, top: int = 40) -> dict[str, Any]:
     scope = load_scope(scope_path)
     python_scope = scope["python"]
@@ -241,6 +264,11 @@ def build_report(repo: Path, scope_path: Path, *, top: int = 40) -> dict[str, An
     missing = [root for root in roots if root not in graph.modules]
     if missing:
         raise ScopeError(f"runtime roots not found: {missing}")
+    stale = _stale_scope_paths(repo, scope)
+    if stale:
+        raise ScopeError(
+            "scope entries name paths that no longer exist (drop them with the retirement): " + ", ".join(stale)
+        )
     entries = list(python_scope["exclusions"])
     unpruned, _, _ = closure(graph, roots, exclusions=[])
     in_scope, direct_hits, kind = closure(graph, roots, exclusions=entries)

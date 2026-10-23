@@ -23,21 +23,19 @@ from ..cli.connect_sync_result import (
 from ..package_firewall_entitlement import (
     reconcile_connect_state_with_oauth_entitlement,
 )
-from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, ActivityDecisionReason
-from ..runtime.command_activity_lifecycle import CommandActivityDecisionFacts, build_pre_hook_evidence
-from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from ..runtime.command_shadow_evaluation import (
-    CommandShadowCohort,
-    CommandShadowControl,
-    baseline_command_shadow_proposal,
-    build_command_shadow_observation,
+from ..runtime.command_activity_contract import (
+    ActivityApprovalReuseStatus,
+    ActivityDecisionReason,
+    ActivityLatencyBucket,
+    ActivityParseConfidence,
+    CommandActivity,
+    CommandActivityEvidence,
+    CommandExecutionStatus,
+    CommandHookPhase,
+    CommandProofLevel,
+    ReceiptLinkStatus,
 )
 from ..runtime.extension_control_authority import ExtensionControlAuthorityView
-from ..runtime.extension_control_runtime import (
-    ExtensionControlRuntimeSnapshot,
-    current_extension_control_snapshot,
-)
-from ..runtime.native_command_evaluation import evaluate_command_native
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncNotAvailableError,
@@ -258,82 +256,35 @@ def _complete_browser_oauth_connect(
     )
 
 
-_PROTECTION_REPAIR_PROBE_COMMAND = "git status --porcelain=v1"
+def _repair_command_activity_persistence_health(store: GuardStore) -> None:
+    """Prove the command-evidence write path so its degraded flag can clear.
 
-
-def _repair_command_activity_persistence_health(store: GuardStore) -> str | None:
-    """Probe command-evidence persistence; return the reason it could not run.
-
-    A probe that cannot evaluate the native policy engine proves nothing, so it
-    must not mutate persistence health. Real probe failures still surface through
-    ``probe_command_activity_persistence``.
+    The probe saves an ordinary unmatched pre-hook row inside a savepoint and
+    rolls it back. It needs no policy evaluation: health tracks whether Guard can
+    save evidence, and a hook that still cannot save marks the store degraded
+    again. Write failures raise from ``probe_command_activity_persistence``.
     """
 
-    snapshot = current_extension_control_snapshot()
-    if snapshot is None:
-        try:
-            snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-                store.read_extension_control_authority_for_registry(
-                    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-                    read_only=True,
-                )
-            )
-        except Exception:
-            snapshot = None
-    try:
-        evaluation = (
-            evaluate_command_native(
-                _PROTECTION_REPAIR_PROBE_COMMAND,
-                guard_home=store.guard_home,
-                extension_control_snapshot=snapshot,
-            )
-            if snapshot is not None
-            else None
-        )
-    except Exception:
-        evaluation = None
-    if evaluation is None:
-        return "native_evaluation_unavailable"
-    occurred_at = datetime.now(timezone.utc)
-    activity_id = f"activity:protection-repair-probe:{uuid.uuid4().hex}"
-    decision_reason = ActivityDecisionReason.EXTENSION_MATCH if evaluation.matches else ActivityDecisionReason.NO_MATCH
-    evidence = build_pre_hook_evidence(
-        evaluation,
-        CommandActivityDecisionFacts(
-            policy_action="allow",
-            decision_reason_code=decision_reason,
-            prompted=False,
-            approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
-            receipt_id=None,
-        ),
-        activity_id=activity_id,
-        occurred_at=occurred_at,
+    activity = CommandActivity(
+        activity_id=f"activity:protection-repair-probe:{uuid.uuid4().hex}",
+        occurred_at=datetime.now(timezone.utc),
         harness="codex",
+        hook_phase=CommandHookPhase.PRE,
+        execution_status=CommandExecutionStatus.ALLOWED_UNCONFIRMED,
+        proof_level=CommandProofLevel.PRE_HOOK,
+        policy_action="allow",
+        decision_reason_code=ActivityDecisionReason.NO_MATCH,
+        controlling_rule_id=None,
+        parse_confidence=ActivityParseConfidence.EXACT,
+        uncertainty_class=None,
+        match_count=0,
+        prompted=False,
+        approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
         request_correlation=None,
+        session_correlation=None,
+        receipt_link_status=ReceiptLinkStatus.NOT_APPLICABLE,
+        receipt_id=None,
+        evaluation_latency_bucket=ActivityLatencyBucket.NOT_MEASURED,
+        persistence_latency_bucket=ActivityLatencyBucket.NOT_MEASURED,
     )
-    shadow = None
-    shadow_evaluation_succeeded = True
-    try:
-        shadow = build_command_shadow_observation(
-            evaluation,
-            authoritative_action="allow",
-            proposal=baseline_command_shadow_proposal(evaluation),
-            activity_id=activity_id,
-            occurred_at=occurred_at,
-            control=CommandShadowControl(
-                enabled=True,
-                kill_switch=False,
-                release_cohorts=frozenset({CommandShadowCohort.BASELINE}),
-                disabled_cohorts=frozenset(),
-                sample_basis_points=10_000,
-            ),
-        )
-    except (RuntimeError, TypeError, ValueError):
-        shadow = None
-        shadow_evaluation_succeeded = False
-    store.probe_command_activity_persistence(
-        evidence,
-        shadow=shadow,
-        shadow_evaluation_succeeded=shadow_evaluation_succeeded,
-    )
-    return None
+    store.probe_command_activity_persistence(CommandActivityEvidence(activity=activity, matches=()))

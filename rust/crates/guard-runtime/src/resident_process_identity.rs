@@ -1,11 +1,9 @@
 #![forbid(unsafe_code)]
 
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::fs::File;
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 const MAX_RUNTIME_BYTES: u64 = 128 * 1024 * 1024;
 pub(crate) fn executable_missing(path: &Path) -> bool {
@@ -73,7 +71,7 @@ pub(crate) fn process_start_marker(process_id: u32) -> Result<String, String> {
     system.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[pid]),
         true,
-        ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
+        ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::Always),
     );
     let process = system
         .process(pid)
@@ -263,7 +261,7 @@ fn process_executable_path(process_id: u32) -> Result<PathBuf, String> {
     system.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[pid]),
         true,
-        ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
+        ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::Always),
     );
     let executable = system
         .process(pid)
@@ -284,20 +282,8 @@ pub(crate) fn executable_digest(executable: &Path) -> Result<String, String> {
     }
     let mut file = File::open(executable)
         .map_err(|_| "native_resident_process_identity_unavailable".to_owned())?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
-    loop {
-        let count = file
-            .read(&mut buffer)
-            .map_err(|_| "native_resident_process_identity_unavailable".to_owned())?;
-        if count == 0 {
-            break;
-        }
-        hasher.update(&buffer[..count]);
-    }
-    Ok(crate::resident_state_encoding::hex_bytes(
-        &hasher.finalize(),
-    ))
+    crate::resident_state_encoding::sha256_hex_from_reader(&mut file)
+        .map_err(|_| "native_resident_process_identity_unavailable".to_owned())
 }
 
 #[cfg(all(test, unix))]

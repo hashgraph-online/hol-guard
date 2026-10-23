@@ -11,13 +11,52 @@ from .realism_fixtures import write_windows_launcher
 
 GITHUB_REVIEW_CASE = "github-review-work-enabled-permissions"
 GITHUB_DELETE_CASE = "explicit-disabled-github-delete-permission"
-GITHUB_STUB_CASES = frozenset({GITHUB_REVIEW_CASE, GITHUB_DELETE_CASE})
+# The Oh My Pi `github` tool runs `gh api` underneath, so its lookups reach the same stand-in.
+GITHUB_LOOKUP_CASE = "omp-native-github-search-prs"
+GITHUB_LOOKUP_REPO = "example-org/example-repo"
+GITHUB_LOOKUP_QUERY = "is:pr metrics OR analytics"
+GITHUB_METADATA_CASE = "github-metadata-command-reads"
+GITHUB_METADATA_CONTROL = "github-metadata-mutation-control"
+GITHUB_STUB_CASES = frozenset(
+    {GITHUB_REVIEW_CASE, GITHUB_DELETE_CASE, GITHUB_LOOKUP_CASE, GITHUB_METADATA_CASE, GITHUB_METADATA_CONTROL}
+)
+METADATA_CALLS = (
+    ("cache", "list", "--limit", "5"),
+    ("label", "list", "--json", "name"),
+    ("secret", "list"),
+    ("variable", "list"),
+    ("codespace", "list"),
+    ("org", "list"),
+    ("project", "list", "--owner", "example-org"),
+    ("alias", "list"),
+    ("extension", "list"),
+    ("config", "list"),
+    ("config", "get", "editor"),
+)
 WORKTREE_CASE = "linked-worktree-edit-from-main-checkout"
+# Writes into a harness plan folder pass; the hooks file beside it stays reviewed.
+PLAN_NOTE_PROTECTION_CASE = "plan-note-protection-codex-hooks"
+CODEX_HOOKS = "{}\n"
 # Not prefixed by the workspace name, so redaction cannot fold it into {{workspace}}.
 WORKTREE_NAME = "review-worktree"
 GITHUB_EXTENSION_ID = "command.github"
 GH_LOG = "output/gh-calls.log"
 SEPARATOR = "\x1f"
+
+
+def seed_protected_codex_hooks(home: Path, scenario_id: str) -> None:
+    """Give the plan-note protection case its hooks file with known bytes.
+
+    A write that reached it then shows as a changed file instead of passing
+    because the destination was missing. Guard's Codex install migrates and
+    removes ``~/.codex/hooks.json``, so the Codex lane seeds it again after
+    installing.
+    """
+    if scenario_id != PLAN_NOTE_PROTECTION_CASE:
+        return
+    (home / ".codex").mkdir(mode=0o700, parents=True, exist_ok=True)
+    (home / ".codex" / "hooks.json").write_text(CODEX_HOOKS, encoding="utf-8", newline="\n")
+
 
 _REPLY_BODY = "@reviewer Fixed in abc123"
 _RESOLVE_LITERAL = 'mutation { resolveReviewThread(input: {threadId: "PRRT_kwDOSYNTH001"}) { thread { isResolved } } }'
@@ -51,6 +90,7 @@ def gh_stub_script(log: Path) -> str:
         'case "$*" in\n'
         '*graphql*) printf \'%s\\n\' \'{"data":{"resolveReviewThread":{"thread":{"isResolved":true}}}}\' ;;\n'
         '*/replies*) printf \'%s\\n\' \'{"id":456,"body":"reply recorded"}\' ;;\n'
+        '*search/issues*) printf \'%s\n\' \'{"total_count":1,"incomplete_results":false,"items":[{"number":12,"title":"Add metrics","state":"open","html_url":"https://github.com/example-org/example-repo/pull/12","pull_request":{}}]}\' ;;\n'
         '*) printf \'%s\\n\' \'[{"id":123,"user":{"login":"reviewer"},"body":"Please rename the helper"}]\' ;;\n'
         "esac\n"
         "exit 0\n"
@@ -69,6 +109,8 @@ def gh_stub_python(log: Path) -> str:
         "    out = '{\"data\":{\"resolveReviewThread\":{\"thread\":{\"isResolved\":true}}}}'\n"
         "elif '/replies' in joined:\n"
         "    out = '{\"id\":456,\"body\":\"reply recorded\"}'\n"
+        "elif 'search/issues' in joined:\n"
+        "    out = '{\"total_count\":1,\"incomplete_results\":false,\"items\":[{\"number\":12,\"title\":\"Add metrics\",\"state\":\"open\",\"html_url\":\"https://github.com/example-org/example-repo/pull/12\",\"pull_request\":{}}]}'\n"
         "else:\n"
         "    out = '[{\"id\":123,\"user\":{\"login\":\"reviewer\"},\"body\":\"Please rename the helper\"}]'\n"
         "sys.stdout.buffer.write(out.encode() + b'\\n')\n"
@@ -92,9 +134,27 @@ def recorded_gh_calls(workspace: Path) -> list[tuple[str, ...]] | None:
     return [tuple(line.split(SEPARATOR)[:-1]) for line in text.splitlines()]
 
 
+def _is_lookup_call(call: tuple[str, ...]) -> bool:
+    """One `gh api` issue-search request carrying the case's query, scoped to its repository."""
+    queries = [arg for arg in call if arg.startswith("q=")]
+    return (
+        call[:1] == ("api",)
+        and "/search/issues" in call
+        and len(queries) == 1
+        and queries == [f"q={GITHUB_LOOKUP_QUERY} repo:{GITHUB_LOOKUP_REPO} is:pr"]
+    )
+
+
 def github_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
+    if scenario_id == GITHUB_METADATA_CASE:
+        return {"github-metadata-calls-exact": recorded_gh_calls(workspace) == list(METADATA_CALLS)}
+    if scenario_id == GITHUB_METADATA_CONTROL:
+        return {"github-metadata-control-not-executed": recorded_gh_calls(workspace) is None}
     if scenario_id == GITHUB_REVIEW_CASE:
         return {"github-stub-calls-exact": recorded_gh_calls(workspace) == list(EXPECTED_GH_CALLS)}
+    if scenario_id == GITHUB_LOOKUP_CASE:
+        calls = recorded_gh_calls(workspace)
+        return {"github-lookup-ran-once": calls is not None and len(calls) == 1 and _is_lookup_call(calls[0])}
     return {}
 
 

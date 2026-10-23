@@ -35,6 +35,14 @@ _RUNNER = "./node_modules/.bin/vitest run"
             f"{_RUNNER} 2>&1 | grep -v ok | grep -c x | head -1",
             (("grep", "-v", "ok"), ("grep", "-c", "x"), ("head", "1")),
         ),
+        (
+            f'{_RUNNER} 2>&1 | rg -A 12 "FAIL|AssertionError" | head -40',
+            (("rg", "-A", "12", "FAIL|AssertionError"), ("head", "40")),
+        ),
+        (f"{_RUNNER} 2>&1 | rg -n FAIL", (("rg", "-n", "FAIL"),)),
+        (f"{_RUNNER} 2>&1 | rg -B2 -A6 -i error", (("rg", "-B2", "-A6", "-i", "error"),)),
+        (f"{_RUNNER} 2>&1 | rg -NU -e FAIL -e Error", (("rg", "-NU", "-e", "FAIL", "-e", "Error"),)),
+        (f"{_RUNNER} 2>&1 | rg -v ok | tail -3", (("rg", "-v", "ok"), ("tail", "3"))),
     ],
 )
 def test_stdin_filter_chains_are_peeled(tmp_path: Path, command: str, stages: tuple[tuple[str, ...], ...]) -> None:
@@ -81,6 +89,21 @@ def test_a_single_head_or_tail_keeps_its_bounded_filter(tmp_path: Path) -> None:
         "| grep x &",
         "| GREP_OPTIONS=-r grep x",
         "| /tmp/grep x",
+        "| rg -f /home/user/.ssh/id_rsa",
+        "| rg x /home/user/.aws/credentials",
+        "| rg x notes.txt",
+        "| rg -l x",
+        "| rg -P x",
+        "| rg -z x",
+        "| rg -g '*.ts' x",
+        "| rg -E utf-8 x",
+        "| rg --pre cat x",
+        "| rg --files",
+        "| rg",
+        "| rg x > ~/.bashrc",
+        "| rg x | sh",
+        "| RIPGREP_CONFIG_PATH=/tmp/rc rg x",
+        "| /tmp/rg x",
     ],
 )
 def test_other_filters_are_not_peeled(tmp_path: Path, tail: str) -> None:
@@ -125,6 +148,62 @@ def test_grep_runs_only_with_validated_arguments() -> None:
         filters.apply_filters("x\n", (("grep", "-f", "/etc/hosts"),))
     with pytest.raises(ValueError):
         filters.apply_filters("x\n", (("grep", "x", "/etc/hosts"),))
+    with pytest.raises(ValueError):
+        filters.apply_filters("x\n", (("rg", "-g", "*.ts", "x"),))
+    with pytest.raises(ValueError):
+        filters.apply_filters("x\n", (("rg", "x", "/etc/hosts"),))
+
+
+def _ripgrep_installed() -> bool:
+    try:
+        filters._trusted_ripgrep()
+    except RuntimeError:
+        return False
+    return True
+
+
+@pytest.mark.skipif(not _ripgrep_installed(), reason="ripgrep not installed")
+def test_an_rg_stage_filters_captured_output(capsys: pytest.CaptureFixture[str]) -> None:
+    output = OutputFilter("pipe", 0, True, "exit=", stages=(("rg", "-A", "1", "FAIL"), ("head", "2")))
+    with bounded_output(output):
+        print("one\nFAIL a\ntwo\nthree")
+    assert capsys.readouterr().out == "FAIL a\ntwo\n"
+    assert output.status_line(1) == "exit=0\n"
+
+
+def test_a_group_writable_ripgrep_is_refused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    directory = tmp_path / "bin"
+    directory.mkdir()
+    planted = directory / "rg"
+    planted.write_text("#!/bin/sh\n")
+    planted.chmod(0o777)
+    monkeypatch.setattr(filters, "_RG_DIRECTORIES", (directory,))
+    with pytest.raises(RuntimeError):
+        filters._trusted_ripgrep()
+
+
+def test_a_ripgrep_that_cannot_run_leaves_the_search_to_the_next_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    first = tmp_path / "first"
+    first.mkdir()
+    (first / "rg").write_text("not the install\n")
+    second = tmp_path / "second"
+    second.mkdir()
+    installed = second / "rg"
+    installed.write_text("#!/bin/sh\ncat\n")
+    installed.chmod(0o755)
+    monkeypatch.setattr(filters, "_RG_DIRECTORIES", (first, second))
+    assert filters._trusted_ripgrep() == str(installed)
+
+
+def test_a_missing_matcher_reports_the_status_a_shell_gives(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(filters, "_RG_DIRECTORIES", (tmp_path / "missing",))
+    text, diagnostics, status = filters.apply_filters("x\n", (("rg", "x"),))
+    assert (text, status) == ("", 127)
+    assert "rg: not found" in diagnostics
 
 
 def test_untrusted_grep_binaries_are_refused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -133,4 +212,4 @@ def test_untrusted_grep_binaries_are_refused(monkeypatch: pytest.MonkeyPatch, tm
     planted.chmod(0o777)
     monkeypatch.setattr(filters, "_GREP_BINARIES", (planted, tmp_path / "missing"))
     with pytest.raises(RuntimeError):
-        filters.apply_filters("x\n", (("grep", "x"),))
+        filters._trusted_grep()

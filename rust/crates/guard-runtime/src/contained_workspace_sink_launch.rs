@@ -12,10 +12,13 @@ pub(super) struct Launch<'a> {
     pub(super) plan: &'a Plan,
     pub(super) workspace: &'a Path,
     pub(super) workspace_text: &'a str,
+    pub(super) home: &'a str,
     pub(super) private: &'a PrivateRoot,
     pub(super) exec_roots: &'a [String],
     pub(super) write_denials: &'a [String],
     pub(super) signals: &'a process::Signals,
+    /// Kept when the run failed on a blocked connection to this machine.
+    pub(super) loopback: grant::LoopbackNote<'a>,
 }
 
 impl Launch<'_> {
@@ -74,6 +77,7 @@ impl Launch<'_> {
                 "The workspace sandbox directory is unavailable.",
             )
         })?;
+        link_private_caches(&format!("{private_root}/tmp"), self.exec_roots)?;
         environment.insert("PATH".into(), self.plan.sandbox_path.clone());
         environment.insert("GIT_CONFIG_NOSYSTEM".into(), "1".into());
         environment.insert(
@@ -87,7 +91,9 @@ impl Launch<'_> {
         let profile = native(
             "macos_profile",
             json!({
-                "profile_version": WORKSPACE_PROFILE,
+                "profile_version": self.plan.profile_version,
+                "capabilities": self.plan.capabilities,
+                "home": self.home,
                 "workspace": self.workspace_text,
                 "cwd": self.workspace_text,
                 "private_root": private_root,
@@ -118,6 +124,7 @@ impl Launch<'_> {
             &self.private.path,
             self.signals,
             RUN_TIMEOUT_SECONDS,
+            &|| self.loopback.keep(),
         )
     }
 }
@@ -268,6 +275,48 @@ impl PrivateRoot {
 
 /// The largest safety guide copied into the private home.
 const MAX_SAFETY_GUIDE_BYTES: u64 = 64 * 1024;
+
+/// Link the host caches a contained run reads into the tree it owns.
+///
+/// Cargo takes its locks inside `CARGO_HOME`, so a contained run needs one it
+/// can write; the fetched crate sources it only reads stay where the host
+/// keeps them, linked in under the names cargo looks for. A link may name an
+/// entry below a cache rather than the cache itself, which leaves the
+/// directory holding it one the run owns and can add to. Nothing is linked
+/// when the native side grants no cache, and the plan's own executable roots
+/// decide that: a run the plan gave no cache to is not handed a link naming
+/// one either.
+fn link_private_caches(private_tmp: &str, exec_roots: &[String]) -> Outcome<()> {
+    let Value::Array(links) = native(
+        "private_links",
+        json!({ "private_tmp": private_tmp, "roots": exec_roots }),
+    )?
+    else {
+        return Err(unavailable("invalid_reply"));
+    };
+    for entry in links {
+        let (Some(Value::String(link)), Some(Value::String(target))) =
+            (entry.get("link"), entry.get("target"))
+        else {
+            return Err(unavailable("invalid_reply"));
+        };
+        let link = Path::new(link);
+        if let Some(parent) = link.parent() {
+            std::fs::DirBuilder::new()
+                .mode(0o700)
+                .recursive(true)
+                .create(parent)
+                .map_err(|_| {
+                    Failure::new(
+                        SANDBOX_UNAVAILABLE,
+                        "The workspace sandbox directory is unavailable.",
+                    )
+                })?;
+        }
+        let _ = std::os::unix::fs::symlink(target, link);
+    }
+    Ok(())
+}
 
 /// Copy Guard's safety guide into the private home, so the
 /// `~/.hol-support/SAFETY.md` that classification admits reads the same text

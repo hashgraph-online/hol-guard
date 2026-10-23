@@ -3,6 +3,83 @@
 
 use crate::guard_store_json::py_strip;
 
+/// Read-only notification for a queued review whose identical retry is bound.
+pub(crate) fn approval_wait_hint(request_id: &str) -> String {
+    if request_id.is_empty()
+        || request_id.starts_with('-')
+        || request_id.len() > 64
+        || !request_id
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_'))
+    {
+        return String::new();
+    }
+    format!(
+        "Wait for the decision with `hol-guard approvals wait {request_id} --json` (bounded to 120 seconds). \
+         Only after an allow decision, retry the identical action through Guard. \
+         A timeout or a block is not approval."
+    )
+}
+
+pub(crate) fn approval_wait_hint_for_home(
+    request_id: &str,
+    guard_home: &str,
+    home_dir: &str,
+) -> String {
+    let hint = approval_wait_hint(request_id);
+    if hint.is_empty()
+        || std::path::Path::new(home_dir).join(".hol-guard") == std::path::Path::new(guard_home)
+    {
+        return hint;
+    }
+    let quoted = crate::mcp_proxy_shlex::quote(guard_home);
+    hint.replace(" --json`", &format!(" --json --home {quoted}`"))
+}
+
+pub(crate) fn wait_hint_projection(
+    args: &serde_json::Value,
+) -> crate::runner_authority_op::KindResult {
+    let id = args
+        .get("request_id")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(crate::runner_authority_op::ERR_INVALID)?;
+    let guard_home = args
+        .get("guard_home")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(crate::runner_authority_op::ERR_INVALID)?;
+    let home_dir = args
+        .get("home_dir")
+        .and_then(serde_json::Value::as_str)
+        .ok_or(crate::runner_authority_op::ERR_INVALID)?;
+    Ok(serde_json::json!({"hint": approval_wait_hint_for_home(id, guard_home, home_dir)}))
+}
+
+#[cfg(test)]
+mod wait_hint_tests {
+    use super::approval_wait_hint;
+
+    #[test]
+    fn only_a_literal_request_id_is_a_shell_wait_hint() {
+        assert!(approval_wait_hint("req-1").contains("approvals wait req-1 --json"));
+        for id in ["", "-x", "req;id", "$(id)", "req/1", "réq"] {
+            assert!(approval_wait_hint(id).is_empty(), "{id}");
+        }
+    }
+
+    #[test]
+    fn a_custom_home_wait_names_the_store_without_weakening_its_review_gate() {
+        let hint = super::approval_wait_hint_for_home("req-1", "/custom guard", "/user");
+        assert!(hint.contains("--json --home '/custom guard'"));
+        let default = super::approval_wait_hint_for_home("req-1", "/user/.hol-guard", "/user");
+        assert!(!default.contains("--home"));
+        let projected = super::wait_hint_projection(&serde_json::json!({
+            "request_id": "req-1", "guard_home": "/custom guard", "home_dir": "/user"
+        }))
+        .unwrap();
+        assert_eq!(projected["hint"], hint);
+    }
+}
+
 /// `SAFE_ALTERNATIVE_GUIDANCE`.
 const SAFE_ALTERNATIVE_GUIDANCE: &str = "This action remains blocked. Continue with a safe, \
      permitted alternative that respects the same protection. Do not retry an equivalent \
@@ -28,9 +105,88 @@ const APPROVAL_CANNOT_UNBLOCK: &str =
 const INBOX_APPROVAL_OFFER: &str = " Approve it in the HOL Guard inbox (choose Always for a \
      repeated read-only command), or split it into simpler commands.";
 
+/// `_CONNECTOR_SETUP_WAIT`: an MCP server setup review is one decision for
+/// the server, not an approval of this action. Only the vector-checked
+/// `connector_setup_reason` reads it until the resident renders this text.
+#[cfg_attr(not(test), allow(dead_code))]
+const CONNECTOR_SETUP_WAIT: &str = "Setting it up is a one-time decision for the user in the HOL \
+     Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this \
+     or another spelling, until it is set up; continue with other work meanwhile.";
+/// `_CONNECTOR_APPROVAL_WAIT`: a local CLI or script Guard has not been set
+/// up for is an ordinary review, which the user's Allow once or Always allow
+/// releases.
+#[cfg_attr(not(test), allow(dead_code))]
+const CONNECTOR_APPROVAL_WAIT: &str = "It is waiting for the user to approve it in the HOL Guard \
+     inbox (`hol-guard approvals`), where Allow once or Always allow lets it run. Do not retry \
+     the same action until it is approved; continue with other work meanwhile.";
+/// `CONNECTOR_SETUP_REASON_PREFIX`.
+const CONNECTOR_SETUP_REASON_PREFIX: &str = "HOL Guard has not been set up for `";
+
+/// `connector_setup_reason(name, surface, ask=..., permitted=..., approvable=...)`:
+/// a local CLI or script whose review is `approvable` says it waits for the
+/// user's approval in either mode, and the caller adds the link. Otherwise,
+/// and for an MCP server, the default mode names the computed redirect (if
+/// any) and appends `SAFE_ALTERNATIVE_GUIDANCE`, with no link and no request
+/// to ask the user; `ask` mode says it waits in the inbox, and the caller adds
+/// the link.
+/// The resident has no caller yet: the daemon renders this text and the vector
+/// test keeps the two byte-identical until the resident takes over rendering.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn connector_setup_reason(
+    name: &str,
+    surface: &str,
+    ask: bool,
+    permitted: &[&str],
+    approvable: bool,
+) -> String {
+    let label = match surface {
+        "cli" => "local CLI",
+        "package-scripts" => "package script",
+        "mcp" => "MCP server",
+        other => other,
+    };
+    let reason = format!("{CONNECTOR_SETUP_REASON_PREFIX}{name}` ({label}) on this device.");
+    if approvable && matches!(surface, "cli" | "package-scripts") {
+        return format!("{reason} {CONNECTOR_APPROVAL_WAIT}");
+    }
+    if ask {
+        return format!("{reason} {CONNECTOR_SETUP_WAIT}");
+    }
+    let names = permitted
+        .iter()
+        .filter(|item| !item.is_empty())
+        .map(|item| format!("`{item}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let redirect = if names.is_empty() {
+        String::new()
+    } else {
+        format!("Permitted on this device: {names}.")
+    };
+    [
+        reason.as_str(),
+        redirect.as_str(),
+        SAFE_ALTERNATIVE_GUIDANCE,
+    ]
+    .into_iter()
+    .filter(|part| !part.is_empty())
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
+/// `is_unlinked_connector_setup_reason`: a default-mode connector setup
+/// reason, to which a harness renderer adds no approval link or step.
+pub(crate) fn is_unlinked_connector_setup_reason(text: &str) -> bool {
+    text.contains(CONNECTOR_SETUP_REASON_PREFIX) && text.contains(SAFE_ALTERNATIVE_GUIDANCE)
+}
+
 /// `_BUILD_REVIEW_PREFIX`: a package review of a build or test says why in
 /// its own text, and the install hint does not apply to it.
 const BUILD_REVIEW_PREFIX: &str = "HOL Guard requires review before this build or test command";
+
+/// `_READ_REVIEW_PREFIX`: a review of a direct read of one path says why in
+/// its own text, and the advice for narrowing a search does not apply to it.
+const READ_REVIEW_PREFIX: &str = "HOL Guard requires review before this file read";
 
 /// `_REASON_CODE_HINTS`: plain-language next steps keyed by the native
 /// decision's reason code; unknown codes have none.
@@ -86,7 +242,8 @@ pub(crate) fn safe_alternative_reason_with_retry(
     if reason_code.is_none() && approval_queued.is_none() {
         return py_strip(&format!("{reason} {SAFE_ALTERNATIVE_GUIDANCE}")).to_owned();
     }
-    let hint = if reason.starts_with(BUILD_REVIEW_PREFIX) {
+    let hint = if reason.starts_with(BUILD_REVIEW_PREFIX) || reason.starts_with(READ_REVIEW_PREFIX)
+    {
         ""
     } else {
         reason_code_hint(reason_code.unwrap_or_default())
@@ -117,6 +274,47 @@ mod tests {
     use super::*;
 
     #[test]
+    fn connector_setup_reason_matches_the_python_vectors_byte_for_byte() {
+        let vectors: serde_json::Value = serde_json::from_str(include_str!(
+            "../testdata/connector_setup_reason_vectors.json"
+        ))
+        .expect("vectors");
+        for case in vectors.as_array().expect("cases") {
+            let permitted: Vec<&str> = case["permitted"]
+                .as_array()
+                .expect("permitted")
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .collect();
+            let text = connector_setup_reason(
+                case["name"].as_str().expect("name"),
+                case["surface"].as_str().expect("surface"),
+                case["ask"].as_bool().expect("ask"),
+                &permitted,
+                case["approvable"].as_bool().expect("approvable"),
+            );
+            assert_eq!(text, case["text"].as_str().expect("text"));
+            let unlinked = case["unlinked"].as_bool().expect("unlinked");
+            assert_eq!(
+                is_unlinked_connector_setup_reason(&text),
+                unlinked,
+                "{text}"
+            );
+            assert!(!text.contains("http"), "{text}");
+            assert_eq!(
+                text.ends_with(SAFE_ALTERNATIVE_GUIDANCE),
+                unlinked,
+                "{text}"
+            );
+            assert_eq!(
+                text.contains("hol-guard approvals"),
+                !unlinked,
+                "an unlinked text never points at the inbox: {text}"
+            );
+        }
+    }
+
+    #[test]
     fn review_drops_the_inbox_offer_only_when_approval_cannot_let_it_run() {
         let native = "HOL Guard requires review because this command could not be confirmed \
              read-only. Approve it in the HOL Guard inbox (choose Always for a repeated read-only \
@@ -138,6 +336,21 @@ mod tests {
             ));
             assert_eq!(text.contains("Approve it in the HOL Guard inbox"), offered);
         }
+    }
+
+    #[test]
+    fn a_direct_read_review_leaves_out_the_search_advice() {
+        let read = "HOL Guard requires review before this file read can execute. `src/lib/auth` \
+             is named like a credential store, so Guard holds a read of it.";
+        let text = safe_alternative_reason(read, Some("native_file_read_review"), Some(true));
+        assert!(text.starts_with(read));
+        assert!(!text.contains("A search is checked"), "{text}");
+        let search = safe_alternative_reason(
+            "HOL Guard requires review before this file action can execute.",
+            Some("native_file_read_review"),
+            Some(true),
+        );
+        assert!(search.contains("A search is checked"), "{search}");
     }
 
     #[test]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,12 @@ from .guard_extension_control_authority_fixtures import (
 from .test_guard_extension_control_api import _mutation_payload, _service
 
 _CATALOG = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
+
+
+def _after_retry_window() -> str:
+    """A rollback clock past the window in which a prepared row may be retried."""
+
+    return (datetime.now(timezone.utc) + timedelta(seconds=301)).isoformat()
 
 
 def _transition_count(store: GuardStore) -> int:
@@ -75,7 +82,7 @@ def test_recent_prepared_transition_survives_reads_so_the_same_request_can_retry
 def test_abandoned_prepared_transition_is_rolled_back_on_next_read(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(transitions, "ABANDONED_TRANSITION_GRACE_SECONDS", 0.0)
+    monkeypatch.setattr(transitions, "_now", _after_retry_window)
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
     secrets.fail_anchor_set_number = secrets.anchor_set_count + 1
@@ -95,7 +102,7 @@ def test_abandoned_prepared_transition_is_rolled_back_on_next_read(
 def test_new_request_after_abandoned_transition_commits_without_manual_recovery(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(transitions, "ABANDONED_TRANSITION_GRACE_SECONDS", 0.0)
+    monkeypatch.setattr(transitions, "_now", _after_retry_window)
     secrets = MemorySecretStore()
     store = _store(tmp_path, secrets)
     secrets.fail_anchor_set_number = secrets.anchor_set_count + 1

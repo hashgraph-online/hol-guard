@@ -52,7 +52,7 @@ def run(monkeypatch: pytest.MonkeyPatch, original: dict[str, object], workspace:
     monkeypatch.setattr(
         sink,
         "prepare_restricted_pytest",
-        lambda argv, *, workspace, cwd, read_only_workspace: prepared.append((workspace, cwd)),
+        lambda argv, *, workspace, cwd, read_only_workspace, home_dir=None: prepared.append((workspace, cwd)),
     )
     monkeypatch.setattr(sink, "run_restricted_pytest", lambda *args, **kwargs: 0)
 

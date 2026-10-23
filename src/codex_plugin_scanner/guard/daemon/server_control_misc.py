@@ -37,7 +37,7 @@ from ..insights_share import publish_insights_share
 from ..native_daemon_handler import (
     native_harness_action,
 )
-from .dashboard_update import schedule_guard_dashboard_update
+from .dashboard_update import schedule_guard_dashboard_update, write_desktop_update_request
 from .server_common import (
     _LOGGER,
     _build_local_url,
@@ -250,6 +250,9 @@ class _ControlMiscRoutes:
         force_pypi_reinstall = bool(payload.get("force_pypi_reinstall"))
         guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
         status_payload = build_guard_update_status_payload(guard_home=guard_home)
+        if payload.get("handoff_to_desktop") is True:
+            self._handle_desktop_update_handoff(guard_home, status_payload)
+            return
         if status_payload.get("python_update_required") is True:
             self._write_json(
                 {
@@ -296,6 +299,53 @@ class _ControlMiscRoutes:
                 include_alpha=status_payload.get("release_channel") == "alpha",
                 status_payload=status_payload,
             )
+        )
+
+    def _handle_desktop_update_handoff(self, guard_home: Path, status_payload: dict[str, object]) -> None:
+        """Record the dashboard's request for Desktop to open its updater.
+
+        Only a Desktop-managed install has an app updater to hand off to,
+        and only when a newer release is actually available. Nothing is
+        scheduled here: Desktop re-verifies the release itself.
+        """
+
+        if status_payload.get("installer") != "desktop":
+            self._write_json(
+                {
+                    "error": "desktop_handoff_unavailable",
+                    "message": "This install is not managed by the HOL Guard app.",
+                },
+                status=400,
+            )
+            return
+        latest_version = status_payload.get("latest_version")
+        if status_payload.get("update_available") is not True or not isinstance(latest_version, str):
+            self._write_json(
+                {
+                    "error": "update_not_available",
+                    "message": "Guard is already on the latest version.",
+                },
+                status=400,
+            )
+            return
+        try:
+            write_desktop_update_request(guard_home, latest_version=latest_version)
+        except OSError:
+            _LOGGER.exception("desktop update handoff request could not be recorded")
+            self._write_json(
+                {
+                    "error": "desktop_handoff_failed",
+                    "message": "The update request could not be recorded. Try again.",
+                },
+                status=500,
+            )
+            return
+        self._write_json(
+            {
+                "handoff_requested": True,
+                "current_version": status_payload.get("current_version"),
+                "latest_version": latest_version,
+            }
         )
 
     def _handle_cloud_review_settings(self, payload: dict[str, object]) -> None:

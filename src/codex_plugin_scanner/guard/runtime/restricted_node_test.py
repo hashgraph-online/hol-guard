@@ -24,15 +24,12 @@ def nearest_project_root(cwd: Path, workspace: Path, relative: str) -> Path:
     return Path(restricted_native("nearest_project_root", {"cwd": cwd, "workspace": workspace, "value": relative}, str))
 
 
-def _approved_node(executable: Path, workspace: Path) -> bool:
-    return restricted_native("approved_node", {"path": executable, "workspace": workspace}, bool)
-
-
 def prepare_restricted_node_test(
     command: Sequence[str],
     *,
     workspace: Path,
     cwd: Path | None = None,
+    home_dir: Path | None = None,
     platform: str | None = None,
     backend_executable: Path | None = None,
 ) -> RestrictedPytestPlan:
@@ -41,6 +38,7 @@ def prepare_restricted_node_test(
         command,
         workspace=workspace,
         cwd=cwd or workspace,
+        home_dir=home_dir,
         platform=platform or sys.platform,
         backend_executable=backend_executable,
         profile=NODE_TEST_READ_ONLY_PROFILE_VERSION,

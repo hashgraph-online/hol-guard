@@ -1,4 +1,4 @@
-"""The Python facts projection reproduces the recorded configured-action queries."""
+"""The resident's artifact facts reproduce the recorded configured-action queries."""
 
 from __future__ import annotations
 
@@ -31,16 +31,26 @@ def _vectors() -> list[dict]:
     return json.loads(gzip.decompress(VECTORS.read_bytes()))
 
 
-def test_facts_projection_reproduces_recorded_queries(tmp_path: Path) -> None:
+def test_facts_projection_reproduces_recorded_queries(native_approval_reuse_runtime: Path) -> None:
+    # The artifact half of every query now comes from the resident, so these
+    # vectors check the ported readers against the Python ones that recorded
+    # them rather than checking a projection against itself.
     recorder = _recorder()
     vectors = _vectors()
     assert len(vectors) >= 900
     for vector in vectors:
-        config = recorder.build_config(vector["spec"]["config"], tmp_path)
+        config = recorder.build_config(vector["spec"]["config"], native_approval_reuse_runtime)
         artifact = recorder.build_artifact(vector["spec"]["artifact"])
+        facts = runtime_policy_artifact_facts(
+            config, artifact, recorder.HARNESS, guard_home=native_approval_reuse_runtime
+        )
+        # ``skip_native_floor`` is the resident's own answer for the hook, not
+        # an input to the configured action these queries were recorded for.
+        # The policy-stack tail vectors pin it against the Python rule.
+        assert isinstance(facts.pop("skip_native_floor"), bool), vector["name"]
         assert {
             "policy_config": runtime_policy_config_facts(config, recorder.HARNESS),
-            "artifact": runtime_policy_artifact_facts(config, artifact, recorder.HARNESS),
+            "artifact": facts,
         } == vector["query"], vector["name"]
 
 

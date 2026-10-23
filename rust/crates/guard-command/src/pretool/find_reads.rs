@@ -10,7 +10,12 @@
 //! `~/.agent` root may be one when its tree clears the walk `ls -R` needs.
 //! Another home dot-directory may be one when `-maxdepth 1` keeps the walk to
 //! its own entries, or when the expression prints only the paths an ordinary
-//! name pattern selects.
+//! name pattern selects, whether that pattern is the name itself, a document
+//! suffix, or a glob built around a word someone chose.
+//! A project-metadata directory such as `.github` in a
+//! repository may be one when every entry below it clears the recursive
+//! listing screen, and a root that does not exist prints only an error, as
+//! the same probe does for `ls`.
 
 use super::safe_reads::{bounded_read_target, verified_path_context};
 
@@ -34,11 +39,16 @@ pub(super) fn safe_find_listing_arguments(
         return false;
     }
     verified_path_context(context.home_dir, context.cwd)
+        && arguments
+            .iter()
+            .all(|argument| super::brace_words::stays_one_word(argument))
         && roots.iter().all(|root| {
             !super::search::skill_link_resolves_over_home(root, context)
                 && (bounded_read_target(root, context.home_dir, context.cwd, true)
                     || super::search::skill_listing_root(root, context)
                     || super::search::agent_root_listing(root, context, true)
+                    || super::search::metadata_directory_walk(root, context)
+                    || super::listing_reads::absent_listing_operand(root, context)
                     || (entries_only(expression)
                         && super::read_paths::home_hidden_directory(
                             root,
@@ -50,7 +60,13 @@ pub(super) fn safe_find_listing_arguments(
                             root,
                             context.home_dir,
                             context.cwd,
-                        )))
+                        )
+                        && (!entries_only_bound(expression)
+                            || super::read_paths::home_hidden_walk_clears_stores(
+                                root,
+                                context.home_dir,
+                                context.cwd,
+                            ))))
         })
         && safe_expression(expression)
 }
@@ -80,6 +96,14 @@ fn entries_only(expression: &[String]) -> bool {
     bounded
 }
 
+/// Whether `-type d` is all that bounds the expression, with no `-name`
+/// pattern to decide which paths may be printed.
+fn entries_only_bound(expression: &[String]) -> bool {
+    !expression
+        .iter()
+        .any(|token| matches!(token.as_str(), "-name" | "-iname"))
+}
+
 /// Whether the expression prints only the paths a name pattern selects.
 ///
 /// `find` walks whatever its root holds, but what it prints is what the
@@ -92,10 +116,21 @@ fn entries_only(expression: &[String]) -> bool {
 ///
 /// Alternation and negation both widen the output back to the whole tree
 /// (`-not -name '*.md'` prints everything else), so the expression must be a
-/// plain conjunction, and it must carry at least one pattern: an expression
-/// that only bounds depth or type still enumerates the tree. `-path` and its
+/// plain conjunction, and it must carry at least one pattern. `-path` and its
 /// spellings match the whole path rather than the entry name, so a directory
 /// prefix alone satisfies them and they bound nothing here.
+///
+/// `-type d` bounds the output the same way without naming anything: it
+/// prints directory names and no file, and a secret is a file. The root is
+/// already one tool's own directory rather than a shared one, and
+/// `find ~/.nvm -maxdepth 2 -type d` is the inventory an agent takes of a
+/// toolchain it is about to use. What `-type d` cannot say on its own is
+/// that the tree below holds no store, so a walk bounded by nothing else is
+/// also screened against the root's own entries by
+/// [`super::read_paths::home_hidden_walk_clears_stores`]: a store directly
+/// below the root would otherwise have its own layout printed. A `-name`
+/// pattern in the same expression already decides what may be printed, so a
+/// walk carrying one keeps its existing proof.
 fn match_bounded(expression: &[String]) -> bool {
     let mut bounded = false;
     let mut index = 0;
@@ -120,7 +155,13 @@ fn match_bounded(expression: &[String]) -> bool {
             // pattern after it filters nothing:
             // `find ~/.codex -print -name run.sh` prints the whole tree.
             "-print" | "-print0" if !bounded => return false,
-            "-type" | "-maxdepth" | "-mindepth" => index += 1,
+            "-type" => {
+                if expression.get(index).map(String::as_str) == Some("d") {
+                    bounded = true;
+                }
+                index += 1;
+            }
+            "-maxdepth" | "-mindepth" => index += 1,
             _ => {}
         }
     }
@@ -131,6 +172,13 @@ fn match_bounded(expression: &[String]) -> bool {
 /// matches only documents: a token is not written in Markdown, and no
 /// credential, key or login file this screen refuses carries such a suffix.
 const DOCUMENT_SUFFIXES: [&str; 3] = [".md", ".markdown", ".rst"];
+
+/// How many letters of a glob have to be literal, in one unbroken run, before
+/// they name a word someone chose rather than a kind of file. The spellings a
+/// kind is written under are shorter than that: `json`, `yaml`, `toml`,
+/// `lock`, `conf` are four letters, and the names sessions look their own
+/// work up by — `usage-rollup`, `web-client`, `toolchain` — are longer.
+const CHOSEN_WORD_LETTERS: usize = 6;
 
 /// Whether `pattern` names entries specifically enough that the walk prints
 /// only what the agent already named, and can name nothing a secret is kept
@@ -161,14 +209,43 @@ fn selects_ordinary_names(pattern: &str) -> bool {
         return false;
     }
     if lowered.contains(['*', '?', '[', ']', '{', '}']) {
-        return DOCUMENT_SUFFIXES
+        return (DOCUMENT_SUFFIXES
             .iter()
             .any(|suffix| lowered.ends_with(suffix))
+            || names_a_chosen_word(&lowered))
             && !crate::credential_store_names::pattern_can_select_secret(&lowered);
     }
     lowered.chars().count() >= 3
         && !lowered.contains("env")
         && !crate::credential_store_names::secret_bearing_file_name(&lowered)
+}
+
+/// Whether a glob is built around a word someone chose rather than around the
+/// wildcard itself.
+///
+/// `find ~/.codex -name "*release-notes*"` prints what a session's own notes
+/// are called: the literal run is the name, and the wildcards only say the
+/// agent does not know what sits either side of it. `*.json` is the opposite
+/// shape — the literal run is an extension every file of a kind carries, so
+/// what gets printed is whatever the tree happens to hold, `auth.json` among
+/// it.
+///
+/// A run that carries a dot is binding an extension, however long it is:
+/// `*h.json` is one letter of a name and a kind, and the names it reaches are
+/// the kind's, `auth.json` among them. So the run that counts is an unbroken
+/// one with no dot in it, long enough to be a word someone picked. The whole
+/// pattern is still read through
+/// [`crate::credential_store_names::pattern_can_select_secret`], so a chosen
+/// word that spells a store (`*credential-notes*`) is refused with the name
+/// it reaches.
+///
+/// A bracket stands for a set of letters that reading the run cannot see, so
+/// `[ac]uth.json` is not read this way and keeps the document-suffix rule.
+fn names_a_chosen_word(pattern: &str) -> bool {
+    !pattern.contains(['[', ']', '{', '}'])
+        && pattern
+            .split(['*', '?'])
+            .any(|run| run.chars().count() >= CHOSEN_WORD_LETTERS && !run.contains('.'))
 }
 
 fn safe_expression(expression: &[String]) -> bool {

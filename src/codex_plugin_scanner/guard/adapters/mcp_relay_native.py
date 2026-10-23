@@ -26,7 +26,7 @@ from pathlib import Path
 
 NATIVE_MCP_RELAY_COMMAND = "mcp-relay"
 NATIVE_MCP_RELAY_FEATURE = "mcp-stdio-relay-v1"
-NATIVE_MCP_RELAY_DECIDE_FEATURE = "mcp-relay-decide-v1"
+NATIVE_MCP_RELAY_DECIDE_FEATURE = "mcp-relay-decide-v2"
 MCP_RELAY_SELECTION_ENV = "HOL_GUARD_MCP_RELAY"
 # The proxies the native relay parses; other Guard proxies stay on Python.
 RELAY_PROXY_COMMANDS = frozenset({"codex-mcp-proxy", "copilot-mcp-proxy", "cursor-mcp-proxy", "opencode-mcp-proxy"})

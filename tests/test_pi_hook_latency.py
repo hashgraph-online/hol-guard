@@ -136,7 +136,9 @@ def test_pi_hook_deadline_stays_inside_host_timeout() -> None:
 
 @pytest.mark.skipif(_bun_executable() is None, reason="Bun is required to execute Pi cleanup helpers")
 def test_pi_cli_cleanup_failure_settles_and_latches(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.pi_extension_cli_runtime_source import CLI_RUNTIME_HELPERS_SOURCE
+    from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_cli_runtime_source import (
+        CLI_RUNTIME_HELPERS_SOURCE,
+    )
 
     bun = _bun_executable()
     assert bun is not None
@@ -188,7 +190,9 @@ console.log(JSON.stringify({
 
 @pytest.mark.skipif(_bun_executable() is None, reason="Bun is required to execute Pi cleanup helpers")
 def test_pi_exited_windows_parent_without_job_proof_latches(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.pi_extension_cli_runtime_source import CLI_RUNTIME_HELPERS_SOURCE
+    from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_cli_runtime_source import (
+        CLI_RUNTIME_HELPERS_SOURCE,
+    )
 
     bun = _bun_executable()
     assert bun is not None
@@ -250,7 +254,9 @@ console.log(JSON.stringify({
     reason="Bun and POSIX process groups are required for fallback termination testing",
 )
 def test_pi_cleanup_kills_descendants_after_direct_parent_exits(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.pi_extension_cli_runtime_source import CLI_RUNTIME_HELPERS_SOURCE
+    from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_cli_runtime_source import (
+        CLI_RUNTIME_HELPERS_SOURCE,
+    )
 
     bun = _bun_executable()
     assert bun is not None

@@ -205,7 +205,7 @@ fn browser_category_without_a_browser_intent_fails_closed() {
 #[test]
 fn unsupported_artifact_type_fails_closed() {
     let mut input = firewall_input("server_npx_tools");
-    input["artifact_type"] = json!("skill");
+    input["artifact_type"] = json!("prompt");
     let request = request_value("firewall", input);
     assert_eq!(
         error_code(request),

@@ -114,7 +114,7 @@ const IPV6_RESERVED_NETWORKS: &[V6Net] = &[
     v6net([0xfe00, 0, 0, 0, 0, 0, 0, 0], 9),
 ];
 
-fn ipv4_is_private(address: Ipv4Addr) -> bool {
+pub(super) fn ipv4_is_private(address: Ipv4Addr) -> bool {
     IPV4_PRIVATE_NETWORKS
         .iter()
         .any(|net| v4_contains(net, address))
@@ -127,7 +127,7 @@ fn ipv4_is_reserved(address: Ipv4Addr) -> bool {
     v4_contains(&IPV4_RESERVED_NETWORK, address)
 }
 
-fn ipv6_is_private(address: Ipv6Addr) -> bool {
+pub(super) fn ipv6_is_private(address: Ipv6Addr) -> bool {
     IPV6_PRIVATE_NETWORKS
         .iter()
         .any(|net| v6_contains(net, address))

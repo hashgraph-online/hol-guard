@@ -8,6 +8,7 @@ one call cannot resolve other pending calls of the same tool.
 
 from __future__ import annotations
 
+from hashlib import sha256
 from pathlib import Path
 
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
@@ -24,7 +25,8 @@ def _native_request(request_id: str, *, harness: str = "zcode", tool: str = "Bas
         artifact_id=f"{harness}:native-pretool:{tool}",
         artifact_name=f"{tool} call",
         artifact_type="tool_action_request",
-        artifact_hash=f"hash-{request_id}",
+        artifact_hash=("native-review-v4:" + sha256(command.encode()).hexdigest()
+                       + ":deny:review:review:native_sensitive_access_review"),
         publisher="guard-hook",
         policy_action="review",
         recommended_scope="artifact",
@@ -179,7 +181,7 @@ def test_workspace_sweep_with_artifact_binding_stays_on_the_decided_action(tmp_p
         harness="zcode",
         scope="workspace",
         artifact_id="zcode:native-pretool:Bash",
-        artifact_hash="hash-target",
+        artifact_hash=store.get_approval_request("target")["artifact_hash"],
         workspace="/workspace/repo",
         publisher=None,
         resolution_action="block",

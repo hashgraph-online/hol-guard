@@ -13,6 +13,12 @@ from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
+from ._modules.opencode.opencode_config_lock import opencode_config_lock
+from ._modules.opencode.opencode_install_snapshot import (
+    OpenCodeInstallSnapshotError,
+    load_opencode_install_snapshot,
+    write_json_transaction,
+)
 from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall, _command_available, _run_command_probe
 from .hook_python import guard_cli_command
 from .mcp_relay_native import mcp_proxy_command
@@ -33,12 +39,6 @@ from .opencode_artifacts import (
     native_artifacts,
     runtime_config_path,
     runtime_overlay,
-)
-from .opencode_config_lock import opencode_config_lock
-from .opencode_install_snapshot import (
-    OpenCodeInstallSnapshotError,
-    load_opencode_install_snapshot,
-    write_json_transaction,
 )
 from .opencode_pretool import (
     global_plugin_path,

@@ -11,10 +11,11 @@ import logging
 import re
 import sqlite3
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING
 
-from .native_hook_exit_code import native_hook_verdict_exit_code
+from ..native_hook_adapter import UnsupportedHarnessError
+from ..native_hook_render import native_evaluation_has_terminal_policy_action
 
 
 def _coalesce_string(*values: object | None) -> str:
@@ -50,25 +51,6 @@ def _hook_event_name(payload: dict[str, object]) -> str | None:
     from .commands_support_runtime_artifacts import _hook_event_name as resolve_hook_event_name
 
     return resolve_hook_event_name(payload)
-
-
-_ENCODED_CONTENT_MARKER_PATTERN = re.compile(
-    r"\b(?:base64|b64decode|frombase64string|encodedcommand|openssl|gpg|xxd)\b"
-    r"|\bencoded\b"
-    r"|\b(?:ba|da|z|a)?sh\s+-\w*s\b",
-    re.IGNORECASE,
-)
-
-
-def _hook_command_has_encoded_markers(command_text: str | None) -> bool:
-    """Whether a command text carries encoded-execution-looking markers.
-
-    Presentation-only signal: encoded-adjacent content is worth surfacing in the
-    structured decision document even when the action is verified inert and
-    allowed. It is deliberately lighter than the policy detector, which is
-    tuned to avoid false positives on quoted literals and stdin-mode scripts.
-    """
-    return isinstance(command_text, str) and bool(_ENCODED_CONTENT_MARKER_PATTERN.search(command_text))
 
 
 def _write_json_line(payload: dict[str, object], *, output_stream: TextIO | None = None) -> None:
@@ -115,7 +97,6 @@ def _load_hook_payload(
     return payload
 
 _BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
-_NON_VERDICT_EVENTS = frozenset({"UserPromptSubmit", "Notification", "PermissionRequest", "PostToolUse"})
 
 
 def _render_cli(kind: str, harness: str, params: dict[str, object]) -> tuple[str, dict[str, object] | None] | None:
@@ -174,12 +155,6 @@ def _emit_native_hook_response(
     output_stream: TextIO | None = None,
 ) -> None:
     canonical = _canonical_harness_name(harness)
-    if canonical == "hermes" and event_name not in _NON_VERDICT_EVENTS:
-        from ..adapters.hermes_runtime_hooks import hermes_native_decision
-
-        decision = hermes_native_decision(policy_action=policy_action, reason=reason)
-        _write_json_line(decision, output_stream=output_stream)
-        return
     params: dict[str, object] = {
         "canonical_harness": canonical,
         "event_name": event_name,
@@ -205,6 +180,16 @@ def _emit_native_hook_response(
         _write_json_line(document, output_stream=output_stream)
 
 
+def _native_edge_output_masked(native_edge_result: Mapping[str, object]) -> bool:
+    """Whether the edge withheld this output from the model.
+
+    The edge answers this itself. A reply that carries no answer is a shape
+    this build cannot read, so the output stays withheld.
+    """
+    masked = native_edge_result.get("output_masked")
+    return masked if isinstance(masked, bool) else True
+
+
 def _apply_native_edge_envelope_fields(
     response_payload: dict[str, object],
     native_edge_result: Mapping[str, object] | None,
@@ -222,8 +207,12 @@ def _apply_native_edge_envelope_fields(
     edge_decision = native_edge_result.get("decision")
     if isinstance(edge_decision, str) and edge_decision.strip():
         response_payload["native_edge_decision"] = edge_decision
-        if project_decision:
-            response_payload["decision"] = "block" if edge_decision == "deny" else "allow"
+    if project_decision:
+        # Only an output review answers whether the model may read the output,
+        # and only its callers project a harness verdict from the edge.
+        masked = _native_edge_output_masked(native_edge_result)
+        response_payload["native_edge_output_masked"] = masked
+        response_payload["decision"] = "block" if masked else "allow"
     structured_content_mediation = native_edge_result.get("structured_content_mediation")
     if isinstance(structured_content_mediation, Mapping):
         # The worker already produced the validated mediation contract. Keep
@@ -284,18 +273,22 @@ def _restore_ephemeral_approval_tokens(value: object, tokens: list[str]) -> obje
 def _emit_native_post_tool_envelope(
     harness: str,
     *,
-    policy_action: str,
+    blocking: bool,
     reason: str,
     response_payload: dict[str, object],
     output_stream: TextIO | None = None,
     as_json: bool = False,
 ) -> None:
-    """Emit a PostToolUse outcome; the action already ran so it never pauses."""
-    blocking = policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
-    edge_masked = (
-        response_payload.get("native_edge_decision") == "deny"
-        or response_payload.get("model_output_action") == "block"
-    )
+    """Emit a PostToolUse outcome; the action already ran so it never pauses.
+
+    ``blocking`` is the caller's already-settled verdict, never re-derived here.
+    A caller holding a native directive passes its ``envelope_decision`` so the
+    emitted surface carries the Rust verdict verbatim.
+    """
+    # The edge decided whether this output is withheld; nothing here re-reads
+    # its verdict or its output action to decide that again. An event with no
+    # edge review carries no mask.
+    edge_masked = response_payload.get("native_edge_output_masked") is True
     response_payload["continue"] = True
     # ``decision`` mirrors the composed policy outcome for the bridge surface;
     # ``native_edge_decision`` keeps the raw edge mask verdict as provenance.
@@ -337,12 +330,13 @@ def _native_hook_json_document(
     *,
     event_name: str,
     policy_action: str,
+    exit_code: Callable[[], int],
     reason: str,
     envelope: Mapping[str, object] | None,
     system_message: str | None = None,
     generic_path: bool = False,
     native_protocol_payload: bool = False,
-    content_flagged: bool = False,
+    command_text: str | None = None,
     command_surface: bool = False,
     verified_benign: bool = False,
 ) -> tuple[dict[str, object] | None, int] | None:
@@ -350,7 +344,11 @@ def _native_hook_json_document(
 
     Returns ``(document, rc)`` when this call owns the response, ``(None, 0)``
     when the harness contract is silence, and ``None`` when the caller should
-    fall back to the generic envelope or adapter emit paths.
+    fall back to the generic envelope or adapter emit paths. ``exit_code`` is
+    the status the resident's directive already decided for this verdict, so
+    the document and the process status come from the same decision; it is
+    asked for only on a branch that owns the response, because grok reads its
+    own status from the adapter's emit state.
     """
     if not getattr(args, "json", False) or event_name == "PostToolUse":
         return None
@@ -366,19 +364,18 @@ def _native_hook_json_document(
         "envelope": dict(envelope) if isinstance(envelope, Mapping) else None,
         "generic_path": generic_path,
         "native_protocol_payload": native_protocol_payload,
-        "content_flagged": content_flagged,
+        "command_text": command_text,
         "command_surface": command_surface,
         "verified_benign": verified_benign,
     }
     rendered = _render_cli("cli_document", args.harness, params)
-    exit_code = native_hook_verdict_exit_code(canonical, policy_action, event_name)
     if rendered is None:
         denied = _fixed_deny(args.harness, event_name, policy_action, reason)
-        return (denied, exit_code) if denied is not None else None
+        return (denied, exit_code()) if denied is not None else None
     outcome, document = rendered
     if outcome == "fallback":
         return None
-    return (document if outcome == "document" else None), exit_code
+    return (document if outcome == "document" else None), exit_code()
 
 
 def _emit_native_hook_json_document(
@@ -420,12 +417,6 @@ def _emit_native_hook_notification_stderr(reason: str) -> None:
     # ephemeral approval link the operator needs.
     print(reason, file=sys.stderr)  # codeql[py/clear-text-logging-sensitive-data]
 
-def _copilot_hook_permission_decision(policy_action: str) -> str:
-    if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
-        return "deny"
-    return "allow"
-
-
 def _object_list(value: object | None) -> list[object]:
     if isinstance(value, list):
         return value
@@ -455,7 +446,14 @@ def _headless_approval_resolver(
     should_wait_for_approvals = not bool(getattr(args, "json", False))
 
     def resolve(detection, payload):
-        if evaluation_has_terminal_policy_action(payload):
+        # A block or sandbox-required answer is not a question to put to a
+        # user, and the resident that produced the evaluation decides that. A
+        # resident that cannot answer leaves the verdict standing rather than
+        # opening an approval flow that could only reach the wrong outcome.
+        terminal = native_evaluation_has_terminal_policy_action(
+            args.harness, payload, guard_home=context.guard_home
+        )
+        if terminal is None or terminal:
             return payload
         managed_install = _managed_install_for(store, args.harness)
         approval_flow = approval_prompt_flow(args.harness, managed_install=managed_install)
@@ -706,13 +704,6 @@ def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[st
         return "never-auto-open"
     return config_policy
 
-_ACTION_ENVELOPE_HARNESSES = frozenset(
-    {
-        "codex", "cline", "claude-code", "opencode", "copilot", "gemini", "hermes",
-        "openclaw", "cursor", "grok", "kimi", "pi", "omp", "zcode", "devin",
-    }
-)
-
 def _hook_action_envelope(
     *,
     harness: str,
@@ -721,29 +712,32 @@ def _hook_action_envelope(
     workspace: Path | None,
     guard_home: Path | None = None,
 ) -> GuardActionEnvelope | None:
-    canonical_harness = _canonical_harness_name(harness)
-    if canonical_harness not in _ACTION_ENVELOPE_HARNESSES:
+    try:
+        return normalize_harness_payload(
+            _canonical_harness_name(harness),
+            _hook_event_name(payload) or "PreToolUse",
+            payload,
+            workspace=workspace,
+            home_dir=home_dir,
+            guard_home=guard_home,
+        )
+    except UnsupportedHarnessError:
+        # Which harnesses have an action adapter is the resident's registry.
+        # A second list here would quietly withhold the envelope from a
+        # harness the adapter had learned, so the answer comes from asking.
         return None
-    return normalize_harness_payload(
-        canonical_harness,
-        _hook_event_name(payload) or "PreToolUse",
-        payload,
-        workspace=workspace,
-        home_dir=home_dir,
-        guard_home=guard_home,
-    )
 
 def _action_envelope_json(envelope: GuardActionEnvelope | None) -> dict[str, object] | None:
     return envelope.to_dict() if envelope is not None else None
 
 __all__ = [
-    "_ACTION_ENVELOPE_HARNESSES", "_action_envelope_json", "_apply_native_edge_envelope_fields",
+    "_action_envelope_json", "_apply_native_edge_envelope_fields",
     "_approval_center_browser_url",
     "_approval_surface_policy_for_flow", "_browser_url_with_guard_params", "_coalesce_string",
-    "_copilot_hook_permission_decision", "_emit_native_hook_block_stderr",
+    "_emit_native_hook_block_stderr",
     "_emit_native_hook_json_document", "_emit_native_hook_notification_stderr",
     "_emit_native_hook_response", "_emit_native_post_tool_envelope", "_first_hook_tool_call",
-    "_headless_approval_resolver", "_hook_action_envelope", "_hook_command_has_encoded_markers",
+    "_headless_approval_resolver", "_hook_action_envelope",
     "_load_hook_payload",
     "_native_hook_json_document", "_normalize_hook_argument_value",
     "_normalize_hook_arguments",

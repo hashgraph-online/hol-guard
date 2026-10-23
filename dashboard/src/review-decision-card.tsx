@@ -51,6 +51,7 @@ import {
 import { buildWhatWouldHappen, pastDecisionVerb, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
+import { ApprovalExtensionCoverageCard } from "./approval-extension-coverage-card";
 import { ApprovalExtensionRecommendationCard } from "./approval-extension-recommendation-card";
 import { useReviewDecisionResolve } from "./use-review-decision-resolve";
 import { approvalLeftActionStopped } from "./evidence/approval-outcome";
@@ -109,6 +110,8 @@ export function ReviewDecisionCard(props: {
   const taskCapabilityCopy = item ? taskCapabilityExplanation(item) : null;
   const watchOnlyObservation = item !== null && isWatchOnlyObservation(item);
   const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
+  const canSubmitAllow = hasAllowScope && (item === null || !retryCannotReuseApproval(item) ||
+    (allowScope === "artifact" && rememberExactAction && item.exact_action_persistence_eligible === true));
   const decisionContractKey = item ? approvalDecisionContractKey(item) : null;
   const decisionSubjectKey = item ? approvalDecisionSubjectKey(item) : null;
 
@@ -162,6 +165,7 @@ export function ReviewDecisionCard(props: {
     availableScopeChoices,
     blockScopeOptions,
     hasAllowScope,
+    canSubmitAllow,
     watchOnlyObservation,
     rememberExactAction,
     extensionDialogActive,
@@ -209,6 +213,7 @@ export function ReviewDecisionCard(props: {
   }
 
   const nativeDisplayOnly = item.native_business_review_display_only === true;
+  const versionBoundScript = item.artifact_type === "native_bash_request";
   const plainTitle = nativeDisplayOnly ? item.artifact_name : plainEnglishRequestTitle(item);
   const harnessName = harnessDisplayName(item.harness);
   const whatWouldHappen = nativeDisplayOnly ? null : buildWhatWouldHappen(item);
@@ -226,11 +231,13 @@ export function ReviewDecisionCard(props: {
   }
   const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
   const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
-  let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
+  let resolvedAllowButtonLabel = allowButtonLabel(allowScope, versionBoundScript, persistExactAllow);
   if (watchOnlyObservation) {
     resolvedAllowButtonLabel = "Keep allowing";
-  } else if (persistExactAllow) {
+  } else if (persistExactAllow && !versionBoundScript) {
     resolvedAllowButtonLabel = "Approve and remember";
+  } else if (retryCannotReuseApproval(item)) {
+    resolvedAllowButtonLabel = "Choose an available approval duration";
   }
   let resolvedBlockButtonLabel = blockButtonLabel(blockScope);
   if (watchOnlyObservation || persistExactBlock) {
@@ -344,10 +351,18 @@ export function ReviewDecisionCard(props: {
             item={item}
             approvalGate={approvalGate}
             allowScope={allowScope}
-            disabled={!hasAllowScope || submitting !== null || pendingAction !== null}
+            persistExactAction={persistExactAllow}
+            disabled={!canSubmitAllow || submitting !== null || pendingAction !== null}
             onResolve={props.onResolve}
             onApproved={handleExtensionApproved}
             onDialogActiveChange={setExtensionDialogActive}
+          />
+        )}
+
+        {resolutionBlockReason === null && resolved === null && !watchOnlyObservation && (
+          <ApprovalExtensionCoverageCard
+            coverage={item.extension_coverage}
+            hasRecommendation={item.extension_recommendation !== undefined}
           />
         )}
 
@@ -360,6 +375,7 @@ export function ReviewDecisionCard(props: {
             hasAllowScope={hasAllowScope}
             taskCapabilityCopy={taskCapabilityCopy}
             exactActionPersistenceEligible={item.exact_action_persistence_eligible === true}
+            versionBoundScript={versionBoundScript}
             rememberExactAction={rememberExactAction}
             oneTimeRetryBlocked={retryCannotReuseApproval(item)}
             retryWindowMinutes={oneTimeRetryWindowMinutes(item)}
@@ -389,11 +405,11 @@ export function ReviewDecisionCard(props: {
         )}
 
         {resolutionBlockReason === null && resolved === null && <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <ActionButton
+          {hasAllowScope && <ActionButton
             ref={allowButtonRef}
             variant="success"
             onClick={handleAllow}
-            disabled={!hasAllowScope || submitting !== null || pendingAction !== null}
+            disabled={!canSubmitAllow || submitting !== null || pendingAction !== null}
           >
             {submitting === "allow" ? (
               <span className="flex items-center gap-2">
@@ -406,7 +422,7 @@ export function ReviewDecisionCard(props: {
                 {resolvedAllowButtonLabel}
               </span>
             )}
-          </ActionButton>
+          </ActionButton>}
           <ActionButton
             variant="outline"
             onClick={handleBlock}

@@ -3,6 +3,10 @@ use super::*;
 pub(super) fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
+        [command, flag] if command == "pack-lifecycle" && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&pack_lifecycle::run(&bytes)?)
+        }
         [command, ..] if command == "restricted-linux-launch" => {
             let digest = if args.len() == 2 { args[1].as_str() } else { "" };
             std::process::exit(restricted_linux_launch::launch(digest))
@@ -41,8 +45,11 @@ pub(super) fn run() -> Result<(), String> {
         {
             claude_hook_bridge::run(config)
         }
+        // The hook carries its config as the last argument. Installs made
+        // before the Python bridge became a launcher pass the whole Python
+        // argv ahead of it, so both shapes reach the same bridge.
         [command, python_argv @ ..]
-            if command == codex_hook_bridge::BRIDGE_COMMAND && python_argv.len() >= 2 =>
+            if command == codex_hook_bridge::BRIDGE_COMMAND && !python_argv.is_empty() =>
         {
             std::process::exit(codex_hook_bridge::run(python_argv))
         }
@@ -68,6 +75,10 @@ pub(super) fn run() -> Result<(), String> {
             let bytes = read_stdin_bounded()?;
             let response = oneshot::evaluate_hook_bytes(&bytes)?;
             write_bytes_response(&response)
+        }
+        [command, flag] if command == "native-bash-host-context" && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_bytes_response(&native_exact_action_op::observe_bash_host_bytes(&bytes)?)
         }
         [command, flag] if policy_snapshot_build::is_command(command) && flag == "--stdin" => {
             let response = policy_snapshot_build::run_command(command, io::stdin().lock())?;
@@ -153,6 +164,18 @@ pub(super) fn run() -> Result<(), String> {
                 std::path::Path::new(state_dir),
             )?;
             write_bytes_response(&request)
+        }
+        #[cfg(target_os = "macos")]
+        [command, flag, state_dir, owner_flag, owner_pid]
+            if command == "native-bash-execute-client" && flag == "--stdin" && owner_flag == "--host-owner-pid" => {
+            let pid = owner_pid.parse::<u32>().map_err(|_| "native_bash_host_owner_unavailable")?;
+            let response = native_bash_client::run(std::path::Path::new(state_dir), read_stdin_bounded()?, Some(pid))?;
+            write_bytes_response(&response)
+        }
+        #[cfg(target_os = "macos")]
+        [command, flag, state_dir] if command == "native-bash-execute-client" && flag == "--stdin" => {
+            let response = native_bash_client::run(std::path::Path::new(state_dir), read_stdin_bounded()?, None)?;
+            write_bytes_response(&response)
         }
         [command, flag, state_dir]
             if matches!(command.as_str(), "hook-client" | "resident-client")

@@ -14,11 +14,23 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.native_daemon_route import native_route_facts
 
 
+class _SettledDirectories:
+    """Stand in for the directories the runtime settles for one request.
+
+    Readiness is what these tests are about, so every candidate settles as
+    the string it arrived as; the verdicts themselves belong to the runtime.
+    """
+
+    def __init__(self, candidates: tuple[tuple[str, str | None] | tuple[str, str | None, str], ...]) -> None:
+        self._paths = {candidate[0]: candidate[1] for candidate in candidates}
+
+    def require(self, parameter: str) -> str | None:
+        return self._paths.get(parameter)
+
+
 class _FakeHandler:
     _handle_hook_readiness = daemon_server_module._GuardDaemonHandler._handle_hook_readiness
-    _normalized_hook_workspace_string = staticmethod(
-        daemon_server_module._GuardDaemonHandler._normalized_hook_workspace_string
-    )
+    _hook_workspace_spelling = staticmethod(daemon_server_module._GuardDaemonHandler._hook_workspace_spelling)
 
     def __init__(self, daemon_server: object) -> None:
         self._fake_daemon_server = daemon_server
@@ -28,27 +40,29 @@ class _FakeHandler:
     def _daemon_server(self) -> object:
         return self._fake_daemon_server
 
+    def _settled_hook_directories(
+        self,
+        *candidates: tuple[str, str | None] | tuple[str, str | None, str],
+        **_kwargs: object,
+    ):
+        """The readiness tests stub a successful native admission verdict.
+
+        A candidate may name the rule to hold it to as a third element; the
+        verdict is the runtime's, so this double reads only the spelling.
+        """
+        values = {candidate[0]: candidate[1] for candidate in candidates if candidate[1] is not None}
+        return SimpleNamespace(require=lambda parameter, **_ignored: values.get(parameter))
+
     @staticmethod
     def _optional_string(value: object) -> str | None:
         return value if isinstance(value, str) else None
 
     @staticmethod
-    def _validated_hook_guard_home(value: str | None) -> str | None:
-        return value
-
-    @staticmethod
-    def _validated_hook_directory_string(
-        _parameter: str,
-        value: str | None,
-        *,
-        roots: tuple[Path, ...],
-    ) -> str | None:
-        del roots
-        return value
-
-    @staticmethod
-    def _hook_safe_roots() -> tuple[Path, ...]:
-        return ()
+    def _settled_hook_directories(
+        *candidates: tuple[str, str | None],
+        **_options: object,
+    ) -> _SettledDirectories:
+        return _SettledDirectories(candidates)
 
     def _record_hook_path_rejection(self, *, parameter: str, reason: str) -> None:
         self.path_rejections.append((parameter, reason))

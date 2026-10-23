@@ -1,20 +1,19 @@
-"""Privacy-safe Local-to-Cloud Extension catalog wire projection."""
+"""Privacy-safe Local-to-Cloud Extension catalog wire projection.
+
+The native runtime owns the v1 catalog projection, bounded shape and privacy
+validation, and the cross-language canonical digest. This module only gathers
+registry values, calls the resident ``cloud_catalog`` operation, and renders
+its answer in the stable wire field order. There is no Python fallback: an
+unavailable runtime raises and callers fail closed.
+"""
 
 from __future__ import annotations
 
-import hashlib
 import json
-import re
-from collections.abc import Iterable, Mapping
-from datetime import datetime
-from typing import Protocol, TypedDict
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any, Protocol, TypedDict
 
-from .extension_control_limits import (
-    CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES,
-    MAX_CATALOG_EXTENSIONS,
-    MAX_INPUT_TEXT_LENGTH,
-    MAX_PERMISSIONS_PER_EXTENSION,
-)
 from .managed_controls_posture_wire import (
     EXTENSION_CONTROL_WIRE_SCHEMA_VERSION as EXTENSION_CONTROL_WIRE_SCHEMA_VERSION,
 )
@@ -30,33 +29,42 @@ from .managed_controls_posture_wire import (
 
 EXTENSION_CATALOG_SCHEMA_VERSION = "guard.extension-catalog.v1"
 
-_SHA256 = re.compile(r"^[0-9a-f]{64}$")
-_WIRE_SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
-_RFC3339 = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$")
-_EXTENSION_ID_PATTERN = re.compile(r"^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$")
-_PERMISSION_ID_PATTERN = re.compile(r"^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$")
-_FORBIDDEN_WIRE_KEYS = frozenset(
-    {
-        "actionclasses",
-        "commandhistory",
-        "description",
-        "environment",
-        "examplecommand",
-        "filecontents",
-        "projectmarkers",
-        "referenceurls",
-        "ruleids",
-        "rules",
-        "saferalternatives",
-        "secrets",
-        "sourcepath",
-        "workingdirectory",
-    }
+# Stable wire field order; the native answer is re-keyed into it so upload
+# bodies stay byte-identical regardless of the runtime's map ordering.
+_TOP_FIELDS = (
+    "schemaVersion",
+    "catalogDigest",
+    "guardVersion",
+    "controlSchemaVersion",
+    "generatedAt",
+    "limits",
+    "extensions",
 )
+_LIMIT_FIELDS = ("maxExtensions", "maxPermissionsPerExtension", "maxPayloadBytes", "maxStringLength")
+_ENTRY_FIELDS = (
+    "id",
+    "version",
+    "name",
+    "source",
+    "executables",
+    "ecosystemIds",
+    "riskClasses",
+    "delegatedProtection",
+    "deprecated",
+    "replacementId",
+    "permissions",
+)
+# The resident request cap is 4 MiB; keep room for the envelope around the fields.
+_NATIVE_FIELDS_MAX_BYTES = 4 * 1024 * 1024 - 64 * 1024
+_PERMISSION_FIELDS = ("id", "name", "configurable", "required", "riskClasses", "typedCapabilities")
 
 
 class ExtensionCatalogLimitError(ValueError):
     """A catalog exceeds a Cloud v1 count or byte limit."""
+
+
+class ExtensionCatalogUnavailableError(RuntimeError):
+    """The resident runtime could not answer, so no catalog exists to send."""
 
 
 class ExtensionCatalogPermissionWire(TypedDict):
@@ -143,280 +151,83 @@ class RegistryLike(Protocol):
     def extensions(self) -> tuple[ExtensionLike, ...]: ...
 
 
-def _code_unit_sorted(values: Iterable[str]) -> list[str]:
-    return sorted(set(values))
+def _ordered(value: object, fields: tuple[str, ...]) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != set(fields):
+        raise RuntimeError("Native Extension catalog answer is malformed")
+    return {field: value[field] for field in fields}
 
 
-def _canonical_json(value: object) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+def _render(value: object) -> ExtensionCatalogWire:
+    wire: Any = _ordered(value, _TOP_FIELDS)
+    extensions = wire["extensions"]
+    if not isinstance(extensions, list):
+        raise RuntimeError("Native Extension catalog answer is malformed")
+    rendered = []
+    for extension in extensions:
+        entry = _ordered(extension, _ENTRY_FIELDS)
+        permissions = entry["permissions"]
+        if not isinstance(permissions, list):
+            raise RuntimeError("Native Extension catalog answer is malformed")
+        entry["permissions"] = [_ordered(permission, _PERMISSION_FIELDS) for permission in permissions]
+        rendered.append(entry)
+    wire["limits"] = _ordered(wire["limits"], _LIMIT_FIELDS)
+    wire["extensions"] = rendered
+    return wire
 
 
-def _permission_wire(permission: PermissionLike) -> ExtensionCatalogPermissionWire:
-    return {
-        "id": permission.permission_id,
-        "name": permission.label,
-        "configurable": permission.configurable,
-        "required": not permission.configurable,
-        "riskClasses": [permission.risk_tier],
-        "typedCapabilities": _code_unit_sorted(permission.typed_capabilities),
-    }
+def native_wire_call(action: str, *, guard_home: Path | None = None, **fields: object) -> dict[str, Any]:
+    """Run one v1 wire action in the resident and raise its stable refusal."""
+
+    from ..native_context import _resolve_digest_home, ensure_resident_prerequisite
+    from . import extension_catalog_pages as pages
+
+    # Measure the way the resident transport encodes: default separators, ASCII escapes.
+    encoded = json.dumps(fields, allow_nan=False).encode("utf-8")
+    if len(encoded) > _NATIVE_FIELDS_MAX_BYTES:
+        raise ExtensionCatalogLimitError("Extension catalog exceeds native wire limits")
+    home = _resolve_digest_home(guard_home)
+    if not ensure_resident_prerequisite(home):
+        raise ExtensionCatalogUnavailableError("Native Extension catalog runtime unavailable")
+    payload = pages.native_call(home, action=action, **fields)
+    refusal = payload.get("v1_error")
+    if refusal is None:
+        return payload
+    message = payload.get("message")
+    if refusal == "limit" and isinstance(message, str):
+        raise ExtensionCatalogLimitError(message)
+    if refusal == "invalid" and isinstance(message, str):
+        raise ValueError(message)
+    if refusal == "protocol" and isinstance(message, str):
+        raise RuntimeError(message)
+    raise RuntimeError("Native Extension catalog answer is malformed")
 
 
-def _extension_wire(extension: ExtensionLike) -> ExtensionCatalogEntryWire:
-    permissions = sorted(
-        (_permission_wire(permission) for permission in extension.permissions),
-        key=lambda permission: permission["id"],
-    )
-    if len(permissions) > MAX_PERMISSIONS_PER_EXTENSION:
-        raise ExtensionCatalogLimitError("Extension catalog permission limit exceeded")
-    return {
-        "id": extension.extension_id,
-        "version": extension.version,
-        "name": extension.name,
-        "source": extension.source,
-        "executables": _code_unit_sorted(extension.executables),
-        "ecosystemIds": _code_unit_sorted(extension.ecosystem_ids),
-        "riskClasses": _code_unit_sorted(extension.risk_classes),
-        "delegatedProtection": extension.delegated_protection,
-        "deprecated": False,
-        "replacementId": None,
-        "permissions": permissions,
-    }
-
-
-def canonical_extension_catalog_json(extensions: list[ExtensionCatalogEntryWire]) -> str:
+def canonical_extension_catalog_json(
+    extensions: list[ExtensionCatalogEntryWire], *, guard_home: Path | None = None
+) -> str:
     """Return the shared canonical JSON for an Extension projection."""
 
-    canonical_extensions = sorted(
-        (_canonical_extension(extension) for extension in extensions),
-        key=_extension_wire_id,
-    )
-    return _canonical_json(canonical_extensions)
+    text = native_wire_call("v1_canonical", guard_home=guard_home, extensions=extensions).get("canonical_json")
+    if not isinstance(text, str):
+        raise RuntimeError("Native Extension catalog answer is malformed")
+    return text
 
 
-def _permission_wire_id(permission: ExtensionCatalogPermissionWire) -> str:
-    return permission["id"]
-
-
-def _extension_wire_id(extension: ExtensionCatalogEntryWire) -> str:
-    return extension["id"]
-
-
-def _canonical_extension(extension: ExtensionCatalogEntryWire) -> ExtensionCatalogEntryWire:
-    return {
-        **extension,
-        "permissions": sorted(extension["permissions"], key=_permission_wire_id),
-    }
-
-
-def catalog_digest_for_extensions(extensions: list[ExtensionCatalogEntryWire]) -> str:
+def catalog_digest_for_extensions(
+    extensions: list[ExtensionCatalogEntryWire], *, guard_home: Path | None = None
+) -> str:
     """Return the cross-language SHA-256 digest over canonical projected Extensions."""
 
-    return hashlib.sha256(canonical_extension_catalog_json(extensions).encode("utf-8")).hexdigest()
+    digest = native_wire_call("v1_canonical", guard_home=guard_home, extensions=extensions).get("catalog_digest")
+    if not isinstance(digest, str):
+        raise RuntimeError("Native Extension catalog answer is malformed")
+    return digest
 
 
-def _is_rfc3339_datetime(value: str) -> bool:
-    if _RFC3339.fullmatch(value) is None:
-        return False
-    try:
-        parsed = datetime.fromisoformat(value.removesuffix("Z") + ("+00:00" if value.endswith("Z") else ""))
-    except ValueError:
-        return False
-    return parsed.tzinfo is not None
-
-
-def validate_extension_catalog_wire(payload: object) -> ExtensionCatalogWire:
+def validate_extension_catalog_wire(payload: object, *, guard_home: Path | None = None) -> ExtensionCatalogWire:
     """Execute the shared catalog's bounded shape, privacy, identity, and digest contract."""
 
-    encoded = _canonical_json(payload).encode("utf-8")
-    if len(encoded) > CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES:
-        raise ExtensionCatalogLimitError("Extension catalog payload limit exceeded")
-    if not isinstance(payload, dict):
-        raise ValueError("Extension catalog must be an object")
-    expected_top_level = {
-        "schemaVersion",
-        "catalogDigest",
-        "guardVersion",
-        "controlSchemaVersion",
-        "generatedAt",
-        "limits",
-        "extensions",
-    }
-    if set(payload) != expected_top_level:
-        _reject_private_wire_keys(payload)
-        raise ValueError("Extension catalog contains unknown fields")
-    _reject_private_wire_keys(payload)
-    if payload.get("schemaVersion") != EXTENSION_CATALOG_SCHEMA_VERSION:
-        raise ValueError("Unsupported Extension catalog schema")
-    catalog_digest = payload.get("catalogDigest")
-    if not isinstance(catalog_digest, str) or _SHA256.fullmatch(catalog_digest) is None:
-        raise ValueError("Invalid Extension catalog digest")
-    guard_version = _required_catalog_string(payload, "guardVersion", maximum=128)
-    control_schema_version = _required_catalog_string(payload, "controlSchemaVersion", maximum=128)
-    generated_at = _required_catalog_string(payload, "generatedAt", maximum=128)
-    if not _is_rfc3339_datetime(generated_at):
-        raise ValueError("Invalid Extension catalog generatedAt")
-    expected_limits = {
-        "maxExtensions": MAX_CATALOG_EXTENSIONS,
-        "maxPermissionsPerExtension": MAX_PERMISSIONS_PER_EXTENSION,
-        "maxPayloadBytes": CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES,
-        "maxStringLength": 8_192,
-    }
-    if payload.get("limits") != expected_limits:
-        raise ValueError("Extension catalog limits do not match runtime limits")
-    raw_extensions = payload.get("extensions")
-    if not isinstance(raw_extensions, list) or len(raw_extensions) > MAX_CATALOG_EXTENSIONS:
-        raise ValueError("Extension catalog limit exceeded")
-    parsed_extensions = [_parse_extension(item) for item in raw_extensions]
-    extension_ids = _unique_ids((_extension_wire_id(item) for item in parsed_extensions), "Extension catalog")
-    _unique_ids(
-        (permission["id"] for extension in parsed_extensions for permission in extension["permissions"]),
-        "Extension permission",
-    )
-    for extension in parsed_extensions:
-        replacement_id = extension["replacementId"]
-        if replacement_id is not None and replacement_id not in extension_ids:
-            raise ValueError("Extension replacement is not present in the catalog")
-    if catalog_digest_for_extensions(parsed_extensions) != catalog_digest:
-        raise ValueError("Extension catalog digest does not match canonical bytes")
-    return {
-        "schemaVersion": EXTENSION_CATALOG_SCHEMA_VERSION,
-        "catalogDigest": catalog_digest,
-        "guardVersion": guard_version,
-        "controlSchemaVersion": control_schema_version,
-        "generatedAt": generated_at,
-        "limits": expected_limits,
-        "extensions": parsed_extensions,
-    }
-
-
-def _required_catalog_string(payload: Mapping[object, object], field: str, *, maximum: int) -> str:
-    value = payload.get(field)
-    if not isinstance(value, str) or not value or len(value) > maximum:
-        raise ValueError(f"Invalid Extension catalog {field}")
-    return value
-
-
-def _unique_ids(values: Iterable[str], label: str) -> set[str]:
-    identifiers = list(values)
-    if len(identifiers) != len(set(identifiers)):
-        raise ValueError(f"Duplicate {label} identity")
-    return set(identifiers)
-
-
-def _parse_extension(value: object) -> ExtensionCatalogEntryWire:
-    fields = {
-        "id",
-        "version",
-        "name",
-        "source",
-        "executables",
-        "ecosystemIds",
-        "riskClasses",
-        "delegatedProtection",
-        "deprecated",
-        "replacementId",
-        "permissions",
-    }
-    if not isinstance(value, dict) or set(value) != fields:
-        _reject_private_wire_keys(value)
-        raise ValueError("Extension catalog entry contains unknown fields")
-    extension_id = _extension_identity(value.get("id"))
-    source = value.get("source")
-    if not isinstance(source, str) or source not in {"built-in", "local-admin", "signed-cloud", "custom"}:
-        raise ValueError("Invalid Extension catalog source")
-    delegated = value.get("delegatedProtection")
-    if delegated is not None and delegated != "package-firewall":
-        raise ValueError("Invalid Extension delegated protection")
-    deprecated = value.get("deprecated")
-    if not isinstance(deprecated, bool):
-        raise ValueError("Invalid Extension deprecation state")
-    replacement = value.get("replacementId")
-    if replacement is not None and (
-        not isinstance(replacement, str)
-        or _EXTENSION_ID_PATTERN.fullmatch(replacement) is None
-        or replacement == extension_id
-        or not deprecated
-    ):
-        raise ValueError("Invalid Extension replacement")
-    permissions_value = value.get("permissions")
-    if not isinstance(permissions_value, list) or len(permissions_value) > MAX_PERMISSIONS_PER_EXTENSION:
-        raise ValueError("Extension catalog permission limit exceeded")
-    permissions = [_parse_permission(item, extension_id=extension_id) for item in permissions_value]
-    return {
-        "id": extension_id,
-        "version": _required_catalog_string(value, "version", maximum=128),
-        "name": _required_catalog_string(value, "name", maximum=8_192),
-        "source": source,
-        "executables": _validate_bounded_string_array(value.get("executables"), label="executables"),
-        "ecosystemIds": _validate_bounded_string_array(value.get("ecosystemIds"), label="ecosystemIds"),
-        "riskClasses": _validate_bounded_string_array(value.get("riskClasses"), label="riskClasses"),
-        "delegatedProtection": delegated,
-        "deprecated": deprecated,
-        "replacementId": replacement,
-        "permissions": permissions,
-    }
-
-
-def _extension_identity(value: object) -> str:
-    if (
-        not isinstance(value, str)
-        or len(value) > MAX_INPUT_TEXT_LENGTH
-        or _EXTENSION_ID_PATTERN.fullmatch(value) is None
-    ):
-        raise ValueError("Invalid Extension catalog identity")
-    return value
-
-
-def _parse_permission(value: object, *, extension_id: str) -> ExtensionCatalogPermissionWire:
-    fields = {"id", "name", "configurable", "required", "riskClasses", "typedCapabilities"}
-    if not isinstance(value, dict) or set(value) != fields:
-        _reject_private_wire_keys(value)
-        raise ValueError("Extension catalog permission contains unknown fields")
-    permission_id = value.get("id")
-    if (
-        not isinstance(permission_id, str)
-        or len(permission_id) > MAX_INPUT_TEXT_LENGTH
-        or _PERMISSION_ID_PATTERN.fullmatch(permission_id) is None
-        or not permission_id.startswith(f"{extension_id}.permission.")
-    ):
-        raise ValueError("Invalid Extension permission identity")
-    configurable = value.get("configurable")
-    required = value.get("required")
-    if not isinstance(configurable, bool) or not isinstance(required, bool):
-        raise ValueError("Invalid Extension permission state")
-    return {
-        "id": permission_id,
-        "name": _required_catalog_string(value, "name", maximum=8_192),
-        "configurable": configurable,
-        "required": required,
-        "riskClasses": _validate_bounded_string_array(value.get("riskClasses"), label="permission riskClasses"),
-        "typedCapabilities": _validate_bounded_string_array(
-            value.get("typedCapabilities"), label="permission typedCapabilities"
-        ),
-    }
-
-
-def _validate_bounded_string_array(value: object, *, label: str) -> list[str]:
-    if not isinstance(value, list) or len(value) > 128:
-        raise ValueError(f"Invalid Extension catalog {label}")
-    if any(not isinstance(item, str) or not item or len(item) > 8_192 for item in value):
-        raise ValueError(f"Invalid Extension catalog {label}")
-    if len(value) != len(set(value)):
-        raise ValueError(f"Duplicate Extension catalog {label}")
-    return value
-
-
-def _reject_private_wire_keys(value: object) -> None:
-    if isinstance(value, Mapping):
-        for key, child in value.items():
-            normalized_key = str(key).replace("_", "").replace("-", "").lower()
-            if normalized_key in _FORBIDDEN_WIRE_KEYS:
-                raise ValueError(f"private Extension catalog field: {key}")
-            _reject_private_wire_keys(child)
-    elif isinstance(value, list):
-        for child in value:
-            _reject_private_wire_keys(child)
+    return _render(native_wire_call("v1_validate", guard_home=guard_home, payload=payload).get("catalog"))
 
 
 def build_extension_catalog_wire(
@@ -424,41 +235,29 @@ def build_extension_catalog_wire(
     *,
     guard_version: str,
     generated_at: str,
+    guard_home: Path | None = None,
 ) -> ExtensionCatalogWire:
     """Project the runtime registry without detector, command, path, or secret data."""
 
+    from .extension_catalog_pages import _raw_extension
+
     if not guard_version.strip() or not generated_at.strip():
         raise ValueError("guard_version and generated_at are required")
-    extensions = sorted(
-        (_extension_wire(extension) for extension in registry.extensions),
-        key=lambda extension: extension["id"],
+    answer = native_wire_call(
+        "v1_build",
+        guard_home=guard_home,
+        extensions=[_raw_extension(extension) for extension in registry.extensions],
+        guard_version=guard_version,
+        generated_at=generated_at,
     )
-    if len(extensions) > MAX_CATALOG_EXTENSIONS:
-        raise ExtensionCatalogLimitError("Extension catalog limit exceeded")
-    payload: ExtensionCatalogWire = {
-        "schemaVersion": EXTENSION_CATALOG_SCHEMA_VERSION,
-        "catalogDigest": catalog_digest_for_extensions(extensions),
-        "guardVersion": guard_version,
-        "controlSchemaVersion": EXTENSION_CONTROL_WIRE_SCHEMA_VERSION,
-        "generatedAt": generated_at,
-        "limits": {
-            "maxExtensions": MAX_CATALOG_EXTENSIONS,
-            "maxPermissionsPerExtension": MAX_PERMISSIONS_PER_EXTENSION,
-            "maxPayloadBytes": CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES,
-            "maxStringLength": 8_192,
-        },
-        "extensions": extensions,
-    }
-    _reject_private_wire_keys(payload)
-    if len(_canonical_json(payload).encode("utf-8")) > CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES:
-        raise ExtensionCatalogLimitError("Extension catalog payload limit exceeded")
-    return validate_extension_catalog_wire(payload)
+    return _render(answer.get("catalog"))
 
 
 def build_builtin_extension_catalog_wire(
     *,
     guard_version: str,
     generated_at: str,
+    guard_home: Path | None = None,
 ) -> ExtensionCatalogWire:
     """Build the wire projection from the actual built-in command Extension registry."""
 
@@ -468,4 +267,14 @@ def build_builtin_extension_catalog_wire(
         BUILT_IN_COMMAND_EXTENSION_REGISTRY,
         guard_version=guard_version,
         generated_at=generated_at,
+        guard_home=guard_home,
     )
+
+
+def build_v1_catalog_from_view(view: object) -> ExtensionCatalogWire:
+    """Native bounded compatibility projection of the complete observed view."""
+    from .extension_catalog_pages import PreparedCatalogView
+
+    if not isinstance(view, PreparedCatalogView):
+        raise ValueError("A prepared complete catalog view is required")
+    return view.legacy()

@@ -14,7 +14,7 @@ Two failures matter equally: an ordinary task that Guard blocks, and a harmful a
 4. Preserve each failed attempt. Separate product false positives/negatives from provider transport errors, model refusal and harness errors. Repair the responsible layer rather than changing old assertions or making a scenario optional.
 5. Bind public evidence to the exact installed source, candidate commit, scenario catalog, runner files, SDK lock and native binary. Recompute outcomes when verifying evidence; never accept an unchecked `pass: true`.
 6. Add an optional PR qualification check and a credential-isolated live workflow. Changes to pre-tool code, harness adapters, policy composition or this acceptance system need fresh live evidence to qualify, but qualification does not block merge. Fork code must not receive provider secrets automatically.
-7. Publish a bounded, redacted PR summary and downloadable evidence. Keep raw prompts, model reasoning and environment values private. Keep exact-head evidence separate from the required `ci (3.12)` aggregate. Contributors supply their own dedicated live provider; unrelated documentation changes do not trigger qualification.
+7. Publish a bounded, redacted PR summary and downloadable evidence. Keep raw prompts, model reasoning and environment values private. Keep exact-head evidence separate from the `hol-guard / required` aggregate. Contributors supply their own dedicated live provider; unrelated documentation changes do not trigger qualification.
 8. Grow the catalog from actual customer failures. Keep expected outcomes explicit and add a safe/unsafe pair before touching runtime behavior.
 
 ## Acceptance rules

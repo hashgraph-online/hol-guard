@@ -199,7 +199,7 @@ fn route_defers_everything_else() {
 #[test]
 fn view_binds_one_harness_with_layers() {
     let view = json!({
-        "schema": "guard-mcp-relay-view.v1",
+        "schema": "guard-mcp-relay-view.v2",
         "harnesses": {
             "codex": {
                 "config": {"mode": "enforce"},
@@ -223,7 +223,7 @@ fn view_binds_one_harness_with_layers() {
         Err("mcp_relay_layers_unavailable")
     );
     let mut renamed = view.clone();
-    renamed["schema"] = json!("guard-mcp-relay-view.v2");
+    renamed["schema"] = json!("guard-mcp-relay-view.v3");
     assert_eq!(
         harness_view(Some(&renamed), "codex"),
         Err("mcp_relay_view_invalid")
@@ -271,6 +271,12 @@ fn request_decodes_the_relay_wire_shape() {
     assert_eq!(request.workspace, None);
     assert_eq!(request.launcher_path, None);
     assert_eq!(request.build.harness, "codex");
+    // The relay sets this only on a package call it could not evaluate.
+    assert!(!request.package_evaluation_unsettled);
+    let mut unsettled = wire.clone();
+    unsettled["package_evaluation_unsettled"] = json!(true);
+    let request: McpRelayDecideRequestV1 = serde_json::from_value(unsettled).unwrap();
+    assert!(request.package_evaluation_unsettled);
     wire["unexpected"] = json!(true);
     assert!(serde_json::from_value::<McpRelayDecideRequestV1>(wire).is_err());
 }

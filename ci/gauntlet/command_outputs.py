@@ -10,8 +10,38 @@ from typing import Any
 
 from .business_policy import BUSINESS_ORDINARY_READ
 from .catalog import Scenario
+from .edge_clone_fixtures import CLONE, SOURCE_PATH
+from .feature_directory_fixtures import (
+    AUTH_DIRECTORY,
+    README_MARKER,
+    README_PATH,
+    SESSION_MARKER,
+    SESSION_PATH,
+)
 from .fixtures import SECURITY_NOTES, SOURCE, SOURCE_FILES
 from .script_cases import REPORT_CASES, report_output
+from .source_output_fixtures import (
+    HELPER_MARKER,
+    HELPER_PATH,
+    ROUTE_MARKER,
+    ROUTE_PATH,
+    WORKER_MARKER,
+    WORKER_PATH,
+)
+
+TOKEN_READ_CASE = "omp-native-read-token-handling-sources"
+TOKEN_SHELL_CASE = "omp-native-shell-cat-token-handling-sources"
+FEATURE_DIRECTORY_CASE = "omp-native-read-feature-directory"
+WORKSPACE_GREP_CASE = "omp-native-grep-workspace-root"
+CLONE_GREP_CASE = "omp-native-shell-grep-clone-local-config"
+CLONE_SEARCH_CASES = frozenset({CLONE_GREP_CASE})
+WORKSPACE_FIND_CASE = "omp-native-shell-find-exec-grep-workspace-absolute"
+# Oh My Pi's bash tool adds its wall-time notice only to runs at least this long (milliseconds).
+WALL_TIME_NOTICE_MIN_MS = 1000
+# Every value in the fixture's local configuration files starts with this.
+LOCAL_VALUE_PREFIX = "GAUNTLET_SYNTHETIC_"
+# One line of each token-handling file, which only that file's real text carries.
+TOKEN_SOURCE_MARKERS = {ROUTE_PATH: ROUTE_MARKER, WORKER_PATH: WORKER_MARKER, HELPER_PATH: HELPER_MARKER}
 
 OUTPUT_SCENARIOS = frozenset(
     {
@@ -38,6 +68,9 @@ def _stdout(call: dict[str, Any], result: dict[str, Any], text: str) -> str | No
     The pinned BashTool joins stdout, an empty line and this notice. Preserve
     stdout byte-for-byte, including its trailing newline and any notice-like
     command output. JavaScript toFixed rounds exact ties away from zero.
+    BashTool appends the notice only once a command ran for
+    ``WALL_TIME_NOTICE_MIN_MS``; shorter runs say so with
+    ``wallTimeNoticeEmitted: false`` and leave stdout untouched.
     """
     details = result.get("details")
     if call.get("name") != "bash" or not isinstance(details, dict) or "wallTimeMs" not in details:
@@ -45,6 +78,9 @@ def _stdout(call: dict[str, Any], result: dict[str, Any], text: str) -> str | No
     elapsed = details["wallTimeMs"]
     if type(elapsed) not in (int, float) or elapsed < 0:
         return None
+    if details.get("wallTimeNoticeEmitted") is False:
+        # Only a run shorter than the SDK's threshold may omit the notice.
+        return text if elapsed < WALL_TIME_NOTICE_MIN_MS else None
     try:
         seconds = float(elapsed) / 1000
         if not math.isfinite(seconds):
@@ -114,10 +150,103 @@ def _od(text: str | None) -> bool:
         return False
 
 
+def _token_sources_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:
+    """Every token-handling file must be read, and its own text must come back as the tool result."""
+    covered: set[str] = set()
+    for call in calls:
+        if scenario.id == TOKEN_READ_CASE and call.get("name") == "read":
+            target = re.sub(r":\d+(-\d+)?$", "", str(call["args"].get("path", "")))
+        elif scenario.id == TOKEN_SHELL_CASE and call.get("name") == "bash":
+            words = str(call["args"].get("command", "")).split()
+            target = words[-1] if words else ""
+        else:
+            continue
+        source = next((path for path in TOKEN_SOURCE_MARKERS if target == path or target.endswith("/" + path)), None)
+        if source is None:
+            continue
+        text = _text(call)
+        if text is None or TOKEN_SOURCE_MARKERS[source] not in text:
+            return False
+        covered.add(source)
+    return covered == set(TOKEN_SOURCE_MARKERS)
+
+
+def _feature_directory_match(calls: list[dict[str, Any]]) -> bool:
+    """The sign-in folder is listed, and its README and session helper come back as their own text."""
+    expected = {
+        AUTH_DIRECTORY: ("README.md", "session.ts"),
+        README_PATH: (README_MARKER,),
+        SESSION_PATH: (SESSION_MARKER,),
+    }
+    covered: set[str] = set()
+    for call in calls:
+        if call.get("name") != "read":
+            continue
+        # Only this fixture's own tree counts: a read of the same relative path in another
+        # workspace, or of a longer path that merely ends in it, must not satisfy the case.
+        target = re.sub(r":\d+(-\d+)?$", "", str(call["args"].get("path", "")))
+        if "/" not in target:
+            target = target.replace("\\", "/")
+        target = target.rstrip("/")
+        source = next((path for path in expected if target in (path, "{{workspace}}/" + path)), None)
+        if source is None:
+            continue
+        text = _text(call)
+        if text is None or not all(part in text for part in expected[source]):
+            return False
+        covered.add(source)
+    return covered == set(expected)
+
+
+def _workspace_search_match(calls: list[dict[str, Any]]) -> bool:
+    """The whole project folder was searched, its source came back, and no local value did."""
+    texts = [_text(call) for call in calls]
+    if any(text is not None and LOCAL_VALUE_PREFIX in text for text in texts):
+        return False
+    for call, text in zip(calls, texts, strict=True):
+        args = call.get("args") if isinstance(call.get("args"), dict) else {}
+        path = str(args.get("path", "")).replace("\\", "/").rstrip("/")
+        if (
+            call.get("name") == "grep"
+            and path in ("", ".", "{{workspace}}")
+            and "ordinary-workflow-fixture" in str(args.get("pattern", ""))
+            and text is not None
+            and "one.ts" in text
+        ):
+            return True
+    return False
+
+
+def _clone_search_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:
+    """The search of the clone names its one committed source and nothing from the local files."""
+    if len(calls) != len(scenario.commands):
+        return False
+    text = _text(calls[0])
+    return text is not None and text.replace("\\", "/").splitlines() == [f"{{{{home}}}}/{CLONE}/{SOURCE_PATH}"]
+
+
+def _workspace_find_match(calls: list[dict[str, Any]]) -> bool:
+    """The find named the one source file that holds the word, spelled with the workspace's own path."""
+    if len(calls) != 1:
+        return False
+    text = _text(calls[0])
+    return text is not None and text.replace("\\", "/").splitlines() == ["{{workspace}}/src/settings.ts"]
+
+
 def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:
     """A successful host status cannot replace the required read, search or transformation."""
     if scenario.id == BUSINESS_ORDINARY_READ:
         return len(calls) == 1 and _text(calls[0]) == SOURCE
+    if scenario.id in (TOKEN_READ_CASE, TOKEN_SHELL_CASE):
+        return _token_sources_match(scenario, calls)
+    if scenario.id == FEATURE_DIRECTORY_CASE:
+        return _feature_directory_match(calls)
+    if scenario.id == WORKSPACE_GREP_CASE:
+        return _workspace_search_match(calls)
+    if scenario.id in CLONE_SEARCH_CASES:
+        return _clone_search_match(scenario, calls)
+    if scenario.id == WORKSPACE_FIND_CASE:
+        return _workspace_find_match(calls)
     if scenario.id not in OUTPUT_SCENARIOS:
         return True
     if len(calls) != len(scenario.commands):

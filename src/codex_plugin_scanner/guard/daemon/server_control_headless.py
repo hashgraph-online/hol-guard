@@ -26,10 +26,6 @@ from ..native_daemon_handler import (
     native_headless_action_state,
     native_headless_cursor_surface_error,
 )
-from ..package_firewall_entitlement import (
-    package_firewall_available_actions,
-    package_firewall_block_details,
-)
 from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..receipts.manager import build_receipt
 from ..shims import (
@@ -227,14 +223,19 @@ class _HeadlessRoutes:
             return
         entitlement = self._supply_chain_entitlement()
         if not bool(entitlement["allowed"]):
-            status, error_code, message = package_firewall_block_details(entitlement)
             current_status = package_shim_status(self._supply_chain_context(payload))
+            access = self._package_firewall_access(
+                entitlement,
+                operation=None,
+                has_installed_managers=bool(current_status.get("installed_managers")),
+                reported_operation=action,
+            )
+            if access is None:
+                return
+            status, error_code, message = access.block
             self._write_json(
                 {
-                    "available_actions": package_firewall_available_actions(
-                        entitlement,
-                        has_installed_managers=bool(current_status.get("installed_managers")),
-                    ),
+                    "available_actions": access.available_actions,
                     "entitlement": entitlement,
                     "error": error_code,
                     "message": message,
@@ -427,6 +428,7 @@ class _HeadlessRoutes:
         }
 
     def _approval_with_extension_recommendation(self, approval: dict[str, object]) -> dict[str, object]:
+        from .approval_extension_coverage import with_approval_extension_coverage
         from .approval_extension_recommendation import with_approval_extension_recommendation
 
         include = not self._is_hosted_dashboard_origin()
@@ -434,7 +436,36 @@ class _HeadlessRoutes:
         if not include or api is None:
             return with_approval_extension_recommendation(approval, registry=None, snapshot=None, include=False)
         registry, snapshot = api.recommendation_inputs()
-        hint = self._daemon_server().store.get_approval_extension_allow_hint(str(approval.get("request_id", "")))
-        return with_approval_extension_recommendation(
-            {**approval, "extension_allow_hint": hint}, registry=registry, snapshot=snapshot, include=True
+        store = self._daemon_server().store
+        from .native_review_allow_hint import recovered_approval_extension_hint
+
+        # Rows queued before the hints existed, and rows whose queue-time
+        # re-review ran out of budget or stored coverage alone, still get what
+        # one read-time review can recover.
+        hint = recovered_approval_extension_hint(
+            store.get_approval_extension_allow_hint(str(approval.get("request_id", ""))),
+            approval,
+            guard_home=store.guard_home,
+            snapshot=snapshot,
         )
+        hinted = {**approval, "extension_allow_hint": hint}
+        payload = with_approval_extension_recommendation(
+            hinted,
+            registry=registry,
+            snapshot=snapshot,
+            include=True,
+            guard_home=store.guard_home,
+        )
+        payload = with_approval_extension_coverage(payload, hinted, registry=registry, include=True)
+        from ..approval_gate import public_config
+        from .approval_connector_recommendation import safe_connector_recommendation
+
+        connector = safe_connector_recommendation(
+            hinted,
+            store=store,
+            snapshot=snapshot,
+            approval_gate_configured=lambda: (gate := public_config(store.guard_home)).configured and gate.enabled,
+        )
+        if connector is not None:
+            payload["connector_recommendation"] = connector
+        return payload

@@ -15,10 +15,7 @@ fn home() -> PathBuf {
         .join(format!(
             "home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let home = root.join("home");
     let admin = home.join("main/.git/worktrees/linked");
@@ -95,6 +92,10 @@ fn links_into_the_workspace_or_a_linked_worktree_proceed() {
             format!("ln -s -- {h}/main/dashboard/node_modules {h}/main/modules-link"),
             "ln -s ~/main/dashboard/node_modules ~/linked/dashboard/node_modules".to_owned(),
             format!("cd {h}/linked && ln -s {h}/main/src/old.ts dashboard/old.ts"),
+            // A relative target resolves against the directory the link is
+            // written in, exactly as the kernel resolves it, and the screens
+            // below act on the canonical target either way.
+            "ln -s dashboard/node_modules linked-modules".to_owned(),
         ] {
             assert_eq!(
                 action(&home, harness, &command),
@@ -104,8 +105,6 @@ fn links_into_the_workspace_or_a_linked_worktree_proceed() {
         }
     }
     for command in [
-        // Relative sources resolve against the link's directory.
-        "ln -s dashboard/node_modules linked-modules".to_owned(),
         // Existing destinations, forced and directory forms.
         format!("ln -s {h}/main/src/old.ts {h}/main/src/stale.ts"),
         format!("ln -s {h}/main/src/old.ts {h}/main/src"),
@@ -135,18 +134,27 @@ fn links_into_a_sibling_worktree_by_relative_parent_proceed() {
     let home = home();
     let h = home.display();
     for harness in ["omp", "zcode", "claude-code", "codex"] {
-        let command = format!("ln -s {h}/main/dashboard/node_modules ../linked/node_modules");
-        assert_eq!(
-            action(&home, harness, &command),
-            "allow",
-            "{harness}: {command}"
-        );
+        for command in [
+            format!("ln -s {h}/main/dashboard/node_modules ../linked/node_modules"),
+            // A directory already standing at the link path takes the link
+            // inside it, under the target's own base name, which is the same
+            // write as naming `../linked/dashboard/node_modules` outright.
+            format!("ln -s {h}/main/dashboard/node_modules ../linked/dashboard"),
+        ] {
+            assert_eq!(
+                action(&home, harness, &command),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
     }
     for command in [
         // Another repository, the home itself, or a name that is not fresh.
         format!("ln -s {h}/main/dashboard/node_modules ../other/node_modules"),
         format!("ln -s {h}/main/dashboard/node_modules ../modules-link"),
-        format!("ln -s {h}/main/dashboard/node_modules ../linked/dashboard"),
+        // `../linked/dashboard/src` already exists, so the deeper name the
+        // link would take is not free either.
+        format!("ln -s {h}/main/src ../linked/dashboard"),
         // The leaf must be a plain, visible name.
         format!("ln -s {h}/main/dashboard/node_modules ../linked/.modules"),
         format!("ln -s {h}/main/dashboard/node_modules ../linked/.."),

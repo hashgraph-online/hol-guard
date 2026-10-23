@@ -2,11 +2,14 @@
 //! A `&&` chain that commits work, pushes it and opens a pull request runs
 //! without review only when every step keeps the proof it has on its own.
 //! This binary registers a push verdict, so it runs in its own process.
+#[path = "../../../test_support/unique_nanos.rs"]
+mod unique_nanos;
+
 #[path = "support/git_helper_fixture.rs"]
 #[allow(dead_code)]
 mod git_helper_fixture;
 
-use git_helper_fixture::{evaluate_pre_tool_envelope_with_context, FixtureCleanup};
+use git_helper_fixture::{evaluate_with_node, FixtureCleanup};
 use guard_command::native_command_controls::CompiledNativeCommandControls;
 use guard_command::pretool::{install_git_push_verdict, GitPushRequest};
 use serde_json::json;
@@ -87,10 +90,7 @@ fn repository(label: &str) -> Repository {
     let home = std::fs::canonicalize(base).unwrap().join(format!(
         "guard-git-publish-{label}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let cleanup = FixtureCleanup(home.clone());
     let primary = home.join("org/app");
@@ -139,13 +139,12 @@ impl Repository {
         cwd: &Path,
         controls: &CompiledNativeCommandControls,
     ) -> guard_contracts::PreToolResultV1 {
-        evaluate_pre_tool_envelope_with_context(
+        evaluate_with_node(
             "codex",
             "PreToolUse",
             &json!({"tool_name":"bash", "tool_input":{"command":command}}),
             Some(controls),
-            None,
-            self.home.to_str(),
+            &self.home,
             cwd.to_str(),
         )
     }
@@ -357,6 +356,7 @@ fn in_session(
             cdpath_unset: false,
             rustup_override_absent: false,
             npm_config_inert: false,
+            pip_config_inert: false,
             shell_home_matches: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),

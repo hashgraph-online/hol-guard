@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
+from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand, slug_local_cli_command_id
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.store import GuardStore
@@ -290,6 +290,123 @@ def test_saving_current_choices_preserves_retired_mcp_denies(tmp_path: Path) -> 
     assert store.read_local_cli_command_states(identity.cli_id)["delete"] == "block"
 
 
+def _catalog_view(store: GuardStore) -> dict[str, object]:
+    return store.list_local_cli_items()[0]["mcp_catalog"]
+
+
+def test_saving_choices_reviews_the_new_tools_they_cover(tmp_path: Path) -> None:
+    store, identity = _store(tmp_path)
+    _publish(store, identity, "read", "delete")
+    assert _catalog_view(store)["changes"]["added"] == ["delete", "read"]
+    revision = _catalog_view(store)["revision"]
+    authority = _tool_authority(store, identity, "read")
+
+    # A save that names no catalog revision reviews nothing.
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=_SECOND,
+        command_states={"read": "allow"},
+    )
+    assert _catalog_view(store)["changes"]["added"] == ["delete", "read"]
+    # A tool whose choice was saved is reviewed; one left out still needs a look.
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=_SECOND,
+        command_states={"read": "allow"},
+        reviewed_catalog_revision=revision,
+    )
+    assert _catalog_view(store)["changes"]["added"] == ["delete"]
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=_SECOND,
+        command_states={"read": "allow", "delete": "review"},
+        reviewed_catalog_revision=revision,
+    )
+    view = _catalog_view(store)
+    assert view["changes"] == {"added": [], "changed": [], "removed": [], "stale": []}
+    # Reviewing changes nothing the catalog proves about the tools.
+    assert view["revision"] == revision
+    assert _tool_authority(store, identity, "read") == authority
+
+    # A later listing still flags a tool that is new since then, and a save
+    # made against the older catalog cannot clear it.
+    _publish(store, identity, "read", "delete", "write")
+    assert _catalog_view(store)["changes"]["added"] == ["write"]
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=_SECOND,
+        command_states={"read": "allow", "delete": "review", "write": "review"},
+        reviewed_catalog_revision=revision,
+    )
+    assert _catalog_view(store)["changes"]["added"] == ["write"]
+
+
+def test_the_other_tools_choice_reviews_only_the_tools_folded_into_it(tmp_path: Path) -> None:
+    store, identity = _store(tmp_path)
+    # "Résumé" has no valid id, so it is folded into the Other-tools choice; a
+    # real tool named "other" has its own id and is not.
+    store.replace_local_cli_commands(
+        identity.cli_id,
+        (
+            *_commands("read", "other"),
+            LocalCliCommand(slug_local_cli_command_id("other"), "other", "other", "Fixture tool"),
+        ),
+        mcp_catalog=_catalog("read", "Résumé", "other"),
+        identity_hash=identity.identity_hash,
+        seen_at=_FIRST,
+    )
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=_SECOND,
+        command_states={"other": "review", "read": "allow"},
+        reviewed_catalog_revision=_catalog_view(store)["revision"],
+    )
+    assert _catalog_view(store)["changes"]["added"] == ["other"]
+
+
+def test_saving_choices_reviews_a_changed_tool(tmp_path: Path) -> None:
+    store, identity = _store(tmp_path)
+    _publish(store, identity, "read")
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=_FIRST,
+        command_states={"read": "allow"},
+    )
+    changed = replace(
+        _catalog("read"),
+        tools=({"name": "read", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}}},),
+    )
+    store.replace_local_cli_commands(
+        identity.cli_id,
+        _commands("read"),
+        mcp_catalog=changed,
+        identity_hash=identity.identity_hash,
+        seen_at=_SECOND,
+    )
+    assert _catalog_view(store)["changes"]["changed"] == ["read"]
+    store.upsert_local_cli_grant(
+        identity=identity,
+        state="allowed",
+        expected_revision=store.read_local_cli_revision(),
+        updated_at=_SECOND,
+        command_states={"read": "allow"},
+        reviewed_catalog_revision=_catalog_view(store)["revision"],
+    )
+    assert _catalog_view(store)["changes"]["changed"] == []
+
+
 def test_schema_changes_require_review_and_preserve_deny(tmp_path: Path) -> None:
     store, identity = _store(tmp_path)
     _publish(store, identity, "read", "delete")
@@ -416,3 +533,16 @@ def test_v10_migration_rebuilds_tool_hashes_without_changing_grants(tmp_path: Pa
         connection.execute("update local_cli_schema_migration set version = 10, checksum = ?", (_V10_CHECKSUM,))
         ensure_local_cli_schema(connection)
     assert _grant_and_authority(store, identity) == before
+
+
+def test_a_save_names_its_catalog_revision_as_a_plain_count() -> None:
+    from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
+    from codex_plugin_scanner.guard.daemon.local_cli_api_contract import LocalCliApiError
+
+    service = object.__new__(LocalCliApiService)
+    assert service._optional_revision({}, "mcp_catalog_revision") is None
+    assert service._optional_revision({"mcp_catalog_revision": 3}, "mcp_catalog_revision") == 3
+    for invalid in (-1, True, "3", 3.0):
+        with pytest.raises(LocalCliApiError) as raised:
+            service._optional_revision({"mcp_catalog_revision": invalid}, "mcp_catalog_revision")
+        assert raised.value.code == "invalid_mcp_catalog_revision"

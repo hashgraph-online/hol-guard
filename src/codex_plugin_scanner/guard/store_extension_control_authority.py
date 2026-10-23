@@ -12,15 +12,11 @@ import secrets
 import sqlite3
 from typing import cast
 
-from .managed_controls_policy_bundle import (
-    managed_controls_layers_from_activation_state as managed_controls_layers_from_activation_state,
-)
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import (
     AuthorityAnchor,
     AuthorityHealth,
     AuthorityPhase,
-    ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
 )
 from .store_base import SecretStore
@@ -51,7 +47,6 @@ class StoreExtensionControlAuthorityMixin(
     _extension_control_authority_secret_store: SecretStore | None = None
     _extension_control_degraded_acknowledged: bool = False
     _extension_control_last_catalog_digest: str = "0" * 64
-    _catalog_manifest_purpose = "hol-guard.extension-control-catalog-manifest.v1"
 
     def recover_extension_control_authority(
         self,
@@ -59,6 +54,8 @@ class StoreExtensionControlAuthorityMixin(
         catalog_digest: str,
         migration_registry: CommandSafetyExtensionRegistry | None = None,
     ) -> ExtensionControlAuthorityView:
+        from .catalog_delivery.activation_journal import UnverifiablePackTransitionError
+
         with self._extension_control_authority_lock():
             self._invalidate_native_extension_control_policy(explicit_recovery=True)
             key = self._authority_key(required=False)
@@ -100,23 +97,15 @@ class StoreExtensionControlAuthorityMixin(
                     ),
                 ).fetchone()
                 if pending is not None:
-                    resumed = self._resume_idempotent_transition(
-                        connection,
-                        pending,
-                        current=ExtensionControlAuthorityView(
-                            AuthorityHealth.RECOVERY_REQUIRED,
-                            current_revision,
-                            catalog_digest,
-                            (),
-                        ),
-                        catalog_digest=_row_str(pending, "catalog_digest"),
-                        layers_json=_row_str(pending, "layers_json"),
-                        actor_hash=_row_str(pending, "actor_id_hash"),
-                        idempotency_hash=_row_str(pending, "idempotency_key_hash"),
-                        nonce_hash=_row_str(pending, "nonce_hash"),
-                        expected_revision=_row_int(pending, "previous_revision"),
-                        key=key,
-                    )
+                    try:
+                        resumed = self._resume_transition(connection, _row_int(pending, "revision"), key=key)
+                    except UnverifiablePackTransitionError:
+                        # Only damaged pending authentication permits the existing
+                        # explicit recovery reset; environmental failures propagate.
+                        connection.rollback()
+                        return self._reset_extension_control_authority(
+                            catalog_digest, key=key, reason="pending-transition-unverifiable"
+                        )
                     if resumed is not None and resumed.health is AuthorityHealth.PROTECTED:
                         return resumed
                     connection.commit()
@@ -184,10 +173,12 @@ class StoreExtensionControlAuthorityMixin(
         if not snapshot_missing:
             return None
         try:
-            restored = self._restore_last_good_authority(anchor, key=key)
-        except (sqlite3.Error, ExtensionControlAuthorityError):
-            # Leftover rows can conflict with the restore; fall back to the
-            # explicit reset, which archives them.
+            restored = self._restore_last_good_authority(key=key)
+        except (sqlite3.Error, RuntimeError):
+            # Leftover rows can conflict with the restore, and the resident can
+            # refuse or fail to read them; fall back to the explicit reset,
+            # which archives them. A resident that does not answer is not a
+            # verdict, so that outage propagates instead of resetting.
             return None
         if not restored:
             return None
@@ -304,6 +295,9 @@ class StoreExtensionControlAuthorityMixin(
             connection.execute("delete from extension_control_authority_proof")
             connection.execute("delete from extension_control_authority_transition")
             connection.execute("delete from extension_control_authority_snapshot")
+            from .catalog_delivery.activation_journal import abandon_all
+
+            abandon_all(connection, archive_id=archive_id)
             if key is None:
                 # These rows authenticate with the lost key. They cannot be
                 # reused under the explicit new-key recovery epoch. Managed

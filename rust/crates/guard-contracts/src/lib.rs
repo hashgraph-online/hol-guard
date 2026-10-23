@@ -3,14 +3,28 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod aibom_report_summaries;
+pub use aibom_report_summaries::*;
 mod approval_contracts;
 pub use approval_contracts::*;
+mod approval_extension_recommendation;
+pub use approval_extension_recommendation::*;
 mod approval_gate;
 pub use approval_gate::*;
 mod approval_reuse;
 pub use approval_reuse::*;
 mod composio_role;
 pub use composio_role::*;
+mod extension_allow_hint;
+pub use extension_allow_hint::*;
+mod extension_control;
+pub use extension_control::*;
+mod extension_control_mutation;
+pub use extension_control_mutation::*;
+mod extension_control_prepared;
+pub use extension_control_prepared::*;
+mod extension_control_preview;
+pub use extension_control_preview::*;
 mod github_cli_classify;
 pub use github_cli_classify::*;
 mod github_workflow_prepare;
@@ -66,24 +80,40 @@ mod local_cli_identity;
 pub use local_cli_identity::*;
 mod approval_scope;
 pub use approval_scope::*;
+mod approval_resolution_eligibility;
+pub use approval_resolution_eligibility::*;
+mod approval_persist_select;
+pub use approval_persist_select::*;
+mod approval_scope_select;
+pub use approval_scope_select::*;
+mod artifact_content_hash;
+pub use artifact_content_hash::*;
+mod hook_artifact_facts;
+pub use hook_artifact_facts::*;
 mod hook_render;
 pub use hook_render::*;
 mod approval_proof;
 mod cursor_observer_proof;
+mod extension_control_authority;
 mod hook_authority_state;
 mod policy_integrity_rows;
 pub use approval_proof::*;
 pub use cursor_observer_proof::*;
+pub use extension_control_authority::*;
 pub use hook_authority_state::*;
 pub use policy_integrity_rows::*;
 mod hook_adapter;
 pub use hook_adapter::*;
 mod hook_artifact_compose;
 pub use hook_artifact_compose::*;
+mod hook_artifact_compose_policy_tail;
+pub use hook_artifact_compose_policy_tail::*;
 mod consumer_artifact_compose;
 pub use consumer_artifact_compose::*;
 mod consumer_artifact_project;
 pub use consumer_artifact_project::*;
+mod connector_setup;
+pub use connector_setup::*;
 mod local_cli_grant;
 pub use local_cli_grant::*;
 mod artifact_risk;
@@ -128,6 +158,10 @@ mod mcp_stdio_session;
 pub use mcp_stdio_session::*;
 mod command_effect;
 pub use command_effect::*;
+mod command_policy_decision;
+pub use command_policy_decision::*;
+mod reviewed_invocation_bindings;
+pub use reviewed_invocation_bindings::*;
 mod canonical_json;
 pub use canonical_json::*;
 
@@ -142,12 +176,38 @@ mod generic_hook_payload;
 pub use generic_hook_payload::*;
 mod hook_decision;
 pub use hook_decision::*;
+mod hook_decision_artifact_finalize;
+pub use hook_decision_artifact_finalize::*;
+mod hook_decision_artifact_reuse_step;
+pub use hook_decision_artifact_reuse_step::*;
+mod hook_route;
+pub use hook_route::*;
+mod hook_pretool_floor;
+pub use hook_pretool_floor::*;
+mod hook_containment_route;
+pub use hook_containment_route::*;
+mod claude_permission_verdict;
+pub use claude_permission_verdict::*;
+mod hook_decision_permission_persist;
+pub use hook_decision_permission_persist::*;
 mod daemon_handler;
 pub use daemon_handler::*;
 mod daemon_route;
 pub use daemon_route::*;
 mod native_exact_action;
 pub use native_exact_action::*;
+mod native_bash_subject;
+pub use native_bash_subject::*;
+mod native_script_dependencies;
+pub use native_script_dependencies::*;
+mod native_bash_launch;
+pub use native_bash_launch::*;
+mod native_bash_review;
+pub use native_bash_review::*;
+mod native_bash_activity;
+pub use native_bash_activity::*;
+mod native_bash_ack;
+pub use native_bash_ack::*;
 
 mod workflow_capability;
 pub use workflow_capability::*;
@@ -171,6 +231,8 @@ mod package_audit_projection;
 pub use package_audit_projection::*;
 mod package_protect_finalize;
 pub use package_protect_finalize::*;
+mod package_evaluation_view;
+pub use package_evaluation_view::*;
 mod supply_chain_egress;
 pub use supply_chain_egress::*;
 
@@ -188,6 +250,32 @@ mod business_action;
 pub use business_action::*;
 mod business_dispatch_receipt;
 pub use business_dispatch_receipt::*;
+mod skill_workflow_preflight;
+pub use skill_workflow_preflight::*;
+mod runtime_artifact_identity;
+pub use runtime_artifact_identity::*;
+mod tool_action_identity;
+pub use tool_action_identity::*;
+mod verified_read_decision;
+pub use verified_read_decision::*;
+mod verified_read_plan;
+pub use verified_read_plan::*;
+mod inventory_item_classification;
+pub use inventory_item_classification::*;
+mod inventory_source_evidence;
+pub use inventory_source_evidence::*;
+mod codex_hook_identity;
+pub use codex_hook_identity::*;
+mod inventory_scan_targets;
+pub use inventory_scan_targets::*;
+mod inventory_snapshot_digest;
+pub use inventory_snapshot_digest::*;
+mod command_pack_record;
+pub use command_pack_record::*;
+mod inventory_url_redaction;
+pub use inventory_url_redaction::*;
+mod inventory_scan_findings;
+pub use inventory_scan_findings::*;
 
 pub const NATIVE_PROTOCOL_VERSION: u16 = 1;
 pub const GUARD_HOOK_ENVELOPE_V2_SCHEMA: &str = "guard-hook-envelope.v2";
@@ -258,6 +346,12 @@ pub struct GuardHookEdgeResultV2 {
     /// the resident so no other layer interprets the verdict.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub harness_response: Option<Value>,
+    /// Which containment step `result` takes (`none`, `sink` or `grant`; only
+    /// a PreToolUse answer is ever routed), the same answer the
+    /// `containment_route` decision gives, so a hook routes the call without a
+    /// second round trip.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub containment_route: Option<String>,
     /// Rust-owned decision evidence.  The Python edge may only transport it
     /// to a non-authoritative asynchronous consumer.
     pub receipt: NativeHookDecisionReceiptV1,
@@ -394,6 +488,22 @@ pub struct HookReviewResponseV1 {
     pub observed_policy_action: Option<String>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub observe_mode: bool,
+    /// Whether the harness must keep this output away from the model. It is
+    /// the edge's own answer rather than something a receiver infers from
+    /// `decision` and `model_output_action`, so a later verdict or output
+    /// action cannot change what masking means without changing it here.
+    ///
+    /// It is always serialized, including when false: a receiver that cannot
+    /// find the answer withholds the output rather than guessing one.
+    #[serde(default)]
+    pub output_masked: bool,
+}
+
+/// Masking follows the verdict and the output action together: a denial masks,
+/// and so does an output action that withholds the original text. An excerpt
+/// replacement is not masking -- the model still reads what the review passed.
+fn masks_output(decision: &str, model_output_action: &str) -> bool {
+    decision == "deny" || model_output_action == "block"
 }
 
 impl HookReviewResponseV1 {
@@ -409,6 +519,7 @@ impl HookReviewResponseV1 {
             policy_action: Some("allow".into()),
             observed_policy_action: None,
             observe_mode: false,
+            output_masked: masks_output("allow", "allow_original"),
         }
     }
 
@@ -424,6 +535,7 @@ impl HookReviewResponseV1 {
             policy_action: None,
             observed_policy_action: None,
             observe_mode: false,
+            output_masked: masks_output("deny", "block"),
         }
     }
 
@@ -443,6 +555,7 @@ impl HookReviewResponseV1 {
             policy_action: None,
             observed_policy_action: None,
             observe_mode: false,
+            output_masked: masks_output("allow", "replace_with_reviewed_excerpt"),
         }
     }
 
@@ -460,7 +573,17 @@ impl HookReviewResponseV1 {
         self.policy_action = Some("allow".into());
         self.observed_policy_action = Some("block".into());
         self.observe_mode = true;
+        self.seal_output_mask();
         self
+    }
+
+    /// Re-derive the masking answer from the current verdict and output action.
+    ///
+    /// Policy may rewrite either one after the review built this response, so
+    /// the resident seals the answer on the way out instead of trusting every
+    /// writer to keep a derived field in step.
+    pub fn seal_output_mask(&mut self) {
+        self.output_masked = masks_output(&self.decision, &self.model_output_action);
     }
 }
 
@@ -494,6 +617,49 @@ mod tests {
         assert!(encoded.get("reason").is_none());
         assert_eq!(encoded["decision"], "allow");
         assert_eq!(encoded["reason_code"], "output_scan_allow");
+    }
+
+    #[test]
+    fn every_edge_response_carries_its_own_masking_answer() {
+        // Masking is the edge's answer, so it must hold for every response the
+        // edge can build, including one an observe-mode downgrade rewrote.
+        let excerpt = HookReviewResponseV1::reviewed_excerpt("excerpt", "why", "text".into());
+        let responses = [
+            HookReviewResponseV1::allow("output_scan_allow"),
+            HookReviewResponseV1::deny("source_secret_match", "blocked"),
+            excerpt,
+            HookReviewResponseV1::deny("source_secret_match", "blocked").observed(None),
+        ];
+        for response in responses {
+            assert_eq!(
+                response.output_masked,
+                masks_output(&response.decision, &response.model_output_action),
+                "{} / {}",
+                response.decision,
+                response.model_output_action
+            );
+        }
+    }
+
+    #[test]
+    fn sealing_follows_a_verdict_a_later_writer_rewrote() {
+        // Observe mode rewrites a denial into an allow after the review built
+        // the response. The seal is what keeps the masking answer honest.
+        let mut response = HookReviewResponseV1::deny("source_secret_match", "blocked");
+        assert!(response.output_masked);
+        response.decision = "allow".into();
+        response.model_output_action = "allow_original".into();
+        response.seal_output_mask();
+        assert!(!response.output_masked);
+    }
+
+    #[test]
+    fn only_a_denial_or_a_withheld_output_masks() {
+        assert!(masks_output("deny", "block"));
+        assert!(masks_output("allow", "block"));
+        assert!(!masks_output("allow", "allow_original"));
+        // An excerpt is what the review passed, so the model may read it.
+        assert!(!masks_output("allow", "replace_with_reviewed_excerpt"));
     }
 
     #[test]

@@ -57,7 +57,11 @@ def portable_project_identity_revision(workspace: str | Path | None) -> int | No
         fingerprints.append(f"{candidate}:{stat.st_mtime_ns}:{stat.st_size}")
     if not fingerprints:
         return None
-    digest = hashlib.sha256("\n".join(fingerprints).encode()).digest()
+    # The identity records the workspace's path inside the repository, so a
+    # symlink retargeted to another directory of the same repository has to
+    # change the revision even though no Git metadata moved.
+    keyed = "\n".join([f"workspace:{workspace_path}", *fingerprints])
+    digest = hashlib.sha256(keyed.encode()).digest()
     return int.from_bytes(digest[:8], byteorder="big", signed=False)
 
 

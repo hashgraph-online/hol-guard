@@ -2,6 +2,12 @@
 
 use super::*;
 
+/// The rules a proven recoverable removal does not match.
+const RECOVERABLE_REMOVAL_RULES: &[&str] = &[
+    "command.filesystem.recursive-delete",
+    "command.shell-mutations.destructive-shell",
+];
+
 impl NativeCommandProgram {
     pub fn observe(
         &self,
@@ -37,13 +43,61 @@ impl NativeCommandProgram {
         context: crate::pretool::PathContext<'_>,
         environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     ) -> Result<NativeCommandObservationBatchV1, &'static str> {
-        let compatibility = crate::command_compatibility::compatibility_observations_in(
+        self.observe_in_with_dispatch(
+            command,
+            active_extensions,
+            deadline,
+            context,
+            environment,
+            None,
+        )
+    }
+
+    pub(crate) fn observe_in_with_dispatch(
+        &self,
+        command: &CanonicalCommandV1,
+        active_extensions: &BTreeSet<String>,
+        deadline: Option<Instant>,
+        context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+        dispatch: Option<&CommandCandidateIndex>,
+    ) -> Result<NativeCommandObservationBatchV1, &'static str> {
+        let mut compatibility = crate::command_compatibility::compatibility_observations_in(
             command,
             deadline,
             context,
             environment,
         )?;
-        let mut batch = self.observe_declarative(command, active_extensions, deadline)?;
+        // A recursive removal Git can restore matches neither the recursive
+        // delete rule nor the destructive-shell rule: it loses no work. The
+        // proof reads an exact single `rm`, so it also settles the
+        // destructive-shell rule's uncertain match.
+        let recoverable = crate::pretool::recoverable_removal::exact_safe_command(
+            command,
+            context,
+            deadline,
+            environment,
+        );
+        if recoverable {
+            compatibility
+                .rule_matches
+                .retain(|matched| !RECOVERABLE_REMOVAL_RULES.contains(&matched.rule_id));
+        }
+        let candidates = dispatch
+            .map(|index| index.candidates(command))
+            .unwrap_or_else(|| self.candidate_rule_indices(command));
+        let mut batch = self.observe_declarative_memo(
+            command,
+            active_extensions,
+            deadline,
+            candidates,
+            dispatch.map(|index| Arc::clone(&index.memo_layout)),
+        )?;
+        if recoverable {
+            batch.observations.retain(|observation| {
+                !RECOVERABLE_REMOVAL_RULES.contains(&observation.rule_id.as_str())
+            });
+        }
         for mut matched in compatibility.rule_matches {
             // Safe evidence is both capability- and segment-scoped. A preview
             // in one segment cannot suppress its destructive sibling, and a
@@ -171,15 +225,41 @@ impl NativeCommandProgram {
         active_extensions: &BTreeSet<String>,
         deadline: Option<Instant>,
     ) -> Result<NativeCommandObservationBatchV1, &'static str> {
+        self.observe_declarative_selected(
+            command,
+            active_extensions,
+            deadline,
+            self.candidate_rule_indices(command),
+        )
+    }
+
+    pub(super) fn observe_declarative_selected(
+        &self,
+        command: &CanonicalCommandV1,
+        active_extensions: &BTreeSet<String>,
+        deadline: Option<Instant>,
+        candidates: impl IntoIterator<Item = usize>,
+    ) -> Result<NativeCommandObservationBatchV1, &'static str> {
+        self.observe_declarative_memo(command, active_extensions, deadline, candidates, None)
+    }
+
+    pub(super) fn observe_declarative_memo(
+        &self,
+        command: &CanonicalCommandV1,
+        active_extensions: &BTreeSet<String>,
+        deadline: Option<Instant>,
+        candidates: impl IntoIterator<Item = usize>,
+        layout: Option<Arc<MemoLayout>>,
+    ) -> Result<NativeCommandObservationBatchV1, &'static str> {
         let mut state = Evaluation {
             program: self,
             command,
             deadline,
-            memo: vec![None; self.nodes.len()],
+            memo: NodeMemo::new(layout),
         };
         let mut observations = Vec::new();
         let mut evidence_items = 0usize;
-        for index in self.candidate_rule_indices(command) {
+        for index in candidates {
             state.check_deadline()?;
             let rule = &self.rules[index];
             let extension = &self.extensions[rule.extension_index];

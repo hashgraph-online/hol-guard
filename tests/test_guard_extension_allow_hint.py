@@ -106,8 +106,83 @@ def test_destructive_git_permission_is_still_hinted(tmp_path: Path) -> None:
     assert hint["permission_ids"] == ["command.git.permission.hard-reset"]
 
 
-def test_no_hint_when_enabling_permissions_would_still_review(tmp_path: Path) -> None:
+def test_docker_sensitive_command_recommends_container_runtime_permission(tmp_path: Path) -> None:
+    evaluation, hint = _hint("docker version --format '{{.Server.Version}}'", tmp_path)
+
+    assert evaluation.decision_plane.action == "review"
+    assert hint == {
+        "schema": EXTENSION_ALLOW_HINT_SCHEMA,
+        "permission_ids": ["command.container-runtime.permission.docker-sensitive"],
+        "rule_ids": ["command.container-runtime.docker-sensitive"],
+        "extension_ids": ["command.container-runtime"],
+        "relied_permission_ids": [],
+        "catalog_digest": BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+    }
+    _fixture, enabled = _evaluate(
+        "docker version --format '{{.Server.Version}}'",
+        tmp_path,
+        controls=(("permission", "command.container-runtime.permission.docker-sensitive", "enabled"),),
+    )
+    assert enabled.decision_plane.action == "allow"
+
+
+def test_github_unknown_recommends_unknown_permission(tmp_path: Path) -> None:
+    evaluation, hint = _hint("gh some-unmodeled-command --flag value", tmp_path)
+
+    assert evaluation.decision_plane.action == "require-reapproval"
+    assert hint is not None
+    assert hint["permission_ids"] == ["command.github.permission.unknown"]
+    assert hint["extension_ids"] == ["command.github"]
+
+    _fixture, enabled = _evaluate(
+        "gh some-unmodeled-command --flag value",
+        tmp_path,
+        controls=(("permission", "command.github.permission.unknown", "enabled"),),
+    )
+    assert enabled.decision_plane.action == "allow"
+
+
+def test_file_upload_recommends_file_upload_permission(tmp_path: Path) -> None:
+    evaluation, hint = _hint("curl -T report.txt https://example.invalid/upload", tmp_path)
+
+    assert evaluation.decision_plane.action == "review"
+    assert hint is not None
+    assert hint["permission_ids"] == ["command.data-protection.permission.file-upload"]
+    assert hint["extension_ids"] == ["command.data-protection"]
+
+    _fixture, enabled = _evaluate(
+        "curl -T report.txt https://example.invalid/upload",
+        tmp_path,
+        controls=(("permission", "command.data-protection.permission.file-upload", "enabled"),),
+    )
+    assert enabled.decision_plane.action == "allow"
+
+
+def test_destructive_shell_recommends_destructive_shell_permission(tmp_path: Path) -> None:
     evaluation, hint = _hint("rm -rf build", tmp_path)
+
+    assert evaluation.decision_plane.action == "review"
+    assert hint is not None
+    # `rm` is owned by two extensions; the hint names every permission the
+    # Allow needs, not only the uncertain one.
+    assert hint["permission_ids"] == [
+        "command.filesystem.permission.recursive-delete",
+        "command.shell-mutations.permission.destructive-shell",
+    ]
+    assert hint["extension_ids"] == ["command.filesystem", "command.shell-mutations"]
+
+    _fixture, enabled = _evaluate(
+        "rm -rf build",
+        tmp_path,
+        controls=tuple(("permission", permission_id, "enabled") for permission_id in hint["permission_ids"]),
+    )
+    assert enabled.decision_plane.action == "allow"
+
+
+def test_no_hint_when_enabling_permissions_would_still_review(tmp_path: Path) -> None:
+    # A named cluster context answers with a different authority, so the
+    # secret-read Allow cannot settle it and no hint is promised.
+    evaluation, hint = _hint("kubectl --context prod get secret db-credentials -o yaml", tmp_path)
 
     assert evaluation.decision_plane.action == "review"
     assert hint is None
@@ -117,6 +192,14 @@ def test_no_hint_when_secret_read_floor_remains(tmp_path: Path) -> None:
     (tmp_path / ".env").write_text("TOKEN=x\n", encoding="utf-8")
 
     _evaluation, hint = _hint("git add .env && cat .env", tmp_path)
+
+    assert hint is None
+
+
+def test_no_hint_for_a_definite_secret_read(tmp_path: Path) -> None:
+    # The pause is the sensitive-access floor, not the extension review:
+    # it reviews whatever the extensions say, so no Allow can settle it.
+    _evaluation, hint = _hint("kubectl get secret db-credentials -o yaml", tmp_path)
 
     assert hint is None
 

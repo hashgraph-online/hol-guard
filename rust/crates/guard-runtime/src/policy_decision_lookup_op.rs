@@ -1340,6 +1340,14 @@ pub(crate) fn evaluate(request: &PolicyDecisionLookupRequestV1) -> Result<Value,
     if let Some(groups) = &request.probe_groups {
         return crate::policy_lookup_groups::evaluate(request, groups);
     }
+    if let Some(portable) = &request.portable_workspace {
+        return crate::policy_lookup_portable::evaluate(request, portable);
+    }
+    // The binding is only re-read under the claim's write lock, which no other
+    // branch of this op takes.
+    if request.evidence_binding.is_some() {
+        return Err("native_policy_decision_lookup_invalid".to_owned());
+    }
     let current_time = canonical_utc_timestamp(&request.now)
         .ok_or_else(|| "native_policy_decision_lookup_invalid_now".to_owned())?;
     let mut conn = open_lookup_connection(&request.store_path)?;
@@ -1377,7 +1385,11 @@ pub(crate) fn evaluate_non_consuming(
     request: &PolicyDecisionLookupRequestV1,
     conn: &Connection,
 ) -> Result<Value, String> {
-    if request.consume_one_shot || request.schema != POLICY_DECISION_LOOKUP_REQUEST_SCHEMA {
+    if request.consume_one_shot
+        || request.portable_workspace.is_some()
+        || request.evidence_binding.is_some()
+        || request.schema != POLICY_DECISION_LOOKUP_REQUEST_SCHEMA
+    {
         return Err("native_policy_decision_lookup_invalid".to_owned());
     }
     let current_time = canonical_utc_timestamp(&request.now)

@@ -183,20 +183,7 @@ pub(crate) fn shlex_join(tokens: &[String]) -> String {
         .join(" ")
 }
 
-/// `shlex.quote` (:271): safe chars `[A-Za-z0-9@%_+=:,./-]`; single-quote
-/// otherwise with `'` → `'"'"'`.
-pub(crate) fn shlex_quote(value: &str) -> String {
-    if value.is_empty() {
-        return "''".to_owned();
-    }
-    if value
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || "@%_+=:,./-".contains(c))
-    {
-        return value.to_owned();
-    }
-    format!("'{}'", value.replace('\'', "'\"'\"'"))
-}
+pub(crate) use guard_hook_payload::shlex_quote;
 
 /// `shlex.split` posix over the subset used by `_expand_env_split_string`:
 /// whitespace split, single/double quotes, backslash escapes, comment char

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -16,11 +16,7 @@ from .runtime.observed_mcp_tools import ObservedMcpTool, observed_mcp_tool
 from .store_local_cli_retention import LocalCliReplaySkippedError, utc_now_iso
 from .store_local_cli_schema import ensure_local_cli_schema
 from .store_mcp_catalog import read_mcp_skill_page
-from .store_mcp_provider_catalog import (
-    describe_provider_actions,
-    read_provider_actions,
-    write_composio_metadata,
-)
+from .store_mcp_provider_catalog import describe_provider_actions, read_provider_actions
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -44,6 +40,27 @@ class StoreLocalMcpMixin:
             connection.execute("begin")
             ensure_local_cli_schema(connection, for_read=True)
             return read_native_provider_choices(connection)
+
+    def observed_mcp_history(self, *, limit: int) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        """Return the paused requests and receipts the connector scan reads.
+
+        The resident projects each row to the tool label, the harness and the
+        history timestamps, which is all the scan parses. Asking for whole
+        approval rows and whole receipts encoded a store with a few hundred of
+        either past the native response cap, and the refresh then failed
+        instead of discovering connectors.
+        """
+
+        page = self._native_store_call("observed_mcp_history", {"limit": limit})
+        if not isinstance(page, dict):
+            raise sqlite3.DatabaseError("native_observed_mcp_history_invalid")
+        batches: list[list[dict[str, object]]] = []
+        for key in ("approvals", "receipts"):
+            rows = cast(dict[str, object], page).get(key)
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                raise sqlite3.DatabaseError("native_observed_mcp_history_invalid")
+            batches.append(cast("list[dict[str, object]]", rows))
+        return batches[0], batches[1]
 
     def read_observed_mcp_tool_actions(self) -> dict[str, str]:
         """Return the operator's exact choices for observed MCP connectors."""
@@ -97,35 +114,39 @@ class StoreLocalMcpMixin:
             server_args_hash=server.args_hash,
             source_label=f"{source.harness.title()} · observed provider metadata",
         )
-        from .native_policy_snapshot import notify_native_policy_mutation
-
-        barrier_closed = False
-        guard_home = cast("GuardStore", self).guard_home
-
-        def before_change() -> None:
-            nonlocal barrier_closed
-            barrier_closed = True
-            notify_native_policy_mutation(guard_home)
-
-        try:
-            with self._connect() as connection:
-                ensure_local_cli_schema(connection)
-                connection.commit()
-                connection.execute("begin immediate")
-                write_composio_metadata(
-                    connection,
-                    source,
-                    actions,
-                    cli_id=cli_id,
-                    seen_at=seen_at,
-                    before_authority_change=before_change,
-                )
-                from .store_mcp_workflows import write_workflow_proposals
-
-                write_workflow_proposals(connection, cli_id, source.identity.identity_hash, proposals, seen_at=seen_at)
-        finally:
-            if barrier_closed:
-                notify_native_policy_mutation(guard_home)
+        args: dict[str, object] = {
+            "cli_id": cli_id,
+            "identity_hash": server.identity_hash,
+            "server_command": server.command,
+            "source_tool": source.qualified_name,
+            "seen_at": seen_at,
+            "actions": [
+                {
+                    "toolkit": action.toolkit,
+                    "tool_slug": action.tool_slug,
+                    "description": action.description,
+                    "input_schema": action.input_schema,
+                    "full_schema": bool(action.full_schema),
+                }
+                for action in actions
+            ],
+            "proposals": [
+                {
+                    "primary": list(proposal.primary),
+                    "supporting": list(proposal.supporting),
+                    "guidance_present": proposal.guidance_present,
+                }
+                for proposal in proposals
+            ],
+        }
+        result = self._native_store_call("record_composio_discovery", args)
+        if isinstance(result, dict) and result.get("need_barrier") is True:
+            # This batch moves the provider authority, which the native policy
+            # barrier has to bracket. The resident cannot reach the publishers
+            # that barrier notifies, so it wrote nothing and asked for one:
+            # close it and run the same write inside it.
+            with _notify_legacy_mcp_denial(cast("GuardStore", self).guard_home):
+                self._native_store_call("record_composio_discovery", {**args, "barrier_closed": True})
         return cli_id
 
     def read_local_mcp_workflows(self, cli_id: str, *, offset: int = 0) -> dict[str, object]:
@@ -234,8 +255,14 @@ class StoreLocalMcpMixin:
         connection_identity_hash: str | None = None,
         replayed: bool = False,
         replay_now: str | None = None,
+        remote_origin: str | None = None,
+        declared_source: str | None = None,
     ) -> str:
         """Insert or refresh an MCP observation without incrementing observed_count.
+
+        ``declared_source`` (``<harness>:<stdio|remote>``) and
+        ``remote_origin`` record a harness config declaration on the same
+        record a call sighting uses.
 
         ``replayed`` marks ``seen_at`` as a history timestamp: it never moves
         ``last_seen_at`` backward and does not run retention pruning. The
@@ -260,6 +287,10 @@ class StoreLocalMcpMixin:
             "replay_now": replay_now,
             "clock": utc_now_iso(),
         }
+        if remote_origin is not None:
+            args["remote_origin"] = remote_origin
+        if declared_source is not None:
+            args["declared_source"] = declared_source
         result = self._native_store_call("ensure_local_mcp_observation", args)
         if isinstance(result, dict) and result.get("need_barrier") is True:
             # Carrying a legacy Deny changes policy authority: close the
@@ -273,6 +304,21 @@ class StoreLocalMcpMixin:
         if not isinstance(cli_id, str):
             raise sqlite3.DatabaseError("native_local_mcp_observation_invalid")
         return cli_id
+
+    def reconcile_remote_mcp_declarations(self, *, harnesses: Sequence[str], declared_cli_ids: Sequence[str]) -> int:
+        """Forget remote declarations a config scan of ``harnesses`` no longer finds.
+
+        Records stay, so permission history and decisions are kept; only the
+        ``<harness>:remote`` source goes, and the stored origin once no harness
+        declares the connector as remote.
+        """
+
+        result = self._native_store_call(
+            "reconcile_remote_mcp_declarations",
+            {"harnesses": sorted(set(harnesses)), "declared_cli_ids": sorted(set(declared_cli_ids))},
+        )
+        reconciled = result.get("reconciled") if isinstance(result, dict) else None
+        return reconciled if isinstance(reconciled, int) else 0
 
 
 @contextmanager

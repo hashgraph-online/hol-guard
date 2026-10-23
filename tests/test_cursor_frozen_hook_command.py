@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.cursor_hook_command_line import cursor_hook_command_tokens
+from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_command_line import cursor_hook_command_tokens
 from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
     FROZEN_CURSOR_HOOK_COMMAND,
     HOOK_SCRIPT_NAME,

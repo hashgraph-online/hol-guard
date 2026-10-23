@@ -73,7 +73,14 @@ def local_policy_status(store: GuardStore) -> dict[str, object]:
     last_error = store.get_sync_payload("policy_bundle_last_error")
     defaults = validated.get("policyDefaults") if validated is not None else None
     mode = _text(defaults.get("mode")) if isinstance(defaults, dict) else None
-    reason = rejection or _text(last_error.get("reason") if isinstance(last_error, dict) else None)
+    stored_error = last_error if isinstance(last_error, dict) else {}
+    stored_reason = _text(stored_error.get("reason"))
+    reason = rejection or stored_reason
+    # The remediation and the rule that caused it describe the stored
+    # rejection, so they are reported only while that is the reason shown.
+    stored_shown = reason is not None and reason == stored_reason
+    message = _text(stored_error.get("message"), 512) if stored_shown else None
+    rule_id = _text(stored_error.get("ruleId"), 128) if stored_shown else None
     live_version = _version_text(bundle.get("bundleVersion"))
     ack_version = _version_text(ack.get("bundleVersion"))
     ack_status = _text(ack.get("status"))
@@ -94,6 +101,8 @@ def local_policy_status(store: GuardStore) -> dict[str, object]:
             "currentVersion": live_version is not None and ack_version == live_version,
         },
         "rejectionReason": reason,
+        "rejectionRuleId": rule_id,
+        "rejectionMessage": message,
     }
 
 
@@ -178,8 +187,11 @@ def format_policy_status(payload: dict[str, object]) -> str:
         f"Last ACK: {ack.get('status') or 'none'}"
         + (f" at {ack['appliedAt']}" if ack.get("appliedAt") else "")
         + ("" if ack.get("currentVersion") or not ack.get("status") else " (older version)"),
-        f"Rejection: {payload.get('rejectionReason') or 'none'}",
+        f"Rejection: {payload.get('rejectionReason') or 'none'}"
+        + (f" (rule {payload['rejectionRuleId']})" if payload.get("rejectionRuleId") else ""),
     ]
+    if payload.get("rejectionMessage"):
+        lines.append(f"  {payload['rejectionMessage']}")
     if delivery.get("available"):
         raw_devices = delivery.get("devices")
         devices = raw_devices if isinstance(raw_devices, list) else []

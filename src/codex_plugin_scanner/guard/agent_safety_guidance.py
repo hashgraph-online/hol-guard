@@ -38,6 +38,8 @@ _LEGACY_SAFETY_GUIDANCE_DIGESTS = frozenset(
         "5211684ae7093b4e0363e176ab38c3d5f2e83a88f557381cffb220b37fb36652",
         # Guidance before it named the script-free npm install Guard lets continue.
         "2726e5000e64235af716c767a45912d389fc522ce16748139ab309f9ffe53075",
+        # Guidance before it named a "not set up on this device" reason as a setup decision.
+        "855a66a828fd86bb249b9751d5d3d8875e293a85c81e942ff03e840b60b32eb4",
     }
 )
 _MANAGED_PATTERN = re.compile(rf"(?ms)^{re.escape(_MANAGED_BEGIN)}\n.*?^{re.escape(_MANAGED_END)}\n?")

@@ -1,13 +1,15 @@
-"""Request artifact construction and command candidate extraction."""
+"""Sensitive file-write classification and command candidate extraction.
+
+The artifacts these requests earn are built by the resident; nothing here
+derives an artifact id, so one implementation decides what a sensitive-request
+review is keyed under.
+"""
 
 from __future__ import annotations
 
-import hashlib
-import json
 import shlex
 from pathlib import Path
 
-from ...models import GuardArtifact
 from ..secret_sensitivity import classify_secret_path
 from .constants_core import (
     _COMMAND_KEYS,
@@ -21,7 +23,6 @@ from .constants_core import (
     COMMAND_SEQUENCE_KEYS,
 )
 from .request_models import (
-    FileReadRequestMatch,
     FileWriteRequestMatch,
     _candidate_paths,
     _normalize_tool_name,
@@ -71,88 +72,6 @@ def extract_sensitive_file_write_request(
                 action_class="sensitive local file write",
             )
     return None
-
-
-def build_file_read_request_artifact(
-    harness: str,
-    request: FileReadRequestMatch,
-    *,
-    config_path: str,
-    source_scope: str,
-) -> GuardArtifact:
-    """Build a Guard artifact for an exact sensitive runtime file-read request."""
-
-    fingerprint = _file_read_request_fingerprint(
-        harness=harness,
-        tool_name=request.normalized_tool_name,
-        normalized_path=request.path_match.normalized_path,
-    )
-    request_summary = (
-        f"Requested `{request.tool_name}` access to `{request.path_match.normalized_path}` "
-        f"({request.path_match.path_class})."
-    )
-    risk_summary = f"Requests access to a sensitive local file: {request.path_match.path_class}."
-    return GuardArtifact(
-        artifact_id=f"{harness}:{source_scope}:file-read:{fingerprint}",
-        name=f"{request.tool_name} {Path(request.path_match.normalized_path).name}",
-        harness=harness,
-        artifact_type="file_read_request",
-        source_scope=source_scope,
-        config_path=config_path,
-        metadata={
-            "tool_name": request.tool_name,
-            "normalized_path": request.path_match.normalized_path,
-            "path_class": request.path_match.path_class,
-            "request_summary": request_summary,
-            "runtime_request_signals": ["requests access to a sensitive local file"],
-            "runtime_request_summary": risk_summary,
-            "runtime_request_reason": request.path_match.reason,
-        },
-    )
-
-
-def build_file_write_request_artifact(
-    harness: str,
-    request: FileWriteRequestMatch,
-    *,
-    config_path: str,
-    source_scope: str,
-) -> GuardArtifact:
-    """Build a Guard artifact for a sensitive runtime file-write request."""
-
-    fingerprint = hashlib.sha256(
-        json.dumps(
-            {
-                "harness": harness,
-                "tool_name": request.normalized_tool_name,
-                "normalized_path": request.normalized_path,
-                "action_class": request.action_class,
-            },
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
-    request_summary = (
-        f"Requested `{request.tool_name}` write access to `{request.normalized_path}` ({request.path_class})."
-    )
-    risk_summary = f"Requests a {request.action_class}: {request.path_class}."
-    return GuardArtifact(
-        artifact_id=f"{harness}:{source_scope}:file-write:{fingerprint}",
-        name=f"{request.tool_name} {Path(request.normalized_path).name}",
-        harness=harness,
-        artifact_type="tool_action_request",
-        source_scope=source_scope,
-        config_path=config_path,
-        metadata={
-            "tool_name": request.tool_name,
-            "normalized_path": request.normalized_path,
-            "path_class": request.path_class,
-            "action_class": request.action_class,
-            "request_summary": request_summary,
-            "runtime_request_signals": [f"writes a sensitive local path: {request.path_class}"],
-            "runtime_request_summary": risk_summary,
-            "runtime_request_reason": request.reason,
-        },
-    )
 
 
 def _candidate_command_texts(value: object) -> list[str]:
@@ -324,15 +243,6 @@ def _normalized_shell_command_name(command_name: str) -> str:
     return normalized_command.rsplit("/", 1)[-1].lower()
 
 
-def _file_read_request_fingerprint(*, harness: str, tool_name: str, normalized_path: str) -> str:
-    payload = {
-        "harness": harness,
-        "tool_name": tool_name,
-        "normalized_path": normalized_path,
-    }
-    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
-
-
 __all__ = [
     "_candidate_command_texts",
     "_collect_candidate_commands",
@@ -343,13 +253,10 @@ __all__ = [
     "_docker_buildx_flag_option_matches",
     "_docker_buildx_option_has_value",
     "_docker_buildx_subcommand_index",
-    "_file_read_request_fingerprint",
     "_normalized_shell_command_name",
     "_shell_braced_variable_name",
     "_shell_unbraced_variable_name",
     "_shell_variable_names",
-    "build_file_read_request_artifact",
-    "build_file_write_request_artifact",
     "command_list_candidate_texts",
     "extract_sensitive_file_write_request",
 ]

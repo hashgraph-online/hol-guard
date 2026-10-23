@@ -96,7 +96,9 @@ import {
   demoPresentationSettings,
   isGuardDemoMode
 } from "./guard-demo";
+import { normalizeApprovalExtensionCoverage } from "./approval-extension-coverage";
 import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
+import { observeDashboardBuild } from "./dashboard-build";
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
@@ -130,8 +132,10 @@ type RawGuardApprovalRequest = Omit<
   | "scope_restrictions"
   | "task_capability_eligibility"
   | "extension_recommendation"
+  | "extension_coverage"
 > & {
   extension_recommendation?: unknown;
+  extension_coverage?: unknown;
   action_envelope_json?: unknown;
   decision_v2_json?: unknown;
   policy_action?: unknown;
@@ -458,7 +462,7 @@ async function fetchGuardDaemonCandidateJson(
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
   try {
-    const response = await fetch(input, { ...init, signal: controller.signal });
+    const response = await daemonFetch(input, { ...init, signal: controller.signal });
     const payload: unknown = await response.json();
     return { response, payload };
   } finally {
@@ -678,7 +682,7 @@ export async function prepareGuardDaemonReconnect(): Promise<GuardDaemonReconnec
     guardDaemonReconnectDiagnostic = "dashboard_reconnect_prepare_origin_unavailable";
     throw new Error("Guard could not identify the authenticated daemon for a secure reconnect.");
   }
-  let response = await fetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
+  let response = await daemonFetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: "{}",
@@ -688,7 +692,7 @@ export async function prepareGuardDaemonReconnect(): Promise<GuardDaemonReconnec
     const refreshedToken = await initializeGuardDashboardSessionAtOrigin(daemonOrigin, guardToken);
     if (refreshedToken && refreshedToken !== guardToken) {
       saveGuardToken(refreshedToken);
-      response = await fetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
+      response = await daemonFetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: "{}",
@@ -998,6 +1002,14 @@ function withGuardAuth(init?: RequestInit): RequestInit | undefined {
   return withGuardAuthForToken(init, readGuardToken());
 }
 
+// Every daemon response names the dashboard bundle it serves; note it so a tab
+// left running an older bundle after a Guard update can load the current one.
+async function daemonFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await fetch(input, init);
+  observeDashboardBuild(response);
+  return response;
+}
+
 function withGuardAuthForToken(
   init: RequestInit | undefined,
   guardToken: string | null,
@@ -1016,7 +1028,7 @@ function withGuardAuthForToken(
 export async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const requestInput = guardApiInput(input);
   const guardToken = readGuardToken();
-  const response = await fetch(requestInput, withGuardAuthForToken(init, guardToken));
+  const response = await daemonFetch(requestInput, withGuardAuthForToken(init, guardToken));
   if (response.status !== 401 || !guardToken || input instanceof Request) {
     return response;
   }
@@ -1025,7 +1037,7 @@ export async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit)
     return response;
   }
   saveGuardToken(refreshedGuardToken);
-  return fetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
+  return daemonFetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
 }
 
 export async function fetchCommandActivityApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
@@ -1091,6 +1103,21 @@ export async function fetchExtensionDiscoveryApi(input: RequestInfo, init?: Requ
   return fetchWithGuardAuth(input, init);
 }
 
+/**
+ * Release archive: the daemon projects hol.org's published feed through the
+ * native runtime and serves it locally. The browser never reaches hol.org
+ * (connect-src stays 'self'), and these two paths are the whole allowlist.
+ */
+export async function fetchReleaseFeedApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    typeof input === "string" &&
+    /^\/v1\/releases\/(?:index|release)(?:\?[A-Za-z0-9=&_.-]*)?$/.test(input);
+  if (!approvedPath) {
+    throw new Error("Invalid release feed API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
 function guardAuthHeaders(): HeadersInit {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
@@ -1110,7 +1137,7 @@ function parseDashboardSessionToken(payload: unknown): string | null {
 
 async function refreshGuardDashboardSession(guardToken: string, signal?: AbortSignal | null): Promise<string | null> {
   try {
-    const response = await fetch(guardApiInput("/v1/initialize"), {
+    const response = await daemonFetch(guardApiInput("/v1/initialize"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1487,9 +1514,11 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
   const {
     decision_contract_error: rawContractError,
     extension_recommendation: rawExtensionRecommendation,
+    extension_coverage: rawExtensionCoverage,
     ...baseItem
   } = item;
   const extensionRecommendation = normalizeApprovalExtensionRecommendation(rawExtensionRecommendation);
+  const extensionCoverage = normalizeApprovalExtensionCoverage(rawExtensionCoverage);
   const policyAction = normalizeGuardAction(item.policy_action);
   const decisionV2 = parseDecisionV2(item.decision_v2_json);
   const actionEnvelope = parseActionEnvelope(item.action_envelope_json);
@@ -1590,6 +1619,7 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
     ...(extensionRecommendation !== null && !hasDecisionContractError
       ? { extension_recommendation: extensionRecommendation }
       : {}),
+    ...(extensionCoverage !== null && !hasDecisionContractError ? { extension_coverage: extensionCoverage } : {}),
     ...(hasDecisionContractError
       ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT }
       : {}),
@@ -3093,7 +3123,7 @@ export async function revokeApprovalGateCooldown(password: string, totpCode?: st
   if (isGuardDemoMode()) {
     return fetchSettings();
   }
-  const response = await fetch(guardApiInput("/v1/approval-gate/cooldown/revoke"), withGuardAuth({
+  const response = await daemonFetch(guardApiInput("/v1/approval-gate/cooldown/revoke"), withGuardAuth({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -3503,6 +3533,51 @@ export async function scheduleGuardUpdate(
     scheduled: booleanValue(payload.scheduled),
     message: stringValue(payload.message) ?? undefined,
     error: stringValue(payload.error) ?? undefined,
+  };
+}
+
+export type GuardDesktopHandoffResult = {
+  handoff_requested: boolean;
+  latest_version: string | null;
+};
+
+/**
+ * Asks the daemon to record an update request for the HOL Guard app. The
+ * dashboard inside the Desktop window cannot call the app updater itself;
+ * Desktop watches for the request and opens its own visible update flow,
+ * which re-verifies the release before installing anything.
+ */
+export async function requestGuardDesktopHandoff(): Promise<GuardDesktopHandoffResult> {
+  if (isGuardDemoMode()) {
+    return { handoff_requested: false, latest_version: null };
+  }
+  // Bounded: an unanswered request must release the banner into its
+  // failure state instead of disabling its actions forever.
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 10_000);
+  let response: Response;
+  try {
+    response = await fetchWithGuardAuth("/v1/update", {
+      method: "POST",
+      redirect: "error",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ handoff_to_desktop: true }),
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    const message =
+      stringValue(payload.message) ??
+      stringValue(payload.error) ??
+      `Guard update failed with ${response.status}`;
+    throw new Error(message);
+  }
+  return {
+    handoff_requested: payload.handoff_requested === true,
+    latest_version: stringValue(payload.latest_version),
   };
 }
 

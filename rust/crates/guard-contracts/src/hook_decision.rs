@@ -14,7 +14,14 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::{CodexToolOutputFactsV1, NativeExtensionControlLayerV1};
+use crate::{
+    ArtifactBrowserOutcomeInputsV1, ArtifactBrowserOutcomeV1, ArtifactFinalizeInputsV1,
+    ArtifactFinalizeV1, ArtifactReusePlanV1, ArtifactReuseStepInputsV1,
+    ClaudePermissionVerdictInputsV1, ClaudePermissionVerdictV1, CodexToolOutputFactsV1,
+    ContainmentRouteInputsV1, ContainmentRouteV1, ContainmentSinkInputsV1, ContainmentSinkV1,
+    HookRouteInputsV1, HookRouteV1, NativeExtensionControlLayerV1, NativePermissionPersistInputsV1,
+    NativePermissionPersistPlanV1, PretoolFloorInputsV1, PretoolFloorV1,
+};
 
 /// Schema discriminator for the request.
 pub const HOOK_DECISION_REQUEST_SCHEMA: &str = "guard-hook-decision-request.v1";
@@ -22,6 +29,38 @@ pub const HOOK_DECISION_REQUEST_SCHEMA: &str = "guard-hook-decision-request.v1";
 pub const HOOK_DECISION_RESULT_SCHEMA: &str = "guard-hook-decision-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const HOOK_DECISION_FEATURE: &str = "hook-decision-v1";
+
+/// Advertised separately because the composed post-claim request carries the
+/// claimed approval's context token and expects the reuse decision back: a
+/// resident that predates it would reject those fields as unknown after the
+/// claim had already been consumed, so a caller asks for this first.
+pub const HOOK_DECISION_POST_CLAIM_COMPOSE_FEATURE: &str = "hook-decision-post-claim-compose-v1";
+
+/// Advertised when the resident answers `artifact_directive`, the artifact
+/// hook's response directive; a resident that predates it rejects the query.
+pub const HOOK_DECISION_ARTIFACT_DIRECTIVE_FEATURE: &str = "hook-decision-artifact-directive-v1";
+
+/// Advertised when the resident answers `artifact_review_route`, the route the
+/// artifact hook takes once its verdict needs review; a resident that predates
+/// it rejects the query.
+pub const HOOK_DECISION_ARTIFACT_REVIEW_ROUTE_FEATURE: &str =
+    "hook-decision-artifact-review-route-v1";
+
+/// Advertised when a directive carries `json_exit_code`, the status the JSON
+/// document itself exits with. A resident that predates the field omits it,
+/// and the caller decodes a directive by its exact key set, so a reply from
+/// the older resident would be rejected and every hook decision would fail
+/// closed after an upgrade until it is retired. Callers that read a directive
+/// demand this capability so the older resident is replaced instead.
+pub const HOOK_DECISION_JSON_EXIT_CODE_FEATURE: &str = "hook-decision-json-exit-code-v1";
+/// Advertised when `native_edge` carries `reason_code`, the reason the edge
+/// result reached its action. `HookNativeEdgeV1` denies unknown fields, so a
+/// resident that predates the field rejects every composition, settlement and
+/// finalize request that names it, and the hook fails closed as unavailable
+/// until that resident retires. Callers that send an edge demand this
+/// capability so the older resident is replaced instead. It ships with
+/// `hook-decision-json-exit-code-v1`.
+pub const HOOK_DECISION_NATIVE_EDGE_REASON_FEATURE: &str = "hook-decision-native-edge-reason-v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -39,7 +78,7 @@ pub enum HookDecisionQueryV1 {
         inputs: Box<HookCompositionInputsV1>,
     },
     /// Derive the inputs of the approval-reuse re-evaluation after a claim.
-    PostClaimReuse { inputs: PostClaimInputsV1 },
+    PostClaimReuse { inputs: Box<PostClaimInputsV1> },
     /// Settle the final action, record dispositions and the response directive.
     Finalize {
         inputs: Box<HookCompositionInputsV1>,
@@ -47,6 +86,111 @@ pub enum HookDecisionQueryV1 {
     },
     /// Settle a Copilot tool call: the final action and the effects to run.
     CopilotSettle { inputs: Box<CopilotSettleInputsV1> },
+    /// The artifact hook's response directive: which branch renders its
+    /// settled verdict, with which emitter, reason, message and exit code.
+    ArtifactDirective {
+        inputs: Box<ArtifactDirectiveInputsV1>,
+    },
+    /// What to save for a Claude-native approval: the stored hash, the policy
+    /// action, the audit events and the inventory disposition.
+    NativePermissionPersistPlan {
+        inputs: Box<NativePermissionPersistInputsV1>,
+    },
+    /// The artifact hook's review route: whether a review-tier or terminal
+    /// verdict is recorded without a prompt, observed, answered natively or
+    /// queued for approval.
+    ArtifactReviewRoute {
+        inputs: Box<ArtifactReviewRouteInputsV1>,
+    },
+    /// The artifact hook's final-action settle: the normalized final action,
+    /// the decision record's key, the evidence patch and the receipt fields.
+    ArtifactFinalize {
+        inputs: Box<ArtifactFinalizeInputsV1>,
+    },
+    /// Whether a browser approval outcome settles the artifact hook, and how
+    /// the hook ends once it does.
+    ArtifactBrowserOutcome {
+        inputs: Box<ArtifactBrowserOutcomeInputsV1>,
+    },
+    /// The artifact hook's approval-reuse state machine: the plan of effects
+    /// (claim, revalidate) and the settlement the request reaches.
+    ArtifactReuseStep {
+        inputs: Box<ArtifactReuseStepInputsV1>,
+    },
+    /// The hook pipeline's dispatch route: which handlers answer a prepared
+    /// payload, in what order.
+    HookRoute { inputs: Box<HookRouteInputsV1> },
+    /// The PreToolUse floor: the action the resident pre-tool review holds
+    /// the hook verdict at, if any.
+    PretoolFloor { inputs: Box<PretoolFloorInputsV1> },
+    /// Whether a native PreToolUse result is routed toward the contained
+    /// sink, through this device's local CLI grant, or not at all.
+    ContainmentRoute {
+        inputs: Box<ContainmentRouteInputsV1>,
+    },
+    /// Whether a rendered receipt is rewritten into the contained sink.
+    ContainmentSink {
+        inputs: Box<ContainmentSinkInputsV1>,
+    },
+    /// The verdict for Claude Code's permission dialog: no decision, the
+    /// Guard approval question, a review deferring to Claude's dialog, or a
+    /// deny.
+    ClaudePermissionVerdict {
+        inputs: Box<ClaudePermissionVerdictInputsV1>,
+    },
+}
+
+/// Facts the artifact hook's review route depends on. The transport gathers
+/// them; which branch they select is the resident's answer.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ArtifactReviewRouteInputsV1 {
+    /// The harness name as the hook was invoked.
+    pub harness: String,
+    /// The canonical adapter name the transport resolved for `harness`.
+    pub canonical_harness: String,
+    pub event: String,
+    pub policy_action: String,
+    /// The reviewed artifact's type, such as `tool_action_request`.
+    pub artifact_type: String,
+    /// The harness's posture records only (Watch).
+    pub observe_mode: bool,
+    /// Blocked requests are offered for approval (`blocked_request_mode`).
+    pub asks_for_approval: bool,
+    /// `--json` was passed.
+    pub json: bool,
+    /// The response is written to a caller-owned stream, not stdout.
+    pub output_stream_present: bool,
+    /// The prompt asks to bypass Guard, so it is never offered for approval.
+    pub prompt_hard_block: bool,
+    /// The prompt asks for local secrets.
+    pub prompt_secret_read: bool,
+}
+
+/// Facts the artifact hook's response directive depends on. The verdict is
+/// already settled; these only pick how it is rendered.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ArtifactDirectiveInputsV1 {
+    /// The harness name as the hook was invoked.
+    pub harness: String,
+    /// The canonical adapter name the transport resolved for `harness`.
+    pub canonical_harness: String,
+    pub event: String,
+    pub policy_action: String,
+    /// `--json` was passed.
+    pub json: bool,
+    /// The response is written to a caller-owned stream, not stdout.
+    pub output_stream_present: bool,
+    /// The payload replays a decision recorded upstream (`artifact_id` and
+    /// `policy_action` both present).
+    pub replayed: bool,
+    /// A live approval context is attached to this response.
+    pub approval_context_present: bool,
+    /// The prompt asks to bypass Guard, so it is never offered for approval.
+    pub prompt_hard_block: bool,
+    /// The prompt asks for local secrets.
+    pub prompt_secret_read: bool,
 }
 
 /// Facts for one Copilot `preToolUse` or `permissionRequest` call.
@@ -209,6 +353,11 @@ pub struct HookNativeEdgeV1 {
     pub minimum_action: Value,
     #[serde(default)]
     pub decision: Value,
+    /// The edge result's `reason_code`. A network protection review is a match
+    /// against the synced bundle rather than an unproven command, so the floor
+    /// keeps it before execution.
+    #[serde(default)]
+    pub reason_code: Value,
 }
 
 /// What the transport learned after the lookups the composition permitted.
@@ -250,7 +399,30 @@ pub struct PostClaimInputsV1 {
     #[serde(default)]
     pub reuse_saved_action: Option<Value>,
     pub post_claim_refresh_failed: bool,
-    pub context_changed: bool,
+    /// Whether the request's context moved since the claimed approval was
+    /// saved, when the caller compared the two tokens itself. A caller that
+    /// names both tokens below leaves this out and the resident compares them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_changed: Option<bool>,
+    /// The context token the claimed approval was stored under. Naming it asks
+    /// the resident to compare the tokens and to compose what the re-evaluated
+    /// claim means for reuse, so the caller makes one request instead of three.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claimed_context_token: Option<Value>,
+    /// The context token recomputed for this request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_context_token: Option<Value>,
+    /// The claimed row was approved locally in this session.
+    ///
+    /// Optional because the request digest binds the caller's own wire form:
+    /// a caller that names the flag gets it back, one that leaves it out gets
+    /// nothing back, and either shape re-serialises to what was sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fresh_local_approval: Option<bool>,
+    /// The claimed row is a durable approval for this exact artifact, optional
+    /// for the same reason.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub durable_exact_approval: Option<bool>,
     pub has_ignored_integrity: bool,
     /// The claimed row no longer matches the authenticated saved row.
     pub claim_row_invalid: bool,
@@ -285,8 +457,29 @@ pub enum HookDecisionPayloadV1 {
     PostClaimReuse {
         current_action: String,
         validation_reason: Option<String>,
+        /// The reuse decision for the re-evaluated claim, present when the
+        /// request named the claimed approval's context token.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reuse: Option<Value>,
     },
     Finalize(Box<HookFinalV1>),
+    ArtifactDirective(Box<HookResponseDirectiveV1>),
+    NativePermissionPersistPlan(Box<NativePermissionPersistPlanV1>),
+    ArtifactReviewRoute(Box<ArtifactReviewRouteV1>),
+    ArtifactFinalize(Box<ArtifactFinalizeV1>),
+    ArtifactBrowserOutcome(Box<ArtifactBrowserOutcomeV1>),
+    ArtifactReuseStep {
+        plan: Box<ArtifactReusePlanV1>,
+    },
+    HookRoute(Box<HookRouteV1>),
+    PretoolFloor(Box<PretoolFloorV1>),
+    ContainmentRoute(Box<ContainmentRouteV1>),
+    ContainmentSink(Box<ContainmentSinkV1>),
+    ClaudePermissionVerdict {
+        /// Facts still missing; resubmit with them when non-empty.
+        needs_facts: Vec<String>,
+        verdict: Option<Box<ClaudePermissionVerdictV1>>,
+    },
     CopilotSettle {
         /// Facts still missing; resubmit with them when non-empty.
         needs_facts: Vec<String>,
@@ -406,6 +599,32 @@ pub struct HookFinalV1 {
     pub directive: HookResponseDirectiveV1,
 }
 
+/// Which branch the artifact hook takes for a verdict, and what each branch
+/// is told. The transport runs the branch and decides nothing itself.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ArtifactReviewRouteV1 {
+    /// `continue`, `silent_review`, `silent_block`, `observe`,
+    /// `copilot_response`, `native_response` or `queue_approval`.
+    pub route: String,
+    /// How a terminal verdict's response copy is closed: `none`, `enforce` or
+    /// `observe` (Watch records the terminal verdict it did not enforce).
+    pub terminalize: String,
+    /// Claude's permission notice is recorded (and, when answered natively,
+    /// printed) for this review.
+    pub record_claude_notice: bool,
+    /// Cursor's native prompt carries the queued approval request ids.
+    pub attach_cursor_request_ids: bool,
+    /// `none`, `claude_punctuated`, `claude_prompt_secret` or
+    /// `claude_prompt_sensitive`.
+    pub system_message: String,
+    /// `none`, `claude_prompt_secret` or `claude_prompt_sensitive`.
+    pub additional_context: String,
+    /// Present on the silent routes: the action converted to a block and the
+    /// lead sentence of what the agent is told. `silent_review` records the
+    /// review-tier denial in the inbox; `silent_block` records nothing.
+    pub silent_review: Option<HookSilentReviewV1>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HookSilentReviewV1 {
     /// The review-tier action that was converted to a block.
@@ -433,17 +652,32 @@ pub struct HookResponseDirectiveV1 {
     pub emitter: String,
     /// `None` leaves the exit code to the host adapter (grok).
     pub exit_code: Option<i32>,
+    /// The status a JSON-document response carries. A replayed decision
+    /// relaxes `exit_code` to 0 so the fallback envelope acknowledges without
+    /// re-blocking, but the document answers before that branch and keeps the
+    /// harness's own status. `None` leaves it to the host adapter (grok).
+    pub json_exit_code: Option<i32>,
     /// For an exit block: write the stderr explanation only on a non-zero exit.
     pub stderr_only_on_nonzero_exit: bool,
-    /// `always`, `with_approval_context` or `never`.
+    /// `always`, `with_approval_context`, `never`, or `artifact_codex` (the
+    /// Codex reason quoting the approval context or else the review hint).
     pub codex_native_reason: String,
     pub include_remediation: bool,
     pub terminal_notice: bool,
-    /// `none`, `claude_punctuated` or `codex_prompt`.
+    /// `none`, `claude_punctuated`, `codex_prompt`, `claude_prompt_secret` or
+    /// `claude_prompt_sensitive`.
     pub system_message: String,
     pub try_json_document: bool,
     /// `native_response`, `post_tool_envelope` or `fallback_envelope`.
     pub after_json: String,
     /// `block` or `allow`.
     pub envelope_decision: String,
+    /// Artifact directive only: whether an exit block also writes its stderr
+    /// explanation (grok's adapter owns its exit and writes none).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_block_stderr: Option<bool>,
+    /// Artifact directive only: the JSON document's reason, `copilot` (the
+    /// Copilot approval copy) or `harness` (the harness reason).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub json_reason: Option<String>,
 }

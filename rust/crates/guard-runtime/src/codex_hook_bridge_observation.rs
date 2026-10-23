@@ -90,8 +90,7 @@ pub(super) fn write(hook_input: &str, envelope: &PyVal) {
     }
 }
 
-#[path = "codex_hook_bridge_observation_receipt.rs"]
-mod receipt;
+use crate::native_decision_receipt as receipt;
 
 #[cfg(all(test, unix))]
 #[path = "codex_hook_bridge_observation_tests.rs"]

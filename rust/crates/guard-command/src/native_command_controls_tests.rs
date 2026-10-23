@@ -25,7 +25,7 @@ fn test_containment_requirement_cannot_override_lockdown() {
     binding.effective_digest = binding.compute_effective_digest().unwrap();
     assert_eq!(
         evaluate(&binding, "python3 -m pytest -q").minimum_action,
-        if cfg!(target_os = "macos") {
+        if cfg!(any(target_os = "macos", windows)) {
             "sandbox-required"
         } else {
             "review"
@@ -544,4 +544,57 @@ fn only_an_expired_deadline_gets_the_try_again_reason() {
         failed(Some(Instant::now() - std::time::Duration::from_secs(1))),
         super::floor::EXPIRED_DEADLINE_REASON
     );
+}
+
+#[test]
+fn recursive_removal_floor_asks_unless_it_removes_a_root() {
+    let floor = |command: &str| {
+        crate::command_critical_floors::command_critical_floor_factors(
+            &crate::critical_floor_context::parse_floor_command(command, None, None),
+            None,
+            &[],
+        )
+        .into_iter()
+        .find(|factor| factor.reason_code == "critical.destructive-filesystem")
+        .map(|factor| factor.basis.action_floor)
+    };
+    for command in [
+        "rm -rf ./stale-lab-dir",
+        "rm -rf build node_modules",
+        "rm -rf /srv/app/releases/old",
+        "rm -rf dist/*",
+    ] {
+        assert_eq!(
+            floor(command),
+            Some(crate::effect_decision::GuardAction::Review),
+            "{command}"
+        );
+    }
+    for command in [
+        "rm -rf /",
+        "rm -rf /*",
+        "rm -rf ~",
+        "rm -rf ~/*",
+        "rm -rf /etc",
+        "rm -rf ~/Documents",
+        "rm -rf $HOME",
+        "rm -rf \"$TARGET\"",
+        // From the session's directory these can reach the home or a root.
+        "rm -rf {/,/etc}",
+        "rm -rf .",
+        "rm -rf ./",
+        "rm -rf ..",
+        "rm -rf ../*",
+        "rm -rf *",
+        "rm -rf ./*",
+        // xargs appends the paths it reads after the visible operands.
+        "echo / | xargs rm -rf x",
+        "xargs rm -rf BUILD",
+    ] {
+        assert_eq!(
+            floor(command),
+            Some(crate::effect_decision::GuardAction::Block),
+            "{command}"
+        );
+    }
 }

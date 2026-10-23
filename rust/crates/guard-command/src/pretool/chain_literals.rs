@@ -20,6 +20,8 @@ pub(crate) mod inert;
 #[path = "chain_literals_launch.rs"]
 mod launch;
 use launch::{launches_as_judged, reviewed};
+#[path = "chain_literals_home.rs"]
+mod home;
 #[path = "chain_literals_pwd.rs"]
 mod pwd;
 
@@ -30,10 +32,12 @@ const MAX_BINDINGS: usize = 32;
 // Word lists below are whitespace-separated and matched whole.
 
 /// Builtins and zsh commands that can set a variable or run text as shell
-/// code. A chain that calls one has bindings this recognizer cannot track.
+/// code, as `zstyle -e` and zregexparse's actions do. A chain that calls one
+/// has bindings this recognizer cannot track.
 const STATE_COMMANDS: &str = ". alias autoload builtin declare emulate enable eval exec export \
     float function getopts integer let local mapfile private read readarray readonly select set \
-    setopt shopt source trap typeset unalias unset unsetopt vared wait zmodload zparseopts";
+    setopt shopt source trap typeset unalias unset unsetopt vared wait zmodload zparseopts \
+    zregexparse zstyle";
 
 /// Reserved words. A literal in their place would be parsed as syntax,
 /// while the expansion it replaces is an ordinary word.
@@ -79,6 +83,8 @@ struct Binding {
 
 /// The extension controls cannot see through an expansion they do not model.
 const EVALUATION_FAILED: &str = "native_command_extension_evaluation_failed";
+/// A command the workspace sandbox runs because no rule proves it.
+const CONTAINED: &str = "native_workspace_containment_required";
 
 /// Replace a raw review with the verdict for the substituted command, which
 /// runs the same words, or the same words with each value-producing command
@@ -124,10 +130,28 @@ pub(super) fn rejudge(
             return projected;
         }
     }
+    // `dirname` reads no file but no read rule names it, so on its own it
+    // runs in the workspace sandbox. The contained run prints the same path,
+    // so that verdict lets it name the parent too.
+    let produces = |body: &str| {
+        let verdict = evaluate(&super::payload_with_command(payload, &command, body));
+        verdict.minimum_action == "allow"
+            || (body.starts_with("dirname ")
+                && verdict.minimum_action == "sandbox-required"
+                && verdict.reason_code == CONTAINED)
+    };
     let unopened = opened.as_deref().unwrap_or(&command);
-    let directory = context.cwd.and_then(|cwd| pwd::project(unopened, cwd));
+    let directory = context
+        .cwd
+        .and_then(|cwd| pwd::project(unopened, cwd, produces));
     let base = directory.as_deref().unwrap_or(unopened);
-    let Some(substituted) = substitute(base).or(directory).or(opened) else {
+    // `$HOME` names the declared home only while the shell's HOME does.
+    let homed = context
+        .home_dir
+        .filter(|_| context.shell_home_matches)
+        .and_then(|home| home::project(base, home));
+    let base = homed.as_deref().unwrap_or(base);
+    let Some(substituted) = substitute(base).or(homed).or(directory).or(opened) else {
         return raw;
     };
     let projected_payload = super::payload_with_command(payload, &command, &substituted);

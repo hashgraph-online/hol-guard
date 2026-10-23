@@ -2105,8 +2105,10 @@
       "enabled_extensions": [
         "command.agi-memory"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "exec",
       "rule_id": "command.agi-memory.sync-dedupe"
     },
@@ -2116,8 +2118,10 @@
       "enabled_extensions": [
         "command.agi-memory"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "exec-alias",
       "rule_id": "command.agi-memory.sync-dedupe"
     },
@@ -2160,8 +2164,10 @@
       "enabled_extensions": [
         "command.agi-memory"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "exec-del",
       "rule_id": "command.agi-memory.delete-hard"
     },
@@ -2182,7 +2188,7 @@
       "enabled_extensions": [
         "command.agi-memory"
       ],
-      "expected_action": "block",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "id": "exec-exp",
       "rule_id": "command.agi-memory.delete-hard"

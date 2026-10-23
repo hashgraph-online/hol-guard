@@ -10,43 +10,41 @@ use guard_contracts::{
     NATIVE_COMMAND_RECEIPT_BINDING_SCHEMA,
 };
 
-use crate::native_command_program::{digest_value, packaged_command_program, NativeCommandProgram};
+use crate::native_command_program::{
+    digest_value, packaged_command_program, CommandCandidateIndex, NativeCommandProgram,
+};
 use crate::CanonicalCommandV1;
 
+#[path = "native_command_controls_admission.rs"]
+mod admission;
+#[path = "native_command_controls_mcp.rs"]
+mod mcp;
 #[path = "native_command_controls_risk.rs"]
 mod risk;
 
 #[derive(Debug)]
 pub struct CompiledNativeCommandControls {
     program: Arc<NativeCommandProgram>,
+    catalog: Option<Arc<crate::native_command_catalog::CommandCatalog>>,
     binding: NativeCommandControlBindingV1,
     active_extensions: BTreeSet<String>,
+    candidate_index: CommandCandidateIndex,
     blocked_extensions: BTreeSet<String>,
     blocked_permissions: BTreeSet<String>,
     explicitly_enabled_permissions: BTreeSet<String>,
     global_block: bool,
     rule_indices: BTreeMap<String, usize>,
+    quarantine_index: Option<CommandCandidateIndex>,
+    quarantine_pending: bool,
 }
 
 impl CompiledNativeCommandControls {
-    pub fn new(binding: &NativeCommandControlBindingV1) -> Result<Self, &'static str> {
-        Self::for_program(binding, packaged_command_program()?)
-    }
-
-    // Production always supplies the packaged, attested program through new().
-    // The crate-local seam also lets diagnostic tests vary real compiled
-    // catalogs without duplicating any control admission or evaluation logic.
-    pub(crate) fn for_program(
+    fn for_program_inner(
         binding: &NativeCommandControlBindingV1,
         program: Arc<NativeCommandProgram>,
+        retain_inactive: bool,
     ) -> Result<Self, &'static str> {
-        binding.validate()?;
-        if binding.program_digest != program.program_digest
-            || binding.catalog_digest != program.catalog_digest
-            || binding.trust_digest != program.trust_digest
-        {
-            return Err("native_command_program_binding_mismatch");
-        }
+        admission::validate_binding(binding, &program)?;
         let extension_indices: BTreeMap<_, _> = program
             .extensions
             .iter()
@@ -68,22 +66,20 @@ impl CompiledNativeCommandControls {
         // It cannot opt in external code or carry any permission override.
         // The snapshot store rejects this baseline after a protected floor has
         // ever been retained, including across expiry, quarantine and restart.
-        let initial_defaults = binding.health == "unenrolled"
-            && binding.revision == 0
-            && binding.managed_revision == 0
-            && binding.layers.is_empty()
-            && binding.authority.as_ref().is_some_and(|authority| {
-                authority.epoch == 1
-                    && authority.authority_key_id == "0".repeat(64)
-                    && authority.recovery.is_none()
-            });
+        let initial_defaults = binding.is_initial_defaults();
         let mut global_block = binding.health != "protected" && !initial_defaults;
         for layer in &binding.layers {
             global_block |= layer.global_lockdown;
             for control in &layer.controls {
                 let is_extension = control.target_kind == "extension";
-                if (is_extension && !extension_indices.contains_key(control.target_id.as_str()))
-                    || (!is_extension && !permissions.contains_key(control.target_id.as_str()))
+                let unknown = (is_extension
+                    && !extension_indices.contains_key(control.target_id.as_str()))
+                    || (!is_extension && !permissions.contains_key(control.target_id.as_str()));
+                if unknown
+                    && (!retain_inactive
+                        || !admission::may_retain_inactive(control, &layer.kind, |owner| {
+                            extension_indices.contains_key(owner)
+                        }))
                 {
                     return Err("native_command_control_target_unknown");
                 }
@@ -168,6 +164,8 @@ impl CompiledNativeCommandControls {
             .map(|(index, rule)| (rule.rule_id.clone(), index))
             .collect();
         Ok(Self {
+            catalog: None,
+            candidate_index: CommandCandidateIndex::for_active(&program, &active_extensions),
             program,
             binding: binding.clone(),
             active_extensions,
@@ -176,6 +174,8 @@ impl CompiledNativeCommandControls {
             explicitly_enabled_permissions,
             global_block,
             rule_indices,
+            quarantine_index: None,
+            quarantine_pending: false,
         })
     }
 
@@ -264,9 +264,9 @@ impl CompiledNativeCommandControls {
         // so it takes the strongest of their floors and never less than review.
         // An unmodeled command already carries the floor of its possible owners.
         let mut uncertain_floor: Option<&'static str> = unmodeled;
-        // Uncertainty about a Git rule the user explicitly allowed reviews only
-        // when that Allow does not cover the whole command, or the command runs
-        // in a repository Guard could not inspect (below).
+        // Uncertainty about a rule the user explicitly allowed reviews only
+        // when that Allow does not cover the whole command, or a segment runs
+        // a shape Guard could not inspect (below).
         let mut enabled_uncertainty = false;
         for observation in &batch.observations {
             if !observation.uncertainty_reasons.is_empty() {
@@ -391,6 +391,7 @@ impl CompiledNativeCommandControls {
             reason = "native_command_extension_evaluation_failed";
         }
         strengthen(&mut result, floor, reason);
+        self.enforce_quarantine(command, tool, &mut result);
         floor::explain_expired_deadline(&mut result, deadline);
         let global_lockdown = self
             .binding
@@ -451,6 +452,8 @@ impl CompiledNativeCommandControls {
 
 #[path = "native_command_delegated.rs"]
 mod delegated;
+#[path = "native_command_quarantine.rs"]
+mod quarantine;
 pub(crate) use delegated::normalized_tool;
 
 #[path = "native_command_controls_floor.rs"]
@@ -460,7 +463,10 @@ mod precedence;
 #[path = "native_command_unmodeled.rs"]
 mod unmodeled;
 use floor::{add_authority_repair_hint, rank, rule_floor, strengthen};
-pub(crate) use unmodeled::{python_is_builtin_only, python_stdin, unread_file_interpreter};
+pub(crate) use unmodeled::{
+    bounds_its_owners, launcher_body, prefix_reads_a_program_file, python_is_builtin_only,
+    python_stdin, unread_file_interpreter,
+};
 
 #[cfg(test)]
 #[path = "native_command_controls_tests.rs"]
@@ -473,6 +479,10 @@ mod uncertainty_regressions;
 #[cfg(test)]
 #[path = "native_command_precedence_tests.rs"]
 mod precedence_regressions;
+
+#[cfg(test)]
+#[path = "native_command_precedence_generic_tests.rs"]
+mod precedence_generic_regressions;
 
 #[cfg(test)]
 #[path = "native_command_compound_controls_tests.rs"]

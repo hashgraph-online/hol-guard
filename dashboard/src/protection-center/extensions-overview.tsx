@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } fr
 import { extensionEffectiveState } from "../extension-control-center-model";
 import type { CatalogReadModel } from "../extension-catalog-v2";
 import type { EffectiveExtensionControls, ExtensionCatalogSummary } from "../extension-controls-api";
+import { CODEX_HOST_FALLBACK, CONFIGURED_CONNECTIONS_FALLBACK, discoveryFailureMessage } from "../discovery-failure";
 import { fetchExtensionDiscoveryApi } from "../guard-api";
 import {
   connectorWorkspaceItems,
@@ -101,8 +102,11 @@ export function ExtensionsOverview(props: {
     setHostDiscoveryError(null);
     const reload = async () => { if (!controller.signal.aborted) await reloadConnections.current(); };
     const configured = refreshMcpInventory("inventory:configured", controller.signal, true, discoveryAttempt > 0)
-      .then(reload).catch(() => {
-        if (!controller.signal.aborted) setDiscoveryError("Could not check host configuration. Known connections remain available.");
+      .then(reload).catch((error: unknown) => {
+        // The reason a scan failed decides what the reader does next, so the
+        // authored guidance for this code reaches the banner instead of one
+        // sentence that fits every failure and names no action.
+        if (!controller.signal.aborted) setDiscoveryError(discoveryFailureMessage(error, CONFIGURED_CONNECTIONS_FALLBACK));
       });
     let hostRunning = false;
     const refreshHost = async (force: boolean) => {
@@ -111,8 +115,8 @@ export function ExtensionsOverview(props: {
       try {
         await refreshCodexHostInventory(controller.signal, force);
         if (!controller.signal.aborted) setHostDiscoveryError(null);
-      } catch {
-        if (!controller.signal.aborted) setHostDiscoveryError("Could not read Codex app inventory. Known connections remain available.");
+      } catch (error: unknown) {
+        if (!controller.signal.aborted) setHostDiscoveryError(discoveryFailureMessage(error, CODEX_HOST_FALLBACK));
       } finally {
         await reload();
         hostRunning = false;

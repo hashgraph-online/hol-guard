@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { GUARD_ACTIONS } from "./guard-types";
 import {
+  GUARD_REVIEW_INTENT_COPY,
   guardActionActivityCopy,
   guardActionDisposition,
   guardActionPresentation,
@@ -58,3 +59,13 @@ assert.equal(
 );
 
 console.log("guard-action.test.ts: all tests passed");
+
+{
+  assert.equal(GUARD_REVIEW_INTENT_COPY.setup.action, "Set up once", "setup reviews say set up once");
+  assert.equal(GUARD_REVIEW_INTENT_COPY.approve.action, "Approve this", "per-action reviews say approve this");
+  assert.notEqual(
+    GUARD_REVIEW_INTENT_COPY.setup.label,
+    GUARD_REVIEW_INTENT_COPY.approve.label,
+    "setup and approval reviews never share a label",
+  );
+}

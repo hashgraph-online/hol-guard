@@ -385,3 +385,6 @@ fn other_clis_rows_do_not_leak_across_cli_ids() {
 
 #[path = "local_cli_grant_op_store_tests.rs"]
 mod store;
+
+#[path = "local_cli_grant_op_capability_tests.rs"]
+mod capability;

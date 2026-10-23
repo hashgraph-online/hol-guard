@@ -1,7 +1,19 @@
 {
   "_comment": "Installed-acceptance expectations, held independently of the product's own hook contracts. The lane asserts against this file so that emptying or narrowing a product contract cannot make the lane pass by agreement. Update it deliberately when a harness genuinely changes shape, and say why in the pull request.",
-  "version": 1,
+  "version": 2,
   "harnesses": {
+    "zcode": {
+      "config": ".zcode/cli/config.json",
+      "format": "json",
+      "hooks_key": "hooks",
+      "events_key": "events",
+      "required_events": [
+        "SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest",
+        "PostToolUse", "PostToolUseFailure", "Stop"
+      ],
+      "replay_event": "PreToolUse",
+      "replay": true
+    },
     "claude-code": {
       "config": ".claude/settings.json",
       "format": "json",

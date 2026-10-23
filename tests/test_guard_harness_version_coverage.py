@@ -122,6 +122,15 @@ class TestManifestValidation:
         assert load.error is None and load.manifest is not None
         assert load.manifest.harnesses["omp"].records == ()
 
+    def test_bundled_manifest_links_to_how_coverage_works(self) -> None:
+        # With no records yet, the card's links are the only guidance it gives.
+        load = load_manifest()
+        assert load.manifest is not None
+        link = load.manifest.harnesses["omp"].remediation[0]
+        prefix = "https://github.com/hashgraph-online/hol-guard/blob/main/"
+        assert link.url.startswith(prefix)
+        assert (Path(__file__).resolve().parents[1] / link.url.removeprefix(prefix)).is_file()
+
     @pytest.mark.parametrize("version", ["18.x", "^18.4.12", ">=18.4.12 <19", "18.4.12 - 18.8.3", "*"])
     def test_rejects_ranges(self, version: str) -> None:
         with pytest.raises(ManifestError, match="exact version"):

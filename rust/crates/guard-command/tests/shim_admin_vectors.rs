@@ -149,6 +149,7 @@ fn run_call(context: &ShimContext, subop: &str, args: &Value) -> Result<Value, S
     match subop {
         "status" => to_value(shims::package_shim_status(context, path_env)),
         "dashboard_status" => to_value(shims::package_shim_dashboard_status(context)),
+        "protection_projection" => to_value(shims::package_shim_protection(context)),
         "cloud_coverage" => shims::package_shim_cloud_coverage(
             context,
             args.get("generated_at").and_then(Value::as_str),

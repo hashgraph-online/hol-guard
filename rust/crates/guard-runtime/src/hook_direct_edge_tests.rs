@@ -44,17 +44,15 @@ fn only_a_verdict_the_daemon_passes_through_is_answered() {
 }
 
 #[test]
-fn a_block_the_daemon_can_offer_to_repair_defers() {
-    // The daemon adds its repair link to this denial.
+fn an_authority_block_carrying_its_repair_link_is_answered() {
+    // The resident composes the command-control repair link at the edge, so
+    // this denial no longer has to reach the daemon to be told how to recover.
     let repairable = pre_edge(json!({
         "decision": "deny",
         "minimum_action": "block",
         "reason_code": "native_command_control_authority_block",
     }));
-    assert_eq!(
-        pre_tool_answer(&repairable, false),
-        Err(HookDirectDefer::NotAllow)
-    );
+    assert!(pre_tool_answer(&repairable, false).is_ok());
     let other = pre_edge(json!({
         "decision": "deny",
         "minimum_action": "block",

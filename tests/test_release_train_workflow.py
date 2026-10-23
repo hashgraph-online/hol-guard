@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+from tests.release_workflow_helpers import native_wheel_job
 from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,7 +44,7 @@ def test_release_native_binary_and_base_wheel_use_the_same_regenerated_program()
     assert build_steps.index(source_generation) < next(
         index for index, step in enumerate(build_steps) if step.get("name") == "Build Guard package (hol-guard)"
     )
-    steps = jobs["build-native-guard-wheels"]["steps"]
+    steps = native_wheel_job()["steps"]
     verify = next(step for step in steps if step.get("name") == "Verify native command program is current")
     run = verify["run"]
     generate = 'python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"'
@@ -118,6 +119,7 @@ def test_release_branch_pushes_publish_alpha_while_stable_publish_is_manual() ->
         "build",
         "assemble-native-guard-distributions",
         "reserve-main-tag",
+        "publish-main-assets",
     ]
     assert "needs.reserve-main-tag.result == 'success'" in jobs["publish-main-pypi"]["if"]
     assert "needs.publish-main-testpypi.result == 'success'" not in jobs["publish-main-pypi"]["if"]
@@ -186,7 +188,10 @@ def test_manual_release_and_pr_version_stamping_contracts() -> None:
     assert 'elif [[ "$CHANNEL" == "stable" && "$TRAIN" == "main" ]]' in compute_run
     assert "Unsupported release channel and train" in compute_run
     assert "VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py" in compute_run
-    assert 'VERSION=$(BASE_VERSION="$BASE_VERSION" PR_NUMBER="$PR_NUMBER"' in compute_run
+    assert 'VERSION="$RESOLVED_CANARY_VERSION"' in compute_run
+    canary_steps = workflow["jobs"]["resolve-canary-version"]["steps"]
+    canary_run = next(step["run"] for step in canary_steps if step.get("name") == "Compute PR canary version")
+    assert 'VERSION=$(BASE_VERSION="$BASE_VERSION" python3 - <<' in canary_run
     assert 'sync_repo_version.py --version "$VERSION"' in stamp_run and "3.0.0a0" not in stamp_run
 
 
@@ -219,7 +224,11 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     assert "alpha:3.0:refs/heads/release/3.0" in dispatch_gate["run"]
     assert "stable:main:refs/heads/main" in dispatch_gate["run"]
     assert '"$EXPECTED_SHA" != "$GITHUB_SHA"' in dispatch_gate["run"]
-    assert jobs["build"]["needs"] == ["authorize-release", "resolve-alpha-version"]
+    assert jobs["build"]["needs"] == [
+        "authorize-release",
+        "resolve-alpha-version",
+        "resolve-canary-version",
+    ]
     build_condition = jobs["build"]["if"]
     assert "needs.authorize-release.result == 'success'" in build_condition
     assert "github.event_name != 'workflow_dispatch' || github.run_attempt == 1" in build_condition

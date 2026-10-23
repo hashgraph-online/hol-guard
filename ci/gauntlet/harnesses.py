@@ -25,6 +25,8 @@ from typing import Any
 
 from .catalog import Scenario
 from .claude_tools import claude_tools
+from .connector_judge import final_message
+from .mcp_calls import codex_call, codex_result, cursor_call
 
 HARNESSES = ("omp", "claude-code", "codex", "cursor")
 
@@ -145,11 +147,13 @@ class Harness:
         context: str,
         workspace: Path,
         model: str | None,
+        mcp_config: Path | None = None,
     ) -> list[str]:
         """Build a non-interactive, JSON-streaming invocation with the CLI's own approvals off.
 
         A harness-side sandbox or approval prompt could stop a harmful call before it
-        reaches Guard and be miscounted as protection, so only Guard may refuse.
+        reaches Guard and be miscounted as protection, so only Guard may refuse. Claude
+        Code ignores every MCP config but ``mcp_config`` (``--strict-mcp-config``).
         """
         glossary = _TOOL_GLOSSARY[self.name]
         if self.name == "claude-code":
@@ -172,6 +176,8 @@ class Harness:
                 "--tools",
                 claude_tools(scenario),
             ]
+            if mcp_config is not None:
+                command += ["--mcp-config", str(mcp_config)]
             model = self.model(model)
             return command + (["--model", model] if model else [])
         if self.name == "codex":
@@ -280,6 +286,7 @@ class CredentialSeed:
 
     def __init__(self, harness: Harness, source_home: Path, fixture_home: Path):
         self._pairs: list[tuple[Path, Path, bytes]] = []
+        self._readable = False
         for relative in harness.credential_files:
             source, target = source_home / relative, fixture_home / relative
             try:
@@ -291,6 +298,7 @@ class CredentialSeed:
             if os.name == "posix":
                 target.chmod(0o600)
             self._pairs.append((source, target, data))
+            self._readable = self._readable or _login_readable(data)
         self.keychain = False
         keychains = source_home / "Library" / "Keychains"
         if harness.macos_keychain and sys.platform == "darwin" and keychains.is_dir():
@@ -302,6 +310,11 @@ class CredentialSeed:
     @property
     def seeded(self) -> int:
         return len(self._pairs) + int(self.keychain)
+
+    @property
+    def login_usable(self) -> bool:
+        """Whether the fixture HOME carries a login file the CLI can read."""
+        return self._readable
 
     def write_back(self) -> None:
         """Replace the operator's login with a refreshed copy, never a stale or wider-readable one.
@@ -331,6 +344,23 @@ class CredentialSeed:
                     os.replace(temporary, source)
                 finally:
                     temporary.unlink(missing_ok=True)
+
+
+def _login_readable(data: bytes) -> bool:
+    """Whether a copied login file is one the CLI can actually read.
+
+    Every CLI this runner drives keeps its login as a JSON object. An empty,
+    truncated or unparsable copy is one the CLI ignores, so a fixture HOME
+    carrying only that has no login at all and still needs the key forwarded;
+    withholding it there would fail the case on authentication rather than on
+    anything Guard did. Whether the tokens inside are still honoured cannot be
+    known without spending one, so a readable file counts as a login.
+    """
+    try:
+        payload = json.loads(data)
+    except (ValueError, UnicodeDecodeError):
+        return False
+    return isinstance(payload, dict) and bool(payload)
 
 
 _LOCK_WAIT_SECONDS = 60
@@ -374,8 +404,20 @@ def keep_login_shell_path(home: Path, path: str) -> None:
         profile.write(f"export PATH={shlex.quote(path)}\n")
 
 
-def credential_environment(harness: Harness) -> dict[str, str]:
-    """Forward only this harness's own login variables, never other credentials."""
+def credential_environment(harness: Harness, *, login_seeded: bool = False) -> dict[str, str]:
+    """Forward only this harness's own login variables, never other credentials.
+
+    The CLI's tool children inherit whatever it was started with, so a key in
+    this environment is one the model's own commands can print. When the
+    fixture HOME already carries a login file the CLI can read, the CLI
+    authenticates from there and the variable buys nothing, so it is withheld
+    and no command can reach it. An operator who authenticates by key alone has
+    no such file, and so does one whose copy is empty or unparsable: the
+    variable is forwarded rather than failing the case on authentication, and
+    the exported transcripts redact it.
+    """
+    if login_seeded:
+        return {}
     return {key: os.environ[key] for key in harness.credential_env if os.environ.get(key)}
 
 
@@ -386,6 +428,7 @@ def read_transcript(name: str, path: Path) -> dict[str, Any]:
     terminal = False
     failed = False
     errors: list[str] = []
+    final_text = ""
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         line = line.strip()
         if not line.startswith("{"):
@@ -398,6 +441,7 @@ def read_transcript(name: str, path: Path) -> dict[str, Any]:
         if not isinstance(event, dict):
             continue
         kind = event.get("type")
+        final_text = final_message(name, event) or final_text
         if name == "claude-code":
             terminal, failed = _claude_event(event, kind, calls, order, terminal, failed)
         elif name == "codex":
@@ -409,7 +453,13 @@ def read_transcript(name: str, path: Path) -> dict[str, Any]:
     for call_id in order:
         call = calls[call_id]
         normalized.append({**call, "id": call_id, "tool": names.get(call["name"], call["name"])})
-    return {"calls": normalized, "terminal": terminal, "failed": failed, "errors": sorted(set(errors))}
+    return {
+        "calls": normalized,
+        "terminal": terminal,
+        "failed": failed,
+        "errors": sorted(set(errors)),
+        "final_text": final_text,
+    }
 
 
 def _remember(calls: dict, order: list, call_id: Any, name: Any, args: Any) -> None:
@@ -453,6 +503,10 @@ def _codex_event(event: dict, kind: Any, calls: dict, order: list, terminal: boo
             _remember(calls, order, item.get("id"), item_type, {"changes": item.get("changes")})
             if kind == "item.completed":
                 _finish(calls, item.get("id"), item.get("status") != "completed", item.get("changes"))
+        elif item_type == "mcp_tool_call" and (call := codex_call(item)):
+            _remember(calls, order, item.get("id"), *call)
+            if kind == "item.completed":
+                _finish(calls, item.get("id"), *codex_result(item))
     elif kind == "turn.completed":
         return True, failed
     elif kind in {"turn.failed", "error"}:
@@ -467,11 +521,13 @@ def _cursor_event(event: dict, kind: Any, calls: dict, order: list, terminal: bo
         if len(tools) == 1:
             name = tools[0]
             body = wrapper[name] if isinstance(wrapper[name], dict) else {}
-            _remember(calls, order, event.get("call_id"), name, body.get("args"))
+            _remember(calls, order, event.get("call_id"), *cursor_call(name, body))
             if event.get("subtype") == "completed":
                 result = body.get("result")
                 success = result.get("success") if isinstance(result, dict) else None
-                is_error = not isinstance(success, dict) or success.get("exitCode", 0) != 0
+                is_error = not isinstance(success, dict) or (
+                    success.get("exitCode", 0) != 0 or success.get("isError") is True
+                )
                 _finish(calls, event.get("call_id"), is_error, result)
     elif kind == "result":
         return True, event.get("is_error") is True or event.get("subtype") != "success"

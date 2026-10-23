@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import stat
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
@@ -19,10 +21,8 @@ from codex_plugin_scanner.guard.extension_builder.listing import (
     category_for_extension,
     validate_listing,
 )
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_contribution import validate_contribution
 from codex_plugin_scanner.guard.runtime.extension_directory_operations import public_operations
-from codex_plugin_scanner.guard.runtime.extension_trust import trust_class_for
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     catalog_id_for_mcp_id,
     validate_mcp_contribution,
@@ -38,6 +38,26 @@ MAX_SOURCE_BYTES = 1_048_576
 MAX_CATALOG_BYTES = 1_048_576
 MIN_SUMMARY_LENGTH = 20
 MAX_SUMMARY_LENGTH = 2_048
+
+
+@lru_cache(maxsize=1)
+def native_extensions():
+    """Read complete build-time metadata from the native source compiler."""
+    from codex_plugin_scanner.guard.extension_builder.native_source_compiler import compile_source
+    from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import _extension
+
+    spec = importlib.util.spec_from_file_location(
+        "directory_native_build_inputs", ROOT / "scripts/build_native_command_program.py"
+    )
+    if spec is None or spec.loader is None:
+        raise ValueError("Canonical native build inputs are unavailable")
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    compiler = os.environ.get("HOL_GUARD_BUILD_SOURCE_COMPILER")
+    compiled = compile_source(builder.build_request(), compiler=Path(compiler) if compiler else None)
+    if compiled.get("catalog_projection_kind") != "complete":
+        raise ValueError("Public directory requires a complete native source projection")
+    return tuple(_extension(entry) for entry in compiled["catalog"])
 
 
 def _sources(root: Path) -> dict[str, tuple[str, dict[str, object], str]]:
@@ -156,17 +176,21 @@ def _summary_for(listing: dict[str, object], entry: dict[str, object]) -> str:
 def _export_directory(
     sources: dict[str, tuple[str, dict[str, object], str]],
     listing_sources: dict[str, tuple[str, dict[str, object], str]],
+    *,
+    extensions=None,
 ) -> dict[str, object]:
+    if extensions is None:
+        extensions = native_extensions()
     listings = {extension_id: item[1] for extension_id, item in listing_sources.items()}
     mcp_ids = {catalog_id_for_mcp_id(key): key for key in sources if key.startswith("mcp.")}
     entries: list[dict[str, object]] = []
     seen: set[str] = set()
-    for native in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions:
+    for native in extensions:
         extension_id = mcp_ids.get(native.extension_id, native.extension_id)
         source = sources.get(extension_id)
         payload: dict[str, object] = source[1] if source else {}
         listing = listings.get(extension_id, {})
-        external = trust_class_for(native.extension_id) == "external"
+        external = native.trust_class == "external"
         if external and source is None:
             raise ValueError("An external native extension must have a canonical contribution source")
         if native.required:
@@ -195,7 +219,7 @@ def _export_directory(
                     "https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/extensions/README.md",
                 ),
                 "protectionModel": model,
-                "trustClass": trust_class_for(native.extension_id),
+                "trustClass": native.trust_class,
                 "claimPolicy": "provenance" if external else "project",
                 "maintainerGithubIds": listing.get("maintainerGithubIds", []),
                 "sourcePath": source[0] if source else f"contributions/command-sources/{native.extension_id}.json",
@@ -274,11 +298,11 @@ def _render(payload: dict[str, object]) -> str:
     return rendered
 
 
-def render_directories(root: Path = ROOT) -> dict[Path, str]:
+def render_directories(root: Path = ROOT, *, extensions=None) -> dict[Path, str]:
     """Render both public versions from one validated source snapshot."""
 
     sources, listing_sources, command_sources = _snapshot(root)
-    v1 = _export_directory(sources, listing_sources)
+    v1 = _export_directory(sources, listing_sources, extensions=extensions)
     v2 = _export_directory_v2(v1, sources, listing_sources, command_sources)
     return {OUTPUT_V1: _render(v1), OUTPUT_V2: _render(v2)}
 

@@ -32,7 +32,7 @@ class _Resident:
         if self.hold:
             self.entered.set()
             assert self.release.wait(2.0)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
 
 def _published(

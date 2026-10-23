@@ -179,6 +179,9 @@ fn docker_listings_and_loopback_port_probes_need_no_prompt() {
         "docker ps -a",
         "docker images",
         "docker container ls -q",
+        "docker context ls",
+        "docker context ls --format json",
+        "docker context show",
         "docker start app-test-pg",
         "docker start app-test-pg 2>&1 | tail -1",
         "nc -z 127.0.0.1 55433; echo \"probe-status:$?\"",
@@ -198,15 +201,20 @@ fn docker_listings_and_loopback_port_probes_need_no_prompt() {
         ),
         "allow"
     );
-    // Container state that prints environments or project secrets, other
-    // daemons, and network modes that move data keep the review.
+    // Container state that prints environments or project secrets, a log read
+    // that never ends, other daemons, and network modes that move data keep
+    // the review.
     for command in [
         "docker inspect web",
         "docker compose ps",
-        "docker logs web --tail 50",
+        "docker logs --follow web",
+        "docker -H tcp://build.example.com:2376 logs web",
         "docker exec web env",
         "docker -H tcp://build.example.com:2376 ps",
         "docker --context production ps",
+        "docker context use staging",
+        "docker context inspect default",
+        "docker context export prod",
         "DOCKER_HOST=tcp://build.example.com:2376 docker ps",
         "docker stop web",
         "docker restart web",

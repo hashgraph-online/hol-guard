@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import asdict, dataclass
 from typing import Literal
 
@@ -211,6 +210,12 @@ LOCAL_ROUTE_OWNERSHIP = (
     RouteOwnership(route="/audit", persona=("solo", "security_lead"), auth_required=True, writes_state=True),
     RouteOwnership(route="/policy", persona=("solo", "team_manager"), auth_required=True, writes_state=True),
     RouteOwnership(route="/feed-health", persona=("solo", "team_manager"), auth_required=True, writes_state=True),
+    RouteOwnership(
+        route="/releases",
+        persona=("vibe_coder", "solo"),
+        auth_required=True,
+        writes_state=False,
+    ),
     RouteOwnership(route="/settings", persona=("solo",), auth_required=True, writes_state=True),
     RouteOwnership(
         route="/protection/repair",
@@ -380,9 +385,4 @@ LOCAL_API_OWNERSHIP = (
     ApiOwnership(path="/v1/settings/export", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/settings/import", method="POST", category="config", auth_required=True, writes_state=True),
     ApiOwnership(path="/v1/settings/reset", method="POST", category="config", auth_required=True, writes_state=True),
-)
-
-_STABLE_ID_PATTERN = re.compile(
-    r"^(?:(act|inc|snap)_[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f]{32}|[0-9a-f]{64}|guard-receipt-[0-9a-f]{8}-"
-    r"[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
 )

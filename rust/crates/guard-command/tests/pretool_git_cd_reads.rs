@@ -341,3 +341,87 @@ fn remote_url_reads_are_read_only() {
         assert_ne!(result.decision, "allow", "{command}");
     }
 }
+
+// `cd <dir> && <read>; <read>` is how an agent looks at a repository it just
+// moved into. The shell groups it as `(cd <dir> && <head>); <tail>`, which is
+// still read-only, so a Git read that starts a configured helper keeps its
+// proof instead of raising an approval row.
+#[test]
+fn forked_cd_read_lists_keep_the_git_helper_proof() {
+    let (space, _cleanup) = workspace("forked");
+    let repository = shell_word(&space.repository);
+    for command in [
+        format!("cd {repository} && git status --short; git log --oneline -3"),
+        format!("cd {repository} && git log --oneline -3; git status --short"),
+        format!("cd {repository} && ls; git log --oneline -3"),
+        format!("cd {repository} && git log --oneline -3 | head -2; git status --short"),
+        format!("cd {repository} && git log -1 --oneline || git show --stat HEAD"),
+        format!("cd {repository}; git log --oneline -3"),
+    ] {
+        let result = decide(&space, &space.repository, &command);
+        assert_eq!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+        assert_eq!(result.reason_code, "native_exact_safe_command", "{command}");
+    }
+}
+
+// The tail of a forked list runs in the destination when the `cd` succeeded
+// and in the original directory when it failed, so a helper configured in
+// either directory must keep the whole list reviewed.
+#[test]
+fn a_forked_cd_read_list_sees_a_helper_in_either_directory() {
+    let (space, _cleanup) = workspace("forked-helper");
+    // A clean repository inside the helper-configured one: either directory
+    // can be the destination, and either can be the one a failed `cd` leaves
+    // the tail in.
+    let nested = space.repository.join("nested");
+    std::fs::create_dir_all(&nested).unwrap();
+    git(
+        &space.repository,
+        &["init", "--quiet", nested.to_str().unwrap()],
+    );
+    git(
+        &space.repository,
+        &["config", "diff.external", "./synthetic-never-execute"],
+    );
+    // The helper is in the destination the head and tail move to.
+    for command in [
+        format!("cd {} && git log -1; ls", shell_word(&space.repository)),
+        format!("cd {}; git log -1", shell_word(&space.repository)),
+    ] {
+        let result = decide(&space, &space.root, &command);
+        assert_ne!(result.decision, "allow", "{command}");
+        assert!(!result.explicitly_benign, "{command}");
+    }
+    // The helper is in the original directory, which the tail falls back to
+    // when the `cd` fails.
+    for command in [
+        format!("cd {} && ls; git log -1", shell_word(&nested)),
+        format!("cd {}; git log -1", shell_word(&nested)),
+    ] {
+        let result = decide(&space, &space.repository, &command);
+        assert_ne!(result.decision, "allow", "{command}");
+        assert!(!result.explicitly_benign, "{command}");
+    }
+}
+
+// A forked list proves each step on its own, so a write keeps the command
+// reviewed however it is joined to the reads.
+#[test]
+fn a_forked_cd_list_does_not_admit_a_write_step() {
+    let (space, _cleanup) = workspace("forked-write");
+    let repository = shell_word(&space.repository);
+    for command in [
+        format!("cd {repository} && git log -1; git push origin main"),
+        format!("cd {repository} && git status --short || git commit -m wip"),
+        format!("cd {repository}; git push origin main"),
+        format!("cd {repository} && git log -1; rm -rf app"),
+    ] {
+        let result = decide(&space, &space.repository, &command);
+        assert_ne!(result.decision, "allow", "{command}");
+        assert!(!result.explicitly_benign, "{command}");
+    }
+}

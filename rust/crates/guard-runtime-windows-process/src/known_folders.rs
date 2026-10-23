@@ -7,7 +7,8 @@ use winapi::shared::guiddef::GUID;
 use winapi::shared::winerror::S_OK;
 use winapi::um::combaseapi::CoTaskMemFree;
 use winapi::um::knownfolders::{
-    FOLDERID_ProgramFiles, FOLDERID_ProgramFilesX64, FOLDERID_ProgramFilesX86, FOLDERID_Windows,
+    FOLDERID_Profile, FOLDERID_ProgramFiles, FOLDERID_ProgramFilesX64, FOLDERID_ProgramFilesX86,
+    FOLDERID_Windows,
 };
 use winapi::um::shlobj::{SHGetKnownFolderPath, KF_FLAG_DEFAULT};
 
@@ -61,4 +62,11 @@ pub fn trusted_install_roots() -> Vec<PathBuf> {
 /// requesting environment spells it (`SystemRoot`, `windir`).
 pub fn windows_directory() -> Option<PathBuf> {
     known_folder(&FOLDERID_Windows)
+}
+
+/// Return the current user's profile directory. Windows reads it from the
+/// registry, so unlike `USERPROFILE` and the folders expanded from it, the
+/// requesting environment cannot move it.
+pub fn user_profile_directory() -> Option<PathBuf> {
+    known_folder(&FOLDERID_Profile)
 }

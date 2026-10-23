@@ -171,16 +171,13 @@ fn a_local_row_an_identity_named_workspace_never_reads_does_not_stop_it() {
 fn an_identity_the_resident_does_not_resolve_exactly_defers() {
     let (home, connection) = store("portable-unknown");
     let checkout = directory("unknown", Some(REMOTE));
-    let link = std::env::temp_dir().join(format!("hook-saved-link-{}", std::process::id()));
-    let _ = std::fs::remove_file(&link);
-    std::os::unix::fs::symlink(&checkout, &link).unwrap();
-    // The daemon reads the link's own path; the resolver would follow it.
-    let parent = std::fs::canonicalize(link.parent().unwrap()).unwrap();
-    let link = parent.join(link.file_name().unwrap());
-    let link = link.to_str().unwrap();
-    assert_eq!(resolve(link), PortableIdentity::Unknown);
+    // The daemon resolves the part of the name that exists and appends the
+    // rest unread; the resident reaches no part of a name it cannot open,
+    // so a workspace under a directory that is not there defers.
+    let missing = format!("{checkout}/not-here");
+    assert_eq!(resolve(&missing), PortableIdentity::Unknown);
     assert_eq!(
-        status(&connection, &home, link),
+        status(&connection, &home, &missing),
         Err(HookDirectDefer::SavedDecision)
     );
 }

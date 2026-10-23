@@ -1028,7 +1028,8 @@
      }
     },
     "minimum_action": "review",
-    "reason": "Extension review."
+    "reason": "Extension review.",
+    "reason_code": "native_command_review_required"
    },
    "review_binding": "sha256:hint",
    "workspace": "/work/project"
@@ -2061,7 +2062,8 @@
      }
     },
     "minimum_action": "review",
-    "reason": "Extension review."
+    "reason": "Extension review.",
+    "reason_code": "native_command_review_required"
    },
    "review_binding": "sha256:hint",
    "workspace": "/work/project"
@@ -3082,7 +3084,8 @@
      }
     },
     "minimum_action": "review",
-    "reason": "Extension review."
+    "reason": "Extension review.",
+    "reason_code": "native_command_review_required"
    },
    "review_binding": "sha256:hint",
    "workspace": "/work/project"

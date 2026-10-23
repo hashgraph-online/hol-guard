@@ -75,7 +75,6 @@ runs:
         tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources
         tests/test_runtime_transition_configured_inverse.py::test_configured_native_inverse_restores_binding_store_and_selection
         tests/test_python_capability_cleanup_gate.py::test_cleanup_contract_covers_every_scoped_hook_capability
-        tests/test_guard_sandbox.py
       )
       slice_index="${{ inputs.slice-index }}"
       slice_count="${{ inputs.slice-count }}"

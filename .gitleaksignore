@@ -229,3 +229,10 @@ b6926bac2ef58d0794d1df6e2bb9ee401d8ac18b:tests/test_guard_runtime.py:generic-api
 5797263da1a42106da975a2758b427831d1af7d1:rust/crates/guard-scanner/src/field_copy.rs:generic-api-key:151
 # Synthetic policy-integrity test key (bytes 0..31) in an earlier commit; the test now encodes it at runtime.
 7c5f2d735d2186b11c8960434cc2699818f106de:rust/crates/guard-runtime/testdata/policy_integrity_generation/vectors.json:generic-api-key:1424
+# Synthetic scanner test literals in an earlier commit; the tests now build them at runtime.
+7b2c0c34fa06483c0967ab94239e4a24ca2bcca1:rust/crates/guard-scanner/src/code_expression_tests.rs:generic-api-key:141
+7b2c0c34fa06483c0967ab94239e4a24ca2bcca1:rust/crates/guard-scanner/src/code_expression_tests.rs:generic-api-key:150
+
+# Fabricated AWS access key in the first commit of the prompt credential-file
+# scan; the fixture now spells it in two pieces.
+02e6c24fa01278405017441a9d876afaf059eded:rust/crates/guard-command/src/codex_prompt_credential_file_tests.rs:aws-access-token:13

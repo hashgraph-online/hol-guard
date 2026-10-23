@@ -69,13 +69,14 @@ def vitest_arguments(command: Sequence[str]) -> tuple[str, ...]:
 
 
 def prepare_restricted_vitest(
-    command: Sequence[str], *, workspace: Path, cwd: Path | None = None
+    command: Sequence[str], *, workspace: Path, cwd: Path | None = None, home_dir: Path | None = None
 ) -> RestrictedPytestPlan:
     return native_launch_plan(
         "prepare_vitest",
         command,
         workspace=workspace,
         cwd=cwd or workspace,
+        home_dir=home_dir,
         platform=sys.platform,
         backend_executable=None,
         profile=VITEST_READ_ONLY_PROFILE_VERSION,

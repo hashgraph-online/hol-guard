@@ -1,7 +1,7 @@
 """Route Codex contained-test receipts through the PreToolUse ``updatedInput`` rewrite.
 
 Codex applies ``permissionDecision: "allow"`` with ``updatedInput`` from 0.131.0.
-macOS routes every contained profile and Linux the workspace sandbox, as for Z Code.
+Which receipts the sink takes on each host is the resident's answer, as for Z Code.
 Older releases treat that output as an unsupported hook result and run the
 original command, so the bridge rewrites only after it has confirmed the Codex
 process that launched it is new enough. A pre-release counts only when its
@@ -21,7 +21,8 @@ import time
 from pathlib import Path
 from typing import TypeGuard
 
-from .zcode_contained_tests import contained_zcode_response, platform_contains
+from ..native_hook_containment_route import native_containment_sink
+from .zcode_contained_tests import contained_zcode_response
 
 _MIN_VERSION = (0, 131, 0)
 _MAX_ANCESTORS = 6
@@ -53,21 +54,24 @@ def route_codex_containment(
     home_dir: Path | None = None,
     deadline: float | None = None,
 ) -> dict[str, object]:
-    """Rewrite a containment receipt into the contained sink, or keep the denial."""
+    """Rewrite a containment receipt into the contained sink, or keep the denial.
 
-    if (
-        not platform_contains(response)
-        or guard_home is None
-        or not _absolute_hook_home(home_dir)
-        or response.get("policy_action") != "sandbox-required"
-        or response.get("decision") != "deny"
-    ):
+    The resident answers whether the sink takes the call; only then is the
+    running Codex asked whether it applies the rewrite.
+    """
+
+    if guard_home is None or not _absolute_hook_home(home_dir):
         return response
     try:
         payload = json.loads(hook_input)
     except ValueError:
         return response
-    if not isinstance(payload, dict) or payload.get("guard_containment_receipt_only") is True:
+    if not isinstance(payload, dict):
+        return response
+    sink = native_containment_sink(
+        response, harness="codex", bridge=True, payload=payload, guard_home=guard_home, deadline=deadline
+    )
+    if sink.profile is None:
         return response
     executable = launching_codex_executable()
     if executable is None or not codex_applies_updated_input(executable, deadline=deadline):
@@ -82,6 +86,7 @@ def route_codex_containment(
             "package_root": str(Path(__file__).resolve().parents[3]),
         },
         cli_args=["--home", str(home_dir)],
+        sink=sink,
     )
     return routed if routed is not None else response
 

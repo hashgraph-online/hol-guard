@@ -13,7 +13,7 @@ import pytest
 from codex_plugin_scanner.guard.runtime.env_wrapper import parse_env_wrapper
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
-from codex_plugin_scanner.guard.runtime.shell_command_wrappers import normalize_transparent_shell_command
+from tests.shell_wrapper_test_support import native_shell_normalization
 
 
 @pytest.fixture(autouse=True)
@@ -129,7 +129,7 @@ def test_split_string_expands_in_place_with_suffix_and_nested_options() -> None:
 
 
 def test_nested_split_string_env_wrappers_are_bounded_and_unwrapped() -> None:
-    normalized = normalize_transparent_shell_command(
+    normalized = native_shell_normalization(
         "env -S 'env -u PYTHONPATH rg -n fixture src'",
     )
 

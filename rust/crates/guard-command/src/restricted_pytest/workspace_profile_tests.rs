@@ -382,6 +382,11 @@ fn a_linked_worktree_writes_only_shared_stores_and_its_admin_entry() {
             .any(|line| line.starts_with(prefix) && line.contains(needle))
     };
     assert!(line("(allow process-exec", "(subpath \"/w/main\")"));
+    // A linked binary the run just built lives in its private directory.
+    assert!(line(
+        "(allow process-exec",
+        &format!("(subpath \"{}\")", value.private_root.display())
+    ));
     assert!(line("(allow file-read*", "(subpath \"/w/main\")"));
     for tree in ["objects", "refs", "logs"] {
         let needle = format!("(subpath \"/w/main/.git/{tree}\")");

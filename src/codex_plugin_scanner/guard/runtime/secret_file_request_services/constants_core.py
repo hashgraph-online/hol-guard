@@ -249,8 +249,6 @@ _PYTEST_SAFE_FLAGS_WITH_VALUES = frozenset({"-k", "-m", "--maxfail", "--tb"})
 
 _PYTEST_SAFE_FLAGS = frozenset({"-q", "-s", "-v", "-x", "--disable-warnings", "--quiet", "--verbose"})
 
-_PYTHON_INTERPRETER_OPTIONS_WITH_VALUES = frozenset({"--check-hash-based-pycs", "-W", "-X"})
-
 _PYTHON_MODULE_MUTATING_FLAGS = {
     "mypy": frozenset({"--install-types"}),
     "pytest": frozenset({"--basetemp", "--debug", "--junitxml"}),
@@ -286,8 +284,6 @@ _SHELL_TOOL_NAMES = frozenset(
 
 _SHELL_SCRIPT_INTERPRETER_COMMANDS = frozenset({"ash", "bash", "dash", "sh", "zsh", ".", "source"})
 
-_SHELL_COMMAND_STRING_INTERPRETERS = frozenset({"ash", "bash", "dash", "sh", "zsh"})
-
 _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
     {
         "chmod",
@@ -309,8 +305,6 @@ _DESTRUCTIVE_SHELL_COMMANDS = frozenset(
         "unlink",
     }
 )
-
-_UNMODELED_INLINE_INTERPRETER_COMMANDS = frozenset({"perl", "ruby"})
 
 _SAFE_SHELL_REDIRECT_TARGETS = frozenset(
     {
@@ -376,7 +370,6 @@ __all__ = [
     "_PYTEST_SAFE_FLAGS",
     "_PYTEST_SAFE_FLAGS_WITH_VALUES",
     "_PYTEST_UNSAFE_ENV_KEYS",
-    "_PYTHON_INTERPRETER_OPTIONS_WITH_VALUES",
     "_PYTHON_MODULE_MUTATING_FLAGS",
     "_PYTHON_MODULE_MUTATING_SUBCOMMANDS",
     "_PYTHON_MODULE_OPTIONS_WITH_VALUES",
@@ -387,7 +380,6 @@ __all__ = [
     "_SAFE_PYTHON_MODULE_SHADOW_PATHS",
     "_SAFE_SHELL_REDIRECT_TARGETS",
     "_SAFE_STATIC_SHELL_COMMANDS",
-    "_SHELL_COMMAND_STRING_INTERPRETERS",
     "_SHELL_CONTROL_PREFIX_TOKENS",
     "_SHELL_SCRIPT_INTERPRETER_COMMANDS",
     "_SHELL_STARTUP_ENV_KEYS",
@@ -395,5 +387,4 @@ __all__ = [
     "_SUDO_OPTION_VALUE_FLAGS",
     "_SUDO_OPTION_VALUE_LONG_FLAGS",
     "_TRUSTED_INTERPRETER_INSTALL_ROOTS",
-    "_UNMODELED_INLINE_INTERPRETER_COMMANDS",
 ]

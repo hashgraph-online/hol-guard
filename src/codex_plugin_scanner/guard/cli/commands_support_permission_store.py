@@ -5,17 +5,14 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ._commands_shared import _now
     from .commands_support_hook_payload import _hook_action_envelope
     from .commands_support_hook_state import (
         _append_cursor_pending_shell_key,
-        _claude_pending_permission_state_key,
-        _cursor_after_shell_observed,
         _cursor_conversation_id,
-        _cursor_pending_shell_state_key,
         _cursor_shell_command_from_payload,
         _load_claude_pending_permission,
         _load_verified_cursor_pending_shell_state,
@@ -27,17 +24,38 @@ if TYPE_CHECKING:
     from .commands_support_runtime_resolution import _runtime_capabilities_summary
 
 
-from ..models import GuardAction
+from ..models import GuardAction, GuardArtifact
+from ..native_artifact_content_hash import (
+    ArtifactContentHashUnavailableError,
+    native_artifact_content_hash,
+)
 from ..native_hook_authority_state import (
     HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE,
     flag_field,
     hook_authority_state,
     object_field,
 )
-from ..runtime.approval_context import parse_approval_context_token
-from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
+from ..native_hook_decision import native_permission_persist_plan
+from ..native_hook_render import (
+    native_cursor_after_shell_observed,
+    native_cursor_observer_event,
+)
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
+
+def _content_hash(artifact: GuardArtifact, *, guard_home: Path | None) -> str | None:
+    """The approval key for ``artifact``, or ``None`` when nobody can spell it.
+
+    The hash keys the allowance this path is about to mint, so a resident that
+    cannot answer leaves the approval pending: the caller treats ``None`` as a
+    refusal to mint rather than reaching for a hash of its own.
+    """
+
+    try:
+        return native_artifact_content_hash(artifact, guard_home=guard_home)
+    except ArtifactContentHashUnavailableError:
+        return None
 
 
 def _cursor_runtime_artifact_from_pending(pending: Mapping[str, object]) -> GuardArtifact | None:
@@ -71,7 +89,6 @@ def _record_cursor_pending_shell_permission(
 ) -> None:
     from ..adapters.cursor_native_approval import (
         compute_cursor_after_observer_proof,
-        cursor_observer_event_for_payload,
         ensure_cursor_approval_binding,
         ensure_cursor_hook_attestation_secret,
         remove_cursor_shell_binding_file,
@@ -83,7 +100,12 @@ def _record_cursor_pending_shell_permission(
     if conversation_id is None or command is None:
         return
     approval_binding = ensure_cursor_approval_binding(payload)
-    observer_event = cursor_observer_event_for_payload(payload)
+    # The issuing and checking sides have to attest under the same event, so
+    # both take it from the resident. Without an answer no proof is issued,
+    # which leaves the approval unable to become an allowance later.
+    observer_event = native_cursor_observer_event(payload, guard_home=guard_home)
+    if observer_event is None:
+        return
     saved_at = _now()
     try:
         secret = ensure_cursor_hook_attestation_secret(guard_home)
@@ -113,23 +135,34 @@ def _record_cursor_pending_shell_permission(
         "after_shell_proof": after_shell_proof,
         "native_source": "cursor-native",
     }
-    pending_key = _cursor_pending_shell_state_key(conversation_id, command)
     try:
-        pending_saved = _store_cursor_pending_shell_state(
+        pending_key = _store_cursor_pending_shell_state(
             store,
             conversation_id=conversation_id,
             command=command,
             payload=notice_payload,
             now=saved_at,
         )
-        indexed = pending_saved and _append_cursor_pending_shell_key(
+        indexed = pending_key is not None and _append_cursor_pending_shell_key(
             store,
             conversation_id=conversation_id,
             pending_key=pending_key,
             now=saved_at,
         )
         if not indexed:
-            store.delete_sync_payload(pending_key)
+            if pending_key is not None:
+                store.delete_sync_payload(pending_key)
+            else:
+                # The resident refused the store, so no key came back; name the
+                # row by its command so an older pending row for it does not
+                # outlive this. A resident that cannot be reached removes
+                # nothing, and it is also the only reader that would verify
+                # and honour that row.
+                _remove_cursor_pending_shell_permission(
+                    store,
+                    conversation_id=conversation_id,
+                    command=command,
+                )
             return
         write_cursor_shell_binding_file(
             guard_home,
@@ -156,12 +189,10 @@ def _attach_cursor_pending_approval_request_ids(
     command = _cursor_shell_command_from_payload(payload)
     if conversation_id is None or command is None:
         return
-    pending_key = _cursor_pending_shell_state_key(conversation_id, command)
     pending = _load_verified_cursor_pending_shell_state(
         store,
         conversation_id=conversation_id,
         command=command,
-        state_key=pending_key,
     )
     if pending is None:
         return
@@ -205,7 +236,6 @@ def _load_cursor_pending_shell_permission(
         required_feature=HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE,
         conversation_id=conversation_id,
         command=normalized_command,
-        expected_key=_cursor_pending_shell_state_key(conversation_id, normalized_command),
     )
     return object_field(reply, "pending")
 
@@ -214,8 +244,16 @@ def _remove_cursor_pending_shell_permission(
     store: GuardStore,
     *,
     conversation_id: str,
-    pending_key: str,
+    pending_key: str | None = None,
+    command: str | None = None,
 ) -> None:
+    """Removes a pending shell row, named either by its key or by its command.
+
+    A key the resident issued — one read out of the pending index — is acted on
+    as given. A caller that knows only the command hands that over instead and
+    the resident derives the key.
+    """
+
     hook_authority_state(
         store,
         "cursor_remove_pending",
@@ -223,6 +261,7 @@ def _remove_cursor_pending_shell_permission(
         required_feature=HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE,
         conversation_id=conversation_id,
         pending_key=pending_key,
+        command=command,
     )
 
 
@@ -318,7 +357,11 @@ def _persist_cursor_native_permission_after_shell(
     # cannot become an allowance.
     if not _cursor_pending_saved_at_is_fresh(store, pending, now):
         return False
-    if not _cursor_after_shell_observed(prepared):
+    # Whether the harness is reporting a finished command is what separates a
+    # pending approval from a durable allowance, and the resident reads that
+    # payload itself. A resident that cannot answer leaves the approval pending
+    # rather than minting an allowance on a guess.
+    if not native_cursor_after_shell_observed(harness, prepared, guard_home=guard_home):
         return False
     if not cursor_after_observer_trusted(
         guard_home=guard_home,
@@ -332,7 +375,7 @@ def _persist_cursor_native_permission_after_shell(
     runtime_artifact = _cursor_runtime_artifact_from_pending(pending)
     runtime_artifact_hash = _optional_string(pending.get("artifact_hash"))
     if runtime_artifact is not None and runtime_artifact_hash is None:
-        runtime_artifact_hash = artifact_hash(runtime_artifact)
+        runtime_artifact_hash = _content_hash(runtime_artifact, guard_home=guard_home)
     if runtime_artifact is None:
         action_envelope = _hook_action_envelope(
             harness=harness,
@@ -350,7 +393,7 @@ def _persist_cursor_native_permission_after_shell(
             workspace=workspace,
         )
         if runtime_artifact is not None:
-            runtime_artifact_hash = artifact_hash(runtime_artifact)
+            runtime_artifact_hash = _content_hash(runtime_artifact, guard_home=guard_home)
     if runtime_artifact is None or runtime_artifact_hash is None:
         return False
     session_saved = _record_cursor_native_shell_allow_state(
@@ -388,11 +431,10 @@ def _persist_cursor_native_permission_after_shell(
         store.add_receipt(receipt)
     except (OSError, sqlite3.Error):
         return False
-    pending_key = _cursor_pending_shell_state_key(conversation_id, command)
     _remove_cursor_pending_shell_permission(
         store,
         conversation_id=conversation_id,
-        pending_key=pending_key,
+        command=command,
     )
     from ..adapters.cursor_native_approval import remove_cursor_shell_binding_file
 
@@ -401,6 +443,76 @@ def _persist_cursor_native_permission_after_shell(
         conversation_id=conversation_id,
         command=command,
     )
+    return True
+
+
+def _persist_claude_native_permission_plan(
+    *,
+    store: GuardStore,
+    artifact_id: str,
+    artifact_hash: str,
+    artifact_type: str | None,
+    config_path: str | None,
+    source_scope: str | None,
+    raw_command_text: object,
+    wrapper_chain: object,
+    action: str,
+    reason: str,
+    source: str,
+    authoritative_action: str | None,
+) -> dict[str, Any]:
+    """Ask the resident what a native approval saves; raises before any write when it cannot say."""
+
+    return native_permission_persist_plan(
+        {
+            "artifact_id": artifact_id,
+            "artifact_hash": artifact_hash,
+            "artifact_type": artifact_type,
+            "config_path": config_path,
+            "source_scope": source_scope,
+            "raw_command_text": raw_command_text,
+            "wrapper_chain": wrapper_chain,
+            "action": action,
+            "reason": reason,
+            "source": source,
+            "authoritative_action": authoritative_action,
+        },
+        guard_home=Path(store.guard_home),
+    )
+
+
+def _write_claude_native_permission_plan(
+    *,
+    store: GuardStore,
+    plan: Mapping[str, Any],
+    artifact_id: str,
+    reason: str,
+    source: str,
+    now: str,
+) -> bool:
+    """Write the policy row and the events the plan names, in its order."""
+
+    try:
+        for event in plan["events"]:
+            if event["before_policy"]:
+                store.add_event(event["name"], event["payload"], now)
+        store.upsert_policy(
+            PolicyDecision(
+                harness="claude-code",
+                scope="artifact",
+                action=plan["policy_action"],
+                artifact_id=artifact_id,
+                artifact_hash=plan["stored_artifact_hash"],
+                reason=reason,
+                source=source,
+            ),
+            now,
+        )
+        for event in plan["events"]:
+            if not event["before_policy"]:
+                store.add_event(event["name"], event["payload"], now)
+    except (ApprovalGateError, OSError, sqlite3.Error):
+        return False
     return True
 
 
@@ -419,65 +531,31 @@ def _persist_claude_native_permission_policy(
     now: str,
     source: str = "claude-native-approval",
 ) -> bool:
-    exact_match_context = (
-        runtime_tool_action_exact_match_context(
-            config_path=config_path,
-            source_scope=source_scope,
-            raw_command_text=raw_command_text,
-            wrapper_chain=wrapper_chain,
-        )
-        if artifact_type == "tool_action_request"
-        else None
+    # The resident decides the stored hash (a well-formed v1 approval-context
+    # token as given, else the runtime exact-match key) and the events; a
+    # resident that cannot answer raises here and nothing is saved.
+    plan = _persist_claude_native_permission_plan(
+        store=store,
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+        artifact_type=artifact_type,
+        config_path=config_path,
+        source_scope=source_scope,
+        raw_command_text=raw_command_text,
+        wrapper_chain=wrapper_chain,
+        action=action,
+        reason=reason,
+        source=source,
+        authoritative_action=None,
     )
-    exact_artifact_hash = (
-        _runtime_scoped_exact_match_key(artifact_id, exact_match_context)
-        if artifact_type == "tool_action_request"
-        else None
+    return _write_claude_native_permission_plan(
+        store=store,
+        plan=plan,
+        artifact_id=artifact_id,
+        reason=reason,
+        source=source,
+        now=now,
     )
-    # V1 approval-context tokens already bind the full tool identity and are
-    # the only values that may authorize P44 approval reuse.  Keep the legacy
-    # exact-command key only for legacy callers/blocks.
-    stored_artifact_hash = (
-        artifact_hash
-        if parse_approval_context_token(artifact_hash) is not None
-        else exact_artifact_hash or artifact_hash
-    )
-    try:
-        if artifact_type == "tool_action_request" and exact_artifact_hash is None:
-            store.add_event(
-                "claude/native_permission_exact_key_missing",
-                {
-                    "artifact_id": artifact_id,
-                    "artifact_type": artifact_type,
-                    "source": source,
-                },
-                now,
-            )
-        store.upsert_policy(
-            PolicyDecision(
-                harness="claude-code",
-                scope="artifact",
-                action="allow" if action == "allow" else "block",
-                artifact_id=artifact_id,
-                artifact_hash=stored_artifact_hash,
-                reason=reason,
-                source=source,
-            ),
-            now,
-        )
-        store.add_event(
-            "claude/native_permission_saved",
-            {
-                "artifact_id": artifact_id,
-                "artifact_hash": stored_artifact_hash,
-                "action": action,
-                "reason": reason,
-            },
-            now,
-        )
-    except (ApprovalGateError, OSError, sqlite3.Error):
-        return False
-    return True
 
 
 def _persist_claude_native_permission_for_runtime_artifact(
@@ -516,43 +594,36 @@ def _persist_claude_native_permission_for_runtime_artifact(
                 now,
             )
         return False, False
-    raw_command_text_value = artifact.metadata.get("raw_command_text")
-    raw_command_text = raw_command_text_value if isinstance(raw_command_text_value, str) else None
-    wrapper_chain_value = artifact.metadata.get("wrapper_chain")
-    wrapper_chain = (
-        wrapper_chain_value
-        if isinstance(wrapper_chain_value, Sequence) and not isinstance(wrapper_chain_value, str)
-        else None
+    plan = _persist_claude_native_permission_plan(
+        store=store,
+        artifact_id=artifact.artifact_id,
+        artifact_hash=artifact_hash,
+        artifact_type=artifact.artifact_type,
+        config_path=artifact.config_path,
+        source_scope=artifact.source_scope,
+        raw_command_text=artifact.metadata.get("raw_command_text"),
+        wrapper_chain=artifact.metadata.get("wrapper_chain"),
+        action=action,
+        reason=reason,
+        source="claude-native-approval",
+        authoritative_action=authoritative_action,
     )
     saved_policy = False
-    if authoritative_action == "allow":
-        saved_policy = _persist_claude_native_permission_policy(
+    if plan["policy_action"] is not None:
+        saved_policy = _write_claude_native_permission_plan(
             store=store,
+            plan=plan,
             artifact_id=artifact.artifact_id,
-            artifact_hash=artifact_hash,
-            artifact_type=artifact.artifact_type,
-            config_path=artifact.config_path,
-            source_scope=artifact.source_scope,
-            raw_command_text=raw_command_text,
-            wrapper_chain=wrapper_chain,
-            action=action,
             reason=reason,
+            source="claude-native-approval",
             now=now,
         )
         if not saved_policy:
             return True, False
     else:
-        with suppress(OSError, sqlite3.Error):
-            store.add_event(
-                "claude/native_permission_current_policy_retained",
-                {
-                    "artifact_id": artifact.artifact_id,
-                    "artifact_hash": artifact_hash,
-                    "native_action": action,
-                    "authoritative_action": authoritative_action,
-                },
-                now,
-            )
+        for event in plan["events"]:
+            with suppress(OSError, sqlite3.Error):
+                store.add_event(event["name"], event["payload"], now)
     try:
         store.record_inventory_artifact(
             artifact=artifact,
@@ -560,7 +631,7 @@ def _persist_claude_native_permission_for_runtime_artifact(
             policy_action=authoritative_action,
             changed=False,
             now=now,
-            approved=authoritative_action in {"allow", "warn"},
+            approved=plan["inventory_approved"],
         )
     except (OSError, sqlite3.Error):
         return True, saved_policy
@@ -569,7 +640,7 @@ def _persist_claude_native_permission_for_runtime_artifact(
         _remove_claude_pending_permission(
             store,
             session_id=session_id,
-            pending_key=_claude_pending_permission_state_key(session_id, artifact.artifact_id),
+            artifact_id=artifact.artifact_id,
         )
     return True, saved_policy
 

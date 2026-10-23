@@ -59,6 +59,7 @@ def test_regen_trigger_covers_product_inputs_not_per_run_evidence() -> None:
         "rust/Cargo.lock",
         "rust/build_support/command_identity.rs",
         "rust/crates/guard-command/build.rs",
+        "rust/crates/guard-command-catalog-data/build.rs",
         "contracts/extensions/trust-class-map.v1.json",
         "contributions/command-sources/command.future.json",
         "contributions/mcp-servers/mcp.future.json",
@@ -66,6 +67,8 @@ def test_regen_trigger_covers_product_inputs_not_per_run_evidence() -> None:
         "contracts/mcp-servers/contribution.v1.schema.json",
         "scripts/build_native_command_program.py",
         "scripts/export_extension_directory.py",
+        "scripts/native_directory_inventory.py",
+        "scripts/prepare_extension_directory.py",
         "scripts/render_command_extension_directory.py",
         "scripts/prepare_extension_contribution.py",
     }
@@ -88,9 +91,16 @@ def test_regen_keeps_main_scope_and_verified_snapshot_publication() -> None:
     assert "pull_request" not in _triggers(workflow)
     assert workflow["concurrency"]["cancel-in-progress"] is False
     steps = workflow["jobs"]["regen"]["steps"]
-    publish = next((step for step in steps if step.get("name") == "Publish immutable public snapshot"), None)
+    publish = next(
+        (
+            step
+            for step in steps
+            if step.get("name") == "Publish complete immutable distribution and compatibility snapshot"
+        ),
+        None,
+    )
     assert publish is not None, "Missing verified snapshot publication step"
-    assert "scripts/publish_extension_snapshot.py" in publish["run"]
+    assert "scripts/publish_extension_delivery.py" in publish["run"]
     assert "gh pr create" not in publish["run"]
     assert "--admin" not in publish["run"]
     assert "continue-on-error" not in publish

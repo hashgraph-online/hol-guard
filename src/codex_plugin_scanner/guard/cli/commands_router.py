@@ -68,6 +68,8 @@ _COMMON_HANDLERS = {
     "package-shims": "_run_guard_package_shims_command",
     "contained-write": "_run_guard_contained_write_command",
     "execute-contained-test": "_run_guard_execute_contained_test_command",
+    "execute-bound-bash": "_run_guard_execute_bound_bash_command",
+    "ack-bound-bash": "_run_guard_ack_bound_bash_command",
     "run": "_run_guard_run_command",
     "run-shim": "_run_guard_run_command",
     "diff": "_run_guard_diff_command",
@@ -290,7 +292,9 @@ def _dispatch_guard_command(
         config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
 
     if inventory_list:
-        return _invoke_guard_handler(run_inventory_list_command, args, store=store, output_stream=output_stream)
+        return _invoke_guard_handler(
+            run_inventory_list_command, args, store=store, context=context, output_stream=output_stream
+        )
     handler = _resolve_guard_handler(_COMMON_HANDLERS, args.guard_command)
     if callable(handler):
         return _invoke_guard_handler(

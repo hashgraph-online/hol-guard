@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import copy
 import sys
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -17,7 +19,6 @@ from codex_plugin_scanner.guard.runtime import guard_run_launch as guard_run_lau
 from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
 from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
-from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
 from codex_plugin_scanner.guard.runtime.decisions import (
     AUTHORITATIVE_DECISION_INCONSISTENT,
     AuthoritativeGuardDecision,
@@ -808,6 +809,7 @@ def test_runtime_detector_signals_require_their_exact_composed_authority(
 def test_terminal_runtime_detector_signal_is_bound_without_synthetic_scanner_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_signal_composition: Callable[[Sequence[object], object], SimpleNamespace],
 ) -> None:
     artifact = _artifact(tmp_path)
     monkeypatch.setattr(
@@ -833,7 +835,7 @@ def test_terminal_runtime_detector_signal_is_bound_without_synthetic_scanner_evi
         severity="high",
         confidence="strong",
     )
-    composition = compose_action_from_signals((signal,), "allow")
+    composition = native_signal_composition((signal,), "allow")
     assert composition.action == "block"
 
     recorded = runner_native_authority.with_recorded_detector_result(
@@ -864,14 +866,16 @@ def test_terminal_runtime_detector_signal_is_bound_without_synthetic_scanner_evi
     assert evaluation_authority_error(recorded) is None
 
 
-def test_run_authority_rejects_a_runtime_trace_that_disagrees_with_composition() -> None:
+def test_run_authority_rejects_a_runtime_trace_that_disagrees_with_composition(
+    native_signal_composition: Callable[[Sequence[object], object], SimpleNamespace],
+) -> None:
     signal = _runtime_signal(
         signal_id="runtime:persistence",
         category="persistence",
         severity="high",
         confidence="strong",
     )
-    composition = compose_action_from_signals((signal,), "allow")
+    composition = native_signal_composition((signal,), "allow")
     run_decision = build_authoritative_decision(
         composition.action,
         reason=composition.reason,

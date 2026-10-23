@@ -1,9 +1,10 @@
 #![cfg(unix)]
 
-//! `npm|pnpm|bun run <script>` and `npm|pnpm test` get a narrow protected-sink
-//! receipt only for a script body that sink runs. Any other body is still an
-//! untrusted package script: it never proceeds unprotected, and never gets a
-//! receipt its sink would refuse.
+//! A package-manager command that names a script gets a narrow protected-sink
+//! receipt only for a script body that sink runs. That covers `npm|pnpm|bun|yarn
+//! run <script>`, the bare `pnpm|yarn <script>`, and `npm|pnpm|yarn test`. Any
+//! other body is still an untrusted package script: it never proceeds
+//! unprotected, and never gets a receipt its sink would refuse.
 
 use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
 use guard_contracts::PreToolResultV1;
@@ -17,10 +18,7 @@ const WORKSPACE: &str = "native_workspace_containment_required";
 const HARNESSES: [&str; 3] = ["omp", "claude-code", "codex"];
 
 fn root() -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir().join(format!(
         "guard-package-scripts-{}-{nonce}",
         std::process::id()

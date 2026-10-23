@@ -164,6 +164,16 @@ fn omp_learn_stays_reviewed_before_it_runs() {
     for input in [
         json!({"memory": "Run the project tests with cargo test before pushing."}),
         json!({"memory": "Run the project tests before pushing.", "context": "Code review turn"}),
+        // A skill is a file later runs read; writing one stays a person's call.
+        json!({
+            "memory": "Run the project tests before pushing.",
+            "skill": {
+                "action": "create",
+                "name": "project-tests",
+                "description": "How to run this project's tests.",
+                "body": "# Project tests\n\nRun the suite from the repository root."
+            }
+        }),
     ] {
         let result = run(&f, "omp", "learn", input.clone());
         assert_eq!(result.minimum_action, "review", "{input}");

@@ -1,7 +1,8 @@
 // The filesystem cases below need symlinks and an executable bit.
 #![cfg_attr(not(unix), allow(dead_code, unused_imports))]
 
-use super::{in_place_edit, inert_substitution, proven_in_place_segment};
+use super::append_scripts::inert_text_insert;
+use super::{in_place_edit, in_place_edit_with, inert_substitution, proven_in_place_segment};
 use crate::native_command_controls::CompiledNativeCommandControls;
 use crate::native_command_program::packaged_command_program;
 use crate::pretool::PathContext;
@@ -36,6 +37,7 @@ fn layout(name: &str) -> Layout {
     write(&workspace.join(".github/workflows/ci.yml"), "on: push\n");
     write(&workspace.join(".husky/pre-commit"), "npm test\n");
     write(&workspace.join("deploy.sh"), "echo deploy\n");
+    write(&workspace.join("tools/deploy.ps1"), "Write-Host deploy\n");
     write(&workspace.join("deploy"), "echo deploy\n");
     write(&workspace.join("notes/AGENTS"), "# agents\n");
     write(&workspace.join("src/linked"), "a\n");
@@ -215,6 +217,83 @@ fn bsd_and_gnu_safe_spellings_are_parsed() {
     assert!(in_place_edit(&many).is_none());
 }
 
+#[test]
+fn line_inserts_are_one_address_and_literal_text() {
+    for script in [
+        "/export const a/a\\\nexport const b = 2;",
+        "/x/i\\\nfirst",
+        "12a\\\nline",
+        "3i\\inline text",
+        "/x/a\\\nline one\\\nline two",
+        // A command letter inside the text is text, not a command.
+        "/x/a\\\nw /tmp/out.txt",
+        "/a\\/b/a\\\nx",
+    ] {
+        assert!(inert_text_insert(script), "{script:?}");
+    }
+    for script in [
+        // An unescaped newline ends the text and starts a new command.
+        "/x/a\\\ntext\nw /tmp/out.txt",
+        "/x/a\\\ntext\ne echo hi",
+        "/x/a\\\n\nw /tmp/out.txt",
+        // Other commands, flags, ranges, negation and custom delimiters.
+        "/x/c\\\ntext",
+        "/x/d",
+        "/x/!a\\\ntext",
+        "/x/Ia\\\ntext",
+        "1,3a\\\ntext",
+        "$a\\\ntext",
+        "\\|x|a\\\ntext",
+        "a\\\ntext",
+        "/x/ a\\\ntext",
+        "/x/a text",
+        // A bracket expression that holds the delimiter, an address that
+        // never closes, and text that is missing or ends in a backslash.
+        "/[/]/a\\\ntext",
+        "/[^]/]/a\\\ntext",
+        "/x\\/a\\\ntext",
+        "/x/a\\",
+        "/x/a\\\n",
+        "/x/a\\\ntext\\",
+        "/x/a\\\ntext\r",
+        "/x/a\\\ntext\0",
+        "0123456789a\\\ntext",
+    ] {
+        assert!(!inert_text_insert(script), "{script:?}");
+    }
+}
+
+#[test]
+fn only_a_scratch_edit_may_insert_a_line() {
+    let insert = |script: &str| {
+        vec![
+            "-i".to_owned(),
+            String::new(),
+            script.to_owned(),
+            "/tmp/x.ts".to_owned(),
+        ]
+    };
+    let line = insert("12a\\\ntext");
+    assert!(in_place_edit(&line).is_none());
+    assert_eq!(
+        in_place_edit_with(&line, true).map(|e| e.targets.len()),
+        Some(1)
+    );
+    let substitution = insert("s/a/b/");
+    assert!(in_place_edit(&substitution).is_some());
+    assert!(in_place_edit_with(&substitution, true).is_some());
+    // GNU sed reads `-i '' /pat/...` as a file named `/pat/...`, which only
+    // BSD sed (the macOS default) takes for the script.
+    let address = insert("/x/a\\\ntext");
+    assert_eq!(
+        in_place_edit_with(&address, true).is_some(),
+        cfg!(target_os = "macos")
+    );
+    // A script that mixes an insert with another command stays reviewed.
+    let mixed = ["-i", "", "-e", "12a\\\ntext", "-e", "s/a/b/e", "/tmp/x.ts"].map(str::to_owned);
+    assert!(in_place_edit_with(&mixed, true).is_none());
+}
+
 #[cfg(unix)]
 #[test]
 fn ordinary_workspace_files_are_edited_in_place() {
@@ -243,7 +322,6 @@ fn ordinary_workspace_files_are_edited_in_place() {
 #[test]
 fn protected_outside_and_linked_targets_stay_reviewed() {
     let layout = layout("refused");
-    let root = layout.root.to_str().unwrap().to_owned();
     let home = layout.home.clone();
     let mut commands: Vec<String> = [
         ".git/config",
@@ -267,7 +345,7 @@ fn protected_outside_and_linked_targets_stay_reviewed() {
     .collect();
     commands.extend([
         format!("sed -i '' 's/a/b/' {home}/notes.txt"),
-        format!("sed -i '' 's/a/b/' {root}/outside/file.ts"),
+        "sed -i '' 's/a/b/' /opt/guard-outside/file.ts".to_owned(),
         "sed -i '' 's/a/b/e' src/app/page.tsx".to_owned(),
         "sed -i '' 's/a/b/w src/out.txt' src/app/page.tsx".to_owned(),
         "sed -i '' 's/a/b/;w src/out.txt' src/app/page.tsx".to_owned(),
@@ -285,7 +363,6 @@ fn protected_outside_and_linked_targets_stay_reviewed() {
         "mv src/linked.ts src/other.ts && sed -i '' 's/a/b/' src/other.ts".to_owned(),
         "ln -sf ../deploy.sh src/index.ts; sed -i '' 's/a/b/' src/index.ts".to_owned(),
         "git checkout feature && sed -i '' 's/a/b/' src/index.ts".to_owned(),
-        "FOO=1 sed -i '' 's/a/b/' src/index.ts".to_owned(),
     ]);
     for command in &commands {
         assert!(!proven(&layout, command), "{command}");
@@ -332,6 +409,14 @@ fn a_bounded_workspace_edit_needs_no_prompt() {
             "allow",
             "{harness}: {edit}"
         );
+        // An ordinary project setting in front of the edit is a value sed
+        // reads for itself; it names no program, loader, config or home.
+        let prefixed = "FOO=1 sed -i '' 's|href={OLD}|href={next}|' src/app/page.tsx";
+        assert_eq!(
+            action(harness, prefixed).minimum_action,
+            "allow",
+            "{harness}: {prefixed}"
+        );
         // These may still run in the workspace sandbox, but never as a proven
         // exact-safe edit on the host.
         for command in [
@@ -352,5 +437,72 @@ fn a_bounded_workspace_edit_needs_no_prompt() {
             );
         }
     }
+    let _ = std::fs::remove_dir_all(&layout.root);
+}
+
+#[test]
+fn windows_executability_is_read_off_the_extension() {
+    for name in [
+        "deploy.ps1",
+        "module.psm1",
+        "setup.bat",
+        "setup.CMD",
+        "tool.exe",
+        "tool.COM",
+        "install.msi",
+        "saver.scr",
+        "legacy.vbs",
+        "legacy.vbe",
+        "job.wsf",
+        "host.wsh",
+        "legacy.jse",
+        "panel.cpl",
+        "console.msc",
+    ] {
+        assert!(super::executable_extension(Path::new(name)), "{name}");
+    }
+    // Win32 drops trailing dots and spaces, so these open the same programs.
+    for name in ["deploy.ps1.", "deploy.ps1 ", "tool.exe...", "setup.CMD. "] {
+        assert!(super::executable_extension(Path::new(name)), "{name}");
+    }
+    // Ordinary repository source, including the `.js` that is in `PATHEXT`.
+    for name in [
+        "index.ts",
+        "page.tsx",
+        "app.js",
+        "deploy.sh",
+        "notes.md",
+        "deploy",
+        "a.ps1.ts",
+    ] {
+        assert!(!super::executable_extension(Path::new(name)), "{name}");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_in_place_edits_of_runnable_files_stay_reviewed() {
+    let layout = layout("windows-executable");
+    assert!(
+        proven(&layout, "sed -i '' 's/a/b/' src/index.ts"),
+        "an ordinary source edit has to stay silent"
+    );
+    assert!(
+        !proven(&layout, "sed -i '' 's/deploy/ship/' tools/deploy.ps1"),
+        "rewriting a file Windows runs on launch has to be reviewed"
+    );
+    let _ = std::fs::remove_dir_all(&layout.root);
+}
+
+/// `tools/deploy.ps1.` opens `tools/deploy.ps1`, so the edit route has to read
+/// it as the program it rewrites rather than as an extensionless file.
+#[cfg(windows)]
+#[test]
+fn a_trailing_dot_does_not_hide_a_runnable_file_from_the_edit_route() {
+    let layout = layout("windows-trailing-dot");
+    assert!(
+        !proven(&layout, "sed -i '' 's/deploy/ship/' tools/deploy.ps1."),
+        "a trailing dot opens the same program and has to be reviewed"
+    );
     let _ = std::fs::remove_dir_all(&layout.root);
 }

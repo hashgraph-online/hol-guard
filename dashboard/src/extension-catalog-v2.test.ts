@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  CATALOG_PREPARATION_FAILED,
   CATALOG_SNAPSHOT_EXPIRED,
   clearCatalogReadCache,
   loadCatalogReadModel,
@@ -120,6 +121,27 @@ function page(items: unknown[], options: { total?: number; next?: string | null;
 const GIT = "command.git";
 const NPM = "command.npm";
 const INDEX = "/v2/extension-controls/catalog/index";
+const LEGACY_CATALOG_PATH = "/v1/extension-controls/catalog";
+
+function legacyCatalog() {
+  return {
+    schema_version: "1.0.0",
+    catalog_digest: DIGEST,
+    extensions: [{
+      ...summary(GIT, "Git"),
+      schema_version: 1,
+      enabled: true,
+      dependencies: [],
+      conflicts: [],
+      delegated_protection: null,
+      project_markers: [],
+      reference_urls: [],
+      safer_alternatives: [],
+      rules: [rule(GIT, "push")],
+      permissions: [permission(GIT, "push")],
+    }],
+  };
+}
 
 // Two index pages: one per extension, consistent snapshot.
 function indexHandler(path: string, params: URLSearchParams): Reply | null {
@@ -156,6 +178,74 @@ try {
   }
 
   {
+    // A daemon still preparing its read model answers 503; the read waits it out.
+    let unavailable = 2;
+    serve((path, params) => {
+      if (path === INDEX && unavailable > 0) {
+        unavailable -= 1;
+        return { status: 503, body: { error: "catalog_read_model_unavailable" } };
+      }
+      return indexHandler(path, params) ?? { status: 500 };
+    });
+    const model = await loadCatalogReadModel();
+    assert.equal(model.protocol, "v2");
+    assert.deepEqual(model.extensions.map((item) => item.extension_id), [GIT, NPM]);
+    assert.deepEqual(requests.map((entry) => entry.params.get("cursor")), [null, null, null, "c1"]);
+  }
+
+  {
+    // A daemon whose preparation keeps failing cannot be waited out, so this
+    // 503 is reported at once instead of after the retry schedule. The legacy
+    // catalog comes from the registry the daemon already holds and does not
+    // depend on preparation, so the read falls back to it and carries the
+    // reason, instead of leaving the page with nothing to render.
+    serve((path) => {
+      if (path === LEGACY_CATALOG_PATH) return { status: 200, body: legacyCatalog() };
+      return path === INDEX ? { status: 503, body: { error: CATALOG_PREPARATION_FAILED } } : { status: 500 };
+    });
+    const degradedModel = await loadCatalogReadModel();
+    assert.equal(degradedModel.protocol, "v1");
+    assert.equal(degradedModel.degraded, CATALOG_PREPARATION_FAILED);
+    assert.deepEqual(degradedModel.extensions.map((item) => item.extension_id), [GIT]);
+    // One v2 attempt, then the legacy read: the failure is not waited out.
+    assert.deepEqual(requests.map((entry) => entry.path), [INDEX, LEGACY_CATALOG_PATH]);
+  }
+
+  {
+    // Only a legacy read that fails too leaves the reader with the preparation
+    // failure, because then there is no catalog to render at all.
+    serve((path) => (path === INDEX ? { status: 503, body: { error: CATALOG_PREPARATION_FAILED } } : { status: 500 }));
+    await assert.rejects(
+      loadCatalogReadModel(),
+      (error: unknown) =>
+        error instanceof ExtensionControlApiError && error.status === 503 && error.code === CATALOG_PREPARATION_FAILED,
+    );
+    assert.deepEqual(requests.map((entry) => entry.path), [INDEX, LEGACY_CATALOG_PATH]);
+  }
+
+  {
+    // A healthy v2 read model never reports itself as degraded.
+    serve((path, params) => indexHandler(path, params) ?? { status: 500 });
+    const healthy = await loadCatalogReadModel();
+    assert.equal(healthy.degraded, undefined);
+  }
+
+  {
+    // A superseded search stops waiting for an unavailable daemon.
+    const controller = new AbortController();
+    serve((path, params) => {
+      const index = indexHandler(path, params);
+      if (index) return index;
+      queueMicrotask(() => controller.abort());
+      return { status: 503, body: { error: "catalog_read_transport_failed" } };
+    });
+    const model = await loadCatalogReadModel();
+    const before = requests.length;
+    await assert.rejects(model.searchPermissions("git", controller.signal), (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+    assert.equal(requests.length, before + 1);
+  }
+
+  {
     // A 304 with an unknown validator is retried once without a condition.
     let calls = 0;
     serve((path, params, headers) => {
@@ -170,32 +260,16 @@ try {
 
   {
     // Only 404 and 501 catalog_read_model_unavailable fall back to v1.
-    const v1 = {
-      schema_version: "1.0.0",
-      catalog_digest: DIGEST,
-      extensions: [{
-        ...summary(GIT, "Git"),
-        schema_version: 1,
-        enabled: true,
-        dependencies: [],
-        conflicts: [],
-        delegated_protection: null,
-        project_markers: [],
-        reference_urls: [],
-        safer_alternatives: [],
-        rules: [rule(GIT, "push")],
-        permissions: [permission(GIT, "push")],
-      }],
-    };
+    const v1 = legacyCatalog();
     for (const unsupported of [{ status: 404, body: { error: "not_found" } }, { status: 404, body: {} }, { status: 501, body: { error: "catalog_read_model_unavailable" } }]) {
-      serve((path) => (path === "/v1/extension-controls/catalog" ? { status: 200, body: v1 } : unsupported));
+      serve((path) => (path === LEGACY_CATALOG_PATH ? { status: 200, body: v1 } : unsupported));
       const model = await loadCatalogReadModel();
       assert.equal(model.protocol, "v1");
       assert.deepEqual(model.localSearch?.("git PUSH").map((hit) => hit.permission.permission_id), [`${GIT}.permission.push`]);
       assert.deepEqual(model.localSearch?.("push absent"), []);
     }
     for (const failure of [{ status: 501, body: { error: "other" } }, { status: 500, body: {} }, { status: 401, body: { error: "unauthorized" } }]) {
-      serve((path) => (path === "/v1/extension-controls/catalog" ? { status: 200, body: v1 } : failure));
+      serve((path) => (path === LEGACY_CATALOG_PATH ? { status: 200, body: v1 } : failure));
       await assert.rejects(loadCatalogReadModel(), (error: unknown) => error instanceof ExtensionControlApiError && error.status === failure.status);
       assert.ok(requests.every((entry) => entry.path.startsWith("/v2/")));
     }

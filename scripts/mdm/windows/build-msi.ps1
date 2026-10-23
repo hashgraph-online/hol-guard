@@ -23,6 +23,7 @@ $VersionModule = Join-Path $Root 'src/codex_plugin_scanner/version.py'
 
 uv run --no-sync pyinstaller --clean --noconfirm --onedir --name hol-guard `
     --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner `
+    --hidden-import sigstore._store --collect-data sigstore `
     --add-data "${VersionModule}:." `
     --add-data "${ContractData}:codex_plugin_scanner/guard/contracts/data" `
     --version-file $VersionFile `

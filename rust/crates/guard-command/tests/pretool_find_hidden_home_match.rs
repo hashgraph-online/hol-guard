@@ -13,10 +13,7 @@ fn home(name: &str) -> PathBuf {
         .join(format!(
             "{name}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let home = root.join("home");
     for directory in [
@@ -177,6 +174,11 @@ fn a_glob_that_could_reach_a_login_keeps_its_review() {
     for command in [
         "find ~/.codex -maxdepth 4 -name \"*.json\"",
         "find ~/.codex -maxdepth 4 -name \"*h.json\"",
+        // A long literal run that is a kind and not a name: the dot binds an
+        // extension, and `json` is what every file of the kind is written
+        // under, `auth.json` among them.
+        "find ~/.codex -maxdepth 4 -name \"*notes.json\"",
+        "find ~/.codex -maxdepth 4 -name \"*json*\"",
         "find ~/.codex -maxdepth 4 -name \"a?th.json\"",
         "find ~/.codex -maxdepth 4 -name \"aut*\"",
         "find ~/.codex -maxdepth 4 -name \"[ac]*.json\"",

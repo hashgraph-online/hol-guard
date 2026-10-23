@@ -29,8 +29,8 @@ TARGETS: Final[dict[str, MutationTarget]] = {
     ),
     "secret-flow": MutationTarget(
         "secret-flow",
-        "src/codex_plugin_scanner/guard/runtime/data_flow.py",
-        ("tests/test_guard_data_flow.py",),
+        "src/codex_plugin_scanner/guard/native_data_flow.py",
+        ("tests/test_native_data_flow_transport.py",),
     ),
     "approval-reuse": MutationTarget(
         "approval-reuse",

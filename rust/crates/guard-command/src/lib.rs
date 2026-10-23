@@ -1,19 +1,29 @@
 #![forbid(unsafe_code)]
 pub mod action_lattice;
 pub mod approval_reuse;
+pub mod artifact_hash;
+#[cfg(test)]
+mod artifact_hash_tests;
+mod artifact_hash_url;
+#[cfg(test)]
+mod artifact_hash_url_tests;
 pub mod artifact_risk;
+pub mod bash_approval;
 pub mod benign_request_api;
 pub mod browser_mcp_intent;
+mod bundle_metadata;
 pub mod business_gmail_plain;
 pub mod business_gmail_wire;
 pub mod business_gws_command;
 pub mod business_input;
 pub mod canonical_command;
+pub mod catalog_prepare;
 pub mod catalog_read_model;
 #[cfg(test)]
 mod catalog_read_model_tests;
 mod catalog_read_projection;
 mod catalog_read_query;
+pub mod cloud_catalog;
 pub mod cloud_scrub;
 mod cloud_scrub_shell;
 mod cloud_scrub_source_search;
@@ -25,12 +35,9 @@ pub mod command_action_risk_classes;
 mod command_ascii_comparison;
 mod command_candidate_common;
 mod command_common_cli_matchers;
+pub mod command_expression_match;
 mod compound_artifact;
-mod credential_store_names {
-    //! The credential screen is shared with PostToolUse source review, so it
-    //! lives in `guard-secure-fs`.
-    pub(crate) use guard_secure_fs::credential_store_names::*;
-}
+mod credential_store_names;
 pub mod cursor_shell_command;
 pub mod policy_document;
 pub use codex_output_entry::{review_codex_tool_output, ToolOutputOutcome};
@@ -54,6 +61,8 @@ mod codex_output_shlex;
 mod codex_output_source_paths;
 mod codex_output_splitters;
 mod codex_output_wrappers;
+mod codex_prompt_attachment;
+pub mod codex_prompt_credential_file;
 pub mod command_compatibility;
 mod command_contained_routine_candidates;
 mod command_critical_floors;
@@ -74,6 +83,7 @@ pub mod command_model;
 pub mod command_native_factors;
 mod command_operand_matchers;
 pub mod command_option_parsing;
+mod command_parse_surface;
 mod command_segment_parsing;
 pub mod command_shell_read_factors;
 mod command_specialized_matchers;
@@ -95,10 +105,14 @@ mod embedded_script_evidence;
 #[cfg(test)]
 mod embedded_script_evidence_tests;
 mod env_wrapper;
+pub mod evidence_hash;
+#[cfg(test)]
+mod evidence_hash_tests;
 mod executable_flag_contract;
 pub mod extension_control;
 pub mod extension_evidence;
 pub mod extension_trust;
+mod github_additional_commands;
 pub mod github_capability_contract;
 #[cfg(test)]
 mod github_capability_contract_tests;
@@ -109,10 +123,15 @@ mod github_command_capabilities_tests;
 pub mod github_workflow_approval_record;
 pub mod github_workflow_authorization;
 pub mod github_workflow_descriptor;
+pub mod github_workflow_lineage;
+#[cfg(test)]
+mod github_workflow_lineage_tests;
 pub mod github_workflow_operations;
 mod harness_config_names;
+pub mod harness_identity;
 mod home_path_text;
 pub mod homebrew_intent;
+mod inline_shell_quoting;
 pub mod jsonc;
 #[cfg(unix)]
 pub mod launch_identity;
@@ -141,6 +160,7 @@ pub mod native_command_extension_evidence;
 #[cfg(test)]
 mod native_command_extension_evidence_tests;
 pub mod native_command_program;
+pub mod network_url;
 pub mod npm_source_spec;
 pub mod ordered_json;
 #[cfg(unix)]
@@ -162,13 +182,18 @@ mod powershell_floors;
 mod powershell_parser;
 mod powershell_reads;
 pub mod protect_request;
+pub mod pytest_argv;
 mod read_only_fanout;
+pub mod reviewed_invocation_bindings;
 pub mod rich_command_model_api;
 use parser_executables::*;
 use parser_segments::*;
 pub mod developer_inspection_authority;
 pub mod environment_secret_dump;
 pub mod pretool;
+pub mod runtime_artifact_identity;
+#[cfg(test)]
+mod runtime_artifact_identity_tests;
 mod runtime_read_paths;
 pub mod secret_path_probe;
 pub mod sensitive_request;
@@ -262,6 +287,7 @@ mod sfrs_node_templates;
 #[cfg(all(test, unix))]
 mod sfrs_node_vectors;
 mod sfrs_node_workflows;
+mod sfrs_path_word_lookups;
 mod sfrs_patterns;
 mod sfrs_perl_read_only;
 #[cfg(all(test, unix))]
@@ -284,6 +310,8 @@ mod sfrs_quote_parsing;
 mod sfrs_quote_tokens;
 #[cfg(all(test, unix))]
 mod sfrs_quote_vectors;
+#[cfg(test)]
+mod sfrs_read_only_filter_tests;
 mod sfrs_read_only_filters;
 pub mod sfrs_replay;
 mod sfrs_replay_context;
@@ -323,6 +351,8 @@ pub mod shell_helpers;
 mod shell_model_limits;
 mod shell_read_literal_wrapper;
 pub mod shell_request_authority;
+#[cfg(test)]
+mod shell_secret_read_containment_tests;
 mod shell_secret_read_flow;
 #[cfg(test)]
 mod shell_secret_read_script_operand_tests;
@@ -330,7 +360,13 @@ mod shell_secret_read_support;
 pub mod shell_secret_reads;
 mod shell_structure;
 pub mod source_cli;
+pub mod tool_action_identity;
+#[cfg(test)]
+mod tool_action_identity_tests;
 pub mod typescript_launch_evidence;
+#[cfg(test)]
+#[path = "../../../test_support/unique_nanos.rs"]
+mod unique_nanos;
 mod unmodeled_shell_artifact;
 
 pub mod package_context_environment;
@@ -339,346 +375,19 @@ mod critical_floor_context;
 pub use command_evaluation::CompositeCommandEvaluation;
 pub use command_evaluation_compose::{evaluate_command, CommandEvaluationInput};
 pub use command_model::parse_shell_command;
+// Modules that `use super::*` resolve these names through the root, so rustc
+// cannot see this re-export as used; removing it breaks those consumers.
+#[allow(unused_imports)]
+pub(crate) use command_parse_surface::{
+    default_dialect, default_provenance, default_transport, is_fd_dup_redirect,
+    parse_command_unbound, parse_explicit_powershell, parse_inline_shell_script,
+    parse_posix_command, uncertain, Quote, RawSegment,
+};
+pub use command_parse_surface::{
+    parse_command, CanonicalCommandV1, CommandModelRequestV1, CommandSegmentV1, CommandSpanV1,
+    MAX_COMMAND_BYTES, MAX_COMMAND_SEGMENTS, MAX_COMMAND_TOKENS,
+};
 pub use critical_floor_context::critical_floor_action;
-
-use serde::{Deserialize, Serialize};
-
-pub const MAX_COMMAND_BYTES: usize = 32_768;
-pub const MAX_COMMAND_SEGMENTS: usize = 128;
-pub const MAX_COMMAND_TOKENS: usize = 2_048;
-
-fn default_dialect() -> String {
-    "posix".to_owned()
-}
-
-fn default_transport() -> String {
-    "shell_string".to_owned()
-}
-
-fn default_provenance() -> String {
-    "guard-shell".to_owned()
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CommandModelRequestV1 {
-    pub command: String,
-    #[serde(default = "default_dialect")]
-    pub dialect: String,
-    #[serde(default = "default_transport")]
-    pub transport: String,
-    #[serde(default = "default_provenance")]
-    pub extraction_provenance: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CommandSpanV1 {
-    pub source: String,
-    pub start: usize,
-    pub end: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CommandSegmentV1 {
-    pub text: String,
-    pub tokens: Vec<String>,
-    pub executable: Option<String>,
-    pub arguments: Vec<String>,
-    pub environment_names: Vec<String>,
-    pub wrapper_chain: Vec<String>,
-    pub path_overridden: bool,
-    pub execution_context: String,
-    pub pipeline_index: usize,
-    pub span: CommandSpanV1,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CanonicalCommandV1 {
-    #[serde(skip)]
-    pub(crate) exact_raw_text: bool,
-    pub normalized_text: String,
-    pub dialect: String,
-    pub transport: String,
-    pub extraction_provenance: String,
-    pub wrapper_chain: Vec<String>,
-    pub segments: Vec<CommandSegmentV1>,
-    pub confidence: String,
-    pub uncertainty_reason: Option<String>,
-    pub path_overridden: bool,
-    pub parser_profile: String,
-    /// Python `CanonicalCommand.security_identity` — the authoritative
-    /// `command-security-v2:` digest serialized on `to_dict`. The wire omits
-    /// embedded-command `text` and redirect spans, so the identity cannot be
-    /// re-derived from the public model; the resident path supplies it. Empty
-    /// string on the pure-native path → `from_v1` recomputes it.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub security_identity: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Quote {
-    None,
-    Single,
-    Double,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct RawSegment {
-    group_index: usize,
-    pipeline_index: usize,
-    start: usize,
-    end: usize,
-}
-
-pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommandV1, String> {
-    let mut command = parse_command_unbound(request)?;
-    command.security_identity = canonical_command::command_security_identity(&command);
-    Ok(command)
-}
-
-fn parse_command_unbound(request: &CommandModelRequestV1) -> Result<CanonicalCommandV1, String> {
-    let raw = request.command.trim();
-    if request.dialect == "powershell" && request.transport == "shell_string" && !raw.is_empty() {
-        return Ok(parse_explicit_powershell(request, raw));
-    }
-    let posix = parse_posix_command(request)?;
-    if request.dialect != "posix" || !powershell_reads::windows_powershell_host() {
-        return Ok(posix);
-    }
-    // Windows agents run PowerShell. A cmdlet name means POSIX only saw an
-    // unknown word, so the PowerShell result stands even when it is uncertain.
-    if posix.confidence == "exact" && powershell_command::names_powershell_effect(&posix.segments) {
-        return Ok(parse_explicit_powershell(request, raw));
-    }
-    // Otherwise retry input that POSIX cannot prove, or where it only saw a
-    // read-only cmdlet as an unknown word. Either keeps POSIX if PowerShell fails.
-    if (posix.confidence != "exact" || powershell_command::names_powershell_benign(&posix.segments))
-        && raw.chars().count() <= MAX_COMMAND_BYTES
-        && raw.len() <= MAX_COMMAND_BYTES
-    {
-        if let Ok(model) = powershell_command::parse(request, raw) {
-            return Ok(model);
-        }
-    }
-    Ok(posix)
-}
-
-fn parse_explicit_powershell(request: &CommandModelRequestV1, raw: &str) -> CanonicalCommandV1 {
-    if raw.chars().count() > MAX_COMMAND_BYTES || raw.len() > MAX_COMMAND_BYTES {
-        return uncertain(request, raw, "command_byte_limit_exceeded");
-    }
-    match powershell_command::parse(request, raw) {
-        Ok(model) => model,
-        Err(reason) => {
-            let mut model = uncertain(request, raw, reason);
-            model.parser_profile = powershell_command::POWERSHELL_PROFILE.to_owned();
-            model
-        }
-    }
-}
-
-/// `2>&1` and `>&1`. A path or a program never has this shape.
-fn is_fd_dup_redirect(token: &str) -> bool {
-    let bytes = token.as_bytes();
-    let rest = bytes
-        .strip_prefix(b"2>&")
-        .or_else(|| bytes.strip_prefix(b">&"));
-    rest.is_some_and(|rest| !rest.is_empty() && rest.iter().all(|byte| byte.is_ascii_digit()))
-}
-
-fn parse_posix_command(request: &CommandModelRequestV1) -> Result<CanonicalCommandV1, String> {
-    let raw = request.command.trim();
-    if raw.is_empty() {
-        return Err("command_text_empty".to_owned());
-    }
-    // Unquoted Windows paths keep backslash separators. Quoted POSIX escapes
-    // stay intact, and cmd/PowerShell stay uncertain until they have their own
-    // separator and quoting rules.
-    let preserve_unquoted_backslash = cfg!(windows) && request.dialect == "posix";
-    if request.dialect != "posix" || request.transport != "shell_string" {
-        return Ok(uncertain(request, raw, "unsupported_dialect_or_transport"));
-    }
-    if raw.chars().count() > MAX_COMMAND_BYTES || raw.len() > MAX_COMMAND_BYTES {
-        return Ok(uncertain(request, raw, "command_byte_limit_exceeded"));
-    }
-
-    let raw_segments = if let Some(value) = contained_compile_check_segments(raw) {
-        value
-    } else {
-        match split_execution_segments(raw, preserve_unquoted_backslash) {
-            Ok(value) => value,
-            Err(reason) => return Ok(uncertain(request, raw, reason)),
-        }
-    };
-    if raw_segments.len() > MAX_COMMAND_SEGMENTS {
-        return Ok(uncertain(request, raw, "command_segment_limit_exceeded"));
-    }
-
-    let chars: Vec<char> = raw.chars().collect();
-    let mut segments = Vec::with_capacity(raw_segments.len());
-    let mut total_tokens = 0usize;
-    for raw_segment in raw_segments {
-        let text: String = chars[raw_segment.start..raw_segment.end].iter().collect();
-        let tokens = match shell_tokens(&text, preserve_unquoted_backslash) {
-            Ok(value) => value,
-            Err(reason) => return Ok(uncertain(request, raw, reason)),
-        };
-        total_tokens = total_tokens.saturating_add(tokens.len());
-        if total_tokens > MAX_COMMAND_TOKENS {
-            return Ok(uncertain(request, raw, "command_token_limit_exceeded"));
-        }
-
-        let mut environment_names = Vec::new();
-        let mut executable_index = 0usize;
-        while executable_index < tokens.len() {
-            if let Some(name) = assignment_name(&tokens[executable_index]) {
-                environment_names.push(name.to_owned());
-                executable_index += 1;
-                continue;
-            }
-            // `;2>&1 python3 evil.py` tokenizes the redirect as the first word.
-            // It is not the program.
-            if is_fd_dup_redirect(&tokens[executable_index]) {
-                executable_index += 1;
-                continue;
-            }
-            break;
-        }
-        let (executable_index, wrapper_chain) = match parser_wrappers::unwrap_wrappers(
-            &tokens,
-            executable_index,
-            &mut environment_names,
-        ) {
-            Ok(value) => value,
-            Err(reason) => return Ok(uncertain(request, raw, reason)),
-        };
-        let mut tokens = tokens;
-        let mut executable = tokens.get(executable_index).cloned();
-        let mut arguments = if executable.is_some() {
-            tokens[executable_index + 1..].to_vec()
-        } else {
-            Vec::new()
-        };
-        if executable_index == 0 && powershell_reads::windows_powershell_host() {
-            if let Some(operands) = executable.as_deref().and_then(|name| {
-                powershell_reads::plain_get_content_operands(name, &arguments, &text)
-            }) {
-                tokens = std::iter::once("cat".to_owned())
-                    .chain(operands.iter().cloned())
-                    .collect();
-                executable = Some("cat".to_owned());
-                arguments = operands;
-            }
-        }
-        if executable.as_deref().is_some_and(is_shell_control_keyword) {
-            return Ok(uncertain(request, raw, "compound_shell_not_yet_supported"));
-        }
-        if executable.as_deref().is_some_and(is_transparent_wrapper)
-            && !parser_wrappers::is_encoded_stdin_shell(
-                executable.as_deref(),
-                &arguments,
-                &raw_segment,
-                segments.last(),
-            )
-            && !parser_wrappers::is_file_shell_invocation(executable.as_deref(), &arguments)
-            && !parser_wrappers::is_command_lookup(executable.as_deref(), &arguments)
-        {
-            return Ok(uncertain(
-                request,
-                raw,
-                "transparent_wrapper_not_yet_supported",
-            ));
-        }
-        let read_only_xargs = executable
-            .as_deref()
-            .is_some_and(|value| executable_basename(value) == "xargs")
-            && environment_names.is_empty()
-            && wrapper_chain.is_empty()
-            && segments.last().is_some_and(|previous| {
-                let context = format!("top:{}", raw_segment.group_index);
-                read_only_fanout::xargs_follows_find(
-                    previous,
-                    raw_segment.pipeline_index,
-                    &context,
-                    &arguments,
-                ) || read_only_fanout::xargs_follows_object_names(
-                    previous,
-                    raw_segment.pipeline_index,
-                    &context,
-                    &arguments,
-                )
-            });
-        if !read_only_xargs
-            && executable
-                .as_deref()
-                .is_some_and(|value| is_nested_command_executor(value, &arguments))
-        {
-            return Ok(uncertain(
-                request,
-                raw,
-                "nested_command_executor_not_yet_supported",
-            ));
-        }
-        let path_overridden = environment_names.iter().any(|name| name == "PATH");
-        segments.push(CommandSegmentV1 {
-            text,
-            tokens,
-            executable,
-            arguments,
-            environment_names,
-            wrapper_chain,
-            path_overridden,
-            execution_context: format!("top:{}", raw_segment.group_index),
-            pipeline_index: raw_segment.pipeline_index,
-            span: CommandSpanV1 {
-                source: "normalized".to_owned(),
-                start: raw_segment.start,
-                end: raw_segment.end,
-            },
-        });
-    }
-
-    let path_overridden = segments.iter().any(|segment| segment.path_overridden);
-    let wrapper_chain = segments
-        .iter()
-        .flat_map(|segment| segment.wrapper_chain.iter().cloned())
-        .collect::<Vec<_>>();
-    let parser_profile = if wrapper_chain.is_empty() {
-        "posix-simple-v1"
-    } else {
-        "posix-bounded-wrappers-v2"
-    };
-    Ok(CanonicalCommandV1 {
-        exact_raw_text: true,
-        normalized_text: raw.to_owned(),
-        dialect: request.dialect.clone(),
-        transport: request.transport.clone(),
-        extraction_provenance: request.extraction_provenance.clone(),
-        wrapper_chain,
-        segments,
-        confidence: "exact".to_owned(),
-        uncertainty_reason: None,
-        path_overridden,
-        parser_profile: parser_profile.to_owned(),
-        security_identity: String::new(),
-    })
-}
-
-fn uncertain(request: &CommandModelRequestV1, raw: &str, reason: &str) -> CanonicalCommandV1 {
-    CanonicalCommandV1 {
-        exact_raw_text: false,
-        normalized_text: raw.to_owned(),
-        dialect: request.dialect.clone(),
-        transport: request.transport.clone(),
-        extraction_provenance: request.extraction_provenance.clone(),
-        wrapper_chain: Vec::new(),
-        segments: Vec::new(),
-        confidence: "uncertain".to_owned(),
-        uncertainty_reason: Some(reason.to_owned()),
-        path_overridden: false,
-        parser_profile: "posix-simple-v1".to_owned(),
-        security_identity: String::new(),
-    }
-}
 
 #[cfg(test)]
 #[path = "powershell_parser_tests.rs"]
@@ -694,17 +403,28 @@ pub mod guard_run_launch;
 pub mod install_time_event;
 pub mod local_supply_chain;
 #[cfg(test)]
+mod local_supply_chain_risk_action_tests;
+#[cfg(test)]
 mod local_supply_chain_saved_claim_tests;
 #[cfg(test)]
 mod local_supply_chain_stale_policy_tests;
+#[cfg(test)]
+mod local_supply_chain_timestamp_tests;
 pub mod package_approval;
+#[cfg(test)]
+mod package_intent_exact_decode_tests;
 pub mod package_policy_override;
 pub mod package_protect_projection;
+mod package_shim_invocation;
+#[cfg(test)]
+mod package_shim_invocation_tests;
 pub mod prompt_analysis;
 pub mod redacted_command_tokens;
 pub mod supply_chain_package_eval;
 pub mod target_identities;
 pub mod workspace_inventory;
+#[cfg(test)]
+mod workspace_path_guard_tests;
 
 // RTM-014/017/020/023 pending modules — compile signal only until legs complete.
 pub mod aibom_reporting;
@@ -718,6 +438,7 @@ pub mod contained_execution;
 #[cfg(unix)]
 pub mod contained_runner;
 pub mod credential_patterns;
+pub mod data_flow_request_artifact;
 pub mod data_flow_rules;
 pub mod decisions;
 pub mod detectors;
@@ -731,26 +452,41 @@ pub mod egress_proxy_credentials;
 mod egress_spool;
 pub mod false_positive_rules;
 pub mod guard_sync_transport;
-mod hook_adapter_cline_tables;
+#[path = "adapters/hook/hook_adapter_envelope.rs"]
 pub mod hook_adapter_envelope;
+#[path = "adapters/hook/hook_adapter_envelope_tables.rs"]
 mod hook_adapter_envelope_tables;
+#[path = "adapters/hook/hook_adapter_envelope_text.rs"]
 mod hook_adapter_envelope_text;
 #[cfg(test)]
+#[path = "adapters/hook/hook_adapter_omp_tests.rs"]
 mod hook_adapter_omp_tests;
+#[path = "adapters/hook/hook_adapter_paths.rs"]
 pub mod hook_adapter_paths;
-pub mod hook_adapter_prepare;
-pub mod hook_adapter_prepare_cline;
-mod hook_adapter_prepare_cursor;
-mod hook_adapter_pyjson;
-mod hook_adapter_pytext;
+use guard_hook_payload::{hook_adapter_cline_tables, hook_adapter_pyjson, hook_adapter_pytext};
+pub use guard_hook_payload::{
+    hook_adapter_prepare, hook_adapter_prepare_cline, hook_adapter_value,
+};
+#[path = "adapters/hook/hook_adapter_redact.rs"]
 mod hook_adapter_redact;
+#[path = "adapters/hook/hook_adapter_secret_path.rs"]
 mod hook_adapter_secret_path;
-pub mod hook_adapter_value;
 #[cfg(all(test, unix))]
+#[path = "adapters/hook/hook_adapter_vector_tests.rs"]
 mod hook_adapter_vector_tests;
+mod hook_evidence_deferred_post;
 pub mod hook_evidence_writer;
+#[cfg(test)]
+mod hook_evidence_writer_tests;
 pub mod hook_responses;
+pub mod inventory_agent_types;
 pub mod inventory_contract;
+#[cfg(test)]
+mod inventory_contract_tests;
+pub mod inventory_fingerprints;
+pub mod inventory_item_metadata;
+pub mod inventory_path_redaction;
+pub mod inventory_redaction;
 pub mod js_semver;
 pub mod linux_artifact_supply_chain;
 #[cfg(any(unix, windows))]
@@ -763,6 +499,8 @@ mod mcp_package_sources;
 pub mod mcp_stdio_session;
 pub mod pep440;
 pub mod persistence_rules;
+mod python_netloc;
+mod python_url;
 pub mod registry_metadata_transport;
 pub mod restricted_archive;
 mod restricted_archive_address;
@@ -783,7 +521,17 @@ pub(crate) mod semantic_workspace;
 pub mod shims;
 pub mod signals;
 pub mod skill_content_risk;
+pub mod skill_dependency_manifest;
+pub mod skill_identity;
+pub mod strict_json;
 pub mod supply_chain_bundle;
 pub mod supply_chain_package_identity;
 pub mod supply_chain_risk;
 pub mod supply_chain_support;
+pub mod verified_npm;
+pub mod verified_read_decision;
+#[cfg(test)]
+mod verified_read_decision_tests;
+pub mod verified_read_plan;
+#[cfg(test)]
+mod verified_read_plan_tests;

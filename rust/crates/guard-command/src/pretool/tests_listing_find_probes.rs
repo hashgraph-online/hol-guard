@@ -100,13 +100,17 @@ fn recursive_listing_and_globs_stay_inside_clean_trees() {
         "ls app/registry/[slug] src",
         // The unmatched bracket drops out under nullglob; `src` remains.
         "ls -R app/registry/[slug] src",
+        // A recursion without `-a` prints no hidden name and descends into no
+        // hidden directory, so the credential file below `bad` is not part of
+        // what the listing can emit.
+        "ls -R bad",
+        "ls --rec bad",
     ] {
         assert!(allowed_in(&fixture, ws, command), "{command}");
     }
     for command in [
-        // Recursion reaches hidden credential files and credential data.
-        "ls -R bad",
-        "ls --rec bad",
+        // Recursion reaches credential data and key containers the listing
+        // prints without being asked for a hidden name.
         "ls --recurs .",
         "ls -R .",
         "ls -R keys",
@@ -163,8 +167,10 @@ fn grep_tree_walk_matches_what_the_walk_can_emit() {
     // Hidden benign names, route brackets and source files that merely name a
     // credential word are admitted by the walk; non-source credential data,
     // key containers and dot-directories are not.
+    // The fixture files all read `synthetic`, so that pattern would print
+    // from a sensitive file and keeps the review.
     for command in [
-        "grep -rn needle bad",
+        "grep -rn synthetic bad",
         "grep -rn needle keys",
         "grep -rn needle docs",
         "grep -rn needle .",
@@ -175,6 +181,8 @@ fn grep_tree_walk_matches_what_the_walk_can_emit() {
     ] {
         assert!(!allowed_in(&fixture, ws, command), "{command}");
     }
+    // A plain pattern that cannot occur in `bad/.env` prints nothing from it.
+    assert!(allowed_in(&fixture, ws, "grep -rn needle bad"));
     // The benign hidden entries and credential-named source directories pass
     // when they are the only difficulty in the tree.
     let tree = std::path::Path::new(&fixture.workspace).join("walk");
@@ -196,7 +204,8 @@ fn grep_tree_walk_matches_what_the_walk_can_emit() {
     assert!(!allowed_in(&fixture, ws, "grep -rln needle walk"));
     std::fs::remove_dir_all(tree.join("prod-secrets")).unwrap();
     write(&tree, ".env");
-    assert!(!allowed_in(&fixture, ws, "grep -rln needle walk"));
+    assert!(!allowed_in(&fixture, ws, "grep -rln synthetic walk"));
+    assert!(allowed_in(&fixture, ws, "grep -rln needle walk"));
     std::fs::remove_file(tree.join(".env")).unwrap();
     write(&tree, "id_rsa");
     assert!(!allowed_in(&fixture, ws, "grep -rln needle walk"));
@@ -263,6 +272,8 @@ fn version_probes_admit_lone_flags_and_keep_npx_review() {
         "ruff --version",
         "gh --version",
         "docker --version",
+        "docker version",
+        "docker compose version",
         "git --version",
         "kubectl version --client",
         "wrangler --version",
@@ -284,7 +295,6 @@ fn version_probes_admit_lone_flags_and_keep_npx_review() {
         "python3 script.py",
         "node script.mjs",
         "npm test",
-        "docker version",
         "yarn --version",
         "pnpm --version",
         "/usr/local/bin/uv --version",
@@ -495,14 +505,14 @@ fn powershell_recurse_prefixes_take_the_recursive_proof_on_windows() {
     // On Windows `ls` can be PowerShell's Get-ChildItem. `-s` is `-Recurse`,
     // and any other prefix of `-Recurse` or `-Depth` is recursive too.
     for command in [
-        "ls -rec bad",
-        "ls -recurse -Force bad",
-        "ls -Depth:1 bad",
-        "ls -s bad",
+        "ls -rec docs",
+        "ls -recurse -Force docs",
+        "ls -Depth:1 docs",
+        "ls -s docs",
     ] {
         assert!(!windows(command), "{command}");
     }
-    for command in ["ls -la bad", "ls -rec src", "ls -Force bad"] {
+    for command in ["ls -la bad", "ls -rec src", "ls -Force bad", "ls docs"] {
         assert!(windows(command), "{command}");
     }
 }

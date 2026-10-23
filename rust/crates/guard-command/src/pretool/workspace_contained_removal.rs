@@ -187,7 +187,7 @@ pub(super) fn loses_work(
     if removals.iter().any(|(index, _)| *index > first_other) {
         return true;
     }
-    let mut probe = None;
+    let mut ignore = IgnoreProbe::new(context, execution_environment);
     removals
         .iter()
         .flat_map(|(_, operands)| operands)
@@ -198,16 +198,60 @@ pub(super) fn loses_work(
             if std::fs::symlink_metadata(cwd.join(operand)).is_err() {
                 return false;
             }
-            let probe = probe.get_or_insert_with(|| {
-                let probe = Probe::new("git", &[], context, None, execution_environment)?;
+            !ignore.ignores(operand)
+        })
+}
+
+/// Whether a local `rsync` copy could replace a destination Git does not
+/// ignore. Overwriting uncommitted files loses work the sandbox cannot
+/// restore, the same loss a recursive removal is held to.
+pub(super) fn rsync_replaces_work(
+    model: &CanonicalCommandV1,
+    command_text: Option<&str>,
+    context: PathContext<'_>,
+    execution_environment: Option<&GuardExecutionEnvironmentV1>,
+) -> bool {
+    let mut ignore = IgnoreProbe::new(context, execution_environment);
+    super::super::rsync_local::replaces_work(
+        &model.segments,
+        Some(command_text.unwrap_or(&model.normalized_text)),
+        context.cwd.map(Path::new),
+        &mut |operand| ignore.ignores(operand),
+    )
+}
+
+/// Git's answer to whether a path is ignored. The repository is asked only
+/// when a path exists, and only after its configuration proves inert.
+struct IgnoreProbe<'a> {
+    context: PathContext<'a>,
+    execution_environment: Option<&'a GuardExecutionEnvironmentV1>,
+    probe: Option<Option<Probe>>,
+}
+
+impl<'a> IgnoreProbe<'a> {
+    fn new(
+        context: PathContext<'a>,
+        execution_environment: Option<&'a GuardExecutionEnvironmentV1>,
+    ) -> Self {
+        Self {
+            context,
+            execution_environment,
+            probe: None,
+        }
+    }
+
+    fn ignores(&mut self, operand: &str) -> bool {
+        let (context, environment) = (self.context, self.execution_environment);
+        self.probe
+            .get_or_insert_with(|| {
+                let probe = Probe::new("git", &[], context, None, environment)?;
                 let (effective, repository) = probe.config()?;
                 super::super::git_local_writes::inert(&effective, &repository).then_some(probe)
-            });
-            probe
-                .as_ref()
-                .and_then(|probe| probe.text(&["check-ignore", "--", operand]))
-                .is_none()
-        })
+            })
+            .as_ref()
+            .and_then(|probe| probe.text(&["check-ignore", "--", operand]))
+            .is_some()
+    }
 }
 
 /// Whether a destructive argument names the whole workspace, an ancestor of

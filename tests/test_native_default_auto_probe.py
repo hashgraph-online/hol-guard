@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.native_probe_receipts import receipt_corpus_is_complete, wait_for_receipt_corpus, wait_for_route_corpus
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS
 
 
 def test_receipt_corpus_complete_requires_processed_count() -> None:
@@ -209,7 +210,7 @@ def test_probe_closes_scoped_clients_before_stopping_resident(
     def stop_resident(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
         assert events == [("close", guard_home)]
         assert command == (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime"))
-        assert kwargs == {"check": False, "capture_output": True, "timeout": 2}
+        assert kwargs == {"check": False, "capture_output": True, "timeout": RESIDENT_STOP_TIMEOUT_SECONDS}
         events.append(("stop", guard_home))
         if outcome == "timeout":
             raise subprocess.TimeoutExpired(command, timeout=2)
@@ -311,7 +312,7 @@ def test_probe_retries_supervisor_join_after_authenticated_stop(
 
     def stop_resident(command: tuple[str, ...], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
         stops.append(command)
-        assert kwargs == {"check": False, "capture_output": True, "timeout": 2}
+        assert kwargs == {"check": False, "capture_output": True, "timeout": RESIDENT_STOP_TIMEOUT_SECONDS}
         return subprocess.CompletedProcess(command, returncode=0)
 
     monkeypatch.setattr(probe, "close_native_residents", close_supervisor)

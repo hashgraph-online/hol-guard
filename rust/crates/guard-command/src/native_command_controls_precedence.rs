@@ -1,5 +1,5 @@
 //! When a user's explicit extension Allow takes precedence over Rust's own
-//! judgment of a command, and when uncertainty about an allowed Git rule still
+//! judgment of a command, and when uncertainty about an allowed rule still
 //! reviews.
 
 use guard_contracts::{NativeCommandObservationBatchV1, PreToolResultV1};
@@ -21,8 +21,9 @@ const OVERRIDABLE_NATIVE_REASONS: &[&str] = &[
 
 impl CompiledNativeCommandControls {
     /// The floor an uncertain observation of `rule_id` contributes, or `None`
-    /// for a Git rule the user explicitly allowed: that uncertainty reviews
-    /// only when the Allow does not settle the command ([`Self::explicit_allow`]).
+    /// for a rule the user explicitly allowed, whichever extension owns it:
+    /// that uncertainty reviews only when the Allow does not settle the
+    /// command ([`Self::explicit_allow`]).
     pub(super) fn uncertain_candidate(&self, rule_id: &str) -> Option<&'static str> {
         let Some(index) = self.rule_indices.get(rule_id) else {
             return Some("block");
@@ -34,10 +35,8 @@ impl CompiledNativeCommandControls {
             .contains(&rule.permission_id)
         {
             Some(rule_floor(rule, extension.required))
-        } else if extension.extension_id == "command.git" {
-            None
         } else {
-            Some("review")
+            None
         }
     }
 
@@ -45,8 +44,8 @@ impl CompiledNativeCommandControls {
     /// permissions settles a command whose delegated floor is already allow.
     /// Guard self-protection, secret access and exfiltration, configured Git
     /// programs, disabled permissions and evaluation failures are fixed
-    /// floors. Allowed Git uncertainty also needs every Git segment to run a
-    /// built-in whose program options Guard holds, in a verified repository.
+    /// floors. Allowed uncertainty also needs every segment to stay inside
+    /// what its text proves ([`settles_enabled_uncertainty`]).
     pub(super) fn explicit_allow(
         &self,
         result: &PreToolResultV1,
@@ -66,22 +65,20 @@ impl CompiledNativeCommandControls {
                         || model
                             .segments
                             .iter()
-                            .all(|segment| settles_git_uncertainty(segment, context)))
+                            .all(|segment| settles_enabled_uncertainty(segment, context)))
                     && self.explicit_permissions_cover_command(model, batch, context)
             })
     }
 }
 
-/// Whether a segment is not Git, or runs a Git built-in whose program options
-/// Guard holds in a repository whose routes it verified.
-fn settles_git_uncertainty(
+/// Whether a segment's own shape stays inside what its text proves, so an
+/// explicit Allow may settle uncertainty about it, whichever extension owns
+/// the uncertain rule.
+fn settles_enabled_uncertainty(
     segment: &crate::CommandSegmentV1,
     context: crate::pretool::PathContext<'_>,
 ) -> bool {
-    use crate::command_compatibility as compatibility;
-    compatibility::basename(segment) != "git"
-        || (compatibility::git_subcommand_settles_uncertainty(segment)
-            && compatibility::git_repository_routes_verified(segment, context))
+    crate::command_compatibility::segment_settles_uncertainty(segment, context)
 }
 
 /// Records that the user's explicit Allow took precedence over Rust's review.

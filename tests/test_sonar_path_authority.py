@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import io
 import json
 from pathlib import Path
 
 import pytest
 import yaml
 
-from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge as bridge
-from codex_plugin_scanner.guard.adapters import copilot_state_paths
 from codex_plugin_scanner.guard.adapters import cursor_hooks as cursor_hooks_module
+from codex_plugin_scanner.guard.adapters._modules.copilot import copilot_state_paths
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor_hooks import (
@@ -22,7 +20,6 @@ from codex_plugin_scanner.guard.adapters.cursor_hooks import (
 )
 from codex_plugin_scanner.guard.adapters.hermes import HermesHarnessAdapter
 from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
-from codex_plugin_scanner.guard.daemon.discovery import authenticate_daemon_state, ensure_daemon_discovery_key
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
 from tests.test_guard_extension_control_authority import MemorySecretStore, _store
@@ -31,57 +28,6 @@ from tests.test_guard_extension_control_authority import MemorySecretStore, _sto
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
-
-def test_claude_daemon_url_rejects_noncanonical_state_path(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match=r"absolute daemon-state[.]json"):
-        bridge._daemon_url(tmp_path / "renamed-state.json", "http://127.0.0.1:5474/")
-
-
-def test_claude_daemon_url_does_not_follow_state_symlink(tmp_path: Path) -> None:
-    external_state = tmp_path / "external.json"
-    external_state.write_text(json.dumps({"port": 6553}), encoding="utf-8")
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    (guard_home / "daemon-state.json").symlink_to(external_state)
-    assert bridge._daemon_url(guard_home / "daemon-state.json", "http://127.0.0.1:5474/") == ("http://127.0.0.1:5474/")
-
-
-def test_claude_daemon_url_uses_authenticated_local_state(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard-home"
-    discovery_key = ensure_daemon_discovery_key(guard_home)
-    state = authenticate_daemon_state(
-        {
-            "guard_home": str(guard_home.resolve()),
-            "host": "127.0.0.1",
-            "port": 6553,
-        },
-        discovery_key=discovery_key,
-    )
-    state_path = guard_home / "daemon-state.json"
-    _write_json(state_path, state)
-    state_path.chmod(0o600)
-
-    assert bridge._daemon_url(state_path, "http://127.0.0.1:5474/") == "http://127.0.0.1:6553/"
-
-
-def test_claude_bridge_falls_back_when_hook_state_binding_is_stale(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    monkeypatch.setattr("sys.stdin", io.StringIO('{"hook_event_name":"PreToolUse"}'))
-    monkeypatch.setattr(bridge, "_run_local_fallback", lambda *args, **kwargs: '{"fallback":true}')
-
-    result = bridge.main(
-        state_path=tmp_path / "old-home" / "daemon-state.json",
-        fallback_daemon_url="http://127.0.0.1:5474/",
-        fallback_command=("trusted-guard", "hook"),
-        query=f"guard-home={tmp_path / 'new-home'}",
-    )
-
-    assert result == 0
-    assert json.loads(capsys.readouterr().out) == {"fallback": True}
 
 
 def test_copilot_uninstall_ignores_tampered_lifecycle_paths(tmp_path: Path) -> None:

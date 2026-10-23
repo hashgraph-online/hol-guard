@@ -18,7 +18,9 @@ _RESIDENT_ROUND_TRIPS_PER_PI_HOOK = 3
 
 # The daemon's direct-hook evidence drain pages evidence on its own wake-ups,
 # off the hook path, so how often it runs depends on timing, not request count.
-_BACKGROUND_OPERATIONS = frozenset({"hook_direct_evidence_drain"})
+# The evidence writer's own thread persists what a finished hook queued, so its
+# store round trips are the same kind of traffic and carry their own name.
+_BACKGROUND_OPERATIONS = frozenset({"hook_direct_evidence_drain", "hook_evidence_writer_drain"})
 
 
 def _pi_workload(requests: int, event: str = "PostToolUse") -> WorkloadSpec:

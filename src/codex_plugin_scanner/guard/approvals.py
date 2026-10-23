@@ -23,10 +23,10 @@ from .adapters import get_adapter
 from .adapters.base import HarnessContext
 from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approval_decision
 from .approval_once_eligibility import requires_local_once_approval
+from .approval_persist_select_support import resolve_request_persistence_selection
 from .approval_resolution import require_resolvable_approval_request
 from .approval_scope_support import (
     RETRY_CANNOT_REUSE_APPROVAL,
-    IneligibleApprovalScopeError,
     apply_scope_surfaces,
     package_request_portable_workspace_scope,
     request_scope_observation,
@@ -341,7 +341,8 @@ def queue_blocked_approvals(
                 payloads.append(request_payload)
                 if notify:
                     notice = cast(dict[str, str], entry["notice"])
-                    _notify_pending_approval(store=store, request=_QueuedNotice(**notice))
+                    group = _string_or_none(request_payload.get("queue_group_id"))
+                    _notify_pending_approval(store=store, request=_QueuedNotice(**notice, queue_group_id=group))
             if error is not None:
                 raise error
     except Exception as failure:
@@ -387,6 +388,7 @@ class _QueuedNotice:
     artifact_name: str
     risk_headline: str | None
     trigger_summary: str | None
+    queue_group_id: str | None = None
 
 
 def silent_review_center_url(guard_home: Path) -> str:
@@ -429,24 +431,6 @@ def record_unprompted_review(
         return []
 
 
-def evaluation_has_terminal_policy_action(evaluation: Mapping[str, object]) -> bool:
-    """Return whether an evaluation contains a non-overridable policy action."""
-
-    artifacts = evaluation.get("artifacts")
-    if not isinstance(artifacts, list):
-        return False
-    for item in artifacts:
-        if not isinstance(item, Mapping):
-            continue
-        action = normalize_guard_action_result(
-            item.get("policy_action"),
-            unknown_action="require-reapproval",
-        ).action
-        if action in {"block", "sandbox-required"}:
-            return True
-    return False
-
-
 @_serialize_approval_resolution
 def apply_approval_resolution(
     *,
@@ -475,8 +459,13 @@ def apply_approval_resolution(
         raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
     if request["status"] != "pending":
         raise ApprovalRequestAlreadyResolvedError(f"Approval request already resolved: {request_id}")
-    require_resolvable_approval_request(request)
-    resolved_at = now or _now()
+    require_resolvable_approval_request(request, guard_home=store.guard_home)
+    from .native_bash_review_preflight import require_verified_bash_review
+
+    require_verified_bash_review(store, request, require_execution=action == "allow" or persist_policy is True)
+    from .store_base import _canonical_utc_timestamp
+
+    resolved_at = _canonical_utc_timestamp(now or _now())
     temporary_mcp_selection: TemporaryMcpGrantSelection | None = None
     if (mcp_grant_target is None) != (mcp_grant_duration is None):
         raise ValueError("incomplete_temporary_mcp_approval")
@@ -505,30 +494,34 @@ def apply_approval_resolution(
             duration=local_tool_grant_duration,
             now=resolved_at,
         )
-    contract, exact_token = request_scope_observation(request)
+    contract, exact_token = (
+        request_scope_observation(request, guard_home=store.guard_home)
+        if request.get("artifact_type") == "native_bash_request"
+        else request_scope_observation(request)
+    )
     selection = resolve_request_scope_selection(
         request,
         action=action,
         requested_scope=scope,
         contract_version=scope_contract_version,
         contract_digest=scope_contract_digest,
-        contract=contract,
+        guard_home=store.guard_home,
     )
     requested_scope = selection.requested_scope
     scope = selection.applied_scope
-    if selection.warning is not None:
-        persist_policy = None
-    elif scope == "artifact" and persist_policy is True:
-        if scope_contract_version is not None:
-            if not contract.exact_action_persistence_eligible:
-                raise IneligibleApprovalScopeError(
-                    "saved_allow_scope_ineligible" if action == "allow" else "saved_block_scope_ineligible",
-                    contract,
-                    action="allow" if action == "allow" else "block",
-                    requested_scope=scope,
-                )
-        else:
-            persist_policy = None
+    # The resident owns both eligibility gates: whether this resolution may be
+    # remembered against the request's exact action, and whether an allow has
+    # any binding left to run under.
+    persist_policy = resolve_request_persistence_selection(
+        request,
+        action=action,
+        applied_scope=scope,
+        persist_policy=persist_policy,
+        scope_narrowed=selection.warning is not None,
+        contract_version=scope_contract_version,
+        contract_digest=scope_contract_digest,
+        guard_home=store.guard_home,
+    )
     request_artifact_id = _string_or_none(request.get("artifact_id"))
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
     resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
@@ -840,12 +833,39 @@ def _notify_pending_approval(*, store: GuardStore, request: _QueuedNotice) -> No
     notify_pending_approval_once(
         DesktopApprovalNotification(
             request_id=request.request_id,
-            title="HOL Guard needs approval",
+            title=_approval_notification_title(request),
             message=_approval_notification_message(request),
             approval_url=approval_url,
         ),
         on_success=lambda: _mark_desktop_notified(store, request.request_id),
     )
+
+
+def notify_connector_setup(store: object, queued: Mapping[str, object], *, connector_name: str) -> None:
+    """Raise the setup notice for a native review row already queued under a connector group.
+
+    Best effort, as ``_notify_pending_approval`` is: the row is in the Inbox either way. Commands that wait on
+    one connector share a group, and the store answers with its first notified sibling's marker, so only the
+    first command raises a notice.
+    """
+
+    fields = {key: _string_or_none(queued.get(key)) for key in ("request_id", "harness", "approval_url")}
+    group = _string_or_none(queued.get("queue_group_id"))
+    request_id, harness, approval_url = fields["request_id"], fields["harness"], fields["approval_url"]
+    if request_id is None or harness is None or approval_url is None or group is None:
+        return
+    notice = _QueuedNotice(
+        request_id=request_id,
+        harness=harness,
+        workspace=_string_or_none(queued.get("workspace")),
+        approval_url=approval_url,
+        artifact_name=connector_name,
+        risk_headline=connector_name,
+        trigger_summary=None,
+        queue_group_id=group,
+    )
+    with contextlib.suppress(Exception):
+        _notify_pending_approval(store=cast(GuardStore, store), request=notice)
 
 
 def _mark_desktop_notified(store: GuardStore, request_id: str) -> None:
@@ -855,10 +875,22 @@ def _mark_desktop_notified(store: GuardStore, request_id: str) -> None:
         store.mark_approval_desktop_notified(request_id, _now())
 
 
+def _is_connector_setup(request: _QueuedNotice) -> bool:
+    return (request.queue_group_id or "").startswith("connector:")
+
+
+def _approval_notification_title(request: _QueuedNotice) -> str:
+    # Commands of one connector share a single notice, raised by the first.
+    return "HOL Guard: a connector needs setup" if _is_connector_setup(request) else "HOL Guard needs approval"
+
+
 def _approval_notification_message(request: _QueuedNotice) -> str:
     subject = request.risk_headline or request.trigger_summary or request.artifact_name
     harness = request.harness.replace("-", " ").title()
-    message = f"{harness} wants approval: {subject}"
+    if _is_connector_setup(request):
+        message = f"{harness} is waiting on a connector Guard has not set up yet: {subject}"
+    else:
+        message = f"{harness} wants approval: {subject}"
     if len(message) <= 180:
         return message
     return f"{message[:177].rstrip()}..."
@@ -1344,6 +1376,7 @@ def wait_for_approval_requests(
     request_ids: list[str],
     timeout_seconds: int,
     poll_interval: float = 0.01,
+    stop_on_missing: bool = False,
 ) -> dict[str, object]:
     if not request_ids:
         return {
@@ -1355,6 +1388,10 @@ def wait_for_approval_requests(
     deadline = time.monotonic() + max(timeout_seconds, 0)
     while True:
         items = [store.get_approval_request(request_id) for request_id in request_ids]
+        if stop_on_missing:
+            missing = [request_id for request_id, item in zip(request_ids, items, strict=True) if item is None]
+            if missing:
+                return {"resolved": False, "missing_request_ids": missing, "items": []}
         resolved_items = [item for item in items if isinstance(item, dict) and item.get("status") == "resolved"]
         pending_ids = [
             request_id
@@ -1954,8 +1991,9 @@ def bulk_allow_read_only_once(
     now: str | None = None,
 ) -> dict[str, object]:
     from .approval_gate import public_config
+    from .store_base import _canonical_utc_timestamp
 
-    resolved_at = now or _now()
+    resolved_at = _canonical_utc_timestamp(now or _now())
     gate = public_config(store.guard_home, now=resolved_at)
     if not gate.enabled or not gate.configured:
         raise ValueError("bulk_approve_gate_required")

@@ -19,13 +19,13 @@ from pathlib import Path
 from typing import Final, cast
 
 from .business_policy_document_import import compile_document_for_import
+from .native_command_policy_decision import native_command_policy_decision
 from .native_policy_document_decision import native_policy_document_decision
 from .policy_document import GuardPolicyDocument
 from .policy_document_diagnostics import COMMAND_EXPRESSION_CODE
 from .policy_document_io import PolicyCompilationError
 from .policy_document_types import CompiledPolicyRow
-from .runtime.command_policy import CommandPolicyRule, compile_command_policy_rules
-from .runtime.command_policy import evaluate_command_policy_rules as _evaluate_command_rules
+from .runtime.command_expression import CommandExpression
 
 POLICY_TOOL_FAMILIES: Final = (
     "file-read",
@@ -166,42 +166,55 @@ def decide_rows(
     )
 
 
-def decide_command(document: GuardPolicyDocument, command: str, *, now: str) -> dict[str, object]:
-    """Decide a shell command against the typed command-expression rules of ``document``."""
+def _wire_expression(expression: CommandExpression) -> dict[str, object]:
+    """One command expression in the shape the resident's typed request reads."""
 
-    rules: tuple[CommandPolicyRule, ...] = compile_command_policy_rules(document)
-    evaluation = _evaluate_command_rules(rules, command)
-    matching = set(evaluation.matching_rule_ids)
-    # The evaluation lists matches in document order; the deciding rule is the first one that asked for the
-    # strongest action, and only matches with that same action tie with it.
-    selected = next(
-        (rule.rule_id for rule in rules if rule.rule_id in matching and rule.action == evaluation.action), None
-    )
-    candidates: list[dict[str, object]] = []
-    tied: list[str] = []
-    for index, rule in enumerate(rules):
-        if rule.rule_id not in matching:
-            candidates.append({"ruleId": rule.rule_id, "rowIndex": index, "state": "unmatched", "reason": "command"})
-        elif rule.rule_id == selected:
-            candidates.append({"ruleId": rule.rule_id, "rowIndex": index, "state": "selected", "reason": None})
-        elif rule.action != evaluation.action:
-            candidates.append({"ruleId": rule.rule_id, "rowIndex": index, "state": "outranked", "reason": "block_wins"})
-        else:
-            tied.append(rule.rule_id)
-            candidates.append({"ruleId": rule.rule_id, "rowIndex": index, "state": "outranked", "reason": "tie"})
-    effect = evaluation.action if matching and evaluation.action in ("allow", "block") else "default"
-    decision: dict[str, object] = {
-        "effect": effect,
-        "ruleId": selected,
-        "ambiguous": bool(tied),
-        "matchLimitExceeded": False,
-        "tiedRuleIds": sorted(tied),
-        "candidates": candidates,
-        "lookup": {"artifactId": None, "familyKey": None, "at": now},
+    return {
+        "combinator": expression.combinator,
+        "conditions": [
+            {
+                "operator": condition.operator,
+                "value": condition.value,
+                "case_sensitive": condition.case_sensitive,
+            }
+            for condition in expression.conditions
+        ],
     }
-    if matching:
-        decision["action"] = evaluation.action
-    return decision
+
+
+def _wire_command_rules(document: GuardPolicyDocument) -> list[dict[str, object]]:
+    """Every enabled document rule that carries a command expression, in document order."""
+
+    return [
+        {
+            "rule_id": rule.id,
+            "action": rule.effect,
+            "expression": _wire_expression(rule.match.command_expression),
+        }
+        for rule in document.rules
+        if rule.enabled and rule.match.command_expression is not None
+    ]
+
+
+def decide_command(
+    document: GuardPolicyDocument,
+    command: str,
+    *,
+    now: str,
+    guard_home: Path | None = None,
+) -> dict[str, object]:
+    """Decide a shell command against the typed command-expression rules of ``document``.
+
+    The runtime matches the patterns and ranks the rules, so a command that reads as allowed here
+    reads the same way when the hook enforces it.
+    """
+
+    return native_command_policy_decision(
+        _wire_command_rules(document),
+        command,
+        now=now,
+        guard_home=guard_home,
+    )
 
 
 def compile_local_rows(document: GuardPolicyDocument) -> tuple[CompiledPolicyRow, ...]:

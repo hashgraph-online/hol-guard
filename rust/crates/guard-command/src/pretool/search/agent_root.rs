@@ -65,8 +65,9 @@ pub(in crate::pretool) fn agent_root_listing(
         && (!recursive || walk(agent, &[], &[], false, false))
 }
 
-/// A user skill directory, or `~/.agents`, named for a listing that prints
-/// names only (`ls` without recursion, `find` without actions). Agents look
+/// A user skill directory, `~/.agents`, or the `skills` tree of any tool's
+/// own home directory, named for a listing that prints names only (`ls`
+/// without recursion, `find` without actions). Agents look
 /// up skill scripts this way; the operand must clear the same word screens as
 /// the `.agent` root and resolve to a directory the skill rules admit.
 /// The operand names a skill root, and that root is a link to the home
@@ -157,11 +158,51 @@ pub(in crate::pretool) fn skill_listing_root(value: &str, context: ReadContext<'
         .is_some_and(|canonical| {
             guard_secure_fs::sensitive_path_family(&canonical).is_none()
                 && !guard_secure_fs::credential_named_path(&canonical)
-                && super::super::read_paths::agent_skill_listing_directory(
+                && (super::super::read_paths::agent_skill_listing_directory(
                     &canonical,
                     context.home_dir,
-                )
+                ) || home_tool_skill_tree(&canonical, context.home_dir))
         })
+}
+
+/// A `skills` tree below a tool's own home directory.
+///
+/// Every harness keeps user skills at `~/.<tool>/skills`, and the named roots
+/// above are the handful that were written down first. The next harness's
+/// tree is the same shape and prints the same thing — skill folders and the
+/// documents inside them — so it is recognised by that shape rather than by
+/// its name, and an agent looking up its own skills does not have to be using
+/// a harness someone remembered. Only names are printed: a document below the
+/// tree keeps its own read proof, which this never grants.
+///
+/// The screens the named roots carry are kept. `canonical` is resolved, so a
+/// linked `skills` that lands anywhere other than a `.<tool>/skills` of this
+/// home fails the shape. Components below `skills` must be visible, because a
+/// hidden one is private state of the skill rather than part of the tree, and
+/// no component may name a credential store.
+fn home_tool_skill_tree(canonical: &Path, home_dir: Option<&str>) -> bool {
+    let Some(home) = home_dir.and_then(|home| std::fs::canonicalize(home).ok()) else {
+        return false;
+    };
+    let Ok(relative) = canonical.strip_prefix(&home) else {
+        return false;
+    };
+    let Some(parts) = relative
+        .components()
+        .map(|component| match component {
+            std::path::Component::Normal(part) => part.to_str(),
+            _ => None,
+        })
+        .collect::<Option<Vec<&str>>>()
+    else {
+        return false;
+    };
+    let lowered: Vec<String> = parts.iter().map(|part| part.to_ascii_lowercase()).collect();
+    parts.len() >= 2
+        && parts[0].starts_with('.')
+        && parts[1] == "skills"
+        && parts[2..].iter().all(|part| !part.starts_with('.'))
+        && !crate::credential_store_names::names_hold_credential_store(&lowered)
 }
 
 /// Windows spells the home path with `\`, so there it is a separator; the

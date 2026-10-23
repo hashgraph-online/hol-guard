@@ -4,6 +4,7 @@ import threading
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from typing_extensions import override
@@ -60,13 +61,17 @@ def test_a_harness_view_carries_the_proxy_config_and_hash_fields(tmp_path: Path)
         "harness_actions",
         "risk_actions",
         "harness_risk_actions",
+        "harness_postures",
         "security_level",
         "protection_posture",
         "protection_posture_explicit",
         "managed_locked_settings",
     }
+    # The posture override is the resolver's own input; the approval token the
+    # proxy binds does not carry it, so it stays out of the hash fields.
+    assert config["harness_postures"] == {}
     assert hash_config == {
-        **config,
+        **{field: value for field, value in config.items() if field != "harness_postures"},
         "managed_policy_hash": "a" * 64,
         "managed_policy_status": "absent",
         "sandbox_analysis": "on",
@@ -78,6 +83,17 @@ def test_a_per_harness_posture_changes_only_that_harness(tmp_path: Path) -> None
 
     assert harness_view(config, "cursor") != harness_view(config, "codex")
     assert harness_view(config, "codex") == harness_view(_config(tmp_path), "codex")
+
+
+def test_a_harness_view_carries_only_its_own_posture_override(tmp_path: Path) -> None:
+    config = _config(tmp_path, harness_postures={"cursor": "extra_careful"})
+
+    cursor = harness_view(config, "cursor")
+    codex = harness_view(config, "codex")
+
+    assert cursor is not None and codex is not None
+    assert cast("dict[str, object]", cursor["config"])["harness_postures"] == {"cursor": "extra_careful"}
+    assert cast("dict[str, object]", codex["config"])["harness_postures"] == {}
 
 
 def test_only_harnesses_every_config_agrees_on_are_bound(tmp_path: Path) -> None:

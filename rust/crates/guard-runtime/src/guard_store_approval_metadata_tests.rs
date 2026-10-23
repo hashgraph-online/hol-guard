@@ -133,3 +133,91 @@ fn a_blob_hint_reads_as_no_hint() {
     assert_eq!(actual, Ok(Value::Null));
     let _ = std::fs::remove_dir_all(&home);
 }
+
+/// Adds a copy of the seeded `h-object` row under `request_id`.
+fn add_copy(
+    path: &std::path::Path,
+    request_id: &str,
+    group: &str,
+    status: &str,
+    marker: Option<&str>,
+) {
+    let connection = Connection::open(path).unwrap();
+    connection
+        .execute_batch(
+            "drop table if exists temp.copy; \
+             create temp table copy as select * from approval_requests where request_id = 'h-object';",
+        )
+        .unwrap();
+    connection
+        .execute(
+            "update temp.copy set request_id = ?1, queue_group_id = ?2, status = ?3, \
+             desktop_notified_at = ?4",
+            rusqlite::params![request_id, group, status, marker],
+        )
+        .unwrap();
+    connection
+        .execute_batch("insert into approval_requests select * from temp.copy")
+        .unwrap();
+}
+
+#[test]
+fn a_connector_group_reads_the_marker_of_its_first_notified_command() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let scenario = &vectors["scenarios"][0];
+    let home = temp_home("approval-metadata-connector-notice");
+    let path = home.join("guard.db");
+    seed(&path, &vectors, scenario);
+    let first = "2026-03-01T12:00:00+00:00";
+    add_copy(
+        &path,
+        "c-first",
+        "connector:aa11:0000000000000001",
+        "pending",
+        Some(first),
+    );
+    add_copy(
+        &path,
+        "c-second",
+        "connector:aa11:0000000000000002",
+        "pending",
+        None,
+    );
+    add_copy(
+        &path,
+        "c-other",
+        "connector:bb22:0000000000000001",
+        "pending",
+        None,
+    );
+    add_copy(
+        &path,
+        "c-closed",
+        "connector:cc33:0000000000000001",
+        "approved",
+        Some(first),
+    );
+    add_copy(
+        &path,
+        "c-after",
+        "connector:cc33:0000000000000002",
+        "pending",
+        None,
+    );
+    add_copy(&path, "g-plain", "qg-seeded-two", "pending", None);
+    let read = |request_id: &str| {
+        store_call(
+            &home,
+            "guard",
+            "approval_desktop_notified_at",
+            json!({"request_id": request_id}),
+        )
+    };
+
+    assert_eq!(read("c-second"), Ok(Value::from(first)));
+    assert_eq!(read("c-first"), Ok(Value::from(first)));
+    assert_eq!(read("c-other"), Ok(Value::Null));
+    assert_eq!(read("c-after"), Ok(Value::Null));
+    assert_eq!(read("g-plain"), Ok(Value::Null));
+    let _ = std::fs::remove_dir_all(&home);
+}

@@ -3,10 +3,7 @@ use std::io::Write;
 
 #[test]
 fn context_loading_obeys_the_authority_transition_fence() {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let suffix = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir().join(format!(
         "guard-context-fence-{}-{suffix}",
         std::process::id()

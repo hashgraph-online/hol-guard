@@ -11,6 +11,7 @@ import { filterByDecision } from "./evidence/evidence-filters";
 import { plainEnglishDescription } from "./evidence/plain-english";
 import { EvidenceActionDetail, nextSafeStep } from "./evidence/evidence-action-detail";
 import { pastDecisionVerb } from "./review-states";
+import { GUARD_REVIEW_INTENT_COPY, guardActionPresentation } from "./guard-action";
 
 const NOW = new Date();
 
@@ -133,5 +134,16 @@ assert.ok(
   plainEnglishDescription({ ...receipt("allow"), user_override: "approval-approved" }).includes("You reviewed and allowed it."),
   "an approval that let the action run keeps the reviewed-and-allowed copy",
 );
+
+for (const action of GUARD_ACTIONS) {
+  assert.notEqual(
+    GUARD_REVIEW_INTENT_COPY.setup.label,
+    guardActionPresentation(action).label,
+    `${action}: the Needs setup label never reads as an enforcement outcome`,
+  );
+}
+for (const copy of Object.values(GUARD_REVIEW_INTENT_COPY)) {
+  assert.ok(!/\ballow(ed)?\b/i.test(`${copy.label} ${copy.action} ${copy.scope}`), "review intent copy never claims an allow");
+}
 
 console.log("authoritative-action-surfaces.test.tsx: all tests passed");

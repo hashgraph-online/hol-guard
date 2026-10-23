@@ -24,7 +24,7 @@ from ci.gauntlet.installed_registration import (
     install_harness,
     load_contract,
 )
-from ci.gauntlet.installed_replay import handler_argv, replay_case
+from ci.gauntlet.installed_replay import NON_DECISION_REASONS, handler_argv, registered_argv, replay_case
 from ci.gauntlet.installed_runtime import (
     FROZEN_ONEDIR,
     SCRIPT,
@@ -35,7 +35,105 @@ from ci.gauntlet.installed_runtime import (
 )
 from ci.gauntlet.installed_store import STALE_COMMAND
 
+
+@pytest.mark.parametrize(
+    "reason_code",
+    sorted(NON_DECISION_REASONS),
+)
+def test_infrastructure_denials_do_not_count_as_attack_protection(tmp_path, monkeypatch, reason_code):
+    import subprocess
+
+    response = {
+        "policy_action": "block",
+        "reason_code": reason_code,
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": "HOL Guard could not prepare the native policy safely.",
+        },
+    }
+    monkeypatch.setattr(
+        subprocess, "run", lambda *args, **kwargs: subprocess.CompletedProcess(args, 2, json.dumps(response), "")
+    )
+    result = replay_case(
+        ["registered-hook"],
+        {"id": "attack", "expect": "not-allow", "payload": {}},
+        home=tmp_path,
+        guard_home=tmp_path / ".hol-guard",
+        workspace=tmp_path,
+        repeat=2,
+    )
+    assert any("infrastructure failed" in failure for failure in result["failures"])
+    assert result["runs"][0]["reason_code"] == reason_code
+
+
 HARNESSES = ["claude-code"]
+
+
+def test_lane_owned_infrastructure_codes_cover_product_availability_failures():
+    from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
+        _INTEGRITY_FAIL_CLOSED_REASON_CODES,
+        _REVIEW_CANNOT_FINISH_REASON_CODES,
+    )
+
+    # The oracle stays lane-owned; adding a product outage code cannot silently
+    # make that denial qualify as policy protection.
+    assert (_INTEGRITY_FAIL_CLOSED_REASON_CODES | _REVIEW_CANNOT_FINISH_REASON_CODES) <= NON_DECISION_REASONS
+
+
+def test_registered_hook_percentiles_include_timeouts(tmp_path, monkeypatch):
+    import subprocess
+
+    clock = iter([0.0, 0.001, 1.0, 1.005, 2.0, 2.009])
+    monkeypatch.setattr("ci.gauntlet.installed_replay.time.monotonic", lambda: next(clock))
+    outcomes = iter([True, False, True])
+
+    def respond(*args, **kwargs):
+        if not next(outcomes):
+            raise subprocess.TimeoutExpired(args, 120)
+        return subprocess.CompletedProcess(args, 0, '{"decision":"allow"}', "")
+
+    monkeypatch.setattr(subprocess, "run", respond)
+    result = replay_case(
+        ["registered-hook"],
+        {"id": "timed", "expect": "allow", "payload": {}},
+        home=tmp_path,
+        guard_home=tmp_path / ".hol-guard",
+        workspace=tmp_path,
+        repeat=3,
+    )
+    assert result["latency"] == {
+        "method": "nearest-rank",
+        "scope": "registered-hook-process-round-trip",
+        "samples": 3,
+        "missing_samples": 0,
+        "timeouts": 1,
+        "p50_ms": 5.0,
+        "p90_ms": 9.0,
+        "p95_ms": 9.0,
+        "p99_ms": 9.0,
+        "max_ms": 9.0,
+        "mean_ms": 5.0,
+    }
+    assert result["failures"]
+
+
+@pytest.mark.parametrize("nested", [True, False])
+def test_zcode_requires_current_events_layout_and_replays_its_registered_command(tmp_path, nested):
+    expectation = load_contract()["harnesses"]["zcode"]
+    hook = tmp_path / "hol-guard-hook"
+    hook.write_text("#!/bin/sh\nexit 0\n")
+    hook.chmod(0o700)
+    handler = {"type": "command", "command": str(hook)}
+    events = {event: [{"matcher": "*", "hooks": [handler]}] for event in expectation["required_events"]}
+    config = {"hooks": {"events": events} if nested else events}
+    path = tmp_path / expectation["config"]
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps(config))
+    result = assess_harness(tmp_path, "zcode", expectation)
+    assert result["registered"] is nested
+    assert registered_argv(tmp_path, expectation, config) == ([str(hook)] if nested else None)
+
 
 _CLAUDE_EVENTS = ("PreToolUse", "PermissionRequest", "PostToolUse", "Notification", "Stop", "SessionStart")
 
@@ -404,11 +502,19 @@ def test_a_real_gate_refusal_names_what_the_install_printed(tmp_path: Path) -> N
         )
 
 
-def test_the_lane_never_touches_the_operators_own_home(tmp_path: Path) -> None:
+def test_the_lane_never_touches_the_operators_own_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sdk = str(tmp_path / "host-python-sdk")
+    monkeypatch.setenv("LD_LIBRARY_PATH", sdk)
     runtime = _stub(tmp_path / "hol-guard", register=True, verdicts=["allow"])
+    runtime.write_text(
+        runtime.read_text().replace(
+            "import json, os, sys", "import json, os, sys\nassert 'LD_LIBRARY_PATH' not in os.environ"
+        )
+    )
     before = os.environ.get("HOME")
     _run(tmp_path, runtime, repeat=1)
     assert os.environ.get("HOME") == before
+    assert os.environ["LD_LIBRARY_PATH"] == sdk
     for relative in (".claude/settings.json", ".codex/config.toml"):
         assert not (tmp_path / "work" / relative).exists()
 

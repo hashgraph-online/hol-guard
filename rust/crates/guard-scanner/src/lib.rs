@@ -6,13 +6,18 @@ pub mod repository_scanner;
 pub mod secret_detection;
 pub mod staged_scanner;
 
+mod code_cursor;
+mod code_expression;
 mod code_value;
 mod continuation;
 mod field_copy;
+mod guard_link;
 mod masked_value;
 mod match_spans;
+mod prose_answer_value;
 mod reference_value;
 mod self_named_value;
+mod url_credential;
 
 pub use match_spans::scan_match_spans;
 
@@ -140,9 +145,24 @@ const PATTERNS: &[PatternDef] = &[
         family: "credential assignment",
         sensitivity: "medium",
         reason: "Guard found credential-looking assignment text.",
-        pattern: r#"[\"']?\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token|password)\b[\"']?\s*[:=]\s*(?:(?:get_secret\([^\)\r\n]*\)|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}|[fF](?:\"\{[A-Za-z_][A-Za-z0-9_.]*\}\"|'\{[A-Za-z_][A-Za-z0-9_.]*\}'))\s*$|\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"#,
+        // `pass` and `pwd` count only after `_` or `-` (`DB_PASS`, `WEBDAV_PWD`), so
+        // `bypass`, `compass`, test tallies (`"pass": 12`) and the shell's
+        // `PWD=`/`OLDPWD=` paths stay clean.
+        pattern: r#"[\"']?\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token|password|passwd|passphrase|access[_-]?key|[_-]pass|[_-]pwd)\b[\"']?\s*[:=]\s*(?:(?:get_secret\([^\)\r\n]*\)|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}|[fF](?:\"\{[A-Za-z_][A-Za-z0-9_.]*\}\"|'\{[A-Za-z_][A-Za-z0-9_.]*\}'))\s*$|\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"#,
         case_insensitive: true,
         multi_line: true,
+    },
+    PatternDef {
+        classifier: "url-credential",
+        family: "URL credential",
+        sensitivity: "high",
+        reason: "Guard found a password inside a URL.",
+        // `scheme://user:password@host`, as `git remote -v`, `.git/config`, a
+        // database URL or a sync script prints it. `git@host:repo` has no
+        // scheme and `ssh://git@host:22/` has no password, so neither matches.
+        pattern: r#"\b[a-z][a-z0-9+.-]{1,31}://[^\s:/?#@'"<>]{0,128}:[^\s/?#@"<>]{1,256}@[^\s/?#@'"<>]"#,
+        case_insensitive: true,
+        multi_line: false,
     },
 ];
 
@@ -221,7 +241,10 @@ fn inert_code_expression_regex() -> &'static Regex {
 }
 
 fn suppressible(classifier: &str) -> bool {
-    matches!(classifier, "credential-assignment" | "generic-bearer-token")
+    matches!(
+        classifier,
+        "credential-assignment" | "generic-bearer-token" | "url-credential"
+    )
 }
 
 fn has_long_alphanumeric_run(token: &str) -> bool {
@@ -255,6 +278,7 @@ fn interpolates(value: &str) -> bool {
 fn is_sample(
     classifier: &str,
     matched: &str,
+    preceding: &str,
     continued: bool,
     rest_of_line: &str,
     suppress_samples: bool,
@@ -263,14 +287,23 @@ fn is_sample(
     if !suppressible(classifier) {
         return false;
     }
+    if classifier == "url-credential" {
+        // Only a whole-password stand-in carries no secret. Sample wording in
+        // the account, host or part of the password (`test:…@`, `@example.com`,
+        // `test-Kq7…`) proves nothing.
+        return url_credential::password(matched).is_some_and(url_credential::is_placeholder);
+    }
     if classifier == "credential-assignment"
         && (field_copy::is_field_copy(matched, rest_of_line)
+            || guard_link::is_guard_link(matched, preceding)
             || self_named_value::is_self_named(matched, rest_of_line)
+            || prose_answer_value::is_prose_answer(matched, rest_of_line, preceding)
             || assignment_value(matched).is_some_and(|value| {
                 inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)
             })
             || reference_value::is_reference(matched, rest_of_line)
-            || code_value::is_code_value(matched, rest_of_line))
+            || code_value::is_code_value(matched, rest_of_line)
+            || code_expression::is_code_expression(matched, rest_of_line))
     {
         return true;
     }
@@ -317,6 +350,7 @@ fn counted_matches<'t>(
         !is_sample(
             classifier,
             matched.as_str(),
+            &text[..matched.start()],
             continuation::continues_as_expression(&text[matched.end()..]),
             &text[matched.end()..line_end],
             suppress_samples,
@@ -547,6 +581,50 @@ mod tests {
                     .any(|matched| matched.classifier == "credential-assignment"),
                 "{text:?}"
             );
+        }
+    }
+
+    fn credential_assignment(text: &str) -> bool {
+        scan_text(text, true, true, MAX_SCAN_BYTES, None)
+            .matches
+            .iter()
+            .any(|matched| matched.classifier == "credential-assignment")
+    }
+
+    #[test]
+    fn password_names_a_secret_search_looks_for_are_credentials() {
+        let value = ["Kq7Xr2", "mWp9Lq4z"].concat();
+        for name in [
+            "PASSWD",
+            "PASSPHRASE",
+            "DB_PASS",
+            "_PASS",
+            "_PWD",
+            "SMTP-PASS",
+            "WEBDAV_PWD",
+            "S3_ACCESS_KEY",
+            "accessKey",
+        ] {
+            for text in [
+                format!("{name}={value}"),
+                format!("config.env:6:{name}={value}"),
+                format!("\"{name}\": \"{value}\""),
+            ] {
+                assert!(credential_assignment(&text), "{text:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn pass_and_pwd_need_a_separator_before_them() {
+        for text in [
+            "PWD=/home/alice/notes",
+            "OLDPWD=/home/alice",
+            "bypass=true",
+            "compass: north",
+            "{\"pass\": 12, \"fail\": 0}",
+        ] {
+            assert!(!credential_assignment(text), "{text:?}");
         }
     }
 

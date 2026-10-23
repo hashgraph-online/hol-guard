@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime.github_capability_contract import GitHubCommandCapability
-from codex_plugin_scanner.guard.runtime.github_command_capabilities import classify_github_cli
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.native_github_capability_support import github_cli_assessment
 
 PR_MERGE_ADMIN_CAPABILITY_CASES: tuple[tuple[str, tuple[str, ...], tuple[GitHubCommandCapability, ...]], ...] = (
     ("admin-001", ("pr", "merge", "123", "--squash"), ("routine_merge_remote",)),
@@ -118,7 +118,7 @@ def test_pr_merge_admin_capability_matches_github_boolean_option_semantics(
     args: tuple[str, ...],
     expected_capabilities: tuple[GitHubCommandCapability, ...],
 ) -> None:
-    assert classify_github_cli(args).capabilities == expected_capabilities
+    assert github_cli_assessment(args).capabilities == expected_capabilities
 
 
 @pytest.mark.parametrize(
@@ -133,7 +133,7 @@ def test_pr_merge_admin_capability_matches_github_boolean_option_semantics(
     ),
 )
 def test_routine_squash_merge_rejects_unbounded_variants(args: tuple[str, ...]) -> None:
-    assert classify_github_cli(args).capabilities != ("routine_merge_remote",)
+    assert github_cli_assessment(args).capabilities != ("routine_merge_remote",)
 
 
 @pytest.mark.parametrize(

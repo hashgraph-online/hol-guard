@@ -8,8 +8,6 @@ from typing import Any, cast
 import pytest
 
 from codex_plugin_scanner.guard.inventory_contract import (
-    _bind_skill_document_evidence,
-    _capabilities_for_artifact,
     inventory_snapshot_from_detection,
     serialize_inventory_snapshot,
 )
@@ -301,41 +299,3 @@ def test_documented_behavior_serializes_separately_from_observed_capabilities(tm
     assert "private-hostname" not in encoded
     assert "private-token" not in encoded
     assert skill_path.as_posix() not in encoded
-
-
-def test_skill_types_do_not_claim_observed_file_reading() -> None:
-    assert _capabilities_for_artifact("skill", {}) == ("unknown",)
-    assert _capabilities_for_artifact("skill_file", {}) == ("unknown",)
-
-
-@pytest.mark.parametrize(
-    "readability_status",
-    ("symlink_rejected", "too_large", "invalid_utf8", "outside_safe_roots"),
-)
-def test_rejected_document_evidence_is_preserved_without_capabilities(
-    readability_status: str,
-) -> None:
-    metadata: dict[str, object] = {
-        "contentEvidence": {"readabilityStatus": readability_status},
-        "documentedCapabilities": [{"capability": "network_egress"}],
-    }
-
-    assert _bind_skill_document_evidence(metadata, primary_content_hash=None) == {
-        "contentEvidence": {"readabilityStatus": readability_status},
-    }
-
-
-def test_unbound_document_evidence_is_removed_before_inventory_serialization() -> None:
-    metadata: dict[str, object] = {
-        "contentEvidence": {"contentHash": "sha256:first"},
-        "documentedCapabilities": [{"capability": "network_egress"}],
-    }
-
-    assert _bind_skill_document_evidence(
-        metadata,
-        primary_content_hash="sha256:second",
-    ) == {"primaryContentHash": "sha256:second"}
-    assert _bind_skill_document_evidence(
-        metadata,
-        primary_content_hash="sha256:first",
-    ) == {**metadata, "primaryContentHash": "sha256:first"}

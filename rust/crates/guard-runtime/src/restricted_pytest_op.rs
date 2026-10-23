@@ -45,6 +45,12 @@ pub(crate) fn evaluate(
         #[cfg(not(windows))]
         let result = Value::Null;
         result
+    } else if cfg!(windows) && operation == "prepare" {
+        #[cfg(windows)]
+        let result = crate::windows_pytest::prepare(input);
+        #[cfg(not(windows))]
+        let result = Value::Null;
+        result
     } else if cfg!(windows) && operation == "prepare_node_build" {
         #[cfg(windows)]
         let result = crate::windows_node_build::prepare_node_build(input);

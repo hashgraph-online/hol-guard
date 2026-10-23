@@ -148,9 +148,12 @@ fn root_exit_kills_descendants_that_hold_capture_pipes() {
         .find(|line| line.starts_with("DESCENDANT="))
         .unwrap();
     let pid: u32 = line.trim_start_matches("DESCENDANT=").parse().unwrap();
+    // The job can report no active processes before a terminated
+    // process handle is signalled, so allow a bounded wait. The descendant
+    // would otherwise hold for 30 seconds.
     match open_process(pid, winapi::um::winnt::SYNCHRONIZE) {
         Ok(process) => assert_eq!(
-            unsafe { WaitForSingleObject(process.as_raw_handle() as HANDLE, 0) },
+            unsafe { WaitForSingleObject(process.as_raw_handle() as HANDLE, 5_000) },
             WAIT_OBJECT_0
         ),
         Err(error) => assert_eq!(
@@ -165,10 +168,7 @@ fn explicit_cancellation_has_no_success_exit_status() {
     let marker = std::env::temp_dir().join(format!(
         "guard-capture-ready-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let cancel = Arc::new(AtomicBool::new(false));
     let stop = cancel.clone();
