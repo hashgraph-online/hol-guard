@@ -737,8 +737,10 @@
       "enabled_extensions": [
         "command.agent-gauntlet"
       ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "run-permission-disabled-permission",
       "rule_id": "command.agent-gauntlet.run-permission"
     },
@@ -910,8 +912,10 @@
       "enabled_extensions": [
         "command.agent-gauntlet"
       ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "init-force-disabled-permission",
       "rule_id": "command.agent-gauntlet.init-force"
     },
