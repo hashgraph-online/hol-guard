@@ -173,24 +173,16 @@ def managed_controls_runtime_sync_posture(
     flags = ManagedControlsFeatureFlags.from_environment()
     if not flags.catalog_sync:
         return {}
-    from . import extension_catalog_posture_cache as posture_cache
     from .extension_catalog_pages import CAPABILITY, prepare_installed_catalog_view
     from .extension_catalog_sync import ExtensionCatalogLimitError, build_v1_catalog_from_view
 
     try:
         registry = current_catalog_registry(store)
-        cached = posture_cache.reusable(
-            store.guard_home, enforcement_digest=registry.catalog_digest, guard_version=__version__
-        )
-        view = (
-            cached[0]
-            if cached is not None
-            else prepare_installed_catalog_view(
-                store.guard_home,
-                registry=registry,
-                guard_version=__version__,
-                generated_at=generated_at,
-            )
+        view = prepare_installed_catalog_view(
+            store.guard_home,
+            registry=registry,
+            guard_version=__version__,
+            generated_at=generated_at,
         )
     except ImportError as error:
         raise RuntimeError("Native complete catalog discovery factory is unavailable") from error
@@ -205,24 +197,14 @@ def managed_controls_runtime_sync_posture(
         "extensionCatalogGeneratedAt": manifest["generatedAt"],
         "extensionControlSchemaVersions": [manifest["controlSchemaVersion"]],
     }
-    if cached is not None:
-        catalog = cached[1]
-    else:
-        try:
-            catalog = build_v1_catalog_from_view(view)
-        except ExtensionCatalogLimitError:
-            # Complete discovery identity is never substituted for a legacy digest.
-            catalog = None
-        except (OSError, RuntimeError, TypeError, ValueError):
-            # Native cache/resident loss is not a usable complete observation.
-            return {"managedControlsCapabilities": []}
-        posture_cache.remember(
-            store.guard_home,
-            enforcement_digest=registry.catalog_digest,
-            guard_version=__version__,
-            view=view,
-            catalog=catalog,
-        )
+    try:
+        catalog = build_v1_catalog_from_view(view)
+    except ExtensionCatalogLimitError:
+        # Complete discovery identity is never substituted for a legacy digest.
+        catalog = None
+    except (OSError, RuntimeError, TypeError, ValueError):
+        # Native cache/resident loss is not a usable complete observation.
+        return {"managedControlsCapabilities": []}
     from ..native_command_control_authority_io import hold_command_control_authority_lock
     from .extension_catalog_completion import policy_view_ready
 

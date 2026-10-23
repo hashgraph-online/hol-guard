@@ -1,0 +1,929 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "build": {
+    "schema": "guard.command-extension-build.v1",
+    "base": "packaged",
+    "sources": [
+      {
+        "schema": "guard.command-extension-source.v1",
+        "extension": {
+          "action_classes": [
+            "LLMRig setup and verification execution",
+            "LLMRig report file creation",
+            "LLMRig optional agent and inference experiment",
+            "LLMRig Rescue report file creation"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "External, locally opt-in command safety rules for LLMRig execution, Rescue experiments and report file creation, while excluding read-only inspection commands.",
+          "ecosystem_ids": [],
+          "executables": [
+            "llmrig",
+            "llmrig.cmd",
+            "llmrig.exe"
+          ],
+          "extension_id": "command.llmrig",
+          "homepage": "https://github.com/sunilteja93/llmrig",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "MIT",
+          "name": "LLMRig command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "LLMRig setup and verification execution"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews LLMRig apply, run, and verify commands, which may download model artifacts, start runtimes, perform inference, or write verification receipts. LLMRig retains its own approval checks.",
+              "example_command": "llmrig run mlx-community/Qwen3-0.6B-4bit",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "LLMRig Autopilot execution",
+              "permission_id": "command.llmrig.permission.autopilot-execution",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Inspect llmrig plan MODEL and doctor MODEL first.",
+                "Approve supported setup changes through LLMRig's own prompts."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "LLMRig report file creation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews --output on report and rescue-evidence commands, which create local files without uploading them.",
+              "example_command": "llmrig report --share --output rig-report.md",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "LLMRig local report file creation",
+              "permission_id": "command.llmrig.permission.report-write",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Inspect the report on stdout first.",
+                "Review the --output path; LLMRig creates new files without overwriting."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "LLMRig optional agent and inference experiment"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews opt-in Rescue probes and agent experiments. Without experiment flags, Rescue preflight remains read-only except for explicit output requests.",
+              "example_command": "llmrig rescue --agent opencode --model qwen3.8:27b-mlx --agent-test",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "LLMRig Rescue experiment execution",
+              "permission_id": "command.llmrig.permission.rescue-execution",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run read-only Rescue preflight before opt-in experiments.",
+                "Review experiment flags and resource budgets."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "LLMRig Rescue report file creation"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Reviews Rescue --output requests which create a new local report file even without experiment flags.",
+              "example_command": "llmrig rescue --agent opencode --model qwen3.8:27b-mlx --output rescue.json",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "LLMRig Rescue report file creation",
+              "permission_id": "command.llmrig.permission.rescue-write",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Inspect Rescue preflight without --output first.",
+                "Use a new filename; LLMRig does not automatically upload reports."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "id": "community.llmrig",
+            "display_name": "LLMRig",
+            "url": "https://github.com/sunilteja93/llmrig"
+          },
+          "reference_urls": [
+            "https://github.com/sunilteja93/llmrig",
+            "https://github.com/sunilteja93/llmrig/blob/1e79048278e13bd3341acd70f8080bd741796a0d/README.md"
+          ],
+          "required": false,
+          "risk_classes": [
+            "execution",
+            "network_egress"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "LLMRig setup and verification execution"
+              ],
+              "default_mode": "review",
+              "description": "Reviews LLMRig apply, run, and verify commands, which may download model artifacts, start runtimes, perform inference, or write verification receipts. LLMRig retains its own approval checks.",
+              "family": null,
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "llmrig",
+                        "llmrig.cmd",
+                        "llmrig.exe"
+                      ],
+                      "subcommands": [
+                        "apply"
+                      ],
+                      "options_with_values": [],
+                      "required_flags_anywhere": [],
+                      "forbidden_flags_before_delimiter": [
+                        "--help",
+                        "-h",
+                        "--version"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "llmrig",
+                        "llmrig.cmd",
+                        "llmrig.exe"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ],
+                      "options_with_values": [],
+                      "required_flags_anywhere": [],
+                      "forbidden_flags_before_delimiter": [
+                        "--help",
+                        "-h",
+                        "--version"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "llmrig",
+                        "llmrig.cmd",
+                        "llmrig.exe"
+                      ],
+                      "subcommands": [
+                        "verify"
+                      ],
+                      "options_with_values": [],
+                      "required_flags_anywhere": [],
+                      "forbidden_flags_before_delimiter": [
+                        "--help",
+                        "-h",
+                        "--version"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "native_capability": null,
+              "permission_id": "command.llmrig.permission.autopilot-execution",
+              "risk_classes": [
+                "execution",
+                "network_egress"
+              ],
+              "rule_id": "command.llmrig.autopilot-execution",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect llmrig plan MODEL and doctor MODEL first.",
+                "Approve supported setup changes through LLMRig's own prompts."
+              ],
+              "severity": "high",
+              "title": "LLMRig Autopilot execution"
+            },
+            {
+              "action_classes": [
+                "LLMRig report file creation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews --output on report and rescue-evidence commands, which create local files without uploading them.",
+              "family": null,
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "llmrig",
+                        "llmrig.cmd",
+                        "llmrig.exe"
+                      ],
+                      "subcommands": [
+                        "report"
+                      ],
+                      "options_with_values": [],
+                      "required_flags_anywhere": [
+                        "--output"
+                      ],
+                      "forbidden_flags_before_delimiter": [
+                        "--help",
+                        "-h",
+                        "--version"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "llmrig",
+                        "llmrig.cmd",
+                        "llmrig.exe"
+                      ],
+                      "subcommands": [
+                        "rescue-evidence"
+                      ],
+                      "options_with_values": [],
+                      "required_flags_anywhere": [
+                        "--output"
+                      ],
+                      "forbidden_flags_before_delimiter": [
+                        "--help",
+                        "-h",
+                        "--version"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "native_capability": null,
+              "permission_id": "command.llmrig.permission.report-write",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.llmrig.report-write",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect the report on stdout first.",
+                "Review the --output path; LLMRig creates new files without overwriting."
+              ],
+              "severity": "medium",
+              "title": "LLMRig local report file creation"
+            },
+            {
+              "action_classes": [
+                "LLMRig optional agent and inference experiment"
+              ],
+              "default_mode": "review",
+              "description": "Reviews opt-in Rescue probes and agent experiments. Without experiment flags, Rescue preflight remains read-only except for explicit output requests.",
+              "family": null,
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "llmrig",
+                        "llmrig.cmd",
+                        "llmrig.exe"
+                      ],
+                      "subcommands": [
+                        "rescue"
+                      ],
+                      "options_with_values": [],
+                      "required_flags_anywhere": [
+                        "--probe"
+                      ],
+                      "forbidden_flags_before_delimiter": [
+                        "--help",
+                        "-h",
+                        "--version"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "llmrig",
+                        "llmrig.cmd",
+                        "llmrig.exe"
+                      ],
+                      "subcommands": [
+                        "rescue"
+                      ],
+                      "options_with_values": [],
+                      "required_flags_anywhere": [
+                        "--agent-test"
+                      ],
+                      "forbidden_flags_before_delimiter": [
+                        "--help",
+                        "-h",
+                        "--version"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "llmrig",
+                        "llmrig.cmd",
+                        "llmrig.exe"
+                      ],
+                      "subcommands": [
+                        "rescue"
+                      ],
+                      "options_with_values": [],
+                      "required_flags_anywhere": [
+                        "--ab-test"
+                      ],
+                      "forbidden_flags_before_delimiter": [
+                        "--help",
+                        "-h",
+                        "--version"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "llmrig",
+                        "llmrig.cmd",
+                        "llmrig.exe"
+                      ],
+                      "subcommands": [
+                        "rescue"
+                      ],
+                      "options_with_values": [],
+                      "required_flags_anywhere": [
+                        "--compaction-ab"
+                      ],
+                      "forbidden_flags_before_delimiter": [
+                        "--help",
+                        "-h",
+                        "--version"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "native_capability": null,
+              "permission_id": "command.llmrig.permission.rescue-execution",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.llmrig.rescue-execution",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Run read-only Rescue preflight before opt-in experiments.",
+                "Review experiment flags and resource budgets."
+              ],
+              "severity": "high",
+              "title": "LLMRig Rescue experiment execution"
+            },
+            {
+              "action_classes": [
+                "LLMRig Rescue report file creation"
+              ],
+              "default_mode": "review",
+              "description": "Reviews Rescue --output requests which create a new local report file even without experiment flags.",
+              "family": null,
+              "matcher": {
+                "op": "leading-subcommand.v1",
+                "config": {
+                  "executables": [
+                    "llmrig",
+                    "llmrig.cmd",
+                    "llmrig.exe"
+                  ],
+                  "subcommands": [
+                    "rescue"
+                  ],
+                  "options_with_values": [],
+                  "required_flags_anywhere": [
+                    "--output"
+                  ],
+                  "forbidden_flags_before_delimiter": [
+                    "--help",
+                    "-h",
+                    "--version"
+                  ]
+                }
+              },
+              "native_capability": null,
+              "permission_id": "command.llmrig.permission.rescue-write",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.llmrig.rescue-write",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect Rescue preflight without --output first.",
+                "Use a new filename; LLMRig does not automatically upload reports."
+              ],
+              "severity": "medium",
+              "title": "LLMRig Rescue report file creation"
+            }
+          ],
+          "safer_alternatives": [
+            "Use LLMRig plan and doctor to inspect readiness before execution.",
+            "Review Rescue experiments before opt-in.",
+            "Inspect privacy-filtered report output before saving."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        }
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.agentbridge",
+          "command.answerloops",
+          "command.appimg",
+          "command.blitcp",
+          "command.blkcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.dispat",
+          "command.errand",
+          "command.faf-cli",
+          "command.genclave",
+          "command.gitsync",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.keibidrop",
+          "command.kim",
+          "command.kranz",
+          "command.librarybridge",
+          "command.llmrig",
+          "command.mcp-agenthub",
+          "command.mcp-asdecided",
+          "command.mcp-authyouragent",
+          "command.mcp-clipugc",
+          "command.mcp-contribos",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-kranz",
+          "command.mcp-lattice-talk",
+          "command.mcp-loomdesk",
+          "command.mcp-musiccontext",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.mcp-tether",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.routed",
+          "command.salesforce.sf",
+          "command.shellroute",
+          "command.showtime",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vttforge",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "id": "run-model",
+      "command": "llmrig run mlx-community/Qwen3-0.6B-4bit",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.llmrig.autopilot-execution"
+    },
+    {
+      "id": "apply-plan",
+      "command": "llmrig apply mlx-community/Qwen3-0.6B-4bit --plan-id plan-example --yes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.llmrig.autopilot-execution"
+    },
+    {
+      "id": "verify-receipt",
+      "command": "llmrig verify latest",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.llmrig.autopilot-execution"
+    },
+    {
+      "id": "run-json",
+      "command": "llmrig run qwen3.8:27b-mlx --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.llmrig.autopilot-execution"
+    },
+    {
+      "id": "win-exe-run",
+      "command": "llmrig.exe run qwen3.8:27b-mlx",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.llmrig.autopilot-execution"
+    },
+    {
+      "id": "win-cmd-apply",
+      "command": "llmrig.cmd apply qwen3.8:27b-mlx --plan-id abc",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.llmrig.autopilot-execution"
+    },
+    {
+      "id": "inactive",
+      "command": "llmrig run qwen3.8:27b-mlx",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "rule_id": "command.llmrig.autopilot-execution"
+    },
+    {
+      "id": "read-only-plan",
+      "command": "llmrig plan qwen3.8:27b-mlx",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "rule_id": "command.llmrig.autopilot-execution"
+    },
+    {
+      "id": "read-only-doctor",
+      "command": "llmrig doctor qwen3.8:27b-mlx",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "rule_id": "command.llmrig.autopilot-execution"
+    },
+    {
+      "id": "read-only-runtimes",
+      "command": "llmrig runtimes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "rule_id": "command.llmrig.autopilot-execution"
+    },
+    {
+      "id": "global-help",
+      "command": "llmrig --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "rule_id": "command.llmrig.autopilot-execution"
+    },
+    {
+      "id": "run-help",
+      "command": "llmrig run --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "rule_id": "command.llmrig.autopilot-execution"
+    },
+    {
+      "id": "report-write",
+      "command": "llmrig report --share --output rig-report.md",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.llmrig.report-write"
+    },
+    {
+      "id": "evidence-write",
+      "command": "llmrig rescue-evidence --baseline old.json --candidate new.json --output diff.json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.llmrig.report-write"
+    },
+    {
+      "id": "report-stdout",
+      "command": "llmrig report --share",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "rule_id": "command.llmrig.report-write"
+    },
+    {
+      "id": "report-help",
+      "command": "llmrig report --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "rule_id": "command.llmrig.report-write"
+    },
+    {
+      "id": "rescue-probe",
+      "command": "llmrig rescue --agent opencode --model qwen3.8:27b-mlx --probe",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.llmrig.rescue-execution"
+    },
+    {
+      "id": "rescue-agent",
+      "command": "llmrig rescue --agent opencode --model qwen3.8:27b-mlx --agent-test",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.llmrig.rescue-execution"
+    },
+    {
+      "id": "rescue-ab",
+      "command": "llmrig rescue --agent opencode --model qwen3.8:27b-mlx --ab-test",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.llmrig.rescue-execution"
+    },
+    {
+      "id": "rescue-compaction",
+      "command": "llmrig rescue --agent opencode --model qwen3.8:27b-mlx --compaction-ab",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.llmrig.rescue-execution"
+    },
+    {
+      "id": "rescue-preflight",
+      "command": "llmrig rescue --agent opencode --model qwen3.8:27b-mlx",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "rule_id": "command.llmrig.rescue-execution"
+    },
+    {
+      "id": "rescue-write",
+      "command": "llmrig rescue --agent opencode --model qwen3.8:27b-mlx --output rescue.json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.llmrig.rescue-write"
+    },
+    {
+      "id": "rescue-stdout",
+      "command": "llmrig rescue --agent opencode --model qwen3.8:27b-mlx",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "rule_id": "command.llmrig.rescue-write"
+    },
+    {
+      "id": "evidence-stdout",
+      "command": "llmrig rescue-evidence --baseline old.json --candidate new.json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.llmrig"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "rule_id": "command.llmrig.report-write"
+    }
+  ]
+}

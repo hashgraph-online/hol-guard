@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import io
 import json
 import re
@@ -2115,3 +2116,46 @@ def test_revoke_guard_self_oauth_grant_retries_with_dpop_nonce_challenge() -> No
     assert "nonce" not in first_claims
     assert second_claims["nonce"] == challenge_nonce
     assert captured_headers[1]["authorization"] == "Bearer oauth-access-token-1"
+
+
+def test_revoke_guard_self_oauth_grant_binds_dpop_proof_to_access_token() -> None:
+    oauth_client = connect_flow.GuardOAuthClientConfig(
+        issuer="https://hol.org",
+        authorize_endpoint="https://hol.org/api/guard/oauth/authorize",
+        token_endpoint="https://hol.org/api/guard/oauth/token",
+        device_authorization_endpoint="https://hol.org/api/guard/oauth/device",
+        jwks_endpoint="https://hol.org/api/guard/oauth/jwks",
+        client_id="guard-local-daemon",
+    )
+    captured_headers: list[dict[str, str]] = []
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self) -> bytes:
+            return b""
+
+    def fake_urlopen(request: urllib.request.Request, timeout: int):
+        del timeout
+        captured_headers.append({str(key).lower(): str(value) for key, value in dict(request.header_items()).items()})
+        return _Response()
+
+    connect_flow.revoke_guard_self_oauth_grant(
+        oauth_client=oauth_client,
+        access_token="oauth-access-token-1",
+        workspace_id="workspace-123",
+        revoke_cloud_grant=True,
+        dpop_key_material=generate_dpop_key_pair(),
+        urlopen=fake_urlopen,
+        now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+    )
+
+    claims = _decode_connect_flow_dpop_claims(captured_headers[0]["dpop"])
+    access_token_digest = hashlib.sha256(b"oauth-access-token-1").digest()
+    expected_ath = base64.urlsafe_b64encode(access_token_digest).rstrip(b"=").decode("ascii")
+    assert claims["ath"] == expected_ath
+    assert claims["htu"] == "https://hol.org/api/guard/oauth/revoke/self"

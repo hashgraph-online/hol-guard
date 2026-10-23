@@ -550,10 +550,6 @@
         "reason": "Retained conservatively in runtime scope: generated_command_catalog and native_command_control_binding reach authenticated pack metadata, activation projection and recovery through lazy imports. Count the complete shared delivery modules, including preparation and transport helpers, rather than exclude code reachable through those authority boundaries. Pack admission and hook evaluation remain native."
       },
       {
-        "path": "src/codex_plugin_scanner/guard/retry_lineage.py",
-        "reason": "Reviewed and retained in runtime scope: Copilot hook processing captures local retry correlation metadata through capture_retry_lineage. The identifiers are diagnostic inputs, not authorization. Native continuation finalization preserves the first valid lineage when updating an operation; the remaining Python capture path stays counted."
-      },
-      {
         "path": [
           "src/codex_plugin_scanner/guard/daemon/server_common.py",
           "src/codex_plugin_scanner/guard/harness_disconnect_gate.py",

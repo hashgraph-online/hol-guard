@@ -11,8 +11,10 @@ pub(crate) type CommandList<'a> = (Vec<(String, &'static str)>, &'static str, &'
 /// Split a command list into items (with the separator that follows each),
 /// stopping at whichever of `terminators` closes it, and return that keyword
 /// with the text after it. Items keep a marker where `$NAME` appeared;
-/// `substitute` expands it. Any construct outside the simple command list
-/// grammar returns `None`.
+/// `substitute` expands it. An empty `name` binds nothing, and every
+/// expansion is written back as it stood, because a list that binds no name
+/// reads the same values the construct around it read. Any construct outside
+/// the simple command list grammar returns `None`.
 pub(crate) fn body_items<'a>(
     text: &'a str,
     name: &str,
@@ -397,7 +399,7 @@ fn reference(chars: &[(usize, char)], i: &mut usize, name: &str, argument: bool)
             break;
         }
     }
-    if ident != name {
+    if ident.is_empty() {
         return None;
     }
     if braced {
@@ -406,7 +408,17 @@ fn reference(chars: &[(usize, char)], i: &mut usize, name: &str, argument: bool)
         }
         *i += 1;
     }
-    Some(MARKER.to_owned())
+    if name.is_empty() {
+        // Nothing binds a name here, so the expansion reads the same value in
+        // the rewritten list as it did inside the construct. Writing it back
+        // keeps the two the same work.
+        return Some(if braced {
+            format!("${{{ident}}}")
+        } else {
+            format!("${ident}")
+        });
+    }
+    (ident == name).then(|| MARKER.to_owned())
 }
 
 const MARKER: &str = "\u{1}";

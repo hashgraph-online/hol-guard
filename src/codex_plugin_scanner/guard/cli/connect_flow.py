@@ -34,7 +34,7 @@ from ..package_firewall_entitlement import (
     reconcile_connect_state_with_oauth_entitlement,
 )
 from ..portable_command import portable_command_payload
-from ..runtime.runner import prepare_guard_cloud_connect_authorization
+from ..runtime.runner import _dpop_access_token_confirmation_claim, prepare_guard_cloud_connect_authorization
 from ..store import GuardStore
 from ..store_connect import build_connect_state_response
 from .commands_parser_constants import DEFAULT_GUARD_CONNECT_URL
@@ -221,6 +221,7 @@ def _sign_dpop_proof(
     dpop_key_material: GuardDpopKeyMaterial,
     now: datetime,
     nonce: str | None = None,
+    access_token: str | None = None,
 ) -> str:
     issued_at = int(now.timestamp())
     header: dict[str, object] = {
@@ -234,6 +235,9 @@ def _sign_dpop_proof(
         "iat": issued_at,
         "jti": str(uuid4()),
     }
+    if access_token is not None:
+        # A proof sent alongside an access token binds to it through `ath` (RFC 9449 section 4.2).
+        claims["ath"] = _dpop_access_token_confirmation_claim(access_token)
     if isinstance(nonce, str):
         normalized_nonce = nonce.strip()
         if normalized_nonce:
@@ -901,6 +905,7 @@ def revoke_guard_self_oauth_grant(
                         dpop_key_material=dpop_key_material,
                         now=now or datetime.now(timezone.utc),
                         nonce=dpop_nonce,
+                        access_token=access_token,
                     ),
                 ),
                 "Authorization": f"Bearer {access_token}",

@@ -928,6 +928,20 @@ fn a_file_this_command_puts_there_before_sourcing_it_keeps_its_failure() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+/// A climb out of a link into a directory the command creates can land back in
+/// the workspace, so the file it sources is not taken to be outside it.
+#[cfg(unix)]
+#[test]
+fn a_written_file_reached_by_climbing_out_of_a_link_keeps_its_failure() {
+    let root = bare("climb");
+    std::fs::create_dir_all(root.join("elsewhere")).unwrap();
+    std::os::unix::fs::symlink(root.join("elsewhere"), root.join("project/out")).unwrap();
+    let command = "mkdir out/new && cp seed.sh run.sh && . out/new/../../project/run.sh";
+    let (_, code) = reviewed(&root, command);
+    assert_eq!(code, FAILED);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 #[test]
 fn a_sourced_file_that_is_there_and_unreadable_keeps_its_failure() {
     let root = bare("unreadable");

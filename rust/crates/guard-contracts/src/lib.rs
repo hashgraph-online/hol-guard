@@ -142,6 +142,8 @@ mod runtime_detector_run;
 pub use runtime_detector_run::*;
 mod runner_authority;
 pub use runner_authority::*;
+mod retry_lineage_capture;
+pub use retry_lineage_capture::*;
 mod mcp_runtime_evidence;
 pub use mcp_runtime_evidence::*;
 mod mcp_tool_evidence;

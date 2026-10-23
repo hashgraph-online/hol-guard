@@ -15,7 +15,9 @@ use crate::codex_output_git_diff::git_diff_selection_identity;
 use crate::codex_output_inspection_flow::{
     is_read_only_source_inspection, scan_targets_secret_like_source_name,
 };
-use crate::codex_output_post_tool::review_post_tool_output;
+use crate::codex_output_post_tool::{
+    post_tool_commands_read_only, review_post_tool_output, review_post_tool_read_only_payload,
+};
 use crate::codex_output_py::{shlex_split, PyPath};
 use crate::codex_output_search::Scope;
 use crate::codex_output_source_paths::py_path;
@@ -179,15 +181,16 @@ pub fn review_codex_tool_output(ctx: &Ctx, action: &CodexToolOutputActionV1) -> 
         }
         Action::PostToolReadOnly(request) => {
             let (cwd, home) = (path_of(&request.cwd), path_of(&request.home_dir));
-            let scope = scope_of(ctx, cwd.as_ref(), home.as_ref());
-            ToolOutputOutcome::flag(
-                !request.commands.is_empty()
-                    && request.commands.iter().all(|command| {
-                        is_read_only_source_inspection(command, scope)
-                            || is_read_only_git_metadata(command, scope.without_home())
-                    }),
-            )
+            ToolOutputOutcome::flag(post_tool_commands_read_only(
+                ctx,
+                &request.commands,
+                cwd.as_ref(),
+                home.as_ref(),
+            ))
         }
+        Action::PostToolReadOnlyPayload(request) => ToolOutputOutcome::flag(
+            review_post_tool_read_only_payload(ctx, &request.body).unwrap_or(false),
+        ),
         Action::SecretLikeSourceName(request) => {
             let (cwd, home) = (path_of(&request.cwd), path_of(&request.home_dir));
             ToolOutputOutcome::flag(secret_like_source_name(

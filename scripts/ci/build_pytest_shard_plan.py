@@ -19,6 +19,7 @@ if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.ci.pytest_duration_manifest import load_latest_duration_manifest, node_id_digest
+from scripts.ci.pytest_shard_resources import deadline_counts, deadline_family, resource_metadata
 from scripts.ci.test_inventory import build_inventory, build_suite_metrics, collect_test_items
 
 PLAN_SCHEMA_VERSION = 1
@@ -254,12 +255,36 @@ def build_affinity_node_shards(
     return shards, loads
 
 
+def build_coverage_node_shards(
+    node_ids: Sequence[str], shard_count: int, durations: Mapping[str, float]
+) -> tuple[list[list[str]], list[float]]:
+    """Reserve the last existing job for fixed deadlines, retaining coverage."""
+    if shard_count < 3:
+        raise ValueError("deadline isolation needs at least three existing shards")
+    if len(node_ids) != len(set(node_ids)):
+        raise ValueError("test node ids must be unique")
+    for node in node_ids:
+        node_file(node)
+    isolated = sorted(node for node in node_ids if deadline_family(node))
+    if not all(deadline_counts(isolated).values()):
+        raise ValueError("every deadline-sensitive selector family must collect at least one node")
+    ordinary = [node for node in node_ids if deadline_family(node) is None]
+    shards, loads = build_affinity_node_shards(ordinary, shard_count - 1, durations)
+    estimates = estimate_node_durations(node_ids, durations)
+    shards.append(isolated)
+    loads.append(sum(estimates[node] for node in isolated))
+    # Validate both the policy and exact ownership, including duplicate inputs.
+    resource_metadata(shards)
+    return shards, loads
+
+
 def write_shard_plan(
     output_directory: Path,
     *,
     shards: Sequence[Sequence[str]],
     estimated_loads: Sequence[float],
     manifest_used: bool,
+    deadline_isolation: bool = False,
 ) -> None:
     """Write one response file per shard plus reviewable plan metadata."""
 
@@ -282,6 +307,8 @@ def write_shard_plan(
         "node_counts": [len(shard) for shard in shards],
         "file_counts": [len({node_file(node_id) for node_id in shard}) for shard in shards],
     }
+    if deadline_isolation:
+        metadata["execution_policy"] = resource_metadata(shards)
     (output_directory / "plan.json").write_text(
         json.dumps(metadata, sort_keys=True, indent=2) + "\n",
         encoding="utf-8",
@@ -324,12 +351,13 @@ def main() -> int:
     markers = {item.nodeid: tuple(marker.name for marker in item.iter_markers()) for item in items}
     inventory = build_inventory(nodes, markers)
     collection_seconds = time.monotonic() - collection_started
-    shards, loads = build_affinity_node_shards(nodes, args.shard_count, durations)
+    shards, loads = build_coverage_node_shards(nodes, args.shard_count, durations)
     write_shard_plan(
         args.output_directory,
         shards=shards,
         estimated_loads=loads,
         manifest_used=manifest_used,
+        deadline_isolation=True,
     )
     (args.output_directory / "test-inventory.json").write_text(
         json.dumps(asdict(build_suite_metrics(root, inventory)), indent=2, sort_keys=True) + "\n",

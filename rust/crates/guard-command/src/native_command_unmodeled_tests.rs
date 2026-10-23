@@ -676,7 +676,9 @@ fn a_case_label_and_an_empty_prefix_keep_their_approval() {
         "case $MODE in a) echo a;; *) echo b;; esac",
         "case \"$f\" in *.ts|*.tsx) echo ts;; *) echo other;; esac",
         "case $1 in start) npm run dev;; stop) npm run stop;; *) echo usage;; esac",
-        "while IFS= read -r line; do echo one; done < list.txt",
+        // `while IFS= read -r line; do echo one; done < list.txt` is not
+        // here: the flatten pass reads a redirected `read` loop as the file
+        // read and the body it runs, so that spelling allows outright.
         "while IFS= read -r line; do echo one; done",
         "IFS= read -r first < list.txt",
         // A label is a pattern, never a command, so one built from a parameter

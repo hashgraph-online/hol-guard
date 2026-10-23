@@ -65,7 +65,7 @@ pub(crate) use supply_chain_eval_op::evaluate_supply_chain_eval_with_seams;
 // Shared result helpers
 // ---------------------------------------------------------------------------
 
-fn err_result(request_id: &str, request_sha256: &str, code: &str) -> Value {
+pub(crate) fn err_result(request_id: &str, request_sha256: &str, code: &str) -> Value {
     json!({
         "schema": PACKAGE_AUTHORITY_RESULT_SCHEMA,
         "request_id": request_id,
@@ -2529,7 +2529,7 @@ pub(crate) fn request_digest_with_limit<T: serde::Serialize>(
     ))
 }
 
-fn string_environment(value: Option<&Value>) -> Option<BTreeMap<String, String>> {
+pub(crate) fn string_environment(value: Option<&Value>) -> Option<BTreeMap<String, String>> {
     let Value::Object(object) = value? else {
         return None;
     };
@@ -2566,6 +2566,16 @@ pub(crate) fn evaluate_package_intent_parse(
         None,
         environment.as_ref(),
     );
+    package_intent_parse_result(&request.request_id, request_sha256, intent)
+}
+
+/// The parse answer for `intent`: the public intent, and the exact targets and
+/// argv on the private channel ephemeral enforcement reads them from.
+pub(crate) fn package_intent_parse_result(
+    request_id: &str,
+    request_sha256: String,
+    intent: Option<PackageIntent>,
+) -> Result<Vec<u8>, String> {
     let (payload, runtime_private_metadata) = match intent {
         Some(intent) => {
             let mut private_metadata = Map::new();
@@ -2586,7 +2596,7 @@ pub(crate) fn evaluate_package_intent_parse(
     };
     let result = PackageIntentParseResultV1 {
         schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
-        request_id: request.request_id.clone(),
+        request_id: request_id.to_owned(),
         request_sha256,
         status: "ok".to_owned(),
         code: "ok".to_owned(),

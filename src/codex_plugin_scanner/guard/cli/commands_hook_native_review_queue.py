@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 
 from ..daemon.client import GuardSurfaceDaemonClient, load_guard_surface_daemon_client
-from ..retry_lineage import capture_retry_lineage
+from ..native_retry_lineage import capture_retry_lineage
 from ._commands_shared import *
 from .commands_hook_native_state import NativeArtifactHookState
 from .commands_parser_helpers import *
@@ -151,6 +151,7 @@ def queue_native_approval(
         harness=str(args.harness),
         workspace=str(workspace) if workspace else None,
         action_envelope=action_envelope.to_dict() if action_envelope is not None else None,
+        guard_home=guard_home,
     )
     if retry_lineage is not None:
         hook_metadata["retry_lineage"] = retry_lineage

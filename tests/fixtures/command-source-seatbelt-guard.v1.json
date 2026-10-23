@@ -1,0 +1,4073 @@
+{
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "seatbelt agent settings change command",
+            "seatbelt fail-open install command",
+            "seatbelt hook removal command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews seatbelt commands that remove or weaken the guardrail it installs for coding agents: removing its hook, installing it so a crashing hook fails open, and editing agent settings.",
+          "ecosystem_ids": [
+            "seatbelt-guard"
+          ],
+          "executables": [
+            "seatbelt"
+          ],
+          "extension_id": "command.seatbelt-guard",
+          "homepage": "https://github.com/nikhilrai-tech/seatbelt-for-AI-agents",
+          "icon": {
+            "background": "#0F172A",
+            "kind": "react-icon",
+            "name": "HiMiniCommandLine"
+          },
+          "license": "Apache-2.0",
+          "name": "seatbelt-guard command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "seatbelt hook removal command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `seatbelt uninstall <agent> --write`, which removes seatbelt's PreToolUse hook from an agent's settings and turns the guardrail off. Without --write the command only previews the change. xargs launches are blocked by Guard's wrapper floor.",
+              "example_command": "seatbelt uninstall claude-code --scope project --write",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "seatbelt hook removal",
+              "permission_id": "command.seatbelt-guard.permission.uninstall-hook",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Preview with `seatbelt uninstall <agent>` (no --write) before removing the hook.",
+                "Do not let the agent that seatbelt guards remove its own guardrail."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "seatbelt fail-open install command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `seatbelt install <agent> --no-on-failure-block --write`, which installs the hook without `onFailure: block`, so a crash or timeout of the hook lets every command run unchecked. xargs launches are blocked by Guard's wrapper floor.",
+              "example_command": "seatbelt install claude-code --no-on-failure-block --write",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "seatbelt fail-open install",
+              "permission_id": "command.seatbelt-guard.permission.install-fail-open",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Keep the default `onFailure: block` so a failing hook cannot silently allow commands.",
+                "Run `seatbelt doctor` after any change to the hook."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "seatbelt agent settings change command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `seatbelt install <agent> --write`, which edits an agent's settings file (user, project or local scope) to add the seatbelt hook. A backup is kept, but the file changes. xargs launches are blocked by Guard's wrapper floor.",
+              "example_command": "seatbelt install claude-code --scope user --write",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "seatbelt agent settings change",
+              "permission_id": "command.seatbelt-guard.permission.install-write",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Preview first with `seatbelt install <agent>` (no --write).",
+                "Check the settings diff, then run `seatbelt doctor`."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Community",
+            "id": "community.seatbelt-guard",
+            "url": "https://github.com/nikhilrai-tech/seatbelt-for-AI-agents"
+          },
+          "reference_urls": [
+            "https://github.com/nikhilrai-tech/seatbelt-for-AI-agents",
+            "https://github.com/nikhilrai-tech/seatbelt-for-AI-agents/blob/main/docs/claude-code-hooks.md"
+          ],
+          "required": false,
+          "risk_classes": [
+            "permission_change",
+            "policy_bypass"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "seatbelt hook removal command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `seatbelt uninstall <agent> --write`, which removes seatbelt's PreToolUse hook from an agent's settings and turns the guardrail off. Without --write the command only previews the change. xargs launches are blocked by Guard's wrapper floor.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--wr",
+                            "--wri",
+                            "--writ",
+                            "--write",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--w"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "uninstall"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--w",
+                            "--wri",
+                            "--writ",
+                            "--write",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--wr"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "uninstall"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--w",
+                            "--wr",
+                            "--writ",
+                            "--write",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--wri"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "uninstall"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--w",
+                            "--wr",
+                            "--wri",
+                            "--write",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--writ"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "uninstall"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--write"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "uninstall"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.seatbelt-guard.permission.uninstall-hook",
+              "risk_classes": [
+                "policy_bypass"
+              ],
+              "rule_id": "command.seatbelt-guard.uninstall-hook",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--w",
+                            "--wr",
+                            "--wri",
+                            "--writ",
+                            "--write",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--write",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "uninstall"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--w",
+                            "--wr",
+                            "--wri",
+                            "--writ",
+                            "--write",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--write",
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "uninstall"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "seatbelt hook removal help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run `seatbelt uninstall <agent>` without --write to preview the change first.",
+                "Remove the hook yourself, in a terminal the agent does not control, if you really mean to turn the guardrail off."
+              ],
+              "severity": "high",
+              "title": "seatbelt hook removal"
+            },
+            {
+              "action_classes": [
+                "seatbelt fail-open install command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `seatbelt install <agent> --no-on-failure-block --write`, which installs the hook without `onFailure: block`, so a crash or timeout of the hook lets every command run unchecked. xargs launches are blocked by Guard's wrapper floor.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {},
+                        "matchers": [
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--n"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-o"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on-"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on-f"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on-fa"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on-fai"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on-fail"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on-failu"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on-failur"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on-failure"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on-failure-"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on-failure-b"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on-failure-bl"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on-failure-blo"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on-failure-bloc"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--no-on-failure-block"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          }
+                        ],
+                        "op": "any.v1"
+                      },
+                      {
+                        "config": {},
+                        "matchers": [
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--w"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--wr"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--wri"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--writ"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          },
+                          {
+                            "config": {
+                              "allow_leading_options": false,
+                              "executables": [
+                                "seatbelt",
+                                "seatbelt.cmd",
+                                "seatbelt.exe"
+                              ],
+                              "fail_secure_unknown_options": true,
+                              "forbidden_flags": [],
+                              "interspersed_flags": [
+                                "--hea",
+                                "--head",
+                                "--headl",
+                                "--headle",
+                                "--headles",
+                                "--headless",
+                                "--n",
+                                "--no",
+                                "--no-",
+                                "--no-o",
+                                "--no-on",
+                                "--no-on-",
+                                "--no-on-f",
+                                "--no-on-fa",
+                                "--no-on-fai",
+                                "--no-on-fail",
+                                "--no-on-failu",
+                                "--no-on-failur",
+                                "--no-on-failure",
+                                "--no-on-failure-",
+                                "--no-on-failure-b",
+                                "--no-on-failure-bl",
+                                "--no-on-failure-blo",
+                                "--no-on-failure-bloc",
+                                "--no-on-failure-block",
+                                "--w",
+                                "--wr",
+                                "--wri",
+                                "--writ",
+                                "--write",
+                                "--hel",
+                                "--help",
+                                "-h"
+                              ],
+                              "interspersed_options_with_values": [],
+                              "inverse_flag_pairs": [],
+                              "leading_options_with_values": [],
+                              "options_with_values": [
+                                "--sc",
+                                "--sco",
+                                "--scop",
+                                "--scope",
+                                "--se",
+                                "--set",
+                                "--sett",
+                                "--setti",
+                                "--settin",
+                                "--setting",
+                                "--settings",
+                                "--settings-",
+                                "--settings-f",
+                                "--settings-fi",
+                                "--settings-fil",
+                                "--settings-file"
+                              ],
+                              "required_flags": [
+                                "--write"
+                              ],
+                              "required_flags_in_all_arguments": true,
+                              "required_option_values": [],
+                              "subcommands": [
+                                "install"
+                              ]
+                            },
+                            "op": "executable.v1"
+                          }
+                        ],
+                        "op": "any.v1"
+                      }
+                    ],
+                    "op": "all.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.seatbelt-guard.permission.install-fail-open",
+              "risk_classes": [
+                "policy_bypass"
+              ],
+              "rule_id": "command.seatbelt-guard.install-fail-open",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--hea",
+                            "--head",
+                            "--headl",
+                            "--headle",
+                            "--headles",
+                            "--headless",
+                            "--n",
+                            "--no",
+                            "--no-",
+                            "--no-o",
+                            "--no-on",
+                            "--no-on-",
+                            "--no-on-f",
+                            "--no-on-fa",
+                            "--no-on-fai",
+                            "--no-on-fail",
+                            "--no-on-failu",
+                            "--no-on-failur",
+                            "--no-on-failure",
+                            "--no-on-failure-",
+                            "--no-on-failure-b",
+                            "--no-on-failure-bl",
+                            "--no-on-failure-blo",
+                            "--no-on-failure-bloc",
+                            "--no-on-failure-block",
+                            "--w",
+                            "--wr",
+                            "--wri",
+                            "--writ",
+                            "--write",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--no-on-failure-block",
+                            "--write",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "install"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--hea",
+                            "--head",
+                            "--headl",
+                            "--headle",
+                            "--headles",
+                            "--headless",
+                            "--n",
+                            "--no",
+                            "--no-",
+                            "--no-o",
+                            "--no-on",
+                            "--no-on-",
+                            "--no-on-f",
+                            "--no-on-fa",
+                            "--no-on-fai",
+                            "--no-on-fail",
+                            "--no-on-failu",
+                            "--no-on-failur",
+                            "--no-on-failure",
+                            "--no-on-failure-",
+                            "--no-on-failure-b",
+                            "--no-on-failure-bl",
+                            "--no-on-failure-blo",
+                            "--no-on-failure-bloc",
+                            "--no-on-failure-block",
+                            "--w",
+                            "--wr",
+                            "--wri",
+                            "--writ",
+                            "--write",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--no-on-failure-block",
+                            "--write",
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "install"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "seatbelt install without fail-closed hook help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Install without --no-on-failure-block so a broken hook blocks instead of allowing.",
+                "Run `seatbelt doctor` afterwards to prove the installed hook really works."
+              ],
+              "severity": "high",
+              "title": "seatbelt install without fail-closed hook"
+            },
+            {
+              "action_classes": [
+                "seatbelt agent settings change command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `seatbelt install <agent> --write`, which edits an agent's settings file (user, project or local scope) to add the seatbelt hook. A backup is kept, but the file changes. xargs launches are blocked by Guard's wrapper floor.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--hea",
+                            "--head",
+                            "--headl",
+                            "--headle",
+                            "--headles",
+                            "--headless",
+                            "--n",
+                            "--no",
+                            "--no-",
+                            "--no-o",
+                            "--no-on",
+                            "--no-on-",
+                            "--no-on-f",
+                            "--no-on-fa",
+                            "--no-on-fai",
+                            "--no-on-fail",
+                            "--no-on-failu",
+                            "--no-on-failur",
+                            "--no-on-failure",
+                            "--no-on-failure-",
+                            "--no-on-failure-b",
+                            "--no-on-failure-bl",
+                            "--no-on-failure-blo",
+                            "--no-on-failure-bloc",
+                            "--no-on-failure-block",
+                            "--wr",
+                            "--wri",
+                            "--writ",
+                            "--write",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--w"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "install"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--hea",
+                            "--head",
+                            "--headl",
+                            "--headle",
+                            "--headles",
+                            "--headless",
+                            "--n",
+                            "--no",
+                            "--no-",
+                            "--no-o",
+                            "--no-on",
+                            "--no-on-",
+                            "--no-on-f",
+                            "--no-on-fa",
+                            "--no-on-fai",
+                            "--no-on-fail",
+                            "--no-on-failu",
+                            "--no-on-failur",
+                            "--no-on-failure",
+                            "--no-on-failure-",
+                            "--no-on-failure-b",
+                            "--no-on-failure-bl",
+                            "--no-on-failure-blo",
+                            "--no-on-failure-bloc",
+                            "--no-on-failure-block",
+                            "--w",
+                            "--wri",
+                            "--writ",
+                            "--write",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--wr"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "install"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--hea",
+                            "--head",
+                            "--headl",
+                            "--headle",
+                            "--headles",
+                            "--headless",
+                            "--n",
+                            "--no",
+                            "--no-",
+                            "--no-o",
+                            "--no-on",
+                            "--no-on-",
+                            "--no-on-f",
+                            "--no-on-fa",
+                            "--no-on-fai",
+                            "--no-on-fail",
+                            "--no-on-failu",
+                            "--no-on-failur",
+                            "--no-on-failure",
+                            "--no-on-failure-",
+                            "--no-on-failure-b",
+                            "--no-on-failure-bl",
+                            "--no-on-failure-blo",
+                            "--no-on-failure-bloc",
+                            "--no-on-failure-block",
+                            "--w",
+                            "--wr",
+                            "--writ",
+                            "--write",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--wri"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "install"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--hea",
+                            "--head",
+                            "--headl",
+                            "--headle",
+                            "--headles",
+                            "--headless",
+                            "--n",
+                            "--no",
+                            "--no-",
+                            "--no-o",
+                            "--no-on",
+                            "--no-on-",
+                            "--no-on-f",
+                            "--no-on-fa",
+                            "--no-on-fai",
+                            "--no-on-fail",
+                            "--no-on-failu",
+                            "--no-on-failur",
+                            "--no-on-failure",
+                            "--no-on-failure-",
+                            "--no-on-failure-b",
+                            "--no-on-failure-bl",
+                            "--no-on-failure-blo",
+                            "--no-on-failure-bloc",
+                            "--no-on-failure-block",
+                            "--w",
+                            "--wr",
+                            "--wri",
+                            "--write",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--writ"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "install"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--hea",
+                            "--head",
+                            "--headl",
+                            "--headle",
+                            "--headles",
+                            "--headless",
+                            "--n",
+                            "--no",
+                            "--no-",
+                            "--no-o",
+                            "--no-on",
+                            "--no-on-",
+                            "--no-on-f",
+                            "--no-on-fa",
+                            "--no-on-fai",
+                            "--no-on-fail",
+                            "--no-on-failu",
+                            "--no-on-failur",
+                            "--no-on-failure",
+                            "--no-on-failure-",
+                            "--no-on-failure-b",
+                            "--no-on-failure-bl",
+                            "--no-on-failure-blo",
+                            "--no-on-failure-bloc",
+                            "--no-on-failure-block",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--write"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "install"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.seatbelt-guard.permission.install-write",
+              "risk_classes": [
+                "permission_change"
+              ],
+              "rule_id": "command.seatbelt-guard.install-write",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--hea",
+                            "--head",
+                            "--headl",
+                            "--headle",
+                            "--headles",
+                            "--headless",
+                            "--n",
+                            "--no",
+                            "--no-",
+                            "--no-o",
+                            "--no-on",
+                            "--no-on-",
+                            "--no-on-f",
+                            "--no-on-fa",
+                            "--no-on-fai",
+                            "--no-on-fail",
+                            "--no-on-failu",
+                            "--no-on-failur",
+                            "--no-on-failure",
+                            "--no-on-failure-",
+                            "--no-on-failure-b",
+                            "--no-on-failure-bl",
+                            "--no-on-failure-blo",
+                            "--no-on-failure-bloc",
+                            "--no-on-failure-block",
+                            "--w",
+                            "--wr",
+                            "--wri",
+                            "--writ",
+                            "--write",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--write",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "install"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "seatbelt",
+                            "seatbelt.cmd",
+                            "seatbelt.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--hea",
+                            "--head",
+                            "--headl",
+                            "--headle",
+                            "--headles",
+                            "--headless",
+                            "--n",
+                            "--no",
+                            "--no-",
+                            "--no-o",
+                            "--no-on",
+                            "--no-on-",
+                            "--no-on-f",
+                            "--no-on-fa",
+                            "--no-on-fai",
+                            "--no-on-fail",
+                            "--no-on-failu",
+                            "--no-on-failur",
+                            "--no-on-failure",
+                            "--no-on-failure-",
+                            "--no-on-failure-b",
+                            "--no-on-failure-bl",
+                            "--no-on-failure-blo",
+                            "--no-on-failure-bloc",
+                            "--no-on-failure-block",
+                            "--w",
+                            "--wr",
+                            "--wri",
+                            "--writ",
+                            "--write",
+                            "--hel",
+                            "--help",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--sc",
+                            "--sco",
+                            "--scop",
+                            "--scope",
+                            "--se",
+                            "--set",
+                            "--sett",
+                            "--setti",
+                            "--settin",
+                            "--setting",
+                            "--settings",
+                            "--settings-",
+                            "--settings-f",
+                            "--settings-fi",
+                            "--settings-fil",
+                            "--settings-file"
+                          ],
+                          "required_flags": [
+                            "--write",
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "install"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "seatbelt agent settings change help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run `seatbelt install <agent>` without --write to preview the exact change.",
+                "Review the settings file diff and the `.bak` copy after installing."
+              ],
+              "severity": "medium",
+              "title": "seatbelt agent settings change"
+            }
+          ],
+          "safer_alternatives": [
+            "Preview `seatbelt install` and `seatbelt uninstall` without --write first.",
+            "Keep the default fail-closed hook and run `seatbelt doctor` after any change."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.aether-vault",
+          "command.agentbridge",
+          "command.agenticjobs",
+          "command.agentsocks",
+          "command.agi-memory",
+          "command.ai-dev",
+          "command.answerloops",
+          "command.appimg",
+          "command.batterycontrol",
+          "command.blitcp",
+          "command.blkcp",
+          "command.claude-tmux",
+          "command.cloudg",
+          "command.codesage",
+          "command.codex-migrate",
+          "command.cogext",
+          "command.crisp-tui",
+          "command.cs",
+          "command.ctty",
+          "command.dataman",
+          "command.dearmour",
+          "command.digline",
+          "command.dispat",
+          "command.envseal",
+          "command.errand",
+          "command.faf-cli",
+          "command.formicx",
+          "command.genclave",
+          "command.gitsync",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.hashdup",
+          "command.iterlay",
+          "command.keibidrop",
+          "command.kelados",
+          "command.kim",
+          "command.kindling",
+          "command.kintsua",
+          "command.kranz",
+          "command.librarybridge",
+          "command.macscope",
+          "command.master-of",
+          "command.mcp-agent-wire",
+          "command.mcp-agenthub",
+          "command.mcp-architecture-intelligence-platform",
+          "command.mcp-asdecided",
+          "command.mcp-aseprite",
+          "command.mcp-askjev",
+          "command.mcp-authyouragent",
+          "command.mcp-axpilot",
+          "command.mcp-azure-vm-pricing",
+          "command.mcp-brickproof-adb",
+          "command.mcp-ccm",
+          "command.mcp-cf-mail-mcp",
+          "command.mcp-ci-guard",
+          "command.mcp-clipugc",
+          "command.mcp-codex-claude-bridge",
+          "command.mcp-compose-bridge",
+          "command.mcp-contribos",
+          "command.mcp-dchub",
+          "command.mcp-debuganything",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-fetchsandbox",
+          "command.mcp-filesystem",
+          "command.mcp-ftp",
+          "command.mcp-g-krusch",
+          "command.mcp-garmin-coach-mcp",
+          "command.mcp-google-mcp-universal",
+          "command.mcp-google-workspace.gmail",
+          "command.mcp-halflife",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-jd-church-website-audit",
+          "command.mcp-kranz",
+          "command.mcp-krusch",
+          "command.mcp-krusch-agentic-proxy",
+          "command.mcp-krusch-context-mcp",
+          "command.mcp-krusch-git",
+          "command.mcp-kuuhaku",
+          "command.mcp-lattice-talk",
+          "command.mcp-leadline",
+          "command.mcp-loomdesk",
+          "command.mcp-mail-server",
+          "command.mcp-melra",
+          "command.mcp-musiccontext",
+          "command.mcp-obsidian-kanban",
+          "command.mcp-openscreenshot",
+          "command.mcp-ops-brain",
+          "command.mcp-pc-control",
+          "command.mcp-pinpoint",
+          "command.mcp-plim",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-quidli-connect",
+          "command.mcp-reaper",
+          "command.mcp-remote-pc-mcp",
+          "command.mcp-repo-notebook",
+          "command.mcp-run",
+          "command.mcp-seahorse",
+          "command.mcp-seq-mcp",
+          "command.mcp-setup-doctor",
+          "command.mcp-tether",
+          "command.mcp-thingery",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.mcp-xrpl-token-guard",
+          "command.mcp-xrpl-trading-lab",
+          "command.mcpguard",
+          "command.netdoctor",
+          "command.noodle",
+          "command.ollama",
+          "command.omairc",
+          "command.probe",
+          "command.pyrig",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.repro-surgeon",
+          "command.rls-saboteur",
+          "command.routed",
+          "command.rungs",
+          "command.salesforce.sf",
+          "command.seatbelt-guard",
+          "command.shellroute",
+          "command.showtime",
+          "command.simgit",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.skills-check-updates",
+          "command.snoboard",
+          "command.storage-clearer",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vaultsync",
+          "command.vttforge",
+          "command.where-are-we",
+          "command.x402shield",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.digitalocean",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "seatbelt uninstall claude-code --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "uninstall-write",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt uninstall claude-code --scope project --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "uninstall-scope-write",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt uninstall --write claude-code",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "uninstall-write-before-target",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt uninstall claude-code --settings-file ./.claude/settings.json --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "uninstall-settings-file",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt.exe uninstall claude-code --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "uninstall-exe",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "cd /tmp && seatbelt uninstall claude-code --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "uninstall-after-cd",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt uninstall claude-code $WRITE_FLAG",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "uninstall-flag-expansion",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "xargs -n 1 seatbelt uninstall claude-code --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs-uninstall",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt uninstall claude-code",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "uninstall-preview",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt uninstall --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "uninstall-help",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt uninstall claude-code --write --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "uninstall-write-help",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt uninstall claude-code --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "uninstall-inactive",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt uninstall claude-code --write",
+      "disabled_permissions": [
+        "command.seatbelt-guard.permission.uninstall-hook"
+      ],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "uninstall-permission-disabled-blocks",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt install claude-code --no-on-failure-block --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "fail-open-install",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --write --no-on-failure-block --scope user",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "fail-open-reordered",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --headless --no-on-failure-block --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "fail-open-headless",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "xargs -n 1 seatbelt install claude-code --no-on-failure-block --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs-fail-open",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --no-on-failure-block",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "fail-open-preview-only",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --no-on-failure-block --write --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "fail-open-help",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --no-on-failure-block --headless --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "fail-open-flag-order-1",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --write --headless --no-on-failure-block",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "fail-open-flag-order-2",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --scope user --no-on-failure-block --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "fail-open-scope-value-between",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install --scope user claude-code --no-on-failure-block --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "fail-open-scope-before-target",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --scope=user --no-on-failure-block --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "fail-open-scope-equals",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "install-write",
+      "rule_id": "command.seatbelt-guard.install-write"
+    },
+    {
+      "command": "seatbelt install claude-code --scope project --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "install-scope-write",
+      "rule_id": "command.seatbelt-guard.install-write"
+    },
+    {
+      "command": "seatbelt install claude-code --headless --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "install-headless-write",
+      "rule_id": "command.seatbelt-guard.install-write"
+    },
+    {
+      "command": "seatbelt install claude-code --settings-file ./.claude/settings.local.json --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "install-settings-file",
+      "rule_id": "command.seatbelt-guard.install-write"
+    },
+    {
+      "command": "seatbelt install claude-code",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "install-preview",
+      "rule_id": "command.seatbelt-guard.install-write"
+    },
+    {
+      "command": "seatbelt install claude-code --write --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "install-write-help",
+      "rule_id": "command.seatbelt-guard.install-write"
+    },
+    {
+      "command": "seatbelt install claude-code --write",
+      "disabled_permissions": [
+        "command.seatbelt-guard.permission.install-write"
+      ],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "install-permission-disabled-blocks",
+      "rule_id": "command.seatbelt-guard.install-write"
+    },
+    {
+      "command": "seatbelt uninstall claude-code --wr",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "abbrev-uninstall-wr",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt uninstall claude-code --w",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "abbrev-uninstall-w",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt uninstall claude-code --wri",
+      "disabled_permissions": [
+        "command.seatbelt-guard.permission.uninstall-hook"
+      ],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "abbrev-uninstall-disabled-blocks",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt install claude-code --no-on --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "abbrev-fail-open-no-on",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --no-on-failure-bl --wri",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "abbrev-fail-open-both",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --n --w",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "abbrev-fail-open-n",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --hea --no-on --wr",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "abbrev-fail-open-headless",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --no-on --wr",
+      "disabled_permissions": [
+        "command.seatbelt-guard.permission.install-fail-open"
+      ],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "abbrev-fail-open-disabled-blocks",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --sc user --no-on --wr",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "abbrev-fail-open-scope",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt install claude-code --wr",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "abbrev-install-wr",
+      "rule_id": "command.seatbelt-guard.install-write"
+    },
+    {
+      "command": "seatbelt install claude-code --head --writ",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "abbrev-install-headless-write",
+      "rule_id": "command.seatbelt-guard.install-write"
+    },
+    {
+      "command": "seatbelt install claude-code --se ./s.json --wr",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "abbrev-install-settings-file",
+      "rule_id": "command.seatbelt-guard.install-write"
+    },
+    {
+      "command": "seatbelt install claude-code --wr",
+      "disabled_permissions": [
+        "command.seatbelt-guard.permission.install-write"
+      ],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "abbrev-install-disabled-blocks",
+      "rule_id": "command.seatbelt-guard.install-write"
+    },
+    {
+      "command": "seatbelt install claude-code --no-on",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "abbrev-install-preview-no-on",
+      "rule_id": "command.seatbelt-guard.install-fail-open"
+    },
+    {
+      "command": "seatbelt check 'git push --force origin main'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "check",
+      "rule_id": "command.seatbelt-guard.install-write"
+    },
+    {
+      "command": "seatbelt doctor",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "doctor",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt demo --short",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "demo",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt log --tail 5 --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "log",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt learn --min 3",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "learn",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "version",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "seatbelt hook --headless",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "hook",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    },
+    {
+      "command": "echo seatbelt uninstall claude-code --write",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.seatbelt-guard"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "unrelated-echo",
+      "rule_id": "command.seatbelt-guard.uninstall-hook"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

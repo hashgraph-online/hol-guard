@@ -37,7 +37,7 @@ def _daemon(monkeypatch: pytest.MonkeyPatch, install_fake_system_keyring) -> Non
     install_fake_system_keyring()
     monkeypatch.setattr(guard_store_module.sys, "platform", "linux", raising=False)
     monkeypatch.setattr(saved, "current_extension_control_binding_digest", lambda: "e" * 64)
-    monkeypatch.setattr(saved, "os", SimpleNamespace(environ={"HOME": "/home/dev", "PATH": "/usr/bin"}))
+    monkeypatch.setattr(saved, "os", SimpleNamespace(name="posix", environ={"HOME": "/home/dev", "PATH": "/usr/bin"}))
 
 
 def _daemon_store(guard_home: Path) -> GuardStore:

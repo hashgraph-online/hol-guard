@@ -155,9 +155,10 @@ jobs:
     name: Rust workspace (${{ matrix.check }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Only main test jobs share the warmer's lock. PRs and Clippy stay parallel.
+    # Required main consumers are the archive producers. Only the two runtime
+    # shards share an archive; core/command and PR/Clippy work stay independent.
     concurrency:
-      group: ${{ github.ref == 'refs/heads/main' && matrix.check != 'clippy' && format('trusted-rust-tests-{0}', github.sha) || format('rust-workspace-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.check) }}
+      group: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.check != 'clippy' && format('trusted-rust-tests-{0}-{1}', github.sha, matrix.check == 'test-command' && 'command' || (matrix.check == 'test-core' && 'core' || 'runtime')) || format('rust-workspace-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.check) }}
       queue: max
       cancel-in-progress: false
     strategy:
@@ -284,14 +285,23 @@ jobs:
                   --workspace-remap "$GITHUB_WORKSPACE/rust" "${nextest_args[@]}" \
                   --test-threads 4 --retries 0 --no-fail-fast
               else
+                # Main's archive step already timed this compilation. Preserve
+                # its HTML instead of replacing it with incremental run timings.
+                timing_args=()
+                if [[ "${GITHUB_EVENT_NAME:-}" != push || "${GITHUB_REF:-}" != refs/heads/main ]]; then
+                  timing_args=(--timings)
+                fi
                 PATH="$nextest_bin:$PATH" cargo nextest run --manifest-path rust/Cargo.toml --locked --all-targets "${packages[@]}" \
-                  "${nextest_args[@]}" \
+                  "${nextest_args[@]}" "${timing_args[@]}" \
                   --test-threads 4 --retries 0 --no-fail-fast
               fi
               ;;
             *) echo "Unsupported workspace check" >&2; exit 64 ;;
           esac
       - name: Save successful runtime test compilation
+        # Publish only after this consumer passes. Compared with an independent
+        # compile-only warmer, availability waits for tests and failed consumers
+        # publish nothing; either successful runtime shard can seed its archive.
         if: >-
           matrix.check != 'clippy' &&
           steps.runtime-archive.outputs.cache-hit != 'true' &&
@@ -303,6 +313,14 @@ jobs:
       - name: Report compiler cache statistics
         if: always() && matrix.check != 'clippy'
         run: '"$SCCACHE_PATH" --show-stats || true'
+      - name: Retain Rust test compilation timings
+        if: always() && matrix.check != 'clippy' && steps.runtime-archive.outputs.cache-hit != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rust-test-compilation-timings-${{ matrix.check }}-${{ github.run_attempt }}
+          path: rust/target/cargo-timings/cargo-timing.html
+          if-no-files-found: ignore
+          retention-days: 1
       - name: Bind successful strict Clippy report
         if: matrix.check == 'clippy'
         run: python3 -m scripts.ci.clippy_report bind
@@ -657,11 +675,12 @@ jobs:
             export GUARD_PYTEST_UNDER_COVERAGE=1
             coverage_args=(--cov --cov-branch --cov-report=)
           fi
-          # Standard public Linux runners provide four CPU cores.
+          # One existing shard runs the fixed-deadline checks serially; the
+          # verified plan assigns four workers to each ordinary shard.
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json \
-            uv run --no-sync python scripts/ci/run_projection_shard.py "$shard_file" -- \
+            uv run --no-sync python scripts/ci/run_projection_shard.py --coverage-resources "$shard_file" -- \
             -p pytest_duration_report "@$shard_file" --tb=short --durations=10 \
-            -n 4 --dist loadfile --max-worker-restart 0 \
+            --dist loadfile --max-worker-restart 0 \
             --reruns 1 --reruns-delay 2 \
             --deselect tests/test_guard_benign_false_positive_gate.py \
             --deselect tests/test_guard_gauntlet_replay_gate.py \

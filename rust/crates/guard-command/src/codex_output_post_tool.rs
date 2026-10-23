@@ -2,9 +2,9 @@
 //! (`_codex_post_tool_output_artifact`): which command read the output, what
 //! local secrets it references, whether a read-only inspection or focused
 //! pytest run can skip the finding, and the artifact fingerprint and copy.
-//! Python collects the response text and command texts and builds the
-//! artifact around the answer; everything between runs here under one
-//! deadline.
+//! Python collects the response text and builds the artifact around the
+//! answer; everything between, including which commands the payload names,
+//! runs here under one deadline.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -21,6 +21,7 @@ use crate::codex_output_commands::{is_focused_pytest_verification, is_read_only_
 use crate::codex_output_entry::{git_pathspec_identity, scope_of};
 use crate::codex_output_env::Ctx;
 use crate::codex_output_inspection_flow::is_read_only_source_inspection;
+use crate::codex_output_post_tool_commands::post_tool_command_texts;
 use crate::codex_output_post_tool_copy::{
     request_summary, runtime_reason, runtime_summary, OutputCopy,
 };
@@ -47,19 +48,24 @@ const DEADLINE: PostToolError = "native_codex_post_tool_deadline_exceeded";
 const MAX_DEADLINE_MS: u64 = 60_000;
 const OUTPUT_CLASS: &str = "credential-looking output";
 const NATIVE_UNAVAILABLE: &str = "shell_cwd_native_unavailable";
-const FIELDS: [&str; 11] = [
+const FIELDS: [&str; 10] = [
     "harness_label",
     "tool_label",
     "tool_name",
     "tool_input",
     "arguments",
     "tool_input_present",
-    "command_texts",
     "response_text",
     "cwd",
     "home_dir",
     "deadline_ms",
 ];
+/// The command texts older clients derive themselves and send along.
+const LEGACY_COMMAND_TEXTS: &str = "command_texts";
+const READ_ONLY_PAYLOAD_FIELDS: [&str; 4] = ["tool_name", "tool_input", "cwd", "home_dir"];
+/// The bounds the per-command read-only action holds a client-sent list to.
+const MAX_READ_ONLY_COMMANDS: usize = 256;
+const MAX_READ_ONLY_COMMAND_BYTES: usize = 64 * 1024;
 
 /// One review: the caller facts and the single deadline every step shares.
 pub(crate) struct Run<'r, 'c> {
@@ -107,15 +113,22 @@ fn optional_path(body: &Value, key: &str) -> Result<Option<PyPath>, PostToolErro
 impl Input {
     pub(crate) fn parse(body: &Value) -> Result<Self, PostToolError> {
         let object = body.as_object().ok_or(INVALID)?;
-        if object.len() != FIELDS.len() || !FIELDS.iter().all(|key| object.contains_key(*key)) {
+        let legacy = object.contains_key(LEGACY_COMMAND_TEXTS);
+        if object.len() != FIELDS.len() + usize::from(legacy)
+            || !FIELDS.iter().all(|key| object.contains_key(*key))
+        {
             return Err(INVALID);
         }
-        let command_texts = body["command_texts"]
-            .as_array()
-            .ok_or(INVALID)?
-            .iter()
-            .map(|item| item.as_str().map(str::to_owned).ok_or(INVALID))
-            .collect::<Result<Vec<_>, _>>()?;
+        let command_texts = if legacy {
+            body[LEGACY_COMMAND_TEXTS]
+                .as_array()
+                .ok_or(INVALID)?
+                .iter()
+                .map(|item| item.as_str().map(str::to_owned).ok_or(INVALID))
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            post_tool_command_texts(&body["tool_name"], &body["tool_input"])
+        };
         let deadline_ms = body["deadline_ms"].as_u64().ok_or(INVALID)?;
         if deadline_ms == 0 || deadline_ms > MAX_DEADLINE_MS {
             return Err(INVALID);
@@ -285,14 +298,63 @@ fn reviewed_source(run: &Run, input: &Input) -> Result<Source, PostToolError> {
     Ok(chosen)
 }
 
-/// `_codex_post_tool_command_is_read_only_source_inspection`.
-fn post_tool_read_only(ctx: &Ctx, input: &Input) -> bool {
-    let scope = scope_of(ctx, input.cwd.as_ref(), input.home_dir.as_ref());
-    !input.command_texts.is_empty()
-        && input.command_texts.iter().all(|command| {
+/// `_codex_post_tool_command_is_read_only_source_inspection`: every command
+/// is a read-only source inspection or git metadata read.
+pub(crate) fn post_tool_commands_read_only(
+    ctx: &Ctx,
+    commands: &[String],
+    cwd: Option<&PyPath>,
+    home_dir: Option<&PyPath>,
+) -> bool {
+    let scope = scope_of(ctx, cwd, home_dir);
+    !commands.is_empty()
+        && commands.iter().all(|command| {
             is_read_only_source_inspection(command, scope)
                 || is_read_only_git_metadata(command, scope.without_home())
         })
+}
+
+fn post_tool_read_only(ctx: &Ctx, input: &Input) -> bool {
+    post_tool_commands_read_only(
+        ctx,
+        &input.command_texts,
+        input.cwd.as_ref(),
+        input.home_dir.as_ref(),
+    )
+}
+
+/// The same verdict over the commands a post-tool payload names. A payload
+/// naming more or longer commands than a client-sent list may carry is not
+/// read-only, as the bounded per-command action refuses it.
+pub(crate) fn review_post_tool_read_only_payload(
+    ctx: &Ctx,
+    body: &Value,
+) -> Result<bool, PostToolError> {
+    let body = content_sensitivity::decode_input(body)?;
+    let object = body.as_object().ok_or(INVALID)?;
+    if object.len() != READ_ONLY_PAYLOAD_FIELDS.len()
+        || !READ_ONLY_PAYLOAD_FIELDS
+            .iter()
+            .all(|key| object.contains_key(*key))
+    {
+        return Err(INVALID);
+    }
+    let cwd = optional_path(&body, "cwd")?;
+    let home_dir = optional_path(&body, "home_dir")?;
+    let commands = post_tool_command_texts(&body["tool_name"], &body["tool_input"]);
+    if commands.len() > MAX_READ_ONLY_COMMANDS
+        || commands
+            .iter()
+            .any(|command| command.len() > MAX_READ_ONLY_COMMAND_BYTES)
+    {
+        return Ok(false);
+    }
+    Ok(post_tool_commands_read_only(
+        ctx,
+        &commands,
+        cwd.as_ref(),
+        home_dir.as_ref(),
+    ))
 }
 
 /// Review one post-tool payload; the JSON answer text.
@@ -460,3 +522,7 @@ fn upsert(metadata: &mut Vec<(String, Value)>, key: String, value: Value) {
         None => metadata.push((key, value)),
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "codex_output_post_tool_payload_tests.rs"]
+mod payload_tests;

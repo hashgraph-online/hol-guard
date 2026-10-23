@@ -1,7 +1,12 @@
-"""Adversarial tests for local hook retry lineage capture."""
+"""Adversarial tests for how stored hook retry lineage is kept and kept private.
+
+The capture grammar is native (``retry_lineage_capture_op``); these records are
+built the way the resident builds them so the store tests need no resident.
+"""
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from collections.abc import Mapping
@@ -16,7 +21,6 @@ from codex_plugin_scanner.guard.continuation_contract import ContinuationOffer, 
 from codex_plugin_scanner.guard.continuation_payload import continuation_payload
 from codex_plugin_scanner.guard.continuation_runtime import continuation_offer_payload
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
-from codex_plugin_scanner.guard.retry_lineage import capture_retry_lineage, preserve_retry_lineage
 from codex_plugin_scanner.guard.runtime.local_request_snapshots import local_request_snapshot_payload
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_continuation import continuation_store_call
@@ -24,123 +28,34 @@ from codex_plugin_scanner.guard.store_continuation import continuation_store_cal
 _NOW = "2026-09-29T12:00:00+00:00"
 
 
-def _payload() -> dict[str, object]:
-    return {
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _lineage(tool_call_id: str = "provider-tool-call-001", **extra: str) -> dict[str, object]:
+    """A valid record, as the resident captures one for a provider hook payload."""
+
+    record: dict[str, object] = {
+        "version": 1,
+        "source": "hook",
+        "harness": "pi",
         "session_id": "provider-session-001",
-        "tool_call_id": "provider-tool-call-001",
+        "tool_call_id": tool_call_id,
         "turn_id": "provider-turn-001",
         "invocation_id": "provider-invocation-001",
-        "request_id": "provider-request-001",
-        "workspace": "/workspace/example",
-        "device_id": "device-001",
+        "provider_request_id": "provider-request-001",
+        "workspace_sha256": _sha256("/workspace/example"),
+        "device_sha256": _sha256("device-001"),
+        **extra,
     }
-
-
-def test_capture_binds_provider_lineage_action_workspace_and_device_without_command_text() -> None:
-    lineage = capture_retry_lineage(
-        _payload(),
-        harness="pi",
-        action_envelope={
-            "action_type": "shell_command",
-            "command": "printf secret-ish command",
-            "action_id": "action-001",
-        },
-    )
-
-    assert lineage is not None
-    assert lineage["session_id"] == "provider-session-001"
-    assert lineage["tool_call_id"] == "provider-tool-call-001"
-    assert lineage["turn_id"] == "provider-turn-001"
-    assert lineage["invocation_id"] == "provider-invocation-001"
-    assert lineage["provider_request_id"] == "provider-request-001"
-    assert "original_request_id" not in lineage
-    assert lineage["workspace_sha256"] != "/workspace/example"
-    assert lineage["device_sha256"] != "device-001"
-    assert lineage["action_sha256"]
-    assert lineage["lineage_id"]
-    assert "printf secret-ish command" not in json.dumps(lineage)
-
-
-def test_capture_rejects_ambiguous_or_unbounded_provider_identifiers() -> None:
-    ambiguous = _payload()
-    ambiguous["sessionId"] = "different-session"
-    assert capture_retry_lineage(ambiguous, harness="pi") is None
-
-    unbounded = _payload()
-    unbounded["tool_call_id"] = "x" * 257
-    assert capture_retry_lineage(unbounded, harness="pi") is None
-
-    malformed = _payload()
-    malformed["turn_id"] = 42
-    assert capture_retry_lineage(malformed, harness="pi") is None
-
-    whitespace = _payload()
-    whitespace["session_id"] = " provider-session-001"
-    assert capture_retry_lineage(whitespace, harness="pi") is None
-
-    contradictory_workspace = _payload()
-    assert capture_retry_lineage(contradictory_workspace, harness="pi", workspace="/other") is None
-
-    request_aliases = _payload()
-    request_aliases["requestId"] = "provider-request-002"
-    assert capture_retry_lineage(request_aliases, harness="pi") is None
-
-    not_finite = _payload()
-    assert capture_retry_lineage(not_finite, harness="pi", action_envelope={"score": float("nan")}) is None
-
-
-def test_capture_requires_at_least_one_provider_lineage_identifier() -> None:
-    payload = {"workspace": "/workspace/example", "tool_name": "shell"}
-
-    assert capture_retry_lineage(payload, harness="pi") is None
-
-
-def test_malformed_unicode_is_rejected_without_crashing_capture_or_preservation() -> None:
-    payload = _payload()
-    payload["session_id"] = "session-\ud800"
-    assert capture_retry_lineage(payload, harness="pi") is None
-    assert capture_retry_lineage(_payload(), harness="pi", action_envelope={"value": "\ud800"}) is None
-
-    initial = capture_retry_lineage(_payload(), harness="pi")
-    assert initial is not None
-    malformed = {**initial, "lineage_id": "\u00e9" * 64}
-    assert preserve_retry_lineage({"retry_lineage": malformed}, {"retry_lineage": initial}) == {
-        "retry_lineage": initial
-    }
-
-
-def test_original_request_id_can_be_bound_explicitly() -> None:
-    payload = _payload()
-    lineage = capture_retry_lineage(payload, harness="pi", original_request_id="original-001")
-
-    assert lineage is not None
-    assert lineage["original_request_id"] == "original-001"
-    assert lineage["provider_request_id"] == "provider-request-001"
-    payload["requestId"] = "contradictory-provider-request"
-    assert capture_retry_lineage(payload, harness="pi", original_request_id="original-001") is None
-
-
-def test_valid_lineage_cannot_be_replaced_by_noncanonical_version() -> None:
-    initial = capture_retry_lineage(_payload(), harness="pi")
-    assert initial is not None
-    invalid = dict(initial)
-    invalid["version"] = True
-
-    preserved = preserve_retry_lineage(
-        {"retry_lineage": initial},
-        {"retry_lineage": invalid, "continuation": {"status": "waiting"}},
-    )
-
-    assert preserved["retry_lineage"] == initial
+    canonical = json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    record["lineage_id"] = _sha256(canonical)
+    return record
 
 
 def test_operation_update_cannot_replace_first_retry_lineage(tmp_path: Path) -> None:
-    initial = capture_retry_lineage(_payload(), harness="pi")
-    changed_payload = _payload()
-    changed_payload["tool_call_id"] = "attacker-substituted-call"
-    changed = capture_retry_lineage(changed_payload, harness="pi")
-    assert initial is not None
-    assert changed is not None
+    initial = _lineage()
+    changed = _lineage("attacker-substituted-call")
     assert initial["lineage_id"] != changed["lineage_id"]
 
     store = GuardStore(tmp_path / "guard")
@@ -188,12 +103,8 @@ def test_operation_update_cannot_replace_first_retry_lineage(tmp_path: Path) -> 
 
 
 def test_continuation_store_update_cannot_replace_first_retry_lineage(tmp_path: Path) -> None:
-    initial = capture_retry_lineage(_payload(), harness="pi")
-    changed_payload = _payload()
-    changed_payload["tool_call_id"] = "continuation-substituted-call"
-    changed = capture_retry_lineage(changed_payload, harness="pi")
-    assert initial is not None
-    assert changed is not None
+    initial = _lineage()
+    changed = _lineage("continuation-substituted-call")
 
     store = GuardStore(tmp_path / "continuation-store")
     _ = store.upsert_guard_operation(
@@ -283,8 +194,7 @@ def test_public_continuation_snapshot_contains_no_raw_retry_lineage(tmp_path: Pa
         "harness": "pi",
         "continuation_snapshot": None,
     }
-    lineage = capture_retry_lineage(_payload(), harness="pi")
-    assert lineage is not None
+    lineage = _lineage()
     operation = {
         "metadata": {"retry_lineage": lineage},
         "session_id": "guard-session",
@@ -308,8 +218,7 @@ def test_public_continuation_snapshot_contains_no_raw_retry_lineage(tmp_path: Pa
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_public_and_cloud_serialization_omit_retry_lineage(tmp_path: Path) -> None:
-    lineage = capture_retry_lineage(_payload(), harness="pi")
-    assert lineage is not None
+    lineage = _lineage()
     offer = ContinuationOffer(
         correlation_id="gcr_00000000-0000-0000-0000-000000000001",
         harness="pi",
@@ -350,12 +259,8 @@ def test_public_and_cloud_serialization_omit_retry_lineage(tmp_path: Path) -> No
 
 
 def test_concurrent_first_writers_retain_a_valid_lineage(tmp_path: Path) -> None:
-    left = capture_retry_lineage(_payload(), harness="pi", original_request_id="request-left")
-    right_payload = _payload()
-    right_payload["tool_call_id"] = "provider-tool-call-right"
-    right = capture_retry_lineage(right_payload, harness="pi", original_request_id="request-right")
-    assert left is not None
-    assert right is not None
+    left = _lineage(original_request_id="request-left")
+    right = _lineage("provider-tool-call-right", original_request_id="request-right")
     barrier = Barrier(2)
 
     def write(store: GuardStore, lineage: dict[str, object]) -> None:

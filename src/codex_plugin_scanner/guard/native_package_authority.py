@@ -33,6 +33,17 @@ _MAX_REQUEST_BYTES = 256 * 1024
 _ARTIFACT_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _PACKAGE_AUTHORITY_FEATURE = "package-authority-v1"
+_PACKAGE_INTENT_EXTRACT_FEATURE = "package-intent-extract-v1"
+# Mirrors PACKAGE_INTENT_EXTRACT_MAX_BYTES: the tool arguments ride in the
+# request whole, so the bound matches the MCP tool-call identity request that
+# carries the same arguments.
+_EXTRACT_MAX_REQUEST_BYTES = 6 * 1024 * 1024 - 64 * 1024
+# Room the operation envelope adds around the request on the wire.
+_EXTRACT_ENVELOPE_RESERVE_BYTES = 1024
+# The resident reads commands five levels into the arguments and its decoder
+# refuses deeper nesting than 128, so anything past this depth is sent as null
+# rather than failing the whole request.
+_EXTRACT_MAX_DEPTH = 16
 _PACKAGE_EVALUATION_VIEW_FEATURE = "package-evaluation-view-v1"
 # Mirrors PACKAGE_EVALUATION_VIEW_MAX_REQUEST_BYTES: the view reads back rows the
 # resident answered inside one reply, so its request takes the reply budget.
@@ -166,8 +177,6 @@ def package_intent_parse_native(
     ``require_answer``, a missing or malformed answer raises instead of reading
     as no intent, so a caller can fail closed.
     """
-    from .runtime.package_intent_common import PackageIntent
-
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": _request_id(),
@@ -184,6 +193,133 @@ def package_intent_parse_native(
         timeout_seconds=timeout_seconds,
         deadline_monotonic=deadline_monotonic,
     )
+    return _intent_from_response(response, require_answer=require_answer)
+
+
+def package_intent_extract_native(
+    tool_name: object,
+    arguments: object,
+    *,
+    action_envelope_command: str | None,
+    workspace: Path | None = None,
+    home_dir: Path | None = None,
+    environment: Mapping[str, str] | None = None,
+    guard_home: Path,
+    timeout_seconds: float = 5.0,
+) -> PackageIntent | None:
+    """The first package intent a tool call's commands name, or ``None``.
+
+    The resident walks a shell tool's arguments for command texts, parses each
+    until one names a package intent, and otherwise parses the action
+    envelope's command, all in one request.
+    """
+
+    request: dict[str, object] = {
+        "schema": _REQUEST_SCHEMA,
+        "request_id": _request_id(),
+        "tool_name": tool_name if isinstance(tool_name, str) and _transportable(tool_name) else None,
+        "arguments": _command_tree(arguments, depth=0),
+        "action_envelope_command": (
+            action_envelope_command if action_envelope_command and _transportable(action_envelope_command) else None
+        ),
+        "workspace": str(workspace) if workspace is not None else None,
+        "home_dir": str(home_dir) if home_dir is not None else None,
+        "environment": _resident_environment(environment),
+    }
+    deadline = time.monotonic() + timeout_seconds
+    if _fits(request):
+        return _extract_once(request, guard_home=guard_home, deadline=deadline)
+    # The arguments and the envelope command do not fit together. The resident
+    # walks the arguments before it reads the envelope command, so asking for
+    # each in turn gives the answer one request would have.
+    walked = {**request, "action_envelope_command": None}
+    if _fits(walked):
+        intent = _extract_once(walked, guard_home=guard_home, deadline=deadline)
+        if intent is not None:
+            return intent
+    if request["action_envelope_command"] is None:
+        return None
+    return _extract_once(
+        {**request, "request_id": _request_id(), "arguments": None}, guard_home=guard_home, deadline=deadline
+    )
+
+
+def _fits(request: dict[str, object]) -> bool:
+    return _encoded_size(request) <= _EXTRACT_MAX_REQUEST_BYTES - _EXTRACT_ENVELOPE_RESERVE_BYTES
+
+
+def _extract_once(request: dict[str, object], *, guard_home: Path, deadline: float) -> PackageIntent | None:
+    response = _resident_request(
+        operation="package_intent_extract",
+        request=request,
+        guard_home=guard_home,
+        timeout_seconds=max(0.0, deadline - time.monotonic()),
+        deadline_monotonic=deadline,
+        required_features=(_PACKAGE_AUTHORITY_FEATURE, _PACKAGE_INTENT_EXTRACT_FEATURE),
+        max_request_bytes=_EXTRACT_MAX_REQUEST_BYTES,
+    )
+    return _intent_from_response(response, require_answer=False)
+
+
+def _command_tree(value: object, *, depth: int) -> object:
+    """Project tool arguments onto the values the resident reads commands from.
+
+    Only strings, lists and objects can hold a command, so every other value is
+    sent as null: it never spends request budget, and a value JSON cannot carry
+    (a NaN, a lone surrogate) never fails the whole request.
+    """
+
+    if depth > _EXTRACT_MAX_DEPTH:
+        return None
+    if isinstance(value, str):
+        return value if _transportable(value) else None
+    if isinstance(value, list):
+        return [_command_tree(item, depth=depth + 1) for item in value]
+    if isinstance(value, dict):
+        tree: dict[str, object] = {}
+        renamed: list[tuple[str, object]] = []
+        for key, item in value.items():
+            if not isinstance(key, str):
+                continue
+            if _transportable(key):
+                tree[key] = _command_tree(item, depth=depth + 1)
+            else:
+                # A key JSON cannot carry never names a command, but the
+                # value under it is still walked; repr() escapes it and its
+                # quotes keep it from colliding with a key the resident reads.
+                renamed.append((repr(key), item))
+        for key, item in renamed:
+            if key not in tree:
+                tree[key] = _command_tree(item, depth=depth + 1)
+        return tree
+    return None
+
+
+def _encoded_size(value: object) -> int:
+    """The ASCII-escaped wire length of ``value``; past any bound when unencodable."""
+
+    try:
+        return len(json.dumps(value))
+    except (TypeError, ValueError):
+        return _EXTRACT_MAX_REQUEST_BYTES + 1
+
+
+def _transportable(text: str) -> bool:
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _intent_from_response(response: dict[str, object] | None, *, require_answer: bool) -> PackageIntent | None:
+    """Hydrate the intent a parse or extract answer carries.
+
+    ``None`` is the resident's "no package intent" answer. With
+    ``require_answer``, a missing or malformed answer raises instead.
+    """
+    from .runtime.package_intent_common import PackageIntent
+
     if response is None:
         if require_answer:
             raise NativePackageIntentUnavailableError("native_package_intent_unavailable")

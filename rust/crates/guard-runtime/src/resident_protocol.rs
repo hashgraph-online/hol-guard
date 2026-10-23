@@ -215,6 +215,7 @@ pub(crate) enum ResidentOperationV1 {
     HookEvidenceWriter(crate::hook_evidence_writer_op::HookEvidenceWriterRequestV1),
     ApprovalGate(ApprovalGateRequestV1),
     PackageIntentParse(PackageIntentParseRequestV1),
+    PackageIntentExtract(guard_contracts::PackageIntentExtractRequestV1),
     PackageRequestArtifact(PackageRequestArtifactRequestV1),
     SupplyChainEval(SupplyChainEvalRequestV1),
     ApplyStoredPackagePolicy(ApplyStoredPackagePolicyRequestV1),
@@ -319,6 +320,7 @@ pub(crate) enum ResidentOperationV1 {
     InventoryUrlRedaction(guard_contracts::InventoryUrlRedactionRequestV1),
     VerifiedReadPlan(guard_contracts::VerifiedReadPlanRequestV1),
     AibomReportSummaries(guard_contracts::AibomReportSummariesRequestV1),
+    RetryLineageCapture(guard_contracts::RetryLineageCaptureRequestV1),
     Health(Value),
     Shutdown(Value),
 }

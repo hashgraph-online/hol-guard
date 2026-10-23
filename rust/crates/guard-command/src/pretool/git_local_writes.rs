@@ -3,8 +3,9 @@
 //! replaces no untracked file, a non-forced branch rename, a plain stash push,
 //! `git stash apply` or `pop` of one entry, `git stash list`, a `git merge`
 //! or `git cherry-pick` (`git_local_writes_merge`) and a `git rebase` onto a
-//! local ref or `--continue` (`git_local_writes_rebase`), with Git reads the configuration
-//! probe proves helper-free around them.
+//! local ref or `--continue` (`git_local_writes_rebase`), a `git reset`
+//! that writes no file and a `git restore --staged`, with Git reads the
+//! configuration probe proves helper-free around them.
 //! On a host with a workspace sandbox the sandbox runs them contained, in a
 //! main checkout or in a linked worktree whose shared Git directory it grants,
 //! before this proof is asked. Some hosts have no sandbox, and a command the
@@ -69,6 +70,8 @@ const RULES: &[&str] = &[
     "command.git.switch",
     "command.git.checkout",
     "command.git.stash",
+    "command.git.reset",
+    "command.git.restore",
     "command.git.merge",
     "command.git.cherry-pick",
     "command.git.rebase",

@@ -144,6 +144,8 @@ mod codex_hook_bridge_transport;
 mod codex_hook_identity;
 mod codex_hook_response;
 mod codex_hooks;
+#[cfg(test)]
+mod codex_hooks_parity_tests;
 mod codex_identity;
 #[cfg(all(test, unix))]
 mod codex_post_tool_output_vectors_tests;
@@ -625,6 +627,7 @@ mod package_authority_op;
 mod package_context_build_op;
 mod package_evaluation_compose_op;
 mod package_evaluation_view_op;
+mod package_intent_extract_op;
 mod package_policy_resolve_op;
 mod package_posture_op;
 mod package_protect_finalize_op;
@@ -690,6 +693,7 @@ mod resident_update_lock;
 mod restricted_linux_launch;
 mod restricted_process_ceiling;
 mod restricted_pytest_op;
+mod retry_lineage_capture_op;
 mod reviewed_invocation_bindings_op;
 mod rich_command_model_op;
 mod runner_authority_detector;

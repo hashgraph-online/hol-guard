@@ -37,6 +37,7 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::GUARD_STORE_FEATURE,
     guard_contracts::APPROVAL_GATE_FEATURE,
     guard_contracts::PACKAGE_AUTHORITY_FEATURE,
+    guard_contracts::PACKAGE_INTENT_EXTRACT_FEATURE,
     guard_contracts::PACKAGE_EVALUATION_COMPOSE_FEATURE,
     guard_contracts::PACKAGE_APPROVAL_HASH_FEATURE,
     guard_contracts::VERIFIED_NPM_FEATURE,
@@ -72,6 +73,7 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::GIT_EXECUTION_SAFETY_FEATURE,
     guard_contracts::COMPOUND_GIT_INSPECTION_FEATURE,
     guard_contracts::CODEX_TOOL_OUTPUT_FEATURE,
+    guard_contracts::CODEX_POST_TOOL_COMMANDS_FEATURE,
     guard_contracts::POLICY_BUNDLE_AUTHORITY_FEATURE,
     guard_contracts::MCP_RUNTIME_EVIDENCE_FEATURE,
     guard_contracts::RUNTIME_DETECTOR_RUN_FEATURE,
@@ -166,4 +168,5 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::COMMAND_PACK_RECORD_FEATURE,
     guard_contracts::INVENTORY_URL_REDACTION_FEATURE,
     guard_contracts::AIBOM_REPORT_SUMMARIES_FEATURE,
+    guard_contracts::RETRY_LINEAGE_CAPTURE_FEATURE,
 ];

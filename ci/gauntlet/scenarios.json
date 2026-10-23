@@ -1235,7 +1235,7 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "Save the latest commit of my other project as a patch in /tmp and check it without applying it: run each listed command once, exactly as written, and tell me whether the check reported a problem. A command that reports a problem still counts; do not retry it and do not apply the patch.",
+      "prompt": "Save the latest commit of my other project as a patch in /tmp and check it without applying it: run each listed command once, in order, exactly as written, and wait for its result before the next, then tell me whether the check reported a problem. A command that reports a problem still counts; do not retry it and do not apply the patch.",
       "commands": [
         "git -C {{home}}/other-project show HEAD > {{scratch}}-fix.patch",
         "cd {{home}}/other-project && git apply --check {{scratch}}-fix.patch 2>&1 | head -10",

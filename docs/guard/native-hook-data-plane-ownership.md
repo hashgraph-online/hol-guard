@@ -319,6 +319,20 @@ snapshot drift states — and returns the three summaries the reply carries. A
 report whose rows exceed the request budget, or a resident that cannot answer,
 fails the summary closed; there is no Python recount.
 
+A hook's retry lineage is captured in the resident
+(`retry-lineage-capture-v1`, in `retry_lineage_capture_op.rs`). Python held the
+capture half of that grammar: which payload aliases name a provider session,
+thread, tool call, turn, invocation, request, workspace and device; when two
+aliases disagree; what counts as a clean identifier; and how the workspace,
+device, action envelope and record are digested. The validating half already
+lived in `guard_store_lineage`, so both halves now share one identifier rule
+and one record digest. Python sends the payload's top-level strings (any other
+value as `false`, which the grammar refuses exactly as it would the original),
+the runtime workspace and the action envelope, and attaches the record the
+reply carries. The lineage only correlates retries and never authorizes an
+action, so a resident that cannot answer leaves the hook without lineage
+rather than falling back to a Python capture.
+
 An inventory snapshot's content identity is computed in the resident
 (`inventory-snapshot-digest-v1`, in `inventory_snapshot_digest_op.rs`, over
 `inventory_fingerprints::inventory_snapshot_content_hash`). That identity is

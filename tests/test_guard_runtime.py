@@ -14186,22 +14186,25 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
     worker = threading.Thread(target=resolve_pending, daemon=True)
     worker.start()
 
-    rc = main(
-        [
-            "guard",
-            "run",
-            "claude-code",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-        ]
-    )
-    stop_resolver.set()
-    worker.join(timeout=1.0)
-    output = capsys.readouterr().out
+    try:
+        rc = main(
+            [
+                "guard",
+                "run",
+                "claude-code",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+            ]
+        )
+    finally:
+        stop_resolver.set()
+        worker.join(timeout=1.0)
+    captured = capsys.readouterr()
+    output = captured.out
 
-    assert rc == 0
+    assert rc == 0, f"guard run returned {rc}\nstdout:\n{output}\nstderr:\n{captured.err}"
     assert "Launch allowed" in output
     assert "Approval received" in output
     assert observed_actions

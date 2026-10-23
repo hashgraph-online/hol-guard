@@ -1,0 +1,290 @@
+{
+  "schema": "redact-text-parity.v1",
+  "cases": [
+    {
+      "name": "plain text keeps every character",
+      "input": [
+        "echo hello world"
+      ],
+      "text": "echo hello world",
+      "count": 0,
+      "classifiers": []
+    },
+    {
+      "name": "empty text",
+      "input": [
+        ""
+      ],
+      "text": "",
+      "count": 0,
+      "classifiers": []
+    },
+    {
+      "name": "bearer token keeps its keyword",
+      "input": [
+        "Authorization: Bearer ",
+        "abcdefghijklmnop"
+      ],
+      "text": "Authorization: Bearer *****",
+      "count": 1,
+      "classifiers": [
+        "bearer-token"
+      ]
+    },
+    {
+      "name": "bearer token is matched case-insensitively",
+      "input": [
+        "bearer ",
+        "abcdefgh"
+      ],
+      "text": "bearer *****",
+      "count": 1,
+      "classifiers": [
+        "bearer-token"
+      ]
+    },
+    {
+      "name": "openai key",
+      "input": [
+        "curl -H 'x: ",
+        "sk-",
+        "AAAABBBBCCCCDDDD",
+        "'"
+      ],
+      "text": "curl -H 'x: sk-*****'",
+      "count": 1,
+      "classifiers": [
+        "openai-token"
+      ]
+    },
+    {
+      "name": "github token",
+      "input": [
+        "git push https://",
+        "ghp_",
+        "AAAABBBBCCCCDDDD",
+        "@github.com/o/r"
+      ],
+      "text": "git push https://gh*****@github.com/o/r",
+      "count": 1,
+      "classifiers": [
+        "github-token"
+      ]
+    },
+    {
+      "name": "two github tokens report one classifier twice",
+      "input": [
+        "ghp_",
+        "AAAABBBB",
+        " ",
+        "gho_",
+        "CCCCDDDD"
+      ],
+      "text": "gh***** gh*****",
+      "count": 2,
+      "classifiers": [
+        "github-token"
+      ]
+    },
+    {
+      "name": "aws access key",
+      "input": [
+        "AWS_ACCESS_KEY_ID is ",
+        "AKIA",
+        "IOSFODNN7",
+        "EXAMPLE"
+      ],
+      "text": "AWS_ACCESS_KEY_ID is AKIA****************",
+      "count": 1,
+      "classifiers": [
+        "aws-access-key"
+      ]
+    },
+    {
+      "name": "aws secret access key assignment",
+      "input": [
+        "\"aws_secret_access_key\" = \"",
+        "wJalrXUtnFEMI",
+        "/K7MDENG/bPxRfiCY",
+        "EXAMPLEKEY",
+        "\""
+      ],
+      "text": "\"aws_secret_access_key\"=\"*****\"",
+      "count": 1,
+      "classifiers": [
+        "aws-secret-access-key"
+      ]
+    },
+    {
+      "name": "npm auth token",
+      "input": [
+        "//registry.npmjs.org/:_authToken=",
+        "abcdefghijkl"
+      ],
+      "text": "//registry.npmjs.org/:_authToken=*****",
+      "count": 1,
+      "classifiers": [
+        "npm-token"
+      ]
+    },
+    {
+      "name": "python index url with credentials",
+      "input": [
+        "index-url = https://user:",
+        "hunter2",
+        "@pypi.example.test/simple"
+      ],
+      "text": "index-url=*****",
+      "count": 1,
+      "classifiers": [
+        "python-index-token"
+      ]
+    },
+    {
+      "name": "private key on one line",
+      "input": [
+        "-----BEGIN RSA PRIVATE",
+        " KEY-----",
+        "ZHVtbXk=",
+        "-----END RSA PRIVATE",
+        " KEY-----"
+      ],
+      "text": "*****",
+      "count": 1,
+      "classifiers": [
+        "private-key"
+      ]
+    },
+    {
+      "name": "private key across lines",
+      "input": [
+        "-----BEGIN RSA PRIVATE",
+        " KEY-----",
+        "\nQUJD\n",
+        "-----END RSA PRIVATE",
+        " KEY-----"
+      ],
+      "text": "*****",
+      "count": 1,
+      "classifiers": [
+        "private-key"
+      ]
+    },
+    {
+      "name": "private key without its end marker is left alone",
+      "input": [
+        "-----BEGIN PRIVATE KEY-----\nno end"
+      ],
+      "text": "-----BEGIN PRIVATE KEY-----\nno end",
+      "count": 0,
+      "classifiers": []
+    },
+    {
+      "name": "secret env assignment",
+      "input": [
+        "SERVICE_PASSWORD=",
+        "hunter2"
+      ],
+      "text": "SERVICE_PASSWORD=*****",
+      "count": 1,
+      "classifiers": [
+        "secret-env"
+      ]
+    },
+    {
+      "name": "indented secret env assignment keeps its indent",
+      "input": [
+        "\t API_SECRET=",
+        "abc"
+      ],
+      "text": "\t API_SECRET=*****",
+      "count": 1,
+      "classifiers": [
+        "secret-env"
+      ]
+    },
+    {
+      "name": "an exported assignment is not a secret env line",
+      "input": [
+        "export API_SECRET=",
+        "abc"
+      ],
+      "text": "export API_SECRET=abc",
+      "count": 0,
+      "classifiers": []
+    },
+    {
+      "name": "connection env assignment",
+      "input": [
+        "DATABASE_URL=postgres://user:",
+        "pw",
+        "@db.example.test/app"
+      ],
+      "text": "DATABASE_URL=*****",
+      "count": 1,
+      "classifiers": [
+        "connection-env"
+      ]
+    },
+    {
+      "name": "connection string without an assignment",
+      "input": [
+        "mongodb+srv://user:",
+        "pw",
+        "@cluster.example.test/db"
+      ],
+      "text": "*****",
+      "count": 1,
+      "classifiers": [
+        "connection-string"
+      ]
+    },
+    {
+      "name": "remote pairing code",
+      "input": [
+        "pair with HLG-",
+        "ABCD23",
+        " now"
+      ],
+      "text": "pair with HLG-****** now",
+      "count": 1,
+      "classifiers": [
+        "remote-pairing-code"
+      ]
+    },
+    {
+      "name": "a github token inside a secret env assignment redacts twice",
+      "input": [
+        "GITHUB_TOKEN=",
+        "ghp_",
+        "AAAABBBBCCCC"
+      ],
+      "text": "GITHUB_TOKEN=*****",
+      "count": 2,
+      "classifiers": [
+        "github-token",
+        "secret-env"
+      ]
+    },
+    {
+      "name": "an already masked assignment matches again and stays masked",
+      "input": [
+        "GITHUB_TOKEN=*****"
+      ],
+      "text": "GITHUB_TOKEN=*****",
+      "count": 1,
+      "classifiers": [
+        "secret-env"
+      ]
+    },
+    {
+      "name": "a token mentioning sk- without a key body",
+      "input": [
+        "sk-short"
+      ],
+      "text": "sk-short",
+      "count": 0,
+      "classifiers": []
+    }
+  ]
+}
