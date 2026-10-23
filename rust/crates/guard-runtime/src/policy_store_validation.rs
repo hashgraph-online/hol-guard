@@ -37,7 +37,7 @@ fn map_verifier_read_error(error: String) -> String {
     }
 }
 
-pub(super) fn read_verifier_key(state_base: &Path) -> Result<[u8; VERIFIER_KEY_BYTES], String> {
+pub(crate) fn read_verifier_key(state_base: &Path) -> Result<[u8; VERIFIER_KEY_BYTES], String> {
     let path = state_base.join(VERIFIER_KEY_FILE_NAME);
     let private_root = crate::resident_state::private_root_for_state_base(state_base)?;
     #[cfg(not(windows))]

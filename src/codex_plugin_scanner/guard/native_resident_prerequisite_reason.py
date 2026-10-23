@@ -13,7 +13,6 @@ _MAX_PART = 48
 # by the snapshot layer itself (whose argument is always a code literal) may
 # carry one; any other exception message is untrusted and never forwarded.
 _SAFE_CODE = re.compile(r"[a-z]{2,}(?:_[a-z0-9]{1,12}){1,6}")
-_HEX_RUN = re.compile(r"[0-9a-f]{16,}")
 _LOCK = threading.Lock()
 _FAILURES: OrderedDict[str, str] = OrderedDict()
 

@@ -26,11 +26,6 @@ from .native_command_expression_validation import (
 from .native_policy_document import NativePolicyDocumentError, bounds_claim, policy_query
 from .policy_document import GuardPolicyDocument
 from .policy_document_business_bounds import oversized_business_selector_path
-from .runtime.command_expression import (
-    CommandExpression,
-    CommandExpressionError,
-    command_expression_from_mapping,
-)
 
 MAX_POLICY_BYTES = 1_048_576
 MAX_POLICY_DEPTH = 32
@@ -406,49 +401,41 @@ def _validate_native_metadata(value: object, query: str) -> None:
         raise PolicyDocumentError((PolicyDiagnostic(result["code"], cast(JsonPath, tuple(result["path"]))),))
 
 
-def _command_expression_wire(expression: CommandExpression) -> dict[str, object]:
-    return {
-        "combinator": expression.combinator,
-        "conditions": [
-            {
-                "operator": condition.operator,
-                "value": condition.value,
-                "case_sensitive": condition.case_sensitive,
-            }
-            for condition in expression.conditions
-        ],
-    }
+def _command_rule_path(index: object) -> JsonPath:
+    if type(index) is not int:
+        raise NativePolicyDocumentError("native_policy_document_commands_malformed")
+    return ("spec", "rules", index, "match", "commands")
 
 
 def _validate_command_expressions(value: dict[str, object]) -> None:
     """Compile every command pattern the document carries, in the runtime.
 
-    The dialect's shape is Python's to parse; whether a glob or a regex
-    compiles belongs to the engine that will match it, so the expressions go
-    to the runtime together and the first one it refuses names its own rule.
+    The dialect's shape and its patterns are read by the same runtime now, so a
+    rule cannot be accepted by one reading of the dialect and refused by the
+    other. Each expression comes back with the rule that carried it, and the
+    first one the runtime refuses names its own rule.
     """
 
-    spec = value.get("spec")
-    if not isinstance(spec, dict):
-        return
-    rules = spec.get("rules")
-    if not isinstance(rules, list):
-        return
+    rules = policy_query("command_expressions", {"value": value})
+    if not isinstance(rules, dict) or set(rules) not in ({"expressions"}, {"invalid"}):
+        raise NativePolicyDocumentError("native_policy_document_commands_malformed")
+    if "invalid" in rules:
+        invalid = rules["invalid"]
+        if not isinstance(invalid, dict) or set(invalid) != {"index", "code"} or not isinstance(invalid["code"], str):
+            raise NativePolicyDocumentError("native_policy_document_commands_malformed")
+        raise PolicyDocumentError((PolicyDiagnostic(invalid["code"], _command_rule_path(invalid["index"])),))
+    carried = rules["expressions"]
+    if not isinstance(carried, list):
+        raise NativePolicyDocumentError("native_policy_document_commands_malformed")
     paths: list[JsonPath] = []
     expressions: list[dict[str, object]] = []
-    for index, rule in enumerate(rules):
-        if not isinstance(rule, dict):
-            continue
-        match = rule.get("match")
-        if not isinstance(match, dict) or not isinstance(match.get("commands"), dict):
-            continue
-        path: JsonPath = ("spec", "rules", index, "match", "commands")
-        try:
-            expression = command_expression_from_mapping(match["commands"])
-        except CommandExpressionError as error:
-            raise PolicyDocumentError((PolicyDiagnostic(str(error), path),)) from error
-        paths.append(path)
-        expressions.append(_command_expression_wire(expression))
+    for rule in carried:
+        if not isinstance(rule, dict) or set(rule) != {"index", "expression"}:
+            raise NativePolicyDocumentError("native_policy_document_commands_malformed")
+        if not isinstance(rule["expression"], dict):
+            raise NativePolicyDocumentError("native_policy_document_commands_malformed")
+        paths.append(_command_rule_path(rule["index"]))
+        expressions.append(rule["expression"])
     if not expressions:
         return
     try:

@@ -165,8 +165,47 @@ def test_a_publication_refresh_failure_is_recorded(prepared, recorded, monkeypat
 
     discovery._refresh(prepared, SimpleNamespace())
 
-    assert [event for event, _detail in recorded] == ["catalog_publication_refresh_failed"]
+    assert [event for event, _detail in recorded] == [
+        "catalog_publication_refresh_failed",
+        "catalog_publication_restore_failed",
+    ]
     assert discovery._refresh_worker is None
+
+
+def test_the_refresh_cause_is_recorded_when_restore_also_fails(prepared, recorded, monkeypatch) -> None:
+    def refresh_fails(_store):
+        raise ValueError("discovery_current_authenticated_publication_required")
+
+    def nothing_retained(_store):
+        raise ValueError("discovery_current_cached_publication_unavailable")
+
+    monkeypatch.setattr(current_refresh, "refresh", refresh_fails)
+    monkeypatch.setattr(current_refresh, "restore", nothing_retained)
+
+    discovery._refresh(prepared, SimpleNamespace())
+
+    assert recorded == [
+        (
+            "catalog_publication_refresh_failed",
+            "error=ValueError detail=discovery_current_authenticated_publication_required",
+        ),
+        (
+            "catalog_publication_restore_failed",
+            "error=ValueError detail=discovery_current_cached_publication_unavailable",
+        ),
+    ]
+
+
+def test_a_restored_view_records_nothing(prepared, recorded, monkeypatch) -> None:
+    def refresh_fails(_store):
+        raise ValueError("offline")
+
+    monkeypatch.setattr(current_refresh, "refresh", refresh_fails)
+    monkeypatch.setattr(current_refresh, "restore", lambda _store: None)
+
+    discovery._refresh(prepared, SimpleNamespace())
+
+    assert recorded == []
 
 
 def test_a_cold_start_still_reports_preparing(prepared, recorded, monkeypatch) -> None:

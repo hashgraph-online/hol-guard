@@ -667,3 +667,64 @@ fn heredoc_python_with_a_coding_cookie_or_padded_terminator_keeps_the_failure() 
         assert_eq!(decision(&controls, command).1, FAILED, "{command}");
     }
 }
+
+#[test]
+fn a_case_label_and_an_empty_prefix_keep_their_approval() {
+    let controls = controls(serde_json::json!([]), false);
+    let mut wrong = Vec::new();
+    for command in [
+        "case $MODE in a) echo a;; *) echo b;; esac",
+        "case \"$f\" in *.ts|*.tsx) echo ts;; *) echo other;; esac",
+        "case $1 in start) npm run dev;; stop) npm run stop;; *) echo usage;; esac",
+        "while IFS= read -r line; do echo one; done < list.txt",
+        "while IFS= read -r line; do echo one; done",
+        "IFS= read -r first < list.txt",
+        // A label is a pattern, never a command, so one built from a parameter
+        // names no program. The labels stay where they are, because the module
+        // refuses to take out a label holding an expansion, and the construct
+        // reaches the same review a literal label reaches.
+        "case $MODE in $PATTERN) echo a;; esac",
+        // `case` and `in` written as arguments of a command open no construct,
+        // and the `)` behind them ends no label. Here the words are `echo`'s
+        // own arguments, so the pattern among them starts nothing and the
+        // command reaches the review an ordinary print reaches.
+        "echo case in /bin/b?sh -c id )",
+    ] {
+        let (action, reason) = decision(&controls, command);
+        if reason == FAILED || action != "review" {
+            wrong.push(format!("{command} -> {action} {reason}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn a_case_clause_that_can_start_a_program_keeps_the_failure() {
+    let controls = controls(serde_json::json!([]), false);
+    let mut wrong = Vec::new();
+    for command in [
+        // The clause body names a program the command does not show: taking
+        // the label out must not hide the body.
+        "case $MODE in a) $CMD;; *) echo b;; esac",
+        "case $MODE in a) echo a;; *) $CMD;; esac",
+        // A label the shell builds at run time keeps every label in place, and
+        // the body behind it is still read where it stands. A substitution in
+        // the label is a program of its own, so the construct holding one
+        // keeps its refusal whatever its bodies name.
+        "case $MODE in $PATTERN) $CMD;; esac",
+        "case $MODE in `echo a`) echo a;; esac",
+        "case $MODE in `echo a`) $CMD;; esac",
+        // An assignment that carries a value is still data movement.
+        "while IFS=: read -r name rest; do echo one; done < list.txt",
+        // `case` and `in` written as arguments open no construct, and the `)`
+        // a comment holds ends no label, so the glob naming the program of the
+        // command behind them is still there to be refused.
+        "echo case in; /usr/bin/pyth?n3 -c 'import os' # )",
+    ] {
+        let (action, reason) = decision(&controls, command);
+        if reason != FAILED {
+            wrong.push(format!("{command} -> {action} {reason}"));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}

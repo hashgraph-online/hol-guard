@@ -236,11 +236,53 @@ pub(super) fn filter(
             );
         }
     }
+    // A Maven build resolves its dependencies from the host's local
+    // repository, which the plan grants read-only and links into a private
+    // local repository Maven can take its resolver locks in and write the
+    // artifacts it builds to. Offline turns an artifact the host has not
+    // fetched into an immediate error rather than a blocked download. The
+    // repository is passed twice because the option spelling reaches every
+    // Maven version while `MAVEN_ARGS` carries the offline flag for the ones
+    // that read it.
+    if allowed.is_empty() {
+        let repository = maven_repository(private_tmp).to_string_lossy().into_owned();
+        result.insert(
+            "MAVEN_ARGS".to_owned(),
+            format!("-o -Dmaven.repo.local={repository}"),
+        );
+        result.insert(
+            "MAVEN_OPTS".to_owned(),
+            format!("-Dmaven.repo.local={repository}"),
+        );
+        // A project's `mvnw` runs the Maven the project pins, which the
+        // wrapper looks for below its Maven user home. The real one is out of
+        // reach, so the run gets its own, holding a link to each distribution
+        // the host has already unpacked. Without it the wrapper would try to
+        // download the distribution and fail, because there is no network.
+        result.insert(
+            "MAVEN_USER_HOME".to_owned(),
+            maven_user_home(private_tmp).to_string_lossy().into_owned(),
+        );
+    }
     // A linked user site is read through the private HOME; otherwise it stays off.
     if !user_site {
         result.insert("PYTHONNOUSERSITE".to_owned(), "1".to_owned());
     }
     Ok(result)
+}
+
+/// The private Maven local repository a contained run uses. Maven writes its
+/// resolver locks and the artifacts it builds at the top of this directory;
+/// the host's fetched groups are linked in below it.
+pub(super) fn maven_repository(private_tmp: &Path) -> PathBuf {
+    private_tmp.join("maven-repository")
+}
+
+/// The private Maven user home a contained run uses. A wrapper run resolves
+/// its distribution below this directory; the host's unpacked distributions
+/// are linked in below it.
+pub(super) fn maven_user_home(private_tmp: &Path) -> PathBuf {
+    private_tmp.join("maven-home")
 }
 
 /// The private `CARGO_HOME` a contained run uses. Cargo writes its locks and

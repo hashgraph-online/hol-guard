@@ -32,7 +32,23 @@ struct Grammar {
 /// `doas` and `chroot` change the user or the root they run under, `flock`
 /// takes a lock file, and the tracers write a file of their own, so none of
 /// them is here.
+///
+/// The shell's `exec` belongs with them: `exec npm test` runs exactly what
+/// `npm test` runs, as this user and in this directory, and only replaces the
+/// shell process instead of forking one. It takes no option this grammar
+/// covers, so `exec -a name prog`, `exec -c prog` and `exec -l prog` leave the
+/// program unknown, as does an `exec` that names no program at all and only
+/// moves the shell's own file descriptors.
 const GRAMMARS: &[Grammar] = &[
+    Grammar {
+        prefix: "exec",
+        short_flags: "",
+        short_values: "",
+        long_flags: &[],
+        long_values: &[],
+        numeric_flag: false,
+        duration_operand: false,
+    },
     Grammar {
         prefix: "nice",
         short_flags: "",
@@ -229,7 +245,7 @@ fn command_reads_a_program_file(piece: &str) -> bool {
 /// A launcher runs that program directly, so a path or a script name there is
 /// a file whose own text names the programs it runs, and this scan has not
 /// read it. `nice ./deploy.sh` is that file, not the one word `deploy.sh`.
-fn prefix_reads_a_program_file(words: &[&str]) -> bool {
+pub(crate) fn prefix_reads_a_program_file(words: &[&str]) -> bool {
     // Options this grammar does not cover leave the program unknown, and an
     // unknown program is read as one this scan never saw.
     let Some(index) = program_index(words) else {
@@ -251,6 +267,58 @@ fn prefix_reads_a_program_file(words: &[&str]) -> bool {
         return true;
     }
     program.contains(['/', '\\']) || names_a_script(program) || reads_a_program_file(rest, 0)
+}
+
+/// The command a launcher prefix stands in front of, as a slice of the text.
+///
+/// `nohup node server.js` runs `node server.js`, as this user and in this
+/// directory, and `nice -n 10 ./scripts/run.sh` runs the script. The launcher
+/// adds a scheduling number, a buffering mode or a hangup that the program
+/// behind it would have run with anyway, so the command the floor reads is the
+/// one the text already names - which is what the parser models exactly when
+/// the prefix is not written.
+///
+/// Only a prefix this scan can count past is read, and only in front of plain
+/// text: an operator, a redirect, a quote, a backslash or an expansion makes
+/// the words behind the launcher something other than the command they look
+/// like, so the text keeps the failure it arrives with. A stacked launcher is
+/// walked down to the program it finally runs.
+pub(crate) fn launcher_body(text: &str) -> Option<&str> {
+    if text.contains([
+        ';', '&', '|', '(', ')', '{', '}', '<', '>', '\n', '`', '$', '\'', '"', '\\',
+    ]) {
+        return None;
+    }
+    let spans = word_spans(text);
+    let words: Vec<&str> = spans.iter().map(|(_, word)| *word).collect();
+    let mut index = 0;
+    while is_launcher(words.get(index)?) {
+        // Every grammar here counts at least the launcher itself, so the walk
+        // moves forward and ends at the program or at a prefix it cannot read.
+        index += program_index(&words[index..])?;
+    }
+    (index > 0).then(|| &text[spans[index].0..])
+}
+
+/// Each word of the text with the byte offset it starts at, so a word can be
+/// handed back as a slice of the text it came from.
+fn word_spans(text: &str) -> Vec<(usize, &str)> {
+    let mut spans = Vec::new();
+    let mut start = None;
+    for (offset, character) in text.char_indices() {
+        match (character.is_whitespace(), start) {
+            (false, None) => start = Some(offset),
+            (true, Some(begin)) => {
+                spans.push((begin, &text[begin..offset]));
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    if let Some(begin) = start {
+        spans.push((begin, &text[begin..]));
+    }
+    spans
 }
 
 /// Whether the word at `index` is an interpreter that takes the program it

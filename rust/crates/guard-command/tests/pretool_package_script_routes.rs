@@ -18,10 +18,7 @@ const WORKSPACE: &str = "native_workspace_containment_required";
 const HARNESSES: [&str; 3] = ["omp", "claude-code", "codex"];
 
 fn root() -> PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir().join(format!(
         "guard-package-scripts-{}-{nonce}",
         std::process::id()

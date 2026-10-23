@@ -297,10 +297,7 @@ fn git_c_rejects_external_gitfile_pointers() {
     let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/gitfile-pointer-fixtures");
     std::fs::create_dir_all(&base).unwrap();
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let fixture = base.join(format!("fixture-{}-{nonce}", std::process::id()));
     let workspace = fixture.join("workspace");
     let external = fixture.join("external-admin");
@@ -328,10 +325,7 @@ fn git_c_rejects_forged_external_linked_worktree_metadata() {
     let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/gitfile-pointer-fixtures");
     std::fs::create_dir_all(&base).unwrap();
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let fixture = base.join(format!("linked-fixture-{}-{nonce}", std::process::id()));
     let workspace = fixture.join("workspace");
     let common = fixture.join("external-common/.git");
@@ -572,6 +566,12 @@ fn reviews_only_materially_risky_variants_of_safe_commands() {
     let inert_pattern = evaluate_pre_tool(&request("rg -e '.env.local' src")).unwrap();
     assert_eq!(inert_pattern.decision, "allow");
     assert_eq!(inert_pattern.minimum_action, "allow");
+    // An ordinary project setting in front of a proven read is a value that
+    // read takes for itself. Every name that could steer lookup, loading,
+    // configuration, a home, a credential, the trust anchor or an endpoint
+    // keeps its review, and the cases below still cover those families.
+    let ordinary_setting = evaluate_pre_tool(&request("FOO=bar git status --short")).unwrap();
+    assert_eq!(ordinary_setting.decision, "allow");
     for command in [
             "rg --pre /opt/guard-test/payload authority src",
             "rg --hostname-bin=/opt/guard-test/payload --hyperlink-format='file://{host}{path}' TOKEN src",
@@ -614,7 +614,6 @@ fn reviews_only_materially_risky_variants_of_safe_commands() {
             "rg --hidd TOKEN .",
             "rg --globx '*.ts' TOKEN .",
             "/opt/guard-test/rg authority src",
-            "FOO=bar git status --short",
             "GIT_EXTERNAL_DIFF=/opt/guard-test/payload git diff --ext-diff README.md",
             "git diff --output=/opt/guard-test/diff README.md",
             "git log -1 --output=/opt/guard-test/log",

@@ -22,14 +22,24 @@ function source(path: string): string {
   return readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
-assert(SHELL_NAV_ITEMS.length === 9, "The shell exposes every top-level Guard destination");
+assert(SHELL_NAV_ITEMS.length === 10, "The shell exposes every top-level Guard destination");
 assert(
   new Set(SHELL_NAV_ITEMS.map((item) => item.href)).size === SHELL_NAV_ITEMS.length,
   "Top-level navigation destinations are unique",
 );
 assert(
-  mobilePrimaryNavigationItems().map((item) => item.view).join(",") === "home,inbox,fleet,evidence",
+  mobilePrimaryNavigationItems().map((item) => item.view).join(",") === "home,inbox,fleet,extensions",
   "Compact screens keep the four highest-frequency sections one tap away",
+);
+assert(
+  SHELL_NAV_ITEMS.map((item) => item.view).join(",") ===
+    "home,inbox,fleet,extensions,policy,supply-chain,settings,evidence,releases,about",
+  "Sidebar order promotes Extensions right after Protect, demotes Evidence near the bottom, and keeps Releases beside About",
+);
+assert(
+  SHELL_NAV_ITEMS.find((item) => item.view === "extensions")?.group === "primary" &&
+    SHELL_NAV_ITEMS.find((item) => item.view === "evidence")?.group === "manage",
+  "Extensions lives in the Guard group while Evidence sits with the Manage surfaces",
 );
 assert(
   canonicalNavigationView("app-detail") === "fleet",

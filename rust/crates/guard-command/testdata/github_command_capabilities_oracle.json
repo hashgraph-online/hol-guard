@@ -1189,11 +1189,11 @@
    "secret",
    "list"
   ],
-  "capability": "secret_remote",
-  "reason_code": "github.command.secret-mutation",
-  "detail": "The command changes GitHub secrets.",
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
   "capabilities": [
-   "secret_remote"
+   "read_remote"
   ]
  },
  {
@@ -1290,11 +1290,11 @@
    "cache",
    "list"
   ],
-  "capability": "mutate_remote",
-  "reason_code": "github.command.remote-mutation",
-  "detail": "The command changes GitHub-hosted state.",
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
   "capabilities": [
-   "mutate_remote"
+   "read_remote"
   ]
  },
  {
@@ -3621,11 +3621,11 @@
    "label",
    "list"
   ],
-  "capability": "content_remote",
-  "reason_code": "github.command.remote-mutation",
-  "detail": "The command changes GitHub-hosted state.",
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
   "capabilities": [
-   "content_remote"
+   "read_remote"
   ]
  },
  {
@@ -3633,11 +3633,11 @@
    "codespace",
    "list"
   ],
-  "capability": "mutate_remote",
-  "reason_code": "github.command.remote-mutation",
-  "detail": "The command changes GitHub-hosted state.",
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
   "capabilities": [
-   "mutate_remote"
+   "read_remote"
   ]
  },
  {
@@ -3645,11 +3645,11 @@
    "variable",
    "list"
   ],
-  "capability": "workflow_remote",
-  "reason_code": "github.command.remote-mutation",
-  "detail": "The command changes GitHub-hosted state.",
+  "capability": "read_remote",
+  "reason_code": "github.command.proven-read",
+  "detail": "The command is a known read-only GitHub operation.",
   "capabilities": [
-   "workflow_remote"
+   "read_remote"
   ]
  },
  {

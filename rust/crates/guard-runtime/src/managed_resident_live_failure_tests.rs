@@ -39,14 +39,10 @@ fn authenticated_initial_probe_reaches_restart_and_preserves_auth_failure() {
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::os::unix::fs::PermissionsExt;
-    use std::time::{SystemTime, UNIX_EPOCH};
     let root = std::env::temp_dir().join(format!(
         "hol-guard-live-failure-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&root).unwrap();
     fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
@@ -140,14 +136,10 @@ fn a_state_whose_pid_was_reused_does_not_count_as_live() {
 /// so discovery sees no live resident.
 fn owner_release_fixture(label: &str) -> (std::path::PathBuf, std::path::PathBuf) {
     use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
     let home = std::env::temp_dir().join(format!(
         "hol-guard-owner-release-{label}-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let base = home.join("native-runtime");
     fs::create_dir(&home).unwrap();

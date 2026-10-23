@@ -60,6 +60,18 @@ pub(super) static LOCAL_APPROVAL_INSTRUCTION_RE: LazyLock<Regex> = LazyLock::new
         .expect("LOCAL_APPROVAL_INSTRUCTION_RE")
 });
 
+/// The approval instruction older runtimes wrote into a stored row's harness
+/// message, with its request link and optional retry sentence. A terminal
+/// action has no approval route, so a replayed row must not keep offering one.
+pub(super) static LEGACY_LOCAL_APPROVAL_INSTRUCTION_RE: LazyLock<Regex> = LazyLock::new(|| {
+    RegexBuilder::new(
+        r"\s*Open HOL Guard to approve or keep this blocked:\s*https?://\S+(?:\s+After you choose,\s+retry the same .*? action\.)?",
+    )
+    .case_insensitive(true)
+    .build()
+    .expect("LEGACY_LOCAL_APPROVAL_INSTRUCTION_RE")
+});
+
 pub(super) static LOCAL_APPROVAL_REQUEST_URL_RE: LazyLock<Regex> = LazyLock::new(|| {
     RegexBuilder::new(r"https?://[^\s]+/requests(?:/[^\s]*)?")
         .case_insensitive(true)

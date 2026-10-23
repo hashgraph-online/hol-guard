@@ -1,10 +1,11 @@
 """Runtime compilation reuse must not reuse test results or partial input matches."""
 
-import fnmatch
 import re
 from pathlib import Path
 
 import yaml
+
+from scripts.ci.rust_test_archive_inputs import EXTERNAL_ROOTS, Inputs
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -22,21 +23,13 @@ def test_runtime_archive_is_exact_input_only_and_saved_by_one_trusted_writer():
         "outputs.compiler-env",
         "CARGO_PROFILE_RELEASE_LTO",
         "CARGO_PROFILE_RELEASE_CODEGEN_UNITS",
-        "rust/**",
-        "contributions/**",
-        "contracts/**",
-        "spec/**",
-        "tests/fixtures/**",
-        "src/codex_plugin_scanner/guard/contracts/**",
-        ".cargo/**",
-        ".github/actions/setup-rust/**",
-        ".github/actions/restore-runtime-tests/**",
-        ".github/workflows/ci.yml",
-        "scripts/**",
-        "!**/__pycache__/**",
-        "!rust/target/**",
+        "runtime-test-archive-v3-",
+        "steps.inputs.outputs.digest",
     ):
         assert binding in key
+    identify = next(step for step in stages if step.get("id") == "inputs")
+    assert identify["env"]["ARCHIVE_PARTITION"] == "${{ inputs.partition }}"
+    assert 'rust_test_archive_inputs --partition "$ARCHIVE_PARTITION"' in identify["run"]
 
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     steps = workflow["jobs"]["native-workspace"]["steps"]
@@ -47,17 +40,14 @@ def test_runtime_archive_is_exact_input_only_and_saved_by_one_trusted_writer():
     save = next(step for step in steps if step.get("name") == "Save successful runtime test compilation")
     assert steps.index(configure) < steps.index(restore_call) < steps.index(archive)
     assert steps.index(archive) < steps.index(validate) < steps.index(save)
-    assert "--locked --workspace --exclude guard-command --exclude hol-guard-runtime --all-targets" in archive["run"]
-    assert "--locked --package guard-command --all-targets" in archive["run"]
-    assert "--locked --package hol-guard-runtime --all-targets" in archive["run"]
-    assert "--partition" not in archive["run"]  # Cache every runtime target, not one hash half.
+    assert archive["run"] == 'bash scripts/ci/archive_rust_tests.sh "$CARGO_CHECK"'
+    assert archive["env"]["CARGO_CHECK"] == "${{ matrix.check }}"
     assert restore_call["if"] == "matrix.check != 'clippy'"
     assert restore_call["with"]["partition"] == (
         "${{ matrix.check == 'test-command' && 'command' || (matrix.check == 'test-core' && 'core' || 'runtime') }}"
     )
     assert save["if"] == (
         "matrix.check != 'clippy' && "
-        "matrix.check != 'test-runtime-2' && "
         "steps.runtime-archive.outputs.cache-hit != 'true' && "
         "github.event_name == 'push' && github.ref == 'refs/heads/main'"
     )
@@ -67,44 +57,43 @@ def test_runtime_archive_is_exact_input_only_and_saved_by_one_trusted_writer():
 
 
 def test_literal_rust_includes_are_covered_by_the_archive_key():
-    action = yaml.safe_load((ROOT / ".github/actions/restore-runtime-tests/action.yml").read_text())
-    restore = next(step for step in action["runs"]["steps"] if step.get("id") == "archive")
-    patterns = re.findall(r"'([^']+)'", restore["with"]["key"])
-    authored = [pattern for pattern in patterns if not pattern.startswith("!")]
-    generated = [pattern[1:] for pattern in patterns if pattern.startswith("!")]
+    authored = set().union(*(Inputs(ROOT).collect(partition) for partition in ("core", "command", "runtime")))
     includes = re.compile(r'include_(?:str|bytes)!\(\s*"([^"\n]+)"\s*\)', re.MULTILINE)
     checked = 0
     for source in (ROOT / "rust").rglob("*.rs"):
         if "target" in source.relative_to(ROOT).parts:
             continue
         for included in includes.findall(source.read_text()):
-            path = (source.parent / included).resolve().relative_to(ROOT).as_posix()
-            assert any(fnmatch.fnmatchcase(path, pattern) for pattern in authored), path
-            assert not any(fnmatch.fnmatchcase(path, pattern) for pattern in generated), path
+            path = (source.parent / included).resolve()
+            assert path in authored, path.relative_to(ROOT)
             checked += 1
     assert checked > 100  # Exercise the compiled fixture graph, not an empty match.
 
 
 def test_generated_files_are_excluded_without_excluding_authored_fixtures():
-    action = yaml.safe_load((ROOT / ".github/actions/restore-runtime-tests/action.yml").read_text())
-    restore = next(step for step in action["runs"]["steps"] if step.get("id") == "archive")
-    patterns = re.findall(r"'([^']+)'", restore["with"]["key"])
-    assert patterns[-2:] == ["!**/__pycache__/**", "!rust/target/**"]
-
-    def included(path):
-        return any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns[:-2]) and not any(
-            fnmatch.fnmatchcase(path, pattern[1:]) for pattern in patterns[-2:]
-        )
-
-    assert not included("scripts/ci/__pycache__/native_cache_environment.cpython-312.pyc")
-    assert not included("src/codex_plugin_scanner/guard/contracts/__pycache__/loaders.cpython-312.pyc")
-    assert not included("rust/target/debug/deps/runtime-generated-output")
+    paths = {path.relative_to(ROOT).as_posix() for path in Inputs(ROOT).collect("runtime")}
+    assert not any("__pycache__" in Path(path).parts or path.startswith("rust/target/") for path in paths)
+    assert {"contributions", "contracts", "spec", "tests/fixtures", "scripts", ".cargo"}.issubset(EXTERNAL_ROOTS)
     for path in (
         "scripts/ci/native_cache_environment.py",
         "rust/rust-toolchain.toml",
+        "rust/crates/guard-runtime/src/lib.rs",
         "rust/crates/guard-runtime/src/main.rs",
-        "rust/crates/guard-runtime/testdata/case.json",
-        "tests/fixtures/authority/vectors.json",
-        "spec/guard-policy/v1alpha1/schema.json",
     ):
-        assert included(path), path
+        assert path in paths, path
+
+
+def test_core_archive_covers_every_rule_contract_component():
+    inputs = Inputs(ROOT).collect("core")
+    package = ROOT / "rust/crates/guard-rule-contract"
+    manifest = package / "component-inputs.tsv"
+    assert manifest in inputs
+    for line in manifest.read_text().splitlines():
+        name, relative = line.split("\t")
+        if name == "native-command-program-artifact":
+            assert relative == "@packaged-program"  # Resolved from the packaged program.
+            continue
+        assert (package / relative).resolve() in inputs, relative
+    build = (package / "build.rs").read_text()
+    assert 'include_str!("component-inputs.tsv")' in build
+    assert "rerun-if-changed=component-inputs.tsv" in build

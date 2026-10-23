@@ -1167,8 +1167,10 @@
       "enabled_extensions": [
         "command.kintsua"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "exec-snapshot",
       "rule_id": "command.kintsua.watch-snapshot"
     },
@@ -1189,8 +1191,10 @@
       "enabled_extensions": [
         "command.kintsua"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "exec-diff-update",
       "rule_id": "command.kintsua.watch-diff-update"
     },

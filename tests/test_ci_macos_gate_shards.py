@@ -36,7 +36,7 @@ def test_macos_gates_require_every_disjoint_shard(node_count):
     assert "set -o pipefail" in command
     assert "test -s gate-shard.txt" in command
     assert "--max-worker-restart 0" in command
-    assert "-n 2" in command
+    assert "-n 3" in command
     assert "--durations=10" in command
     partition = next(line for line in command.splitlines() if "| awk " in line)
     expression = partition.split("'", 2)[1]

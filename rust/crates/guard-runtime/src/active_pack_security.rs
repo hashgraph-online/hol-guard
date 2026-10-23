@@ -172,11 +172,12 @@ pub(crate) fn active(input: &Value, key: &[u8]) -> Result<Value, String> {
     Ok(value)
 }
 
-// The Python daemon reuses answers to the operations handled before `active`
-// below (scope, check, read, change, marker, binding and resume) for identical
-// requests. They must stay pure functions of the request: no files, clock or
-// randomness. An operation that needs any of those belongs after `active`, and
-// must not be added to `_PURE` in catalog_delivery/active_security.py.
+// The resident answers the operations handled before `active` below (scope,
+// check, read, change, marker, binding and resume) in process, with no file
+// access of its own. They must stay pure functions of the request: no files,
+// clock or randomness. An operation that needs any of those belongs after
+// `active`, and must not be added to `ACTIVE_SECURITY_OPERATIONS` in
+// command_pack_record_op.rs.
 pub(crate) fn evaluate(input: &Value) -> Result<Value, String> {
     let key = hex::decode(input["key"].as_str().ok_or("active_security_key_missing")?)
         .map_err(|_| "active_security_key_invalid")?;

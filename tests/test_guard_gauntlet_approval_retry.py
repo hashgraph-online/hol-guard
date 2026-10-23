@@ -46,6 +46,7 @@ def test_lane_catalog_carries_retry_and_bash_lifecycle_cases():
         "approved-retry-unbindable-command",
         *BASH_LIFECYCLE_CASES,
         "approved-retry-environment-dump",
+        "approved-retry-sourced-toolchain-init",
     }
     ordinary = [scenario for scenario in scenarios if scenario.oracle == "approved-retry"]
     lifecycle = [scenario for scenario in scenarios if scenario.oracle == BASH_LIFECYCLE_ORACLE]
@@ -79,6 +80,14 @@ def test_lane_catalog_carries_retry_and_bash_lifecycle_cases():
     # this lane's transcripts are packed into the public evidence bundle, so
     # the case must not ask a model to print the environment it runs in.
     assert by_id["approved-retry-environment-dump"].commands == ("env -i",)
+    # Sourcing a version manager's init file and then calling one of the
+    # functions it defines is the first line of every Node project's setup. The
+    # file lives outside the workspace and carries no marker of its own, so the
+    # scan may not read it; the row it queues is what the lane proves can be
+    # approved and retried.
+    assert by_id["approved-retry-sourced-toolchain-init"].commands == (
+        "source ~/.nvm/nvm.sh && nvm_latest_version",
+    )
 
 
 def test_core_catalog_never_carries_the_lane_oracle():

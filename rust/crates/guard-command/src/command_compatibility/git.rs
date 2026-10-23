@@ -86,6 +86,11 @@ fn bounded_inspection(arguments: &[String]) -> bool {
         // A stash listing and a `show` of one entry print; every other
         // stash spelling moves work and keeps its workspace attribution.
         || (command == "stash" && crate::pretool::git_stash_reads::read_form(rest))
+        // A bisect session's log and a note's listing print; every other
+        // spelling of either moves a ref, writes the notes ref or runs a
+        // program the text names, and keeps its attribution.
+        || (matches!(command.as_str(), "bisect" | "notes")
+            && crate::pretool::git_side_record_reads::read_form(command, rest))
 }
 
 /// A staged-index diff that prints to stdout like `git diff HEAD`, which the
@@ -198,6 +203,11 @@ pub(super) fn inspection_arguments<'a>(
         // `stash` reaches the worktree in every spelling but the two that
         // print: a listing and a `show` of one entry.
         Some("stash") => crate::pretool::git_stash_reads::read_form(&remaining[1..]),
+        // A bisect session and a commit's notes each print in one grammar and
+        // write in every other, so each is admitted only in that grammar.
+        Some(record @ ("bisect" | "notes")) => {
+            crate::pretool::git_side_record_reads::read_form(record, &remaining[1..])
+        }
         _ => false,
     };
     admitted.then_some(remaining)

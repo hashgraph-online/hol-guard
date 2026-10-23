@@ -130,6 +130,14 @@ pub(super) fn safe_git_arguments(
         // spelling that moves work keeps its own review.
         return allow_helper_context && super::git_stash_reads::read_form(&arguments[1..]);
     }
+    if matches!(subcommand, "bisect" | "notes") {
+        // A bisect log and a note print through the pager (core.pager), so
+        // the configuration probe has to clear it first. Every spelling of
+        // either subcommand that moves a ref, runs a program or opens the
+        // editor keeps its own review.
+        return allow_helper_context
+            && super::git_side_record_reads::read_form(subcommand, &arguments[1..]);
+    }
     if subcommand == "rev-list" {
         // A commit walk honors pager.rev-list and can fetch from a partial
         // clone's promisor, so the configuration probe has to clear it first.

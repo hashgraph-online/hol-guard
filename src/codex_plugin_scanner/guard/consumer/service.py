@@ -23,6 +23,10 @@ from ..models import (
     HarnessDetection,
     PolicyDecision,
 )
+from ..native_artifact_content_hash import (
+    native_artifact_content_hash,
+    native_artifact_content_hashes,
+)
 from ..native_consumer_artifact_compose import native_consumer_compose
 from ..receipts import build_receipt
 from ..risk import NO_RISK_SIGNAL_SUMMARY, artifact_risk_profile
@@ -157,7 +161,7 @@ def diff_artifact(
         None,
         current,
         payload=payload,
-        content_hash=artifact_hash(current),
+        content_hash=native_artifact_content_hash(current, guard_home=guard_home),
         previous=previous,
         with_history=False,
         guard_home=guard_home,
@@ -566,6 +570,17 @@ def evaluate_detection(
         pending_approval_claims=pending_approval_claims,
     )
     current_artifact_ids: set[str] = set()
+    # Each hash is the approval key its artifact's saved decision is stored
+    # under, and the resident spells it. A scan asks for the harness's whole
+    # detection at once rather than crossing once per artifact.
+    content_hashes = {
+        artifact.artifact_id: digest
+        for artifact, digest in zip(
+            detection.artifacts,
+            native_artifact_content_hashes(detection.artifacts),
+            strict=True,
+        )
+    }
     for artifact in detection.artifacts:
         current_artifact_ids.add(artifact.artifact_id)
         previous = previous_snapshots.get(artifact.artifact_id)
@@ -580,7 +595,7 @@ def evaluate_detection(
             store,
             artifact,
             payload=current_snapshot,
-            content_hash=artifact_hash(artifact),
+            content_hash=content_hashes[artifact.artifact_id],
             previous=previous,
             with_history=not inventory_only,
         )

@@ -209,6 +209,43 @@ pub fn classify_github_cli(args: &[String]) -> GitHubCommandAssessment {
     if let Some(auth) = classify_github_auth(&normalized) {
         return auth;
     }
+    if let Some(capability) = crate::github_additional_commands::classify(&normalized) {
+        let (reason, detail) = match capability {
+            Cap::ReadLocal => (
+                "github.command.local-metadata",
+                "The command reads local CLI metadata.",
+            ),
+            Cap::ReadRemote => (
+                "github.command.proven-read",
+                "The command is a known read-only GitHub operation.",
+            ),
+            Cap::WriteLocal => (
+                "github.command.local-write",
+                "The command changes local GitHub CLI configuration.",
+            ),
+            Cap::DeleteRemote => (
+                "github.command.delete-mutation",
+                "The command deletes GitHub-hosted state.",
+            ),
+            Cap::ContentRemote => (
+                "github.command.content-mutation",
+                "The command changes GitHub-hosted content.",
+            ),
+            Cap::MutateRemote => (
+                "github.command.remote-mutation",
+                "The command changes GitHub-hosted state.",
+            ),
+            Cap::SecretRemote => (
+                "github.command.auth-token-read",
+                "The command reads a GitHub authentication token.",
+            ),
+            _ => (
+                "github.command.unverified-options",
+                "The command has options or effects that require explicit review.",
+            ),
+        };
+        return assessment(capability, reason, detail);
+    }
     if READ_ONLY_TOP_LEVEL.contains(&top_level.as_str()) {
         return assessment(
             Cap::ReadRemote,

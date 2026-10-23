@@ -494,7 +494,7 @@ fn evaluate_envelope(
         .command
         .as_deref()
         .filter(|_| !search_scope_proven && !apply_patch_proven)
-        .and_then(|command| venv_activation_projection::project(command, context))
+        .and_then(|command| venv_activation_projection::verdict_target(command, context))
     {
         let projected_payload = payload_with_command(
             payload,
@@ -548,8 +548,15 @@ fn evaluate_envelope(
             );
             // Inert settings cannot widen what an extension rule already
             // allows, but a rule that gates the plain form keeps its own
-            // fail-closed answer for wrapped forms.
-            if projected.minimum_action == "allow" || !extension_rule_matched(&projected) {
+            // fail-closed answer for wrapped forms. An ordinary value rides
+            // only an exact proof; contained execution would drop it, so the
+            // reviewed projection below judges every other verdict.
+            if projected.minimum_action == "allow"
+                || (!extension_rule_matched(&projected)
+                    && !env_prefix_projection::removes_values(
+                        signals.command.as_deref().unwrap_or_default(),
+                    ))
+            {
                 return projected;
             }
         }

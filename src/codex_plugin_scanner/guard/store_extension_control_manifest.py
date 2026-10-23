@@ -1,4 +1,4 @@
-"""Frozen built-in control manifest compilation, outside authority leases."""
+"""Frozen control manifest compilation, outside authority leases."""
 
 from __future__ import annotations
 
@@ -11,24 +11,27 @@ from types import MappingProxyType
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 
 _CACHE_LOCK = threading.Lock()
-_manifest_cache: tuple[object, object, str, Mapping[str, str]] | None = None
+# One slot for the built-in registry and one for the last authenticated pack
+# registry, so a pack registry and the built-in one never evict each other.
+_manifest_cache: dict[bool, tuple[object, object, str, Mapping[str, str]]] = {}
 
 
 def catalog_target_manifest(registry: CommandSafetyExtensionRegistry) -> dict[str, str]:
-    """Cache only the exact trusted built-in registry and its retained frozen tuple.
+    """Cache the built-in registry and the last other one by identity.
 
-    Custom registries are compiled each time. Callers receive a copy, so local
-    mutation cannot poison later authenticated catalog comparisons. Replacing
-    the built-in registry/extension tuple/catalog identity invalidates the cache.
+    Registries hold their extensions as a frozen tuple, so the same registry,
+    tuple and catalog digest compile to the same manifest. The other slot keeps
+    the pack registry the publisher re-reads every poll. Callers receive a
+    copy, so local mutation cannot poison later authenticated catalog
+    comparisons. Replacing a registry, its extension tuple or its catalog
+    identity invalidates its slot.
     """
 
     from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
-    if registry is not BUILT_IN_COMMAND_EXTENSION_REGISTRY:
-        return _build_catalog_target_manifest(registry)
-    global _manifest_cache
+    built_in = registry is BUILT_IN_COMMAND_EXTENSION_REGISTRY
     with _CACHE_LOCK:
-        current = _manifest_cache
+        current = _manifest_cache.get(built_in)
         if (
             current is not None
             and current[0] is registry
@@ -37,7 +40,7 @@ def catalog_target_manifest(registry: CommandSafetyExtensionRegistry) -> dict[st
         ):
             return dict(current[3])
         manifest = _build_catalog_target_manifest(registry)
-        _manifest_cache = (registry, registry.extensions, registry.catalog_digest, MappingProxyType(manifest))
+        _manifest_cache[built_in] = (registry, registry.extensions, registry.catalog_digest, MappingProxyType(manifest))
         return dict(manifest)
 
 

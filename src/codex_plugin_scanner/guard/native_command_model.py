@@ -12,7 +12,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .native_command_model_wrappers import decode_sudo_prefix, inline_shell_script
+from .native_command_model_wrappers import (
+    decode_sudo_prefix,
+    inline_shell_script,
+    skip_exec_launcher,
+)
 from .native_resident_client import (
     native_resident_client_request,
     record_native_resident_client_failure_code,
@@ -209,6 +213,7 @@ def _decode_command_model(
                 return None
         elif segment_wrappers:
             return None
+        executable_index = skip_exec_launcher(tokens, executable_index)
         expected_executable = tokens[executable_index] if executable_index < len(tokens) else None
         expected_arguments = tokens[executable_index + 1 :] if expected_executable is not None else []
         expected_path_override = "PATH" in expected_environment_names

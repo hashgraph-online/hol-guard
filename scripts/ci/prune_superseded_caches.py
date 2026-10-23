@@ -46,7 +46,7 @@ CODEQL_KEY = re.compile(r"^(codeql-overlay-base-database-.+)-[0-9a-f]{40}-[0-9]+
 CODEQL_STATUS_PREFIX = "codeql-overlay-status-"
 OFFLINE_PREVIOUS_KEY = re.compile(r"^(native-offline-previous-v1-.+)-[0-9a-f]{40}-[0-9a-f]{64}$")
 RUNTIME_ARCHIVE_KEY = re.compile(
-    r"^((?:runtime-test-archive-v[12]|linux-native-evaluators-v1|macos-hol-guard-runtime-v2|windows-hol-guard-runtime-v2|shipped-runtime-v[12])-.+)-[0-9a-f]{64}$"
+    r"^((?:runtime-test-archive-v[123]|linux-native-evaluators-v1|macos-hol-guard-runtime-v2|windows-hol-guard-runtime-v2|shipped-runtime-v[12])-.+)-[0-9a-f]{64}$"
 )
 RUST_PREFIXES = ("v0-rust-", "release-native-")
 RUST_GENERATION = re.compile(r"^(?P<job>.+)-[0-9a-f]{8}-[0-9a-f]{8}$")

@@ -1,0 +1,887 @@
+{
+  "build": {
+    "base": "packaged",
+    "mcp_sources": [],
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "x402shield live payment execution command",
+            "x402shield external signer service command",
+            "x402shield authorization issuer service command",
+            "x402shield gateway database migration command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "dependencies": [],
+          "description": "Reviews x402Shield commands that can directly affect authorization, signing, migration, or live payment execution. Payment-intent binding stays enforced by x402Shield itself; this descriptor only classifies each invocation.",
+          "ecosystem_ids": [],
+          "executables": [
+            "x402shield-e2e-buyer-runner",
+            "x402shield-external-signer",
+            "x402shield-authorization-issuer",
+            "x402shield-gateway"
+          ],
+          "extension_id": "command.x402shield",
+          "name": "x402Shield command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "x402shield live payment execution command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `x402shield-e2e-buyer-runner` live-run, live, a2a-x402-live, and a2a-live, which sign and submit real test-network payments from configured wallet credentials.",
+              "example_command": "x402shield-e2e-buyer-runner live-run",
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "x402Shield live payment execution",
+              "permission_id": "command.x402shield.permission.live-payment",
+              "risk_tier": "critical",
+              "safer_guidance": [
+                "Run config-check, dry-run, or preflight first; they do not submit a payment.",
+                "Confirm the configured network, recipient, and funding wallet before a live run."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "x402shield external signer service command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies any invocation of `x402shield-external-signer`, the service that verifies permits and signs payments. The command model cannot distinguish its diagnostic flags, so every invocation is reviewed.",
+              "example_command": "x402shield-external-signer",
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "x402Shield external signer service",
+              "permission_id": "command.x402shield.permission.external-signer",
+              "risk_tier": "critical",
+              "safer_guidance": [
+                "Confirm the trusted permit issuers and signer scope in the environment before starting the signer.",
+                "Start the signer only in the environment that is meant to hold signing authority."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "x402shield authorization issuer service command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies any invocation of `x402shield-authorization-issuer`, the service that issues signed payment permits. The command model cannot distinguish its diagnostic flags, so every invocation is reviewed.",
+              "example_command": "x402shield-authorization-issuer",
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "x402Shield authorization issuer service",
+              "permission_id": "command.x402shield.permission.authorization-issuer",
+              "risk_tier": "critical",
+              "safer_guidance": [
+                "Confirm the issuer policy version and maximum permit lifetime in the environment before starting the issuer.",
+                "Start the issuer only in the environment that is meant to hold permit-issuing authority."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "x402shield gateway database migration command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `x402shield-gateway migrate`, which applies database migrations to the DATABASE_URL target.",
+              "example_command": "x402shield-gateway migrate",
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "x402Shield gateway database migration",
+              "permission_id": "command.x402shield.permission.gateway-migrate",
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Confirm DATABASE_URL points at the intended database and take a backup before migrating.",
+                "Review the pending migrations first."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "reference_urls": [
+            "https://x402shield.dev"
+          ],
+          "required": false,
+          "risk_classes": [
+            "financial_transaction",
+            "destructive_shell"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "x402shield live payment execution command"
+              ],
+              "default_mode": "review",
+              "description": "Matches `x402shield-e2e-buyer-runner` with the live-run, live, a2a-x402-live, or a2a-live subcommand. Read-only subcommands such as config-check, dry-run, preflight, observe-tx, and verify-evidence are not matched.",
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "x402shield-e2e-buyer-runner",
+                        "x402shield-e2e-buyer-runner.cmd",
+                        "x402shield-e2e-buyer-runner.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "subcommands": [
+                        "live-run"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "x402shield-e2e-buyer-runner",
+                        "x402shield-e2e-buyer-runner.cmd",
+                        "x402shield-e2e-buyer-runner.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "subcommands": [
+                        "live"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "x402shield-e2e-buyer-runner",
+                        "x402shield-e2e-buyer-runner.cmd",
+                        "x402shield-e2e-buyer-runner.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "subcommands": [
+                        "a2a-x402-live"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "x402shield-e2e-buyer-runner",
+                        "x402shield-e2e-buyer-runner.cmd",
+                        "x402shield-e2e-buyer-runner.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "subcommands": [
+                        "a2a-live"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "permission_id": "command.x402shield.permission.live-payment",
+              "risk_classes": [
+                "financial_transaction"
+              ],
+              "rule_id": "command.x402shield.live-payment",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Use config-check, dry-run, or preflight to inspect the setup without submitting a payment."
+              ],
+              "severity": "critical",
+              "title": "x402Shield live payment execution"
+            },
+            {
+              "action_classes": [
+                "x402shield external signer service command"
+              ],
+              "default_mode": "review",
+              "description": "Matches any invocation of `x402shield-external-signer`.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": false,
+                  "executables": [
+                    "x402shield-external-signer",
+                    "x402shield-external-signer.cmd",
+                    "x402shield-external-signer.exe"
+                  ],
+                  "subcommands": []
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.x402shield.permission.external-signer",
+              "risk_classes": [
+                "financial_transaction"
+              ],
+              "rule_id": "command.x402shield.external-signer",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Verify the permit trust configuration before starting the signer."
+              ],
+              "severity": "critical",
+              "title": "x402Shield external signer service"
+            },
+            {
+              "action_classes": [
+                "x402shield authorization issuer service command"
+              ],
+              "default_mode": "review",
+              "description": "Matches any invocation of `x402shield-authorization-issuer`.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": false,
+                  "executables": [
+                    "x402shield-authorization-issuer",
+                    "x402shield-authorization-issuer.cmd",
+                    "x402shield-authorization-issuer.exe"
+                  ],
+                  "subcommands": []
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.x402shield.permission.authorization-issuer",
+              "risk_classes": [
+                "financial_transaction"
+              ],
+              "rule_id": "command.x402shield.authorization-issuer",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Verify the issuer policy configuration before starting the issuer."
+              ],
+              "severity": "critical",
+              "title": "x402Shield authorization issuer service"
+            },
+            {
+              "action_classes": [
+                "x402shield gateway database migration command"
+              ],
+              "default_mode": "review",
+              "description": "Matches `x402shield-gateway migrate`. `x402shield-gateway run` is not matched.",
+              "matcher": {
+                "config": {
+                  "allow_leading_options": false,
+                  "executables": [
+                    "x402shield-gateway",
+                    "x402shield-gateway.cmd",
+                    "x402shield-gateway.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "subcommands": [
+                    "migrate"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "permission_id": "command.x402shield.permission.gateway-migrate",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.x402shield.gateway-migrate",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Back up the database and confirm DATABASE_URL before migrating."
+              ],
+              "severity": "high",
+              "title": "x402Shield gateway database migration"
+            }
+          ],
+          "safer_alternatives": [
+            "Use the read-only diagnostic subcommands before any live payment run."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.agentbridge",
+          "command.agi-memory",
+          "command.ai-dev",
+          "command.answerloops",
+          "command.appimg",
+          "command.blitcp",
+          "command.blkcp",
+          "command.cloudg",
+          "command.codesage",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.dispat",
+          "command.errand",
+          "command.faf-cli",
+          "command.formicx",
+          "command.genclave",
+          "command.gitsync",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.keibidrop",
+          "command.kim",
+          "command.kranz",
+          "command.librarybridge",
+          "command.macscope",
+          "command.mcp-agenthub",
+          "command.mcp-asdecided",
+          "command.mcp-authyouragent",
+          "command.mcp-clipugc",
+          "command.mcp-contribos",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-fetchsandbox",
+          "command.mcp-filesystem",
+          "command.mcp-ftp",
+          "command.mcp-google-workspace.gmail",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-kranz",
+          "command.mcp-lattice-talk",
+          "command.mcp-loomdesk",
+          "command.mcp-mail-server",
+          "command.mcp-musiccontext",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.mcp-run",
+          "command.mcp-setup-doctor",
+          "command.mcp-tether",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.noodle",
+          "command.ollama",
+          "command.omairc",
+          "command.probe",
+          "command.pyrig",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.repro-surgeon",
+          "command.routed",
+          "command.rungs",
+          "command.salesforce.sf",
+          "command.shellroute",
+          "command.showtime",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.storage-clearer",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vaultsync",
+          "command.vttforge",
+          "command.where-are-we",
+          "command.x402shield",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "x402shield-e2e-buyer-runner live-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "live-payment-live-run",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner live",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "live-payment-live",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner a2a-x402-live",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "live-payment-a2a-x402-live",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner a2a-live",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "live-payment-a2a-live",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner.exe live-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "live-payment-exe-suffix",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner live-run --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "live-payment-with-trailing-flag",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-external-signer",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "external-signer-start",
+      "rule_id": "command.x402shield.external-signer"
+    },
+    {
+      "command": "x402shield-external-signer --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "external-signer-help",
+      "rule_id": "command.x402shield.external-signer"
+    },
+    {
+      "command": "x402shield-authorization-issuer",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "authorization-issuer-start",
+      "rule_id": "command.x402shield.authorization-issuer"
+    },
+    {
+      "command": "x402shield-authorization-issuer --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "authorization-issuer-help",
+      "rule_id": "command.x402shield.authorization-issuer"
+    },
+    {
+      "command": "x402shield-gateway migrate",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "gateway-migrate",
+      "rule_id": "command.x402shield.gateway-migrate"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner preflight && x402shield-e2e-buyer-runner live-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "compound-live-after-preflight",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-gateway run; x402shield-gateway migrate",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "compound-migrate-after-run",
+      "rule_id": "command.x402shield.gateway-migrate"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner --unknown live-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "unsafe-unknown-option-before-subcommand",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner config-check",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "read-only-config-check",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner dry-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "read-only-dry-run",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner preflight",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "read-only-preflight",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner observe-tx",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "read-only-observe-tx",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner verify-evidence ./artifacts",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "read-only-verify-evidence",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner test-inventory",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "read-only-test-inventory",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-outbox-worker verify-audit --scope s --correlation-id c",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "worker-verify-audit",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-gateway run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "gateway-run-not-included",
+      "rule_id": "command.x402shield.gateway-migrate"
+    },
+    {
+      "command": "x402shield-gateway",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "gateway-default-not-included",
+      "rule_id": "command.x402shield.gateway-migrate"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "buyer-runner-no-subcommand",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner frobnicate",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "buyer-runner-unknown-subcommand",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner live-run",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "inactive-extension-live-run",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-external-signer",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "inactive-extension-signer",
+      "rule_id": "command.x402shield.external-signer"
+    },
+    {
+      "command": "x402shield-e2e-buyer-runner live-run",
+      "disabled_permissions": [
+        "command.x402shield.permission.live-payment"
+      ],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "disabled-live-payment-permission",
+      "rule_id": "command.x402shield.live-payment"
+    },
+    {
+      "command": "x402shield-external-signer",
+      "disabled_permissions": [
+        "command.x402shield.permission.external-signer"
+      ],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "disabled-signer-permission",
+      "rule_id": "command.x402shield.external-signer"
+    },
+    {
+      "command": "x402shield-authorization-issuer",
+      "disabled_permissions": [
+        "command.x402shield.permission.authorization-issuer"
+      ],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "disabled-issuer-permission",
+      "rule_id": "command.x402shield.authorization-issuer"
+    },
+    {
+      "command": "x402shield-gateway migrate",
+      "disabled_permissions": [
+        "command.x402shield.permission.gateway-migrate"
+      ],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "disabled-migrate-permission",
+      "rule_id": "command.x402shield.gateway-migrate"
+    },
+    {
+      "command": "true",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.x402shield"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "unrelated-command",
+      "rule_id": "command.x402shield.live-payment"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

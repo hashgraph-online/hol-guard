@@ -219,7 +219,7 @@ def composition_inputs(
         "has_payload_action": "policy_action" in payload,
         "payload_action": payload.get("policy_action"),
         "native_edge": (
-            {key: native_edge_result.get(key) for key in ("policy_action", "minimum_action", "decision")}
+            {key: native_edge_result.get(key) for key in ("policy_action", "minimum_action", "decision", "reason_code")}
             if isinstance(native_edge_result, Mapping)
             else None
         ),

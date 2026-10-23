@@ -18,10 +18,7 @@ fn evaluate(root: &std::path::Path, command: &str) -> guard_contracts::PreToolRe
 
 #[test]
 fn a_reviewable_setting_before_an_unmodeled_script_reaches_ordinary_review() {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir()
         .canonicalize()
         .unwrap()
@@ -173,10 +170,7 @@ fn an_open_quote_is_named_instead_of_the_extension_controls() {
     let root = std::env::temp_dir().canonicalize().unwrap().join(format!(
         "guard-open-quote-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     std::fs::create_dir_all(root.join("project")).unwrap();
     let _cleanup = FixtureCleanup(root.clone());
@@ -324,10 +318,7 @@ fn a_heap_only_node_options_setting_points_to_the_sandboxed_node_form() {
 /// stays at review; what it must not be is unapprovable.
 #[test]
 fn an_env_that_names_no_program_is_reviewed_rather_than_refused() {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir()
         .canonicalize()
         .unwrap()

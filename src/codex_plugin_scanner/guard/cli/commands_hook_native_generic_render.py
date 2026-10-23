@@ -35,10 +35,15 @@ from .commands_support_runtime_policy import (
 )
 
 
-def directive_exit_code(directive: Mapping[str, object], policy_action: str) -> int:
-    """The directive's exit code; grok's depends on its adapter's emit state."""
+def directive_exit_code(directive: Mapping[str, object], policy_action: str, *, key: str = "exit_code") -> int:
+    """The directive's exit code; grok's depends on its adapter's emit state.
 
-    code = directive["exit_code"]
+    ``key`` picks the status the branch owns: the JSON document answers before
+    the fallback envelope, so a replayed decision relaxes ``exit_code`` to 0
+    without touching ``json_exit_code``.
+    """
+
+    code = directive[key]
     if isinstance(code, int):
         return code
     from ..adapters.grok_hooks import grok_hook_process_exit
@@ -189,6 +194,9 @@ def render_generic_hook(
     def exit_code() -> int:
         return directive_exit_code(directive, policy_action)
 
+    def json_exit_code() -> int:
+        return directive_exit_code(directive, policy_action, key="json_exit_code")
+
     def reason() -> str:
         if "reason" not in composed:
             composed["reason"] = _reason(
@@ -232,6 +240,7 @@ def render_generic_hook(
             args,
             event_name=event_name,
             policy_action=policy_action,
+            exit_code=json_exit_code,
             reason=json_reason,
             envelope=envelope,
             system_message=(

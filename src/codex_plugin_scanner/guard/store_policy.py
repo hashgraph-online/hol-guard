@@ -14,10 +14,7 @@ from .managed_controls_policy_bundle import (
     MANAGED_CONTROLS_LAST_GOOD_STATE_KEY,
     MANAGED_CONTROLS_NEGOTIATED_CAPABILITIES_STATE_KEY,
     MANAGED_CONTROLS_REVISION_STATE_KEY,
-    build_managed_controls_activation_state,
-    build_managed_controls_revision_state,
-    managed_controls_layers_from_activation_state,
-    managed_controls_revision_from_state,
+    managed_controls_activation_input,
 )
 from .native_policy_bundle import PolicyBundleNativeError, PolicyBundleNativeUnavailableError
 from .policy_bundle_activation import (
@@ -579,10 +576,7 @@ class StorePolicyMixin:
                 assert managed_authority_key is not None
                 try:
                     revision_state = json.loads(str(revision_row["payload_json"]))
-                    previous_revision = managed_controls_revision_from_state(
-                        revision_state,
-                        authority_key=managed_authority_key,
-                    )
+                    previous_revision = self._managed_revision(revision_state, key=managed_authority_key)
                 except (json.JSONDecodeError, ExtensionControlAuthorityError):
                     return reject("managed_controls_revision_state_invalid", connection)
             if active_row is not None:
@@ -590,10 +584,8 @@ class StorePolicyMixin:
                 assert managed_authority_key is not None
                 try:
                     previous_active = json.loads(str(active_row["payload_json"]))
-                    active_managed_layers, active_revision = managed_controls_layers_from_activation_state(
-                        previous_active,
-                        catalog_digest=previous_active.get("catalogDigest"),
-                        authority_key=managed_authority_key,
+                    active_managed_layers, active_revision = self._managed_activation(
+                        previous_active, key=managed_authority_key
                     )
                     if previous_active.get("catalogDigest") != managed_base_authority.catalog_digest:
                         composed = self._with_managed_controls_activation(
@@ -648,14 +640,17 @@ class StorePolicyMixin:
                     if previous_bundle_hash == policy_bundle.get("bundleHash") and previous_revision > 0
                     else previous_revision + 1
                 )
-                managed_state = build_managed_controls_activation_state(
-                    dict(policy_bundle),
-                    managed_controls_policy,
-                    base_authority=managed_base_authority,
-                    managed_revision=managed_revision,
-                    negotiated_capabilities=managed_controls_negotiated_capabilities,
-                    authority_key=managed_authority_key,
-                    base_snapshot_digest=managed_base_snapshot[1],
+                managed_state = self._seal_managed_activation(
+                    managed_controls_activation_input(
+                        policy_bundle,
+                        managed_controls_policy,
+                        base_authority=managed_base_authority,
+                        managed_revision=managed_revision,
+                        negotiated_capabilities=managed_controls_negotiated_capabilities,
+                        base_snapshot_digest=managed_base_snapshot[1],
+                    ),
+                    key=managed_authority_key,
+                    catalog_digest=managed_base_authority.catalog_digest,
                 )
                 encoded_payloads[MANAGED_CONTROLS_ACTIVE_STATE_KEY] = json.dumps(
                     managed_state,
@@ -666,10 +661,7 @@ class StorePolicyMixin:
                     allow_nan=False,
                 )
                 encoded_payloads[MANAGED_CONTROLS_REVISION_STATE_KEY] = json.dumps(
-                    build_managed_controls_revision_state(
-                        managed_revision,
-                        authority_key=managed_authority_key,
-                    ),
+                    self._seal_managed_revision(managed_revision, key=managed_authority_key),
                     allow_nan=False,
                 )
                 if update_last_good:
@@ -682,10 +674,7 @@ class StorePolicyMixin:
                 if managed_revision > 0:
                     assert managed_authority_key is not None
                     encoded_payloads[MANAGED_CONTROLS_REVISION_STATE_KEY] = json.dumps(
-                        build_managed_controls_revision_state(
-                            managed_revision,
-                            authority_key=managed_authority_key,
-                        ),
+                        self._seal_managed_revision(managed_revision, key=managed_authority_key),
                         allow_nan=False,
                     )
                 connection.execute(
@@ -813,10 +802,7 @@ class StorePolicyMixin:
                 assert managed_authority_key is not None
                 try:
                     revision_state = json.loads(str(revision_row["payload_json"]))
-                    managed_revision = managed_controls_revision_from_state(
-                        revision_state,
-                        authority_key=managed_authority_key,
-                    )
+                    managed_revision = self._managed_revision(revision_state, key=managed_authority_key)
                 except (json.JSONDecodeError, ExtensionControlAuthorityError) as exc:
                     connection.rollback()
                     raise ExtensionControlAuthorityError("invalid managed controls revision") from exc
@@ -829,10 +815,8 @@ class StorePolicyMixin:
                     )
                     if not isinstance(active_catalog_digest, str) or not active_catalog_digest:
                         raise ExtensionControlAuthorityError("invalid managed controls activation catalog")
-                    _, active_revision = managed_controls_layers_from_activation_state(
-                        previous_active,
-                        catalog_digest=active_catalog_digest,
-                        authority_key=managed_authority_key,
+                    _, active_revision = self._managed_activation(
+                        previous_active, key=managed_authority_key, catalog_digest=active_catalog_digest
                     )
                 except (json.JSONDecodeError, ExtensionControlAuthorityError) as exc:
                     connection.rollback()
@@ -844,10 +828,7 @@ class StorePolicyMixin:
             if managed_revision > 0:
                 assert managed_authority_key is not None
                 encoded_payloads[MANAGED_CONTROLS_REVISION_STATE_KEY] = json.dumps(
-                    build_managed_controls_revision_state(
-                        managed_revision,
-                        authority_key=managed_authority_key,
-                    ),
+                    self._seal_managed_revision(managed_revision, key=managed_authority_key),
                     allow_nan=False,
                 )
             self._replace_remote_policy_rows_locked(connection, ())

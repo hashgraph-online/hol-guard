@@ -121,11 +121,24 @@ pub fn evaluate_package_request_artifact(
 ///     "ask": "require-reapproval", "block": "block"}`.
 // supply_chain_package_eval.py:154-160
 pub(super) fn decision_to_guard_action_variant(decision: &str) -> GuardAction {
-    let mapped = decision_to_guard_action()
-        .get(decision)
-        .copied()
-        .unwrap_or("allow");
-    match mapped {
+    guard_action_variant(
+        decision_to_guard_action()
+            .get(decision)
+            .copied()
+            .unwrap_or("allow"),
+    )
+}
+
+/// Read a `policy_action` field back into its variant.
+///
+/// `_normalize_package_user_copy` (:1506-1523) tests an evaluation's
+/// `policy_action` directly, and that field already holds a guard action rather
+/// than a decision. Routing it through `decision_to_guard_action_variant` would
+/// read `review`, `require-reapproval` and `sandbox-required` as `allow`,
+/// because the decision map has no entry for any of them.
+// supply_chain_package_eval.py:1506-1523
+pub(super) fn guard_action_variant(policy_action: &str) -> GuardAction {
+    match policy_action {
         "warn" => GuardAction::Warn,
         "review" => GuardAction::Review,
         "require-reapproval" => GuardAction::RequireReapproval,

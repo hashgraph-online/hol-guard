@@ -93,12 +93,13 @@ def test_stage_keeps_one_name_while_the_fixture_root_gains_children(tmp_path: Pa
     name derived from the root's changing metadata would point somewhere new every
     time: the prompt would name a directory nothing had seeded.
     """
+    scratch = scratch_checkout(tmp_path)
     seeded = stage_directory(tmp_path)
     (tmp_path / "private-evidence").mkdir()
     rendered = stage_directory(tmp_path)
     (tmp_path / "guard-home").mkdir()
     assert seeded == rendered == stage_directory(tmp_path)
-    assert scratch_checkout(tmp_path) == scratch_checkout(tmp_path)
+    assert scratch == scratch_checkout(tmp_path)
 
 
 def test_stage_is_removed_with_the_scratch_checkout(tmp_path: Path) -> None:
@@ -176,7 +177,7 @@ def test_shell_case_runs_only_its_listed_commands() -> None:
     assert native_tools_scope_error(scenario, _shell(scenario)[:-1], {})
     assert native_tools_scope_error(scenario, _shell(scenario)[:-1], {}, guard_denied=True) is None
     all_steps = _shell(scenario)
-    assert native_tools_scope_error(scenario, all_steps + [all_steps[0]], {}) == (
+    assert native_tools_scope_error(scenario, [*all_steps, all_steps[0]], {}) == (
         "the shell commands were duplicated or out of order"
     )
     assert native_tools_scope_error(scenario, list(reversed(all_steps)), {}) == (

@@ -357,8 +357,9 @@ fn command_prefix(prefix: &[String]) -> Vec<String> {
     windows::sink_prefix(prefix)
 }
 
-/// The sink command line: POSIX-quoted, and on Windows quoted for the
-/// PowerShell Codex runs shell commands in.
+/// The sink command line: POSIX-quoted, and on Windows written so that
+/// PowerShell and Git Bash, either of which Codex may run it in, read it
+/// the same way.
 #[cfg(not(windows))]
 fn shell_join(command: &[String]) -> Option<String> {
     Some(crate::mcp_proxy_shlex::join(command))
@@ -366,7 +367,7 @@ fn shell_join(command: &[String]) -> Option<String> {
 
 #[cfg(windows)]
 fn shell_join(command: &[String]) -> Option<String> {
-    windows::powershell_join(command)
+    windows::sink_command_line(command)
 }
 
 /// The allow that runs the `joined` command line in place of the original

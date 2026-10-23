@@ -37,6 +37,7 @@ from ci.gauntlet.fixtures import (
     gitconfig_variant,
 )
 from ci.gauntlet.host_process import realistic_environment
+from ci.gauntlet.native_tools import native_tools_scope_error
 from ci.gauntlet.parent_fixtures import PARENT_WORKSPACE_CASE
 from ci.gauntlet.realism_fixtures import DASHBOARD, REVIEW_NOTES_MARKER
 from ci.gauntlet.source_output_fixtures import HELPER_MARKER, ROUTE_MARKER, SOURCES, WORKER_MARKER
@@ -318,3 +319,28 @@ def test_fast_forward_fixture_puts_origin_one_commit_ahead(tmp_path: Path, case:
         )
         assert not _git(other.workspace, other.home, "remote").strip()
         assert not (other.home / ".config/git/hooks/post-merge").exists()
+
+
+def _bash(command: str, key: str) -> dict[str, object]:
+    return {
+        "id": key,
+        "name": "bash",
+        "args": {"command": command},
+        "result": {"content": [{"type": "text", "text": "{{workspace}}/app-portal/src/report.ts\n"}]},
+        "is_error": False,
+    }
+
+
+def test_the_parent_search_accepts_the_spelling_the_redactor_writes() -> None:
+    """That session's cwd is the parent directory, so evidence spells it `{{workspace}}`."""
+    scenario = next(item for item in load_catalog() if item.id == PARENT_WORKSPACE_CASE)
+    calls = [
+        _bash(command.replace("{{home}}/Code/org", "{{workspace}}"), f"call-{index}")
+        for index, command in enumerate(scenario.commands)
+    ]
+    assert native_tools_scope_error(scenario, calls, {}) is None
+    assert native_tools_scope_error(scenario, calls[:1], {}) == "the model skipped a listed shell command"
+    stray = [*calls, _bash("git -C {{workspace}}/app-portal status", "stray")]
+    assert native_tools_scope_error(scenario, stray, {}) == (
+        "the model ran a shell command the scenario did not list"
+    )

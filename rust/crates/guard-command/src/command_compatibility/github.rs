@@ -43,6 +43,10 @@ fn one(capability: &'static str) -> Capabilities {
     Some(vec![capability])
 }
 
+pub(super) fn repository_selector(value: &str) -> bool {
+    options::repository(value)
+}
+
 pub(super) fn arguments_are_read_only(arguments: &[String], text: &str) -> bool {
     // A glued `-Rowner/repo` selector is an unproven content read and stays
     // on the review path. A separate `--repo` read keeps the benign floor.
@@ -142,6 +146,9 @@ fn classify(original: &[String], text: &str) -> Capabilities {
     }
     if matches!(top.as_str(), "search" | "status") {
         return one("read_remote");
+    }
+    if let Some(capability) = crate::github_additional_commands::classify(args) {
+        return one(capability.as_str());
     }
     if top == "secret" {
         return one("secret_remote");

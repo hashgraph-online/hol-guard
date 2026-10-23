@@ -66,6 +66,7 @@ def test_atomic_activation_rejects_stale_delivery_after_concurrent_local_commit(
     wire_digest = runner.build_builtin_extension_catalog_wire(
         guard_version="test",
         generated_at="2026-08-25T12:00:00Z",
+        guard_home=guard_home,
     )["catalogDigest"]
     device_id, _ = runner._guard_device_metadata(stale_store)
     rollback = bundle["rollback"]

@@ -12,10 +12,7 @@ struct Workspace(PathBuf);
 
 impl Workspace {
     fn new(name: &str) -> Self {
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = crate::unique_nanos::unique_nanos();
         let root = std::env::temp_dir().join(format!(
             "hol-guard-approval-hash-{name}-{}-{nonce}",
             std::process::id()

@@ -26,7 +26,7 @@ def workflow(name: str) -> dict:
 @pytest.mark.parametrize("dependency", ["NATIVE_WORKSPACE_RESULT", "QUALITY_RESULT", "COVERAGE_RESULT"])
 def test_required_aggregate_rejects_failed_or_skipped_dependencies(result: str, dependency: str) -> None:
     """Reject any unsuccessful required dependency, including skipped jobs."""
-    step = workflow("ci.yml")["jobs"]["ci-python-312"]["steps"][0]
+    step = workflow("ci.yml")["jobs"]["required"]["steps"][1]
     environment = {name: "success" for name in step["env"]}
     environment[dependency] = result
     completed = subprocess.run(
@@ -58,6 +58,51 @@ def test_native_evaluators_build_with_the_ci_release_overrides() -> None:
     ) in evaluator_runs
     assert "verify_native_command_program.py" in evaluator_runs
     assert "native-command-evaluators" in document["jobs"]["required"]["needs"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="The required workspace formatting check uses Bash")
+@pytest.mark.parametrize("cargo_status", [0, 42])
+def test_required_clippy_formats_the_full_workspace_even_with_cached_archives(
+    tmp_path: Path, cargo_status: int
+) -> None:
+    document = workflow("ci.yml")
+    job = document["jobs"]["native-workspace"]
+    steps = job["steps"]
+    setup = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
+    formatting = next(
+        step for step in steps if step.get("name") == "Check native formatting in the required Clippy job"
+    )
+    assert setup["with"]["components"] == "${{ matrix.check == 'clippy' && 'clippy rustfmt' || 'clippy' }}"
+    assert steps.index(setup) + 1 == steps.index(formatting)
+    assert formatting["if"] == "matrix.check == 'clippy'"
+    assert "continue-on-error" not in formatting
+    assert "runtime-archive" not in formatting["if"]
+    assert "native-workspace" in document["jobs"]["required"]["needs"]
+    assert "continue-on-error" not in job
+    (tmp_path / "rust").mkdir()
+    (tmp_path / "rust/rust-toolchain.toml").write_text('[toolchain]\nchannel = "1.88.0"\n')
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    cargo = bindir / "cargo"
+    cargo.write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" > "$CAPTURE"\nexit {cargo_status}\n')
+    cargo.chmod(0o755)
+    capture = tmp_path / "arguments"
+    result = subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", formatting["run"]],
+        cwd=tmp_path,
+        env={**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}", "CAPTURE": str(capture)},
+        capture_output=True,
+        timeout=5,
+    )
+    assert result.returncode == cargo_status
+    assert capture.read_text().splitlines() == [
+        "+1.88.0",
+        "fmt",
+        "--manifest-path",
+        "rust/Cargo.toml",
+        "--all",
+        "--check",
+    ]
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Linux workspace profile uses Bash")

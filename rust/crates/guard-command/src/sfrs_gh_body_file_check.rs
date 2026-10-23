@@ -275,10 +275,7 @@ mod windows_tests {
         let root = std::env::temp_dir().join(format!(
             "guard-pr-body-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
         fs::create_dir(&root).unwrap();
         let path = root.join("pr-body.md");
@@ -352,10 +349,7 @@ mod unix_tests {
         let root = std::env::temp_dir().join(format!(
             "guard-pr-body-{label}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
         fs::create_dir_all(&root).unwrap();
         fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();

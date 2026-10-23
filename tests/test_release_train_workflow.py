@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+from tests.release_workflow_helpers import native_wheel_job
 from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,7 +44,7 @@ def test_release_native_binary_and_base_wheel_use_the_same_regenerated_program()
     assert build_steps.index(source_generation) < next(
         index for index, step in enumerate(build_steps) if step.get("name") == "Build Guard package (hol-guard)"
     )
-    steps = jobs["build-native-guard-wheels"]["steps"]
+    steps = native_wheel_job()["steps"]
     verify = next(step for step in steps if step.get("name") == "Verify native command program is current")
     run = verify["run"]
     generate = 'python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"'

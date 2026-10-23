@@ -32,6 +32,12 @@ class TestZCodeHookPayload:
         assert normalized["session_id"] == "session-redacted-001"
         assert normalized["workspace_root"] == "<workspace>"
 
+    def test_prepare_payload_leaves_no_second_tool_name(self) -> None:
+        # The harness spelling must not survive beside the canonical one: two
+        # names for one call read as an ambiguous payload and deny the work.
+        normalized = prepare_zcode_hook_payload(_fixture("pretooluse_bash.json"))
+        assert {normalized[key] for key in ("tool_name", "toolName") if key in normalized} == {"Bash"}
+
     def test_prepare_payload_maps_mcp_fixture(self) -> None:
         normalized = prepare_zcode_hook_payload(_fixture("pretooluse_mcp.json"))
         assert normalized["tool_name"] == "mcp__lean-ctx__ctx_call"

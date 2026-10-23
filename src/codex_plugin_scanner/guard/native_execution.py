@@ -201,7 +201,10 @@ def _resident_request(
             "daemon_route",
             "daemon_handler",
             "extension_control",
+            "extension_allow_hint",
+            "approval_extension_recommendation",
             "hook_authority_state",
+            "extension_control_authority",
             "hook_render",
             "protect_request",
             "hook_artifact_compose",
@@ -213,6 +216,7 @@ def _resident_request(
             "command_expression_validate",
             "reviewed_invocation_bindings_validate",
             "tool_action_request_identity",
+            "verified_read_plan",
         }:
             accepted = frozenset({"ok", "error"})
         elif operation == "mcp_tool_policy_decide":

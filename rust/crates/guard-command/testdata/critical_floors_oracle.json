@@ -136,7 +136,7 @@
    {
     "source": "policy",
     "reason_code": "critical.destructive-filesystem",
-    "action": "block",
+    "action": "review",
     "proof_route": null,
     "segment_ref": "segment:0"
    }
@@ -273,7 +273,7 @@
    {
     "source": "policy",
     "reason_code": "critical.destructive-filesystem",
-    "action": "block",
+    "action": "review",
     "proof_route": null,
     "segment_ref": "segment:0"
    }
@@ -2273,7 +2273,7 @@
    {
     "source": "policy",
     "reason_code": "critical.destructive-filesystem",
-    "action": "block",
+    "action": "review",
     "proof_route": null,
     "segment_ref": "segment:0"
    }

@@ -32,10 +32,10 @@ export function AboutRuntimeProofStrip({
   ];
 
   return (
-    <div className="flex flex-wrap gap-2 pt-3">
+    <div className="flex flex-wrap gap-x-4 gap-y-2 pt-4">
       {items.map((item) => (
         <div key={item.label} className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-dark/75">
             {item.label}
           </span>
           <Tag tone={item.tone}>{item.value}</Tag>

@@ -7757,7 +7757,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_find_exec_del
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["approval_reuse"]["action"] == "block"
+    assert output == {"permissionDecision": "allow"}
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_wrapped_command_split_string_argument(
@@ -8051,7 +8051,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_find_ok_delet
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["approval_reuse"]["action"] == "block"
+    assert output == {"permissionDecision": "allow"}
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_perl_sleep_wait(

@@ -11,7 +11,7 @@ import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError } from "./components/protection-primitives";
 import { commandStatesPayload } from "./custom-extension-commands";
 import { customExtensionDisplayName } from "./custom-extension-profile";
-import { randomToken } from "./local-cli-panel-copy";
+import { FRESH_TOTP_REQUIRED_MESSAGE, isFreshTotpRequired, randomToken } from "./local-cli-panel-copy";
 import { CustomExtensionReviewModal } from "./local-cli-review-modal";
 
 export const CAPABILITY_COPY: Record<LocalCliCapability, { label: string; description: string; blocked: string; need: string }> = {
@@ -47,12 +47,14 @@ export function LocalCliCapabilities(props: {
   const [pending, setPending] = useState<CapabilityChange | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [freshTotpRequired, setFreshTotpRequired] = useState(false);
   const name = customExtensionDisplayName(props.item);
   const states = props.item.capabilities;
   const suggested = props.item.suggested_capability;
 
   const request = useCallback(async (change: CapabilityChange) => {
     setError(null);
+    setFreshTotpRequired(false);
     try {
       await refreshApprovalGate({ failClosed: true });
     } catch {
@@ -90,7 +92,13 @@ export function LocalCliCapabilities(props: {
       await refreshApprovalGate();
       setPending(null);
     } catch (caught) {
-      setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not change this access.");
+      if (isFreshTotpRequired(caught)) {
+        setFreshTotpRequired(true);
+        await refreshApprovalGate().catch(() => undefined);
+        setError(FRESH_TOTP_REQUIRED_MESSAGE);
+      } else {
+        setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not change this access.");
+      }
     } finally {
       setBusy(false);
     }
@@ -150,6 +158,7 @@ export function LocalCliCapabilities(props: {
           busy={busy}
           error={error}
           approvalGate={resolvedApprovalGate}
+          requireFreshTotp={freshTotpRequired}
           onCancel={cancel}
           onConfirm={confirm}
         />

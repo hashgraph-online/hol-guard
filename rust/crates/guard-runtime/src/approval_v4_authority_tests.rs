@@ -79,13 +79,9 @@ pub(crate) fn write_test_record(
 use super::*;
 use guard_contracts::NATIVE_APPROVAL_V4_ALGORITHM_ED25519;
 use ring::signature::{Ed25519KeyPair, KeyPair};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 fn test_root() -> PathBuf {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let suffix = crate::unique_nanos::unique_nanos();
     let path = std::env::temp_dir().join(format!(
         "hol-guard-approval-v4-authority-{}-{suffix}",
         std::process::id()

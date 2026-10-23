@@ -7,6 +7,7 @@ on:
       - ".github/actions/setup-rust/**"
       - "rust/Cargo.lock"
       - "rust/crates/guard-contracts/src/policy_bundle_*.rs"
+      - "rust/crates/guard-policy-bundle/**"
       - "rust/crates/guard-runtime/src/policy_bundle_*.rs"
       - "rust/crates/guard-runtime/src/resident_*.rs"
       - "scripts/mdm/**"

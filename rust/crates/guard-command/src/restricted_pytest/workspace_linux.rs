@@ -211,26 +211,76 @@ fn overlay_argv(lower: &str, upper: &Path, work: &Path) -> Vec<String> {
     ]
 }
 
-/// Credential files and directories already in the workspace. Each is hidden
+/// What a directory the walk cannot enumerate does to the walk.
+#[derive(Clone, Copy, PartialEq)]
+enum Unreadable {
+    /// The workspace and the checkout it shares: a root Guard cannot read
+    /// whole is one it cannot promise to hold the credentials of, and the
+    /// launch is refused.
+    Refuse,
+    /// A granted dependency tree: the command is already authorized to run,
+    /// so refusing here would trade the review the grant removes for an
+    /// error. The directory is hidden whole instead, which withholds more
+    /// than naming the files inside it would, never less.
+    Hide,
+}
+
+/// `directory` hidden whole, in place of every mask and every unwalked
+/// directory below it. A mask below it would otherwise be mounted onto a path
+/// the empty directory does not hold, which fails the launch. False once the
+/// masks pass their budget, which a hidden directory counts against as a
+/// named credential does: each one is a mount of its own.
+fn hide(directory: &Path, masks: &mut Vec<(PathBuf, bool)>, pending: &mut Vec<PathBuf>) -> bool {
+    masks.retain(|(path, _)| !path.starts_with(directory));
+    pending.retain(|path| !path.starts_with(directory));
+    masks.push((directory.to_path_buf(), true));
+    masks.len() <= MAX_MASKS
+}
+
+/// Credential files and directories already inside `root`. Each is hidden
 /// behind an empty read-only mount, which also keeps it from being renamed or
-/// deleted. `None` when the workspace is too large to walk or holds too many.
-fn credential_masks(workspace: &Path) -> Option<Vec<(PathBuf, bool)>> {
+/// deleted. A directory the walk cannot enumerate is handled as `unreadable`
+/// says. `None` when `root` is too large to walk or holds too many.
+fn credential_masks(root: &Path, unreadable: Unreadable) -> Option<Vec<(PathBuf, bool)>> {
     let credentials: Vec<Regex> = patterns()
         .iter()
         .map(|pattern| Regex::new(pattern).ok())
         .collect::<Option<_>>()?;
-    let mut masks = Vec::new();
-    let mut pending = vec![workspace.to_path_buf()];
+    let mut masks: Vec<(PathBuf, bool)> = Vec::new();
+    let mut pending = vec![root.to_path_buf()];
     let mut visited = 0usize;
+    let hides = |directory: &Path| unreadable == Unreadable::Hide && directory != root;
     while let Some(directory) = pending.pop() {
-        for entry in std::fs::read_dir(&directory).ok()? {
+        let listing = match std::fs::read_dir(&directory) {
+            Ok(listing) => listing,
+            Err(_) if hides(&directory) => {
+                if !hide(&directory, &mut masks, &mut pending) {
+                    return None;
+                }
+                continue;
+            }
+            Err(_) => return None,
+        };
+        for entry in listing {
             visited += 1;
             if visited > MAX_ENTRIES {
                 return None;
             }
-            let entry = entry.ok()?;
-            let path = entry.path();
-            let file_type = entry.file_type().ok()?;
+            let named = entry.ok().and_then(|entry| {
+                entry
+                    .file_type()
+                    .ok()
+                    .map(|file_type| (entry.path(), file_type))
+            });
+            let Some((path, file_type)) = named else {
+                if hides(&directory) {
+                    if !hide(&directory, &mut masks, &mut pending) {
+                        return None;
+                    }
+                    break;
+                }
+                return None;
+            };
             let text = path.to_string_lossy();
             if credentials.iter().any(|pattern| pattern.is_match(&text)) {
                 if file_type.is_dir() || file_type.is_file() {
@@ -269,18 +319,35 @@ fn workspace_argv(input: &Input) -> Result<Vec<String>, RestrictedPytestError> {
     let backend = trusted_backend_executable(&input.backend_executable)
         .ok_or_else(|| unavailable("The workspace sandbox backend is not trusted."))?;
     let too_large = || unavailable("The workspace is too large for the workspace sandbox.");
-    let mut masks = credential_masks(&input.workspace).ok_or_else(too_large)?;
-    if let Some((linked, _, _)) = shared {
-        masks.extend(credential_masks(linked.checkout()).ok_or_else(too_large)?);
-        masks.sort();
-        masks.dedup();
-    }
     let exec_roots: Vec<PathBuf> = input
         .exec_roots
         .iter()
         .filter(|root| !root.starts_with(&input.workspace))
         .cloned()
         .collect();
+    let mut masks = credential_masks(&input.workspace, Unreadable::Refuse).ok_or_else(too_large)?;
+    if let Some((linked, _, _)) = shared {
+        masks
+            .extend(credential_masks(linked.checkout(), Unreadable::Refuse).ok_or_else(too_large)?);
+    }
+    // An installed dependency tree is granted whole, because the links a tool
+    // directory inside it holds point at the packages beside them. The rest
+    // of the tree comes with it, so a credential file anywhere in it is
+    // hidden exactly as one in the workspace is. A directory of the tree that
+    // cannot be enumerated is hidden rather than refused, so an installed
+    // package does not fail the run the grant exists to let through. The
+    // other granted roots name a single tool or cache directory and carry no
+    // tree to walk.
+    for root in exec_roots
+        .iter()
+        .filter(|root| is_package_tree(root.as_path()) && root.is_dir())
+    {
+        masks.extend(credential_masks(root, Unreadable::Hide).ok_or_else(|| {
+            unavailable("A granted package tree is too large for the workspace sandbox.")
+        })?);
+    }
+    masks.sort();
+    masks.dedup();
     let mut argv = base_argv(&backend, &exec_roots);
     for file in &input.read_files {
         let regular = std::fs::symlink_metadata(file).is_ok_and(|meta| meta.file_type().is_file());

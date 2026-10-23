@@ -3,29 +3,16 @@ from __future__ import annotations
 import json
 import sqlite3
 import urllib.request
-from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon.approval_extension_recommendation import (
-    RECOMMENDATION_SCHEMA,
-    build_approval_extension_recommendation,
-    with_approval_extension_recommendation,
-)
+from codex_plugin_scanner.guard.daemon import approval_extension_recommendation as recommendation_module
+from codex_plugin_scanner.guard.daemon.approval_extension_recommendation import RECOMMENDATION_SCHEMA
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import EXTENSION_ALLOW_HINT_SCHEMA
-from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
-from codex_plugin_scanner.guard.runtime.extension_control_contract import (
-    CONTROL_SCHEMA_VERSION,
-    ControlLayerKind,
-    ControlState,
-    ControlTarget,
-    ControlTargetKind,
-    ExtensionControl,
-    ExtensionControlLayer,
-)
-from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import (
     get_approval_request,
@@ -35,7 +22,6 @@ from tests.native_approval_writes import add_approval_request, native_approval_c
 
 REGISTRY = BUILT_IN_COMMAND_EXTENSION_REGISTRY
 GIT_ADD = "command.git.permission.add"
-HARD_RESET = "command.git.permission.hard-reset"
 
 
 def _hint(*permission_ids: str) -> dict[str, object]:
@@ -48,43 +34,6 @@ def _hint(*permission_ids: str) -> dict[str, object]:
         "extension_ids": sorted({permission.extension_id for permission in permissions}),
         "catalog_digest": REGISTRY.catalog_digest,
     }
-
-
-def _layer(kind: ControlLayerKind, controls: tuple[tuple[ControlTargetKind, str, ControlState], ...]):
-    return ExtensionControlLayer(
-        schema_version=CONTROL_SCHEMA_VERSION,
-        kind=kind,
-        catalog_digest=REGISTRY.catalog_digest,
-        global_lockdown=False,
-        controls=tuple(
-            sorted(
-                (ExtensionControl(ControlTarget(kind_, target_id), state) for kind_, target_id, state in controls),
-                key=lambda control: control.target,
-            )
-        ),
-    )
-
-
-def _snapshot(
-    *,
-    health: AuthorityHealth = AuthorityHealth.PROTECTED,
-    local: tuple[tuple[ControlTargetKind, str, ControlState], ...] = (),
-    managed: tuple[tuple[ControlTargetKind, str, ControlState], ...] = (),
-) -> ExtensionControlRuntimeSnapshot:
-    layers = [_layer(ControlLayerKind.LOCAL_ADMIN, local)]
-    if managed:
-        layers.append(_layer(ControlLayerKind.SIGNED_CLOUD, managed))
-    return ExtensionControlRuntimeSnapshot(
-        health=health,
-        revision=7,
-        catalog_digest=REGISTRY.catalog_digest,
-        effective_digest="e" * 64,
-        layers=tuple(layers),
-    )
-
-
-def _approval(hint: dict[str, object] | None, *, status: str = "pending") -> dict[str, object]:
-    return {"request_id": "req-1", "status": status, "extension_allow_hint": hint}
 
 
 def _request(request_id: str, *, hint: dict[str, object] | None) -> GuardApprovalRequest:
@@ -168,100 +117,60 @@ def test_existing_store_gains_hint_column(tmp_path: Path) -> None:
     assert "extension_allow_hint" not in (store.get_approval_request("req-old") or {})
 
 
-def test_available_recommendation_for_git_add() -> None:
-    recommendation = build_approval_extension_recommendation(
-        _approval(_hint(GIT_ADD)), registry=REGISTRY, snapshot=_snapshot()
-    )
-
-    assert recommendation is not None
-    assert recommendation["schema"] == RECOMMENDATION_SCHEMA
-    assert recommendation["status"] == "available"
-    assert recommendation["caution"] is False
-    assert recommendation["revision"] == 7
-    [permission] = recommendation["permissions"]
-    assert permission["permission_id"] == GIT_ADD
-    assert permission["extension_id"] == "command.git"
-    assert permission["rule_id"] == "command.git.add"
-    assert permission["cli_command"] == f"hol-guard command controls set {GIT_ADD} --state allow"
-    assert "src/app.py" not in json.dumps(recommendation)
-
-
-def test_destructive_permission_carries_caution() -> None:
-    recommendation = build_approval_extension_recommendation(
-        _approval(_hint(HARD_RESET)), registry=REGISTRY, snapshot=_snapshot()
-    )
-
-    assert recommendation is not None
-    assert recommendation["caution"] is True
-    assert recommendation["permissions"][0]["caution_reason"] in {"critical", "destructive", "sensitive"}
-
-
-def test_no_recommendation_when_not_applicable() -> None:
-    enabled = ((ControlTargetKind.PERMISSION, GIT_ADD, ControlState.ENABLED),)
-    managed_off = ((ControlTargetKind.PERMISSION, GIT_ADD, ControlState.DISABLED),)
-    extension_off = ((ControlTargetKind.EXTENSION, "command.git", ControlState.DISABLED),)
-    hint = _hint(GIT_ADD)
-
-    def build(approval, snapshot):
-        return build_approval_extension_recommendation(approval, registry=REGISTRY, snapshot=snapshot)
-
-    assert build(_approval(hint), _snapshot(local=enabled)) is None
-    assert build(_approval(hint), _snapshot(managed=managed_off)) is None
-    assert build(_approval(hint), _snapshot(local=extension_off)) is None
-    assert build(_approval(hint, status="approved"), _snapshot()) is None
-    assert build(_approval({**hint, "catalog_digest": "0" * 64}), _snapshot()) is None
-    assert build(_approval(None), _snapshot()) is None
-    locked = _snapshot()
-    locked = replace(locked, layers=(replace(locked.layers[0], global_lockdown=True),))
-    assert build(_approval(hint), locked) is None
-
-
-def test_relied_permission_must_still_be_enabled() -> None:
-    relied = "command.git.permission.commit"
-    assert REGISTRY.permission(relied) is not None
-    hint = {**_hint(GIT_ADD), "relied_permission_ids": [relied]}
-
-    def build(snapshot):
-        return build_approval_extension_recommendation(_approval(hint), registry=REGISTRY, snapshot=snapshot)
-
-    relied_on = ((ControlTargetKind.PERMISSION, relied, ControlState.ENABLED),)
-    relied_off = ((ControlTargetKind.PERMISSION, relied, ControlState.DISABLED),)
-    assert build(_snapshot(local=relied_on)) is not None
-    assert build(_snapshot(managed=relied_on)) is not None
-    assert build(_snapshot()) is None
-    assert build(_snapshot(local=relied_on, managed=relied_off)) is None
-    legacy = build_approval_extension_recommendation(_approval(_hint(GIT_ADD)), registry=REGISTRY, snapshot=_snapshot())
-    assert legacy is not None
-
-
-def test_unhealthy_authority_reports_unavailable() -> None:
-    recommendation = build_approval_extension_recommendation(
-        _approval(_hint(GIT_ADD)), registry=REGISTRY, snapshot=_snapshot(health=AuthorityHealth.TAMPERED)
-    )
-
-    assert recommendation is not None
-    assert recommendation["status"] == "authority_unavailable"
-
-
-def test_enrichment_strips_hint_and_respects_include() -> None:
-    approval = _approval(_hint(GIT_ADD))
-
-    enriched = with_approval_extension_recommendation(approval, registry=REGISTRY, snapshot=_snapshot(), include=True)
-    hidden = with_approval_extension_recommendation(approval, registry=REGISTRY, snapshot=_snapshot(), include=False)
-
-    assert "extension_allow_hint" not in enriched
-    assert enriched["extension_recommendation"]["permissions"][0]["permission_id"] == GIT_ADD
-    assert "extension_allow_hint" not in hidden
-    assert "extension_recommendation" not in hidden
-
-
 def _get_json(port: int, path: str, *, token: str) -> dict[str, object]:
     request = urllib.request.Request(f"http://127.0.0.1:{port}{path}", headers={"X-Guard-Token": token}, method="GET")
     with urllib.request.urlopen(request, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
-def test_daemon_request_detail_includes_recommendation(tmp_path: Path) -> None:
+def _resident_recommends(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
+    """Answer each recommendation ask as the resident would for an applicable hint.
+
+    Whether a hint applies is the resident's decision, pinned by its own tests
+    and by the client tests; here only the daemon's read path is under test.
+    """
+
+    asked: list[dict[str, object]] = []
+
+    def decide(query, guard_home, _fields, validate, **_kwargs):
+        asked.append({"query": query, "guard_home": guard_home})
+        permission_id = query["hint"]["permission_ids"][0]
+        validate(
+            {
+                "kind": query["kind"],
+                "recommendation": {
+                    "schema": RECOMMENDATION_SCHEMA,
+                    "status": "available",
+                    "permissions": [
+                        {
+                            "permission_id": permission_id,
+                            "label": "Git add",
+                            "description": None,
+                            "example_command": None,
+                            "extension_id": "command.git",
+                            "extension_name": None,
+                            "rule_id": query["hint"]["rule_ids"][0],
+                            "risk_tier": "low",
+                            "caution": False,
+                            "caution_reason": None,
+                            "caution_detail": None,
+                            "cli_command": f"hol-guard command controls set {permission_id} --state allow",
+                        }
+                    ],
+                    "caution": False,
+                    "revision": query["snapshot"]["revision"],
+                    "catalog_digest": query["snapshot"]["catalog_digest"],
+                },
+            }
+        )
+        return {}
+
+    monkeypatch.setattr(recommendation_module, "_decide", decide)
+    return asked
+
+
+def test_daemon_request_detail_includes_recommendation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    asked = _resident_recommends(monkeypatch)
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-1", hint=_hint(GIT_ADD)), "2026-10-09T10:00:00+00:00")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -276,20 +185,30 @@ def test_daemon_request_detail_includes_recommendation(tmp_path: Path) -> None:
     assert recommendation["schema"] == RECOMMENDATION_SCHEMA
     assert recommendation["status"] in {"available", "authority_unavailable"}
     assert [item["permission_id"] for item in recommendation["permissions"]] == [GIT_ADD]
+    # The resident of the daemon's own home is the one asked.
+    assert [entry["guard_home"] for entry in asked] == [store.guard_home]
 
 
 def test_daemon_request_detail_computes_live_recommendation_for_legacy_pending_row(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     from codex_plugin_scanner.guard.daemon import native_review_allow_hint
 
+    _resident_recommends(monkeypatch)
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-legacy", hint=None), "2026-10-09T10:00:00+00:00")
+
+    recoveries = []
+
+    def live_hint(approval, **kwargs):
+        recoveries.append((approval.get("request_id"), kwargs["guard_home"]))
+        return _hint(GIT_ADD) if approval.get("request_id") == "req-legacy" else None
+
     monkeypatch.setattr(
         native_review_allow_hint,
-        "live_approval_extension_allow_hint",
-        lambda approval, **_kwargs: _hint(GIT_ADD) if approval.get("request_id") == "req-legacy" else None,
+        "live_approval_extension_hint",
+        live_hint,
     )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
@@ -298,7 +217,30 @@ def test_daemon_request_detail_computes_live_recommendation_for_legacy_pending_r
     finally:
         daemon.stop()
 
+    assert recoveries == [("req-legacy", store.guard_home)]
     assert "extension_allow_hint" not in detail
     recommendation = detail["extension_recommendation"]
     assert recommendation["schema"] == RECOMMENDATION_SCHEMA
     assert [item["permission_id"] for item in recommendation["permissions"]] == [GIT_ADD]
+
+
+def test_daemon_request_detail_without_a_resident_answer_lists_the_request_without_advice(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def refused(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise recommendation_module.NativeApprovalExtensionRecommendationError(
+            "native_approval_extension_recommendation_unavailable"
+        )
+
+    monkeypatch.setattr(recommendation_module, "_decide", refused)
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(_request("req-1", hint=_hint(GIT_ADD)), "2026-10-09T10:00:00+00:00")
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        detail = _get_json(daemon.port, "/v1/requests/req-1", token=daemon._server.auth_token)
+    finally:
+        daemon.stop()
+
+    assert detail["request_id"] == "req-1"
+    assert "extension_allow_hint" not in detail and "extension_recommendation" not in detail

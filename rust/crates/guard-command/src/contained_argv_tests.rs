@@ -178,3 +178,29 @@ fn venv_activation_target_answers_the_sink() {
     );
     let _ = std::fs::remove_dir_all(&root);
 }
+
+#[test]
+fn launcher_program_reports_where_the_parser_reads_the_program() {
+    let offset =
+        |command: &[&str]| evaluate("launcher_program", &json!({ "command": command })).unwrap();
+    assert_eq!(
+        offset(&["nice", "-n", "10", "pytest", "-q"]),
+        json!({"value": 3})
+    );
+    assert_eq!(offset(&["nice", "pytest", "-q"]), json!({"value": 1}));
+    assert_eq!(
+        offset(&["stdbuf", "-oL", "pytest", "-q"]),
+        json!({"value": 2})
+    );
+    // The sink refuses every shape the native parser leaves in place.
+    for command in [
+        &["./nice", "-n", "10", "pytest"][..],
+        &["C:\\tools\\nice", "pytest"],
+        &["stdbuf", "pytest", "-q"],
+        &["nohup", "pytest", "-q"],
+        &["nice", "-n", "10", "python3", "deploy.py"],
+        &["pytest", "-q"],
+    ] {
+        assert_eq!(offset(command), json!({"value": null}), "{command:?}");
+    }
+}

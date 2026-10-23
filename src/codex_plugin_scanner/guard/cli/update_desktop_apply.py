@@ -207,6 +207,9 @@ def run_desktop_managed_update(
             current_version=current_version,
             version_check=version_check,
             context=context,
+            store=store,
+            workspace=workspace,
+            now=now,
             daemon_refresh_required=daemon_refresh_required,
         )
     if target_version is None:
@@ -300,6 +303,9 @@ def _desktop_already_current(
     current_version: str,
     version_check: dict[str, object],
     context: HarnessContext | None,
+    store: GuardStore | None,
+    workspace: str | None,
+    now: str | None,
     daemon_refresh_required: bool,
 ) -> tuple[dict[str, object], int]:
     from . import update_commands as commands
@@ -308,13 +314,14 @@ def _desktop_already_current(
     payload["changed"] = False
     payload["resulting_version"] = current_version
     payload["message"] = commands.already_current_update_message(version_check)
-    if context is not None and daemon_refresh_required:
+    restart = _converge_installs(payload, context=context, store=store, workspace=workspace, now=now)
+    if context is not None and (daemon_refresh_required or restart):
         return _refresh_or_fail(
             payload,
             context=context,
             executable=Path(sys.executable).resolve(),
             minimum_version=current_version,
-            required=True,
+            required=daemon_refresh_required or restart,
         )
     return payload, 0
 
@@ -361,27 +368,43 @@ def _desktop_apply_target(
         if applied.changed
         else commands.already_current_update_message(version_check)
     )
-    if context is not None and store is not None and now is not None:
-        repaired_installs, repair_notes = commands._repair_supported_harnesses_in_process(
-            context=context,
-            store=store,
-            workspace=workspace,
-            now=now,
-            dry_run=False,
-        )
-        if repair_notes:
-            payload["notes"] = [*commands._payload_notes(payload), *repair_notes]
-        if repaired_installs:
-            payload["managed_installs"] = repaired_installs
-    if context is not None and (applied.changed or daemon_refresh_required):
+    restart = _converge_installs(payload, context=context, store=store, workspace=workspace, now=now)
+    if context is not None and (applied.changed or daemon_refresh_required or restart):
         return _refresh_or_fail(
             payload,
             context=context,
             executable=applied.executable,
             minimum_version=applied.version,
-            required=daemon_refresh_required,
+            required=daemon_refresh_required or restart,
         )
     return payload, 0
+
+
+def _converge_installs(
+    payload: dict[str, object],
+    *,
+    context: HarnessContext | None,
+    store: GuardStore | None,
+    workspace: str | None,
+    now: str | None,
+) -> bool:
+    """Repair hooks and retire superseded installs; return whether to restart the daemon."""
+
+    from . import update_commands as commands
+    from .desktop_converge import converge_notes, repair_hooks_then_converge
+
+    if context is None or store is None or now is None:
+        return False
+    converged, repaired_installs, repair_notes = repair_hooks_then_converge(
+        context, store=store, workspace=workspace, now=now
+    )
+    if repaired_installs:
+        payload["managed_installs"] = repaired_installs
+    payload["converge"] = converged
+    notes = [*repair_notes, *converge_notes(converged)]
+    if notes:
+        payload["notes"] = [*commands._payload_notes(payload), *notes]
+    return bool(converged.get("daemon_restart_required"))
 
 
 def _refresh_or_fail(

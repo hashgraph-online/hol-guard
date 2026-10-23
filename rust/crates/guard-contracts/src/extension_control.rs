@@ -8,8 +8,13 @@
 //! specific code, never a default verdict.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-use crate::NativeExtensionControlLayerV1;
+use crate::{
+    ExtensionControlEventTargetV1, ExtensionControlMutationRegistryV1,
+    ExtensionControlPreviewRegistryV1, ExtensionControlSemanticPreviewV1,
+    NativeExtensionControlLayerV1,
+};
 
 /// Schema discriminator for the request.
 pub const EXTENSION_CONTROL_REQUEST_SCHEMA: &str = "guard-extension-control-request.v1";
@@ -91,6 +96,93 @@ pub enum ExtensionControlQueryV1 {
         registry: ExtensionControlRegistryV1,
         scenarios: Vec<ExtensionControlScenarioV1>,
     },
+    /// The digest that identifies the runtime snapshot of one authority view.
+    SnapshotDigest {
+        catalog_digest: String,
+        health: String,
+        revision: u64,
+        managed_revision: u64,
+        layers: Vec<NativeExtensionControlLayerV1>,
+    },
+    /// The digest a commit proof binds: replacing the layers at
+    /// `previous_revision` with `layers`, for this actor and request.
+    MutationDigest {
+        previous_revision: i64,
+        catalog_digest: String,
+        layers: Vec<NativeExtensionControlLayerV1>,
+        actor_id: String,
+        idempotency_key: String,
+        nonce: String,
+    },
+    /// The digest a first-enrollment proof binds.
+    EnrollmentDigest {
+        catalog_digest: String,
+        actor_id: String,
+        nonce: String,
+    },
+    /// The semantic preview of replacing `current_layers` with `proposed_layers`.
+    Preview {
+        registry: ExtensionControlPreviewRegistryV1,
+        current_layers: Vec<NativeExtensionControlLayerV1>,
+        proposed_layers: Vec<NativeExtensionControlLayerV1>,
+    },
+    /// Whether `layers` stay within the input bounds of one mutation. Asked
+    /// before any work that depends on the layers, so an oversized draft is
+    /// refused cheaply.
+    MutationBounds {
+        layers: Vec<NativeExtensionControlLayerV1>,
+    },
+    /// Whether a mutation may proceed, and its layers with every extension
+    /// target named by its canonical id. `catalog_digest` is the catalog the
+    /// caller serves; the mutation must name it, and so must every layer.
+    MutationValidate {
+        registry: ExtensionControlMutationRegistryV1,
+        catalog_digest: String,
+        requested_catalog_digest: String,
+        current_layers: Vec<NativeExtensionControlLayerV1>,
+        layers: Vec<NativeExtensionControlLayerV1>,
+    },
+    /// Whether `layers` leave the managed layer and every immutable control of
+    /// `current_layers` as they are, against a registry the mutation was
+    /// prepared with.
+    MutabilityValidate {
+        registry: ExtensionControlMutationRegistryV1,
+        current_layers: Vec<NativeExtensionControlLayerV1>,
+        layers: Vec<NativeExtensionControlLayerV1>,
+    },
+    /// The digest that identifies one apply request: the fields below are
+    /// exactly the ones that make two requests the same request. They are
+    /// hashed as the caller sent them (`null` for a missing field), because the
+    /// request is not yet known to be well formed.
+    ///
+    /// The fields are boxed so the arbitrary-shape values do not set the size of
+    /// every query.
+    RequestDigest {
+        previous_revision: Box<Value>,
+        catalog_digest: Box<Value>,
+        layers: Box<Value>,
+        actor_id: Box<Value>,
+        idempotency_key: Box<Value>,
+        nonce: Box<Value>,
+    },
+    /// The nonce a prepared candidate's mutation is proven under: the caller's
+    /// nonce bound to the identities of the activation records staged for it,
+    /// so a proof cannot be reused with other records.
+    CandidateNonce {
+        nonce: String,
+        activation_digest: String,
+        lifecycle_before: String,
+        lifecycle_after: String,
+        security_digest: Option<String>,
+    },
+    /// The audit projection of the semantic preview of replacing
+    /// `current_layers` with `proposed_layers`: one entry per changed target,
+    /// without the target's id.
+    PreviewEventTargets {
+        registry: ExtensionControlPreviewRegistryV1,
+        current_layers: Vec<NativeExtensionControlLayerV1>,
+        proposed_layers: Vec<NativeExtensionControlLayerV1>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -161,7 +253,74 @@ pub enum ExtensionControlPayloadV1 {
     Resolve {
         scenarios: Vec<ExtensionControlScenarioResultV1>,
     },
+    SnapshotDigest {
+        digest: String,
+    },
+    MutationDigest {
+        digest: String,
+    },
+    EnrollmentDigest {
+        digest: String,
+    },
+    Preview {
+        preview: ExtensionControlSemanticPreviewV1,
+    },
+    /// The answer to `mutation_bounds`: null when the layers are inside every
+    /// limit, otherwise the limit reason.
+    MutationBounds {
+        refusal: Option<String>,
+    },
+    /// The answer to `mutation_validate`.
+    MutationValidate {
+        /// Null when the mutation is accepted, otherwise the reason it is
+        /// refused (one of the `EXTENSION_CONTROL_MUTATION_*` reasons).
+        refusal: Option<String>,
+        /// The validated mutation's layers, extension targets canonical. Empty
+        /// when the mutation is refused.
+        layers: Vec<NativeExtensionControlLayerV1>,
+    },
+    /// The answer to `mutability_validate`: null when the draft may proceed,
+    /// otherwise the immutability reason.
+    MutabilityValidate {
+        refusal: Option<String>,
+    },
+    /// The answer to `request_digest`: lowercase hex SHA-256.
+    RequestDigest {
+        digest: String,
+    },
+    /// The answer to `candidate_nonce`: lowercase hex SHA-256.
+    CandidateNonce {
+        nonce: String,
+    },
+    /// The answer to `preview_event_targets`, bounded by
+    /// `EXTENSION_CONTROL_MAX_EVENT_TARGETS`.
+    PreviewEventTargets {
+        targets: Vec<ExtensionControlEventTargetV1>,
+    },
 }
+
+/// A mutation exceeds the layer count of one authority.
+pub const EXTENSION_CONTROL_MUTATION_LAYER_LIMIT: &str = "layer_limit_exceeded";
+/// One layer of a mutation holds more controls than a layer may.
+pub const EXTENSION_CONTROL_MUTATION_LAYER_CONTROL_LIMIT: &str = "layer_control_limit_exceeded";
+/// A mutation holds more controls than one authority may.
+pub const EXTENSION_CONTROL_MUTATION_CONTROL_LIMIT: &str = "control_limit_exceeded";
+/// A control targets an extension the catalog does not know.
+pub const EXTENSION_CONTROL_MUTATION_UNKNOWN_EXTENSION: &str = "unknown_extension";
+/// A control targets a permission the catalog does not know.
+pub const EXTENSION_CONTROL_MUTATION_UNKNOWN_PERMISSION: &str = "unknown_permission";
+/// A layer holds two controls for one target, once its aliases are resolved.
+pub const EXTENSION_CONTROL_MUTATION_DUPLICATE_TARGET: &str = "duplicate_control_target";
+/// The mutation or one of its layers is bound to another catalog.
+pub const EXTENSION_CONTROL_MUTATION_CATALOG_CONFLICT: &str = "catalog_conflict";
+/// The mutation adds, changes or drops a managed-layer control.
+pub const EXTENSION_CONTROL_MUTATION_MANAGED_LAYER: &str = "managed_layer_mutation";
+/// The mutation creates or changes a control of a required extension.
+pub const EXTENSION_CONTROL_MUTATION_IMMUTABLE_EXTENSION: &str = "immutable_extension";
+/// The mutation creates or changes a control of a permission the catalog fixes.
+pub const EXTENSION_CONTROL_MUTATION_IMMUTABLE_PERMISSION: &str = "immutable_permission";
+/// The mutation's layers are not valid once their targets are canonical.
+pub const EXTENSION_CONTROL_MUTATION_INVALID: &str = "invalid_mutation";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]

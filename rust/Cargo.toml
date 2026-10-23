@@ -2,9 +2,11 @@
 exclude = ["crates/guard-command-build"]
 members = [
     "crates/guard-alloc-probe",
+    "crates/guard-adapter-detection",
     "crates/guard-archive",
     "crates/guard-contained-process",
     "crates/guard-command",
+    "crates/guard-command-catalog-data",
     "crates/guard-contracts",
     "crates/guard-google-identity",
     "crates/guard-rules",
@@ -12,10 +14,13 @@ members = [
     "crates/guard-seatbelt",
     "crates/guard-secure-fs",
     "crates/guard-hook-core",
+    "crates/guard-hook-payload",
     "crates/guard-policy-snapshot",
+    "crates/guard-policy-bundle",
     "crates/guard-pack-compiler",
     "crates/guard-rule-contract",
     "crates/guard-runtime",
+    "crates/guard-runtime-pyjson",
     "crates/guard-runtime-windows-process",
 ]
 resolver = "2"

@@ -56,11 +56,8 @@ def test_native_review_defaults_to_safe_alternative(
     assert "safe, permitted alternative" not in reason
     # The agent hands the queued request's link to the user.
     request_id = store.list_approval_requests(status="pending")[0]["request_id"]
-    # Only the OMP extension waits for the approval and resumes the agent.
-    if harness == "omp":
-        assert response["approval_resume"] == {"request_id": request_id, "poll_path": f"/v1/requests/{request_id}"}
-    else:
-        assert "approval_resume" not in response
+    assert response["approval_resume"] == {"request_id": request_id, "poll_path": f"/v1/requests/{request_id}"}
+    assert f"hol-guard approvals wait {request_id} --json" in reason
     if harness == "codex":
         # Codex gets only signed loopback links, and this daemon has no token to sign with.
         assert "could not create a signed approval link" in reason

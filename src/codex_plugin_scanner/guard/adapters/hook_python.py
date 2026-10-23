@@ -28,12 +28,11 @@ from typing import Final, cast
 import codex_plugin_scanner
 
 from ...version import __version__
+from ..stable_guard_cli import guard_cli_launcher
 from .base import HarnessContext
 from .hook_python_probe_code import PROBE_CODE as _PROBE_CODE
 from .hook_python_subprocess import run_probe as _run_probe
 
-_WORKTREE_MARKERS = ("/.worktrees/", "/worktrees/")
-_WORKTREE_SEGMENT_PREFIXES = ("hol-guard-wt-",)
 _PROBE_SCHEMA: Final = 2
 _EXPECTED_ENTRY_POINT: Final = "codex_plugin_scanner.cli:main"
 _PREPARATION_PROBE: ContextVar[tuple[int, Path] | None] = ContextVar("guard_preparation_probe", default=None)
@@ -466,7 +465,7 @@ def resolve_guard_hook_python(context: HarnessContext) -> Path:
     """Return the invocation path for the attested running Guard Python."""
 
     if bool(getattr(sys, "frozen", False)):
-        return _executable_identity(Path(sys.executable).absolute()).invocation_path
+        return _executable_identity(Path(guard_cli_launcher()).absolute()).invocation_path
     try:
         return attest_guard_hook_python(context).executable
     except RuntimeError as error:
@@ -483,8 +482,7 @@ def guard_cli_command(context: HarnessContext, args: list[str]) -> list[str]:
     executable = str(resolve_guard_hook_python(context))
     if not bool(getattr(sys, "frozen", False)):
         return [executable, *args]
-    python_prefix = ["-m", "codex_plugin_scanner.cli", "guard"]
-    if args[:3] != python_prefix:
+    if args[:3] != ["-m", "codex_plugin_scanner.cli", "guard"]:
         raise RuntimeError("Frozen Guard CLI arguments do not match the managed launch contract.")
     return [executable, *args[3:]]
 

@@ -21,10 +21,7 @@ fn status(harness: &str, home: &std::path::Path, repository: &std::path::Path) -
 
 // An exclusive root, so a directory left by an interrupted run is never reused.
 fn unique_root() -> std::path::PathBuf {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     for attempt in 0.. {
         let root = std::env::temp_dir().join(format!(
             "guard large listing {}-{nonce}-{attempt}",

@@ -39,12 +39,16 @@ GUARD_RECOVERY_COMMAND = __GUARD_RECOVERY_COMMAND__
 GUARD_HOOK_ARGV = __GUARD_HOOK_ARGV__
 GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__
 GUARD_HOOK_TIMEOUT_SECONDS = __GUARD_HOOK_TIMEOUT_SECONDS__
-_HOOK_DEADLINE_MONOTONIC = _HOOK_STARTED_MONOTONIC + GUARD_HOOK_TIMEOUT_SECONDS
+_HOOK_REMAINING_SECONDS = GUARD_HOOK_TIMEOUT_SECONDS
 # The native runtime hands over a hook it did not answer with the time it
 # already spent; that time comes out of this client's budget, never added.
 _NATIVE_ELAPSED_MS = os.environ.pop("HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS", "")
 if _NATIVE_ELAPSED_MS.isascii() and _NATIVE_ELAPSED_MS.isdigit():
-    _HOOK_DEADLINE_MONOTONIC -= min(int(_NATIVE_ELAPSED_MS) / 1000.0, float(GUARD_HOOK_TIMEOUT_SECONDS))
+    try:
+        _HOOK_REMAINING_SECONDS -= min(int(_NATIVE_ELAPSED_MS) / 1000.0, float(GUARD_HOOK_TIMEOUT_SECONDS))
+    except (ValueError, OverflowError):
+        _HOOK_REMAINING_SECONDS = 0.0
+_HOOK_DEADLINE_MONOTONIC = _HOOK_STARTED_MONOTONIC + _HOOK_REMAINING_SECONDS
 GUARD_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
 _FALLBACK_LOCK = threading.Lock()
 
@@ -580,12 +584,6 @@ def _prepare_cursor_hook_payload(payload: dict[str, object]) -> dict[str, object
     if raw_event == "pretooluse":
         normalized["hook_event_name"] = "PreToolUse"
     return normalized
-
-
-def _cursor_read_file_permission(permission: str) -> str:
-    if permission in {"deny", "ask"}:
-        return "deny"
-    return "allow"
 
 '''.replace("__HOOK_INPUT_READER__", HOOK_INPUT_READER_TEMPLATE).replace(
     "__HOOK_HTTP_DEADLINE__", HOOK_HTTP_DEADLINE_TEMPLATE + "\n" + DAEMON_PID_LIVENESS_TEMPLATE

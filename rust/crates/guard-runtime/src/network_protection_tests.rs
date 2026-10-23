@@ -162,6 +162,11 @@ fn raised_results_keep_a_consistent_action_matrix() {
     }
     let kept = raise(result("require-reapproval"), review.clone());
     assert_eq!(kept.reason_code, "native_test");
+    let held = raise(result("review"), review.clone());
+    assert_eq!(held.reason_code, "network_known_bad_host");
+    assert_eq!(held.minimum_action, "review");
+    let blocked = raise(result("sandbox-required"), block.clone());
+    assert_eq!(blocked.reason_code, "network_known_bad_url");
 }
 
 #[test]

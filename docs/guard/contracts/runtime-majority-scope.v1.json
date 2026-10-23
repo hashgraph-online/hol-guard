@@ -218,7 +218,6 @@
           "src/codex_plugin_scanner/guard/aibom_content_upload.py",
           "src/codex_plugin_scanner/guard/aibom_models.py",
           "src/codex_plugin_scanner/guard/aibom_reporting.py",
-          "src/codex_plugin_scanner/guard/aibom_symlink.py",
           "src/codex_plugin_scanner/guard/aibom_sync.py",
           "src/codex_plugin_scanner/guard/aibom_trust_metadata.py",
           "src/codex_plugin_scanner/guard/local_risk_report.py",
@@ -526,6 +525,10 @@
       }
     ],
     "reviewed_runtime": [
+      {
+        "path": "src/codex_plugin_scanner/guard/runtime/extension_control_proof.py",
+        "reason": "Retained conservatively in runtime scope: installed-upgrade recovery imports the existing authority phase and error contracts from this proof module. Count the complete module, including its proof helpers, rather than exclude code reached by startup recovery. Installed-upgrade authorization remains native."
+      },
       {
         "path": [
           "src/codex_plugin_scanner/guard/adapters/_modules/cline/__init__.py",
@@ -864,6 +867,12 @@
           "src/codex_plugin_scanner/guard/secret_redaction.py"
         ],
         "reason": "Reviewed and retained in runtime scope: catalog_delivery/discovery reaches this lazily when it records a failing catalog preparation or publication refresh in daemon.log. It only strips token, password and bearer shapes from a bounded diagnostic line; it decides nothing about what Guard allows."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/cli/native_hook_exit_code.py"
+        ],
+        "reason": "Reviewed and retained in runtime scope: the per-harness verdict exit-status table. The JSON document now carries the status the resident's directive decided, so commands_support_hook_payload no longer imports this table at load; commands_hook_native_availability still reaches it lazily to map a native-unavailable fail-closed deny onto the harness's own exit contract. That fallback runs exactly when the resident cannot answer, so the table stays counted as runtime until the native runtime owns the unavailable lane too."
       }
     ],
     "tests": {
@@ -1780,12 +1789,11 @@
         "path": "src/codex_plugin_scanner/guard/store_extension_control_authority_commit.py",
         "symbols": [
           "ExtensionControlAuthorityCommitMixin.enroll_extension_control_authority",
-          "ExtensionControlAuthorityCommitMixin.commit_extension_control_layers",
-          "ExtensionControlAuthorityCommitMixin._bootstrap_extension_control_authority"
+          "ExtensionControlAuthorityCommitMixin.commit_extension_control_layers"
         ],
         "entry_points": [],
         "reason": "Write side of the extension-control authority store: enrolling the local authority and committing signed control layers.",
-        "evidence": "enroll_extension_control_authority is called only from cli/extension_controls_commands.py and commit_extension_control_layers only from daemon/extension_control_api.py; the extension-authoring exclusion already removes both from scope. _bootstrap_extension_control_authority is called only from enroll and from the recovery method excluded by extension-control-authority-recovery. The read and verification side of the authority store (views, layer loading, transitions) is not excluded because hook evaluation reads it. The report validates that no retained symbol references them."
+        "evidence": "enroll_extension_control_authority is called only from cli/extension_controls_commands.py and commit_extension_control_layers only from daemon/extension_control_api.py; the extension-authoring exclusion already removes both from scope. _bootstrap_extension_control_authority stays in scope because the daemon enrolls a never-enrolled authority at startup through enroll_extension_control_authority_by_default. The read and verification side of the authority store (views, layer loading, transitions) is not excluded because hook evaluation reads it. The report validates that no retained symbol references them."
       },
       {
         "id": "extension-control-authority-recovery",
@@ -2081,15 +2089,11 @@
         "category": "offline_reporting",
         "path": "src/codex_plugin_scanner/guard/aibom_detection.py",
         "symbols": [
-          "InstructionRole",
-          "_DOC_DIRECTORY_ROLES",
-          "_NAME_ROLES",
-          "instruction_role_for_path",
           "discover_shared_workspace_aibom_artifacts"
         ],
         "entry_points": [],
-        "reason": "Classifying instruction files by role and listing shared workspace AIBOM artifacts for the inventory contract. Inventory is built for reports and Cloud sync, not on a hook call.",
-        "evidence": "instruction_role_for_path is called only from inventory_contract_metadata.py and discover_shared_workspace_aibom_artifacts only from inventory_contract.py; both are outside runtime scope. InstructionRole and the role tables are reached only from these two. The retained adapter detection, Codex skill discovery and MCP metadata enrichment do not reference them, and the report validates this reference closure on every run."
+        "reason": "Listing shared workspace AIBOM artifacts for the inventory contract. Inventory is built for reports and Cloud sync, not on a hook call.",
+        "evidence": "discover_shared_workspace_aibom_artifacts is called only from inventory_contract.py, which is outside runtime scope. The role grammar this entry used to cover now lives in the resident's aibom_paths.rs and reaches Python only as the inventory_source_evidence answer. The retained adapter detection, Codex skill discovery and MCP metadata enrichment do not reference it, and the report validates this reference closure on every run."
       }
     ],
     "dynamic_imports": [

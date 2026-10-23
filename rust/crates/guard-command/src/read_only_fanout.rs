@@ -3,9 +3,10 @@
 //!
 //! The parser used to mark every `xargs` and `find -exec` command uncertain,
 //! which stopped ordinary agent reads such as `find src -name '*.ts' -exec cat
-//! {} +`. This module only recognizes the shape: a flat `find` expression of
-//! name, type and depth tests whose result is handed to one child from a short
-//! read-only list. It decides nothing about safety. The pre-tool proof
+//! {} +`. This module only recognizes the shape: a `find` expression of name,
+//! type and depth tests, optionally skipping a vendored tree with the
+//! `-name DIR -prune -o` idiom, whose result is handed to one child from a
+//! short read-only list. It decides nothing about safety. The pre-tool proof
 //! (`pretool::fanout_reads`) still requires verified workspace-contained
 //! roots, regular files only (`-type f`, so a workspace symlink is never
 //! followed), and the existing read-only proof of the child. Everything else,
@@ -102,9 +103,10 @@ pub(crate) fn bounded_without_operands(child: &[String]) -> bool {
     }
 }
 
-/// Flat `find` operands: roots, then a conjunction of name, type and depth
-/// tests. Operators (`-o`, `!`, parentheses), `-prune`, `-L`, `-H`, `-follow`
-/// and every action other than `-print`/`-print0` are not part of the shape.
+/// Flat `find` operands: roots, an optional `-prune` prefix, then a
+/// conjunction of name, type and depth tests. An operator in the printing
+/// branch (`-o`, parentheses), `-L`, `-H`, `-follow` and every action other
+/// than `-print`/`-print0` are not part of the shape.
 pub(crate) fn find_shape(arguments: &[String]) -> Option<FindShape<'_>> {
     let end = arguments
         .iter()
@@ -121,37 +123,48 @@ pub(crate) fn find_shape(arguments: &[String]) -> Option<FindShape<'_>> {
         print0: false,
     };
     let mut index = 0;
+    // `find src -name node_modules -prune -o REST` is how an agent skips a
+    // vendored tree. A pruned branch only takes directories out of the walk,
+    // so it never widens what REST hands the child, and its own patterns are
+    // not part of the bound REST has to carry.
+    while let Some(after) = pruned_branch(expression, index) {
+        index = after;
+    }
     while index < expression.len() {
         if shape.print0 {
             return None;
         }
-        let token = expression[index].as_str();
+        let mut token = expression[index].as_str();
         index += 1;
+        let negated = matches!(token, "!" | "-not");
+        if negated {
+            token = expression.get(index)?.as_str();
+            index += 1;
+        }
         match token {
-            "-print" => {}
-            "-print0" => shape.print0 = true,
+            "-print" | "-a" | "-and" if !negated => {}
+            "-print0" if !negated => shape.print0 = true,
             "-name" | "-iname" | "-path" | "-ipath" => {
                 let pattern = expression.get(index)?;
-                if pattern.len() > MAX_PATTERN_BYTES || pattern.contains(['\n', '\r', '\0']) {
+                if !bounded_test_pattern(pattern) {
                     return None;
                 }
-                if matches!(token, "-name" | "-iname") {
+                // A negated test only takes names away, so it is never the
+                // bound a content-reading child is admitted under.
+                if !negated && matches!(token, "-name" | "-iname") {
                     shape.patterns.push(pattern);
                 }
                 index += 1;
             }
-            "-type" => {
+            "-type" if !negated => {
                 if expression.get(index).map(String::as_str) != Some("f") {
                     return None;
                 }
                 shape.regular_files_only = true;
                 index += 1;
             }
-            "-maxdepth" | "-mindepth" => {
-                let value = expression.get(index)?;
-                if !value.bytes().all(|byte| byte.is_ascii_digit())
-                    || value.parse::<u8>().map_or(true, |count| count > MAX_DEPTH)
-                {
+            "-maxdepth" | "-mindepth" if !negated => {
+                if !bounded_depth(expression.get(index)?) {
                     return None;
                 }
                 index += 1;
@@ -160,6 +173,75 @@ pub(crate) fn find_shape(arguments: &[String]) -> Option<FindShape<'_>> {
         }
     }
     Some(shape)
+}
+
+fn bounded_test_pattern(pattern: &str) -> bool {
+    pattern.len() <= MAX_PATTERN_BYTES && !pattern.contains(['\n', '\r', '\0'])
+}
+
+fn bounded_depth(value: &str) -> bool {
+    !value.is_empty()
+        && value.bytes().all(|byte| byte.is_ascii_digit())
+        && value.parse::<u8>().is_ok_and(|count| count <= MAX_DEPTH)
+}
+
+/// A `TESTS -prune -o` branch at `index`, answering where the expression after
+/// it resumes. `find` evaluates `-prune` to true and `-o` short-circuits on
+/// it, so an entry the branch matches is dropped from the walk rather than
+/// handed to the child.
+fn pruned_branch(expression: &[String], index: usize) -> Option<usize> {
+    let index = branch_tests(expression, index)?;
+    if expression.get(index).map(String::as_str) != Some("-prune") {
+        return None;
+    }
+    if !matches!(
+        expression.get(index + 1).map(String::as_str),
+        Some("-o" | "-or")
+    ) {
+        return None;
+    }
+    Some(index + 2)
+}
+
+/// The tests a pruned branch names directories with: name and path tests and
+/// `-type d`. `-o` joins them only inside parentheses, where it cannot reach
+/// past the branch; an unparenthesized `-o` would make the whole expression a
+/// disjunction and is left to the uncertain model.
+fn branch_tests(expression: &[String], index: usize) -> Option<usize> {
+    let parenthesized = expression.get(index).map(String::as_str) == Some("(");
+    let mut index = index + usize::from(parenthesized);
+    let mut tests = 0_usize;
+    loop {
+        match expression.get(index).map(String::as_str) {
+            Some("-a" | "-and") if tests > 0 => index += 1,
+            Some("-o" | "-or") if parenthesized && tests > 0 => index += 1,
+            Some("-name" | "-iname" | "-path" | "-ipath") => {
+                if !bounded_test_pattern(expression.get(index + 1)?) {
+                    return None;
+                }
+                index += 2;
+                tests += 1;
+            }
+            Some("-type") => {
+                if expression.get(index + 1).map(String::as_str) != Some("d") {
+                    return None;
+                }
+                index += 2;
+                tests += 1;
+            }
+            _ => break,
+        }
+    }
+    if tests == 0 {
+        return None;
+    }
+    if parenthesized {
+        if expression.get(index).map(String::as_str) != Some(")") {
+            return None;
+        }
+        index += 1;
+    }
+    Some(index)
 }
 
 /// `find SHAPE -exec CHILD {} +` or `... {} \;`, with the file operand last.

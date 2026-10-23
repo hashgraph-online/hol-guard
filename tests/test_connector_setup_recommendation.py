@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import urllib.request
+from collections.abc import Iterable
 from pathlib import Path
 
 import pytest
@@ -75,6 +76,36 @@ class _Store:
         if name.startswith(("upsert_", "set_", "write_", "apply_", "record_", "resolve_")):
             raise AssertionError(f"recommendation must not write: {name}")
         raise AttributeError(name)
+
+
+# What the resident answers for a caution query; its own tests pin the set.
+_RESIDENT_CAUTION = frozenset(
+    {
+        "credential_exfiltration",
+        "data_flow_exfiltration",
+        "destructive",
+        "dynamic_execution",
+        "encoded_execution",
+        "financial_transaction",
+        "local_secret_read",
+        "policy_bypass",
+    }
+)
+
+
+@pytest.fixture(autouse=True)
+def _resident_caution(monkeypatch: pytest.MonkeyPatch) -> list[tuple[frozenset[str], Path | None]]:
+    """Answer caution queries as the resident would, recording what was asked and of which home."""
+
+    asked: list[tuple[frozenset[str], Path | None]] = []
+
+    def answer(risk_classes: Iterable[str], *, guard_home: Path | None = None) -> frozenset[str]:
+        classes = frozenset(risk_classes)
+        asked.append((classes, guard_home))
+        return classes & _RESIDENT_CAUTION
+
+    monkeypatch.setattr(recommendation, "native_caution_risk_classes", answer)
+    return asked
 
 
 def _items(monkeypatch: pytest.MonkeyPatch, *, state: str = "unset", identity_hash: str = _HASH) -> None:
@@ -229,6 +260,40 @@ def test_caution_when_any_grouped_row_carries_a_caution_class(monkeypatch: pytes
     assert result is not None
     assert result["caution"] is True
     assert result["caution_risk_classes"] == ["destructive"]
+
+
+def test_the_resident_of_the_stores_home_decides_the_caution(
+    monkeypatch: pytest.MonkeyPatch, _resident_caution: list[tuple[frozenset[str], Path | None]], tmp_path: Path
+) -> None:
+    _items(monkeypatch)
+    store = _Store({"req-2": _hint(risk_classes=["destructive"])})
+    store.guard_home = tmp_path  # type: ignore[attr-defined]
+
+    result = _build(_approval(_hint()), store)
+
+    assert result is not None and result["caution_risk_classes"] == ["destructive"]
+    assert _resident_caution == [(frozenset({"destructive"}), tmp_path)]
+
+
+def test_no_resident_answer_means_no_recommendation_never_no_caution(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.daemon.approval_extension_recommendation import (
+        NativeApprovalExtensionRecommendationError,
+    )
+
+    _items(monkeypatch)
+
+    def unavailable(_risk_classes: Iterable[str], *, guard_home: Path | None = None) -> frozenset[str]:
+        raise NativeApprovalExtensionRecommendationError("native_approval_extension_recommendation_unavailable")
+
+    monkeypatch.setattr(recommendation, "native_caution_risk_classes", unavailable)
+    store = _Store({"req-2": _hint(risk_classes=["destructive"])})
+
+    assert (
+        safe_connector_recommendation(
+            _approval(_hint()), store=store, snapshot=_snapshot(), approval_gate_configured=lambda: True
+        )
+        is None
+    )
 
 
 def test_caution_reads_grouped_rows_past_the_first_page(monkeypatch: pytest.MonkeyPatch) -> None:

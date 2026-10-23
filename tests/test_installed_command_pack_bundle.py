@@ -258,12 +258,14 @@ def test_preparation_io_reuses_one_container_and_still_checks_each_member(packag
     fetch = bundle.preparation_fetch()
     assert fetch(targets[0], len(first)) == first
     assert fetch(targets[1], len(second)) == second
-    assert len(reads) == 1
+    # The runtime opens the one container and checks each member; Python never
+    # loads the container bytes.
+    assert reads == []
     with pytest.raises(ValueError):
         fetch(targets[1], len(second) - 1)
-    assert len(reads) == 1
+    assert reads == []
     assert bundle.preparation_fetch()(targets[0], len(first)) == first
-    assert len(reads) == 2
+    assert reads == []
 
 
 @pytest.mark.parametrize("fault", [None, "engine", "source", "executable-engine"])

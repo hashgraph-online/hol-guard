@@ -79,7 +79,7 @@ pub const REASON_CODES: &[&str] = &[
 
 const RULE_MATERIAL: &str = concat!(
     "hook-content-v1\nsource-paths-v1\nsource-read-fast-v1\n",
-    "github-token|aws-access-key|openai-api-key|anthropic-api-key|hedera-private-key|pem-private-key|npm-auth-token|generic-bearer-token|credential-marker|credential-assignment\n",
+    "github-token|aws-access-key|openai-api-key|anthropic-api-key|hedera-private-key|pem-private-key|npm-auth-token|generic-bearer-token|credential-marker|credential-assignment|url-credential\n",
     ".env|.npmrc|.pypirc|.netrc|.git-credentials|.aws/credentials|.aws/config|.docker/config.json|.kube/config|.ssh|.gnupg|terraform.tfvars|private-key\n",
     "depth=24|items=24|keys=24|max=5242880|matches=16|context=8192"
 );

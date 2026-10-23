@@ -13,6 +13,7 @@ import pytest
 
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
+from codex_plugin_scanner.guard.native_verified_read_plan import NativeVerifiedReadPlanError
 from codex_plugin_scanner.guard.runtime import verified_github_reads as github_reads
 from codex_plugin_scanner.guard.runtime import verified_read_execution as local_reads
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
@@ -138,6 +139,40 @@ def test_local_executor_rejects_shell_composition_and_boundary_drift(tmp_path: P
         assert try_execute_verified_local_read(("head", "-40", ".env")) is None
     finally:
         os.chdir(previous)
+
+
+def test_local_executor_shows_the_slice_the_resident_planned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _workspace_path, _repository, cwd = _workspace(tmp_path)
+    source = cwd / "main.py"
+    _ = source.write_text("".join(f"line{number}\n" for number in range(1, 11)), encoding="utf-8")
+    monkeypatch.chdir(cwd)
+
+    view = try_execute_verified_local_read(("sed", "-n", "3,5p", "main.py"))
+    leading = try_execute_verified_local_read(("head", "--lines=2", "main.py"))
+    trailing = try_execute_verified_local_read(("tail", "-2", "main.py"))
+
+    assert view is not None and view.operation_id == "bounded-source-view"
+    assert view.stdout == "line3\nline4\nline5\n"
+    assert leading is not None and leading.operation_id == "bounded-head"
+    assert leading.stdout == "line1\nline2\n"
+    assert trailing is not None and trailing.operation_id == "bounded-tail"
+    assert trailing.stdout == "line9\nline10\n"
+
+
+def test_local_executor_has_no_grammar_of_its_own(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without the resident's plan there is no read, and no Python fallback."""
+
+    _workspace_path, _repository, cwd = _workspace(tmp_path)
+    _ = (cwd / "main.py").write_text("print('ok')\n", encoding="utf-8")
+    monkeypatch.chdir(cwd)
+
+    def unavailable(_argv: tuple[str, ...]) -> object:
+        raise NativeVerifiedReadPlanError("native_verified_read_plan_unavailable")
+
+    monkeypatch.setattr(local_reads, "verified_read_plan", unavailable)
+
+    assert try_execute_verified_local_read(("head", "-40", "main.py")) is None
+    assert try_execute_verified_local_read(("pwd",)) is None
 
 
 def test_local_executor_rejects_untrusted_workspace_and_context_drift(

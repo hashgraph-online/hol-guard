@@ -28,6 +28,15 @@ MAX_NODES_PER_AFFINITY_GROUP = 8
 # These assertions share one full, independently checked corpus evaluation.
 # Keep them in one process rather than paying the 51,000-case setup per shard.
 SINGLE_PROCESS_FILES = frozenset({"tests/test_guard_command_decision_diff.py"})
+# Listed functions share one fixture group; the file's remaining nodes share another.
+FIXTURE_GROUP_FUNCTIONS = {
+    "tests/test_native_offline_cache.py": frozenset(
+        {
+            "test_complete_export_import_and_cached_vs_uncached_enable",
+            "test_import_rejects_corruption_missing_wrong_release_and_traversal",
+        }
+    ),
+}
 SCHEDULING_ONLY_NODE_IDS = frozenset(
     {
         "tests/test_guard_command_decision_diff.py::test_fresh_process_report_is_environment_independent_and_bounded",
@@ -145,10 +154,21 @@ def _split_file_nodes(
     estimates: Mapping[str, float],
     target_seconds: float,
 ) -> list[tuple[str, int, list[str], float]]:
-    """Keep report tests in one process while splitting other large modules."""
+    """Keep shared fixtures in one process while splitting other large modules."""
     total = sum(estimates[node_id] for node_id in node_ids)
     if file_path in SINGLE_PROCESS_FILES:
         return [(file_path, 0, sorted(node_ids), total)]
+    fixture_functions = FIXTURE_GROUP_FUNCTIONS.get(file_path)
+    if fixture_functions is not None:
+        groups: list[list[str]] = [[], []]
+        for node_id in node_ids:
+            function = node_id.split("::", maxsplit=1)[-1].split("[", maxsplit=1)[0]
+            groups[0 if function in fixture_functions else 1].append(node_id)
+        return [
+            (file_path, index, sorted(nodes), sum(estimates[node] for node in nodes))
+            for index, nodes in enumerate(groups)
+            if nodes
+        ]
     split_count = math.ceil(len(node_ids) / MAX_NODES_PER_AFFINITY_GROUP)
     if total > target_seconds * MAX_UNSPLIT_FILE_TARGET_MULTIPLIER:
         split_count = max(split_count, math.ceil(total / target_seconds))

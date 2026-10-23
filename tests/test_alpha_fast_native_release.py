@@ -6,14 +6,14 @@ import json
 import re
 from pathlib import Path
 
-from tests.release_workflow_helpers import load_workflow
+from tests.release_workflow_helpers import load_workflow, native_target_matrix
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLISH = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]
 
 
 def test_fast_codegen_is_requested_only_for_alpha_dispatches() -> None:
-    precompile = PUBLISH["precompile-native"]
+    precompile = PUBLISH["precompile-native-linux-x64"]
     assert precompile["with"]["fast_codegen"] == "${{ inputs.release_channel == 'alpha' }}"
     condition = " ".join(precompile["if"].split())
     stable = "github.ref == format('refs/tags/v{0}', inputs.release_version) && inputs.release_channel == 'stable'"
@@ -95,7 +95,7 @@ def test_windows_alpha_compile_lowers_only_workspace_opt_level() -> None:
     prepare = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]
     expression = prepare["env"]["ALPHA_WORKSPACE_OPT_LEVEL"]
     assert expression == "${{ endsWith(matrix.target, '-pc-windows-msvc') && '1' || '' }}"
-    legs = prepare["strategy"]["matrix"]["include"]
+    legs = native_target_matrix(prepare)[""]
     assert len(legs) == 5
     targets = [leg["target"] for leg in legs]
     assert targets.count("x86_64-pc-windows-msvc") == 1
@@ -147,5 +147,8 @@ def test_native_prepare_version_pattern_accepts_only_canonical_alpha_suffix() ->
     for bad in ("3.35.0a0", "3.35.0a01", "3.35.0rc1", "3.35.0.dev1", "3.35.0a1-x"):
         assert not pattern.match(bad)
     # Only PR canary compiles, which never publish a release, may embed a dev version.
-    assert 'PR_CANARY: ${{ github.event_name == \'pull_request\' }}' in prepare
-    assert '! [[ "${PR_CANARY:-}" == "true" && "$RELEASE_VERSION" =~ ^${BASE_VERSION//./\\\\.}\\.dev[0-9]+$ ]]; then' in prepare
+    assert "PR_CANARY: ${{ github.event_name == 'pull_request' }}" in prepare
+    assert (
+        '! [[ "${PR_CANARY:-}" == "true" && "$RELEASE_VERSION" =~ ^${BASE_VERSION//./\\\\.}\\.dev[0-9]+$ ]]; then'
+        in prepare
+    )

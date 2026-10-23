@@ -36,13 +36,14 @@ def _queue_local_protect_approvals(
 ) -> None:
     if not _should_queue_local_protect_approval(response_payload):
         return
-    from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
+    from ..blocked_request_mode import approval_wait_hint, asks_for_approval, safe_alternative_reason
 
     try:
         config = load_guard_config(guard_home)
     except (OSError, RuntimeError, TypeError, ValueError):
         config = None
     if config is None or not asks_for_approval(config):
+        queued = []
         artifact = _protect_request_artifact(response_payload, workspace=workspace)
         approval_item = (
             _protect_approval_item(response_payload, workspace=workspace, artifact=artifact)
@@ -57,7 +58,7 @@ def _queue_local_protect_approvals(
                 store=store,
                 artifact_id=artifact.artifact_id,
             )
-            record_unprompted_review(
+            queued = record_unprompted_review(
                 detection=HarnessDetection(
                     harness=artifact.harness,
                     installed=True,
@@ -72,6 +73,18 @@ def _queue_local_protect_approvals(
         verdict = response_payload.get("verdict")
         reason = verdict.get("reason") if isinstance(verdict, dict) else None
         guidance = safe_alternative_reason(str(reason or "HOL Guard blocked this package request."))
+        if queued:
+            request_id = str(queued[0]["request_id"])
+            guidance = safe_alternative_reason(
+                str(reason or "HOL Guard blocked this package request."),
+                reason_code="native_package_review",
+                approval_queued=True,
+            )
+            guidance = f"{guidance} {approval_wait_hint(request_id, guard_home=guard_home)}".strip()
+            response_payload["approval_resume"] = {
+                "request_id": request_id,
+                "poll_path": f"/v1/requests/{request_id}",
+            }
         response_payload.update(policy_action="block", approval_requests=[], prompted=False, review_hint=guidance)
         evaluation = response_payload.get("supply_chain_evaluation")
         if isinstance(evaluation, dict):

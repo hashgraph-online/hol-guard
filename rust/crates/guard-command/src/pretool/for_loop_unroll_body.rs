@@ -4,14 +4,20 @@
 
 use super::{CONTROL_WORDS, MAX_BODY_BYTES};
 
-/// Split the body into list items (with the separator that follows each) and
-/// return the text after the closing `done`. Items keep a marker where
-/// `$NAME` appeared; `substitute` expands it. Any construct outside the simple
-/// command list grammar returns `None`.
-pub(super) fn body_items<'a>(
+/// A parsed command list: its items with the separator that follows each, the
+/// keyword that closed the list, and the text after that keyword.
+pub(crate) type CommandList<'a> = (Vec<(String, &'static str)>, &'static str, &'a str);
+
+/// Split a command list into items (with the separator that follows each),
+/// stopping at whichever of `terminators` closes it, and return that keyword
+/// with the text after it. Items keep a marker where `$NAME` appeared;
+/// `substitute` expands it. Any construct outside the simple command list
+/// grammar returns `None`.
+pub(crate) fn body_items<'a>(
     text: &'a str,
     name: &str,
-) -> Option<(Vec<(String, &'static str)>, &'a str)> {
+    terminators: &[&'static str],
+) -> Option<CommandList<'a>> {
     let chars: Vec<(usize, char)> = text.char_indices().collect();
     let mut items: Vec<(String, &'static str)> = Vec::new();
     let mut item = String::new();
@@ -65,6 +71,9 @@ pub(super) fn body_items<'a>(
                         ("; ", 1)
                     };
                 let trimmed = item.trim().to_owned();
+                if ends_in_an_open_escape(&trimmed) {
+                    return None;
+                }
                 if trimmed.is_empty() {
                     // Blank separators (after `do`, doubled newlines) are fine;
                     // an empty slot around && or || is not.
@@ -87,11 +96,14 @@ pub(super) fn body_items<'a>(
                 if separator == "; " {
                     let after = &text[chars.get(i).map_or(text.len(), |(b, _)| *b)..];
                     let lead = after.trim_start_matches([' ', '\t', '\n', ';']);
-                    if starts_with_done(lead) {
+                    if let Some(&closer) = terminators
+                        .iter()
+                        .find(|keyword| starts_with_keyword(lead, keyword))
+                    {
                         if items.last().is_none_or(|last| last.1 != "; ") {
                             return None;
                         }
-                        return Some((items, &lead["done".len()..]));
+                        return Some((items, closer, &lead[closer.len()..]));
                     }
                 }
             }
@@ -181,12 +193,22 @@ pub(super) fn body_items<'a>(
     None
 }
 
+/// Whether the item ends in a backslash with nothing left for it to escape.
+/// `echo a\ ` ends in an escaped space, and trimming that space leaves the
+/// backslash to escape the separator instead: the written list runs `echo a `
+/// and then the next command, while the trimmed text would hand that command
+/// to `echo` as arguments. No command list is described by both, so the
+/// construct keeps its review.
+fn ends_in_an_open_escape(item: &str) -> bool {
+    (item.len() - item.trim_end_matches('\\').len()) % 2 == 1
+}
+
 /// Whether a body item can change the loop variable or `IFS`, so a later
 /// `$NAME` would not expand to the word written in the header. References are
 /// already placeholders here, so a remaining bare `NAME` or `IFS` is read as
 /// the name `read`, `printf -v`, `declare`, `unset` or an assignment binds. A
 /// `-NAME` flag such as `[ -f ... ]` is not a target; an attached `-vNAME` is.
-pub(super) fn rebinds(item: &str, name: &str) -> bool {
+pub(crate) fn rebinds(item: &str, name: &str) -> bool {
     // Quoting is how a rebinding hides: the shell builds one word out of
     // `o''pt=secret`, while the written text holds no run that spells the
     // name. Scanning both forms covers a name split across quotes and one
@@ -349,8 +371,8 @@ fn names_a_target(item: &str, name: &str) -> bool {
     false
 }
 
-fn starts_with_done(text: &str) -> bool {
-    text.strip_prefix("done").is_some_and(|rest| {
+fn starts_with_keyword(text: &str, keyword: &str) -> bool {
+    text.strip_prefix(keyword).is_some_and(|rest| {
         rest.is_empty() || rest.starts_with([' ', '\t', '\n', ';', '>', '<', '&'])
     })
 }
@@ -389,7 +411,7 @@ fn reference(chars: &[(usize, char)], i: &mut usize, name: &str, argument: bool)
 
 const MARKER: &str = "\u{1}";
 
-pub(super) fn substitute(item: &str, word: &str) -> Option<String> {
+pub(crate) fn substitute(item: &str, word: &str) -> Option<String> {
     // Every pipeline stage must start with a plain word: no marker, no
     // assignment, no shell keyword. A leading redirection such as
     // `2>/dev/null $f` would hide the real command word from this check, so a
@@ -412,7 +434,7 @@ pub(super) fn substitute(item: &str, word: &str) -> Option<String> {
 }
 
 /// The redirect text after `done`, restricted to plain redirections.
-pub(super) fn redirect_tail(tail: &str) -> Option<String> {
+pub(crate) fn redirect_tail(tail: &str) -> Option<String> {
     // Newlines after done start new commands and must not be trimmed away.
     let tail = tail.trim_start_matches([' ', '\t']).trim_end();
     if tail.is_empty() {

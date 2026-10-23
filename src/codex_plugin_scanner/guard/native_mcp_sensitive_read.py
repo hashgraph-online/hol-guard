@@ -17,11 +17,14 @@ from pathlib import Path
 from typing import Any
 
 from .config import GuardConfig, resolve_risk_action
-from .consumer import artifact_hash
 from .harness_posture import config_for_harness, harness_posture_override
 from .models import GuardArtifact
 from .native_context import _resolve_digest_home
-from .native_mcp_proxy_decision import NativeMcpProxyDecisionError, native_mcp_proxy_decide
+from .native_mcp_proxy_decision import (
+    MCP_SENSITIVE_READ_ARTIFACT_FEATURE,
+    NativeMcpProxyDecisionError,
+    native_mcp_proxy_decide,
+)
 
 
 def _config_facts(config: object, *, artifact: GuardArtifact, harness: str) -> dict[str, object] | None:
@@ -43,6 +46,31 @@ def _config_facts(config: object, *, artifact: GuardArtifact, harness: str) -> d
         "security_level": config.security_level,
         "harness_posture": harness_posture_override(config, artifact.harness),
         "sandbox_analysis": config.sandbox_analysis,
+    }
+
+
+def _artifact_fields(artifact: GuardArtifact) -> dict[str, object]:
+    """The artifact's own fields, unredacted, as the resident reads them.
+
+    The content hash the approval token binds to is spelled by the resident
+    from these. They are sent raw because the resident applies the artifact's
+    own redaction before hashing; a copy redacted here would hash differently
+    and miss every approval the user already granted.
+    """
+
+    return {
+        "artifact_id": artifact.artifact_id,
+        "name": artifact.name,
+        "harness": artifact.harness,
+        "artifact_type": artifact.artifact_type,
+        "source_scope": artifact.source_scope,
+        "config_path": artifact.config_path,
+        "command": artifact.command,
+        "args": list(artifact.args),
+        "url": artifact.url,
+        "transport": artifact.transport,
+        "publisher": artifact.publisher,
+        "metadata": dict(artifact.metadata),
     }
 
 
@@ -80,7 +108,7 @@ def context_query(
             "configured_env_values_hash": configured_env_values_hash,
             "workspace": _workspace(cwd),
         },
-        "content": artifact_hash(artifact),
+        "artifact": _artifact_fields(artifact),
         "capabilities": {
             "artifact_type": artifact.artifact_type,
             "path_class": artifact.metadata.get("path_class"),
@@ -117,7 +145,11 @@ def sensitive_read_context(
         server_launch_identity=server_launch_identity,
         configured_env_values_hash=configured_env_values_hash,
     )
-    payload = native_mcp_proxy_decide(query, guard_home=_resolve_digest_home(guard_home))
+    payload = native_mcp_proxy_decide(
+        query,
+        guard_home=_resolve_digest_home(guard_home),
+        required_feature=MCP_SENSITIVE_READ_ARTIFACT_FEATURE,
+    )
     return _text(payload, "current_action"), _text(payload, "artifact_hash")
 
 

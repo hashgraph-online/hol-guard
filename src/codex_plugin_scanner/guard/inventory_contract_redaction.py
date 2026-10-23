@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import ipaddress
 import json
-import re
 from pathlib import Path
-from typing import Literal
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from . import native_inventory_url_redaction as _native_url
 from .inventory_contract_constants import (
     _SAFE_SERIALIZED_MARKERS,
     _SENSITIVE_KEY_RE,
@@ -33,49 +30,93 @@ def redact_local_path(path: str | Path, *, home_dir: Path | None = None) -> str:
 
 def redact_headers(headers: dict[str, str]) -> dict[str, str]:
     """Preserve header names while redacting credential-bearing header values."""
-    return {key.lower(): "present_redacted" if _SENSITIVE_KEY_RE.search(key) else "present" for key in headers}
+    return _native_url.redact_headers(list(headers))
 
 
 def redact_url(value: str) -> str:
     """Remove sensitive URL credentials and query values before exporting an endpoint."""
-    try:
-        parsed = urlsplit(value)
-    except ValueError:
-        return "malformed_url_redacted"
-    hostname = parsed.hostname or ""
-    if ":" in hostname and not hostname.startswith("["):
-        hostname = f"[{hostname}]"
-    netloc = hostname
-    try:
-        port = parsed.port
-    except ValueError:
-        port = None
-    if port is not None:
-        netloc = f"{netloc}:{port}"
-    redacted_pairs = [
-        (key, "redacted" if _SENSITIVE_KEY_RE.search(key) else item)
-        for key, item in parse_qsl(parsed.query.replace(";", "&"), keep_blank_values=True)
-    ]
-    return urlunsplit((parsed.scheme, netloc, parsed.path, urlencode(redacted_pairs), parsed.fragment))
+    return _native_url.redact_url(value)
 
 
-def classify_endpoint_host(value: str | None) -> Literal["none", "local_loopback", "local_private", "remote_public"]:
+def classify_endpoint_host(value: str | None) -> str:
     """Classify an endpoint host without making a network request."""
-    if not value:
-        return "none"
-    try:
-        parsed = urlsplit(value)
-    except ValueError:
-        return "remote_public"
-    host = (parsed.hostname or "").lower()
-    if host in {"localhost", "127.0.0.1", "::1"}:
-        return "local_loopback"
-    try:
-        if ipaddress.ip_address(host).is_private:
-            return "local_private"
-    except ValueError:
-        pass
-    return "remote_public"
+    return _native_url.classify_endpoint_host(value)
+
+
+def _prefetch_export_redactions(
+    artifacts: tuple[object, ...],
+    cisco_runs: tuple[object, ...] = (),
+    *,
+    home_dir: Path,
+    workspace_dir: Path | None,
+) -> None:
+    """Answer every redaction a snapshot export makes, in batched requests.
+
+    The per-value redaction below then reads the pass's answers instead of
+    asking the resident once per string. Paths dominate that count: every
+    metadata string that is not a URL is offered to the resident as a path, so
+    batching only the URLs left the walk one round trip per string.
+
+    A value this walk misses is still redacted; it only costs its own request.
+    """
+    urls: list[str] = []
+    hosts: list[str] = []
+    paths: list[str] = []
+    commands: list[str] = []
+    for artifact in artifacts:
+        url = getattr(artifact, "url", None)
+        if isinstance(url, str) and url:
+            urls.append(url)
+            hosts.append(url)
+        config_path = getattr(artifact, "config_path", None)
+        if isinstance(config_path, str) and config_path:
+            paths.append(config_path)
+        command = getattr(artifact, "command", None)
+        if isinstance(command, str) and command:
+            commands.append(command)
+        _collect_metadata_values(getattr(artifact, "metadata", None), urls, paths)
+    for run in cisco_runs:
+        if not _is_supported_scanner_run(run):
+            continue
+        commands.append(_finding_command_text(str(getattr(run, "message", ""))))
+        for finding in tuple(getattr(run, "findings", ()) or ()):
+            commands.append(_finding_command_text(_scanner_finding_title(finding)))
+            commands.append(_finding_command_text(str(getattr(finding, "description", "") or "")))
+            file_path = getattr(finding, "file_path", None)
+            if isinstance(file_path, str) and file_path:
+                paths.append(file_path)
+    _native_url.prefetch(
+        urls,
+        hosts,
+        paths=paths,
+        commands=commands,
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+    )
+
+
+def _collect_metadata_values(value: object, urls: list[str], paths: list[str]) -> None:
+    """Gather the strings ``_sanitize_paths`` will redact, by how it redacts them.
+
+    This mirrors that walk exactly, including the sensitive keys it replaces
+    without asking: a value gathered here that the walk never reaches would be
+    a request made for nothing, and one it reaches but this misses is the
+    unbatched round trip this exists to avoid.
+    """
+    if isinstance(value, Path):
+        paths.append(str(value))
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            if not _SENSITIVE_KEY_RE.search(str(key)):
+                _collect_metadata_values(item, urls, paths)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _collect_metadata_values(item, urls, paths)
+    elif isinstance(value, str):
+        if "://" in value:
+            urls.append(value)
+        else:
+            paths.append(value)
 
 
 def _safe_source_detail(run: object) -> str:
@@ -93,9 +134,40 @@ def _safe_source_detail(run: object) -> str:
 
 def _safe_finding_text(value: str, *, home_dir: Path, workspace_dir: Path | None) -> str:
     """Sanitize finding text without exposing private paths or credential values."""
-    redacted = _SENSITIVE_VALUE_RE.sub("redacted", value)
-    redacted = _redact_command_value(redacted, home_dir, workspace_dir)
+    redacted = _redact_command_value(_finding_command_text(value), home_dir, workspace_dir)
     return redacted[:500]
+
+
+SUPPORTED_SCANNER_SOURCES = ("cisco-mcp-scanner", "cisco-skill-scanner")
+"""The scanners whose runs become inventory findings.
+
+A run from anything else is dropped before it is redacted, so asking about its
+text would be a request made for a finding that is never exported.
+"""
+
+
+def _is_supported_scanner_run(run: object) -> bool:
+    """Whether this run's findings reach the export at all."""
+    return str(getattr(run, "source", "")) in SUPPORTED_SCANNER_SOURCES
+
+
+def _scanner_finding_title(finding: object) -> str:
+    """The title a finding is redacted under, named once for both sides.
+
+    A finding that carries no title is exported under a stand-in rather than an
+    empty string, and the prefetch has to ask about the string the export will
+    actually redact or that finding costs its own round trip.
+    """
+    return str(getattr(finding, "title", "") or "Cisco scanner finding")
+
+
+def _finding_command_text(value: str) -> str:
+    """The command string a finding's text is redacted as.
+
+    The prefetch has to ask about the same string this does, so the one
+    substitution both sides apply first lives here rather than in either.
+    """
+    return _SENSITIVE_VALUE_RE.sub("redacted", value)
 
 
 def _safe_artifact_metadata(
@@ -154,49 +226,12 @@ def _sanitize_paths(value: object, home_dir: Path, workspace_dir: Path | None) -
 
 def _redact_known_path(value: str, home_dir: Path, workspace_dir: Path | None) -> str:
     """Redact one known local path using the operator home boundary."""
-    path = Path(value)
-    if path.is_absolute():
-        home_redacted = redact_local_path(path, home_dir=home_dir)
-        if home_redacted.startswith("{home}/"):
-            return home_redacted
-        if workspace_dir is not None:
-            try:
-                relative = path.resolve().relative_to(workspace_dir.resolve())
-                return f"{{workspace}}/{relative.as_posix()}"
-            except (OSError, RuntimeError, ValueError):
-                return path.name
-        return path.name
-    return value
+    return _native_url.redact_known_path(value, home_dir, workspace_dir)
 
 
 def _redact_command_value(value: str, home_dir: Path, workspace_dir: Path | None) -> str:
     """Redact path and credential values from an exported command string."""
-    redacted = re.sub(
-        r"(?i)\b[a-z][a-z0-9+.-]*://[^\s]+",
-        lambda match: redact_url(match.group(0)),
-        value,
-    )
-    redacted = re.sub(
-        r"(^|\s)(/[^\s]+)",
-        lambda match: f"{match.group(1)}{_redact_known_path(match.group(2), home_dir, workspace_dir)}",
-        redacted,
-    )
-    redacted = re.sub(
-        r"(?i)(authorization:\s*bearer\s+)\S+",
-        r"\1redacted",
-        redacted,
-    )
-    redacted = re.sub(
-        r"(?i)((?:api[_-]?key|auth|password|secret|token)=)\S+",
-        r"\1redacted",
-        redacted,
-    )
-    redacted = re.sub(
-        r"(?i)((?:--)?(?:api[_-]?key|auth|password|secret|token)\s+)\S+",
-        r"\1redacted",
-        redacted,
-    )
-    return redacted
+    return _native_url.redact_command_value(value, home_dir, workspace_dir)
 
 
 def _sanitize_serializer_string(

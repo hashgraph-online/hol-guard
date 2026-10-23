@@ -4,15 +4,22 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
 from .codex_hook_identity import (
     CODEX_HOOK_IDENTITY_SCHEMA,
+    CodexHookDefinitionTooDeepError,
+    CodexHookGroupQuestion,
+    CodexHookHandlerQuestion,
+    CodexHookIdentityUnavailableError,
     canonical_codex_command_argv,
     canonical_codex_hook_conflict_keys,
+    canonical_codex_hook_group_conflict_keys,
+    canonical_codex_hook_group_identities,
     canonical_codex_hook_group_identity,
+    canonical_codex_hook_handler_identities,
     canonical_codex_hook_identity,
 )
 
@@ -25,6 +32,10 @@ CODEX_HOOK_INVENTORY_SOURCE_DUPLICATE = "codex_hook_inventory_source_duplicate_k
 CODEX_HOOK_INVENTORY_SOURCE_MALFORMED = "codex_hook_inventory_source_malformed"
 CODEX_HOOK_INVENTORY_SOURCE_UNREADABLE = "codex_hook_inventory_source_unreadable"
 CODEX_HOOK_INVENTORY_SOURCE_CHANGED = "codex_hook_inventory_source_changed"
+# The identity failures a source can carry, named here for callers that match
+# on a reason code. Each is the ``code`` of the error the bridge raises.
+CODEX_HOOK_INVENTORY_IDENTITY_UNAVAILABLE = CodexHookIdentityUnavailableError.code
+CODEX_HOOK_INVENTORY_DEFINITION_TOO_DEEP = CodexHookDefinitionTooDeepError.code
 HookSourceFormat = Literal["json", "toml"]
 HookOwnership = Literal["authenticated_manifest", "exact_legacy_adoption", "self_install_binding", "unmanaged"]
 
@@ -124,6 +135,7 @@ def enumerate_codex_hooks(
 
     records: list[CodexHookInventoryRecord] = []
     issues: list[CodexHookInventoryIssue] = []
+    questions: list[CodexHookHandlerQuestion] = []
     for event_name, groups in hooks.items():
         if _is_codex_hook_state_metadata(event_name, groups, source_format):
             continue
@@ -178,6 +190,7 @@ def enumerate_codex_hooks(
             group_active = _entry_is_active(group)
             for handler_index, handler in enumerate(handlers):
                 record, handler_issues = _handler_record(
+                    questions,
                     handler,
                     source_path=source_path,
                     source_scope=source_scope,
@@ -196,7 +209,58 @@ def enumerate_codex_hooks(
                 if record is not None:
                     records.append(record)
                 issues.extend(handler_issues)
-    return CodexHookInventory(str(source_path), tuple(records), tuple(issues))
+    try:
+        identified = _identified(records, questions)
+    except CodexHookIdentityUnavailableError as error:
+        return CodexHookInventory(
+            str(source_path),
+            (),
+            (*issues, _unidentified_source_issue(source_path, error)),
+        )
+    return CodexHookInventory(str(source_path), identified, tuple(issues))
+
+
+def _unidentified_source_issue(
+    source_path: Path,
+    error: CodexHookIdentityUnavailableError,
+) -> CodexHookInventoryIssue:
+    """Report a source Guard cannot identify rather than one with no hooks.
+
+    The resident owns hook identity. With no answer there is nothing to compare
+    against the manifest, so every handler in the source would read as unowned;
+    an issue keeps the caller on its fail-closed path instead. The error's own
+    code travels with it, so a definition the resident will not read stays
+    distinguishable from a resident that could not answer at all.
+    """
+
+    return CodexHookInventoryIssue(
+        error.code,
+        "Guard's native runtime did not identify this source's Codex hooks. Repair whichever the code names, "
+        "the Guard installation or the hook definition, before retrying install.",
+        str(source_path),
+    )
+
+
+def _identified(
+    records: Sequence[CodexHookInventoryRecord],
+    questions: Sequence[CodexHookHandlerQuestion],
+) -> tuple[CodexHookInventoryRecord, ...]:
+    """Give every record the identity the resident derived for it.
+
+    The walk appends exactly one question per record, so the two line up by
+    position; ``strict`` makes a walk that ever stopped doing so fail closed
+    rather than hand back a record carrying another handler's identity.
+    """
+
+    identities = canonical_codex_hook_handler_identities(questions)
+    return tuple(
+        replace(
+            record,
+            command_argv=identity.command_argv,
+            canonical_identity=identity.canonical_identity,
+        )
+        for record, identity in zip(records, identities, strict=True)
+    )
 
 
 def _is_codex_hook_state_metadata(
@@ -232,6 +296,7 @@ def _is_trusted_hook_hash(value: object) -> bool:
 
 
 def _handler_record(
+    questions: list[CodexHookHandlerQuestion],
     handler: object,
     *,
     source_path: Path,
@@ -334,13 +399,15 @@ def _handler_record(
         legacy_bindings=legacy_bindings,
         self_bindings=self_bindings,
     )
-    command_argv = canonical_codex_command_argv(command)
-    canonical_identity = canonical_codex_hook_identity(
-        source_scope=source_scope,
-        source_hooks_enabled=source_hooks_enabled,
-        event_name=event_name,
-        group=group,
-        handler=handler,
+    questions.append(
+        CodexHookHandlerQuestion(
+            source_scope=source_scope,
+            source_hooks_enabled=source_hooks_enabled,
+            event_name=event_name,
+            group=group,
+            handler=handler,
+            command=command,
+        )
     )
     record = CodexHookInventoryRecord(
         source_path=str(source_path),
@@ -353,13 +420,13 @@ def _handler_record(
         handler_index=handler_index,
         handler_type=handler_type,
         command=command,
-        command_argv=command_argv,
+        command_argv=None,
         timeout=timeout,
         environment_keys=environment_keys,
         active=group_active and _entry_is_active(handler),
         executable=executable,
         ownership=ownership,
-        canonical_identity=canonical_identity,
+        canonical_identity="",
     )
     return record, tuple(issues)
 
@@ -447,6 +514,8 @@ def _bindings_contain_handler(
 
 __all__ = [
     "CODEX_HOOK_IDENTITY_SCHEMA",
+    "CODEX_HOOK_INVENTORY_DEFINITION_TOO_DEEP",
+    "CODEX_HOOK_INVENTORY_IDENTITY_UNAVAILABLE",
     "CODEX_HOOK_INVENTORY_MALFORMED_GROUP",
     "CODEX_HOOK_INVENTORY_MALFORMED_HANDLER",
     "CODEX_HOOK_INVENTORY_SOURCE_CHANGED",
@@ -456,12 +525,17 @@ __all__ = [
     "CODEX_HOOK_INVENTORY_UNKNOWN_HANDLER",
     "CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE",
     "CODEX_HOOK_INVENTORY_UNSUPPORTED_EVENT",
+    "CodexHookGroupQuestion",
+    "CodexHookHandlerQuestion",
     "CodexHookInventory",
     "CodexHookInventoryIssue",
     "CodexHookInventoryRecord",
     "canonical_codex_command_argv",
     "canonical_codex_hook_conflict_keys",
+    "canonical_codex_hook_group_conflict_keys",
+    "canonical_codex_hook_group_identities",
     "canonical_codex_hook_group_identity",
+    "canonical_codex_hook_handler_identities",
     "canonical_codex_hook_identity",
     "enumerate_codex_hooks",
 ]

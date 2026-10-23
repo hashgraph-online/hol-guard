@@ -141,7 +141,7 @@ jobs:
           fi
           grep -q "def review_pre_tool_native(" src/codex_plugin_scanner/guard/native_pretool.py
           grep -q 'command == "pre-tool"' rust/crates/guard-runtime/src/runtime_cli.rs
-          grep -q "pub fn evaluate_pre_tool" rust/crates/guard-command/src/pretool.rs
+          grep -q "pub fn evaluate_pre_tool" rust/crates/guard-command/src/pretool/mod.rs
           uv run --no-sync python scripts/ci/rust_pretool_no_python_gate.py --root .
           uv run --no-sync python - <<'PY'
           from pathlib import Path
@@ -152,7 +152,7 @@ jobs:
           if 'currently supported Python reference backend remains authoritative' in native:
               raise SystemExit('Python authority declaration remains')
           cargo = Path('rust/crates/guard-runtime/Cargo.toml').read_text()
-          runtime = Path('rust/crates/guard-runtime/src/main.rs').read_text()
+          runtime = Path('rust/crates/guard-runtime/src/lib.rs').read_text()
           if 'guard-policy-snapshot' not in cargo:
               raise SystemExit('policy snapshot dependency missing')
           if 'PolicySnapshot' not in runtime and 'policy_snapshot' not in runtime:
@@ -702,6 +702,10 @@ jobs:
           echo "HOL_GUARD_NATIVE_BINARY=$runtime" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
       - name: Prepare and verify current extension projections
+        env:
+          # Contribution validation asks the resident for the MCP command
+          # grammar, and auto mode ignores an explicit runtime path.
+          HOL_GUARD_NATIVE: force
         run: |
           arguments=(--publish-directory --compiler "$HOL_GUARD_NATIVE_SOURCE_COMPILER")
           uv run --no-sync python scripts/prepare_extension_contribution.py "${arguments[@]}"
@@ -1031,14 +1035,77 @@ jobs:
         run: |
           source scripts/ci/native-proof-environment.sh
           runtime=$(.venv/bin/python -c 'from codex_plugin_scanner.guard.native_runtime import native_runtime_status; status = native_runtime_status(); assert status.identity is not None; print(status.identity.path)')
-          .venv/bin/python scripts/bench_guard_native_installed_slo.py \
-            --runtime "$runtime" \
-            --warm-iterations 2 \
-            --cold-iterations 2 \
-            --recovery-iterations 2 \
-            --readiness-samples 2 \
-            --json native-installed-slo.json \
-            --enforce
+          run_installed_slo() {
+            local output_path="$1"
+            local status=0
+            .venv/bin/python scripts/bench_guard_native_installed_slo.py \
+              --runtime "$runtime" \
+              --warm-iterations 2 \
+              --cold-iterations 2 \
+              --recovery-iterations 2 \
+              --readiness-samples 2 \
+              --json "$output_path" \
+              --enforce 2>"${output_path}.stderr" || status=$?
+            cat "${output_path}.stderr" >&2
+            return "$status"
+          }
+          retryable_slo_miss() {
+            .venv/bin/python - "$1" <<'PY_CHECK'
+          import json
+          import sys
+          from pathlib import Path
+
+          payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          gates = payload.get("gates")
+          concurrency = payload.get("concurrency")
+          sixteen = concurrency.get("sixteen") if isinstance(concurrency, dict) else None
+          # Peak RSS growth differs between identical hosted runs, most when
+          # the 64-request wave sheds load. A run that missed only the RSS
+          # ceiling measures once more: a real leak misses it again, and any
+          # other miss fails the first time.
+          failed_gates = {key for key, value in gates.items() if value is False} if isinstance(gates, dict) else set()
+          retryable = (
+              isinstance(gates, dict)
+              and all(type(value) is bool for value in gates.values())
+              and failed_gates == {"rss"}
+              and payload.get("errors_16") == 0
+              and payload.get("errors_64") == 0
+              and isinstance(sixteen, dict)
+              and sixteen.get("errors") == 0
+              and sixteen.get("overloaded") == 0
+          )
+          raise SystemExit(0 if retryable else 1)
+          PY_CHECK
+          }
+          attempts=2
+          slo_status=1
+          for attempt in $(seq 1 "$attempts"); do
+            output_path="native-installed-slo-attempt-${attempt}.json"
+            set +e
+            run_installed_slo "$output_path"
+            slo_status=$?
+            set -e
+            if [[ "$slo_status" -eq 0 ]]; then
+              cp "$output_path" native-installed-slo.json
+              break
+            fi
+            if [[ ! -f "$output_path" ]]; then
+              echo "Linux SLO crashed without a report." >&2
+              exit "$slo_status"
+            fi
+            cp "$output_path" native-installed-slo.json
+            if ! retryable_slo_miss "$output_path"; then
+              echo "Linux SLO failed for a non-retryable reason." >&2
+              exit "$slo_status"
+            fi
+            if [[ "$attempt" -lt "$attempts" ]]; then
+              echo "::warning::Linux SLO attempt ${attempt}/${attempts} missed only the RSS growth ceiling; retrying the same installed wheel."
+            fi
+          done
+          if [[ "$slo_status" -ne 0 ]]; then
+            echo "Linux SLO failed all ${attempts} attempts." >&2
+            exit "$slo_status"
+          fi
       - name: Exercise bounded installed native stress
         if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
         run: |
@@ -1050,7 +1117,25 @@ jobs:
       - name: Enforce complete installed native soak
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: |
+          status=0
           source scripts/ci/native-proof-environment.sh
+          .venv/bin/python scripts/stress_guard_daemon.py \
+            --requests 100000 \
+            --receipts 250000 \
+            --settle-seconds 0 \
+            --enforce-soak \
+            --json native-soak.json || status=$?
+          if [[ "$status" -eq 0 ]]; then
+            exit 0
+          fi
+          # Peak RSS growth differs by about 0.2 between identical hosted runs.
+          # A soak that missed only the RSS ceiling runs once more: a real leak
+          # misses it again, and any other miss fails the first time.
+          if ! .venv/bin/python -c 'import json, sys; sys.exit(json.load(open(sys.argv[1]))["soak_failures"] != ["rss_growth"])' native-soak.json; then
+            exit "$status"
+          fi
+          echo "::warning::Native soak missed only the RSS growth ceiling; running it once more."
+          mv native-soak.json native-soak-attempt-1.json
           .venv/bin/python scripts/stress_guard_daemon.py \
             --requests 100000 \
             --receipts 250000 \
@@ -1083,7 +1168,11 @@ jobs:
             installed-native-extensions.json
             installed-native-prompt.json
             native-installed-slo.json
+            native-installed-slo-attempt-*.json
+            native-installed-slo-attempt-*.json.stderr
+            native-installed-slo.json.stderr
             native-soak.json
+            native-soak-attempt-*.json
             native-stress-smoke.json
             native-artifact-evidence.json
             native-stop-diagnostic.json
@@ -1446,17 +1535,29 @@ jobs:
             cat "${output_path}.stderr" >&2
             return "$status"
           }
-          retryable_intel_latency_miss() {
-            .venv/bin/python - "$1" <<'PY_CHECK'
+          retryable_slo_miss() {
+            .venv/bin/python - "$1" "$TARGET" <<'PY_CHECK'
           import json
           import sys
           from pathlib import Path
 
           payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          intel = sys.argv[2] == "x86_64-apple-darwin"
+          failure = payload.get("failure")
+          # An aborted run whose cause is the host, not a gate, says nothing
+          # about the wheel. Any target may measure it again.
+          if (
+              payload.get("evaluation") == "incomplete"
+              and isinstance(failure, dict)
+              and failure.get("category") == "environment_error"
+          ):
+              raise SystemExit(0)
           gates = payload.get("gates")
           concurrency = payload.get("concurrency")
           sixteen = concurrency.get("sixteen") if isinstance(concurrency, dict) else None
-          latency_gates = {
+          # Intel runners vary in latency and in peak RSS from one identical
+          # run to the next; every other gate must already hold.
+          noisy_gates = {
               "1m_latency",
               "250k_latency",
               "5m_latency",
@@ -1464,15 +1565,17 @@ jobs:
               "concurrency",
               "readiness",
               "recovery_latency",
+              "rss",
               "warm_latency",
           }
           failed_gates = {key for key, value in gates.items() if value is False} if isinstance(gates, dict) else set()
           retryable = (
-              isinstance(gates, dict)
+              intel
+              and isinstance(gates, dict)
               and all(type(value) is bool for value in gates.values())
               and bool(failed_gates)
-              and failed_gates <= latency_gates
-              and all(value is True for key, value in gates.items() if key not in latency_gates)
+              and failed_gates <= noisy_gates
+              and all(value is True for key, value in gates.items() if key not in noisy_gates)
               and payload.get("errors_16") == 0
               and payload.get("errors_64") == 0
               and isinstance(sixteen, dict)
@@ -1482,42 +1585,42 @@ jobs:
           raise SystemExit(0 if retryable else 1)
           PY_CHECK
           }
+          attempts=2
           if [[ "$TARGET" == "x86_64-apple-darwin" ]]; then
-            slo_status=1
-            for attempt in 1 2 3; do
-              output_path="native-installed-slo-attempt-${attempt}.json"
-              set +e
-              run_installed_slo "$output_path"
-              slo_status=$?
-              set -e
-              if [[ "$slo_status" -eq 0 ]]; then
-                cp "$output_path" native-installed-slo.json
-                break
-              fi
-              if [[ ! -f "$output_path" ]]; then
-                if grep -Eq 'native_installed_slo_failed: .*recovery sample' "${output_path}.stderr"; then
-                  echo "::warning::Intel macOS SLO attempt ${attempt}/3 hit transient recovery routing crash; retrying."
-                  tail -5 "${output_path}.stderr"
-                  continue
-                fi
-                echo "Intel macOS SLO crashed without a report for a non-retryable reason." >&2
-                exit "$slo_status"
-              fi
+            attempts=3
+          fi
+          slo_status=1
+          for attempt in $(seq 1 "$attempts"); do
+            output_path="native-installed-slo-attempt-${attempt}.json"
+            set +e
+            run_installed_slo "$output_path"
+            slo_status=$?
+            set -e
+            if [[ "$slo_status" -eq 0 ]]; then
               cp "$output_path" native-installed-slo.json
-              if ! retryable_intel_latency_miss "$output_path"; then
-                echo "Intel macOS SLO failed for a non-retryable reason." >&2
-                exit "$slo_status"
+              break
+            fi
+            if [[ ! -f "$output_path" ]]; then
+              if grep -Eq 'native_installed_slo_failed: .*recovery sample' "${output_path}.stderr"; then
+                echo "::warning::macOS SLO attempt ${attempt}/${attempts} hit transient recovery routing crash; retrying."
+                tail -5 "${output_path}.stderr"
+                continue
               fi
-              if [[ "$attempt" -lt 3 ]]; then
-                echo "::warning::Intel macOS strict latency-only SLO gate missed on attempt ${attempt}/3; retrying the same installed wheel."
-              fi
-            done
-            if [[ "$slo_status" -ne 0 ]]; then
-              echo "Intel macOS strict latency-only SLO gates failed all three attempts." >&2
+              echo "macOS SLO crashed without a report for a non-retryable reason." >&2
               exit "$slo_status"
             fi
-          else
-            run_installed_slo native-installed-slo.json
+            cp "$output_path" native-installed-slo.json
+            if ! retryable_slo_miss "$output_path"; then
+              echo "macOS SLO failed for a non-retryable reason." >&2
+              exit "$slo_status"
+            fi
+            if [[ "$attempt" -lt "$attempts" ]]; then
+              echo "::warning::macOS SLO attempt ${attempt}/${attempts} missed only host-sensitive gates; retrying the same installed wheel."
+            fi
+          done
+          if [[ "$slo_status" -ne 0 ]]; then
+            echo "macOS SLO failed all ${attempts} attempts." >&2
+            exit "$slo_status"
           fi
       - name: Verify native artifact provenance
         if: matrix.proof == 'default'

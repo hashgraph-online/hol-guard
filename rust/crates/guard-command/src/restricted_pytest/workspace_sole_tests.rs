@@ -101,3 +101,38 @@ fn only_a_cargo_workspace_or_a_cargo_text_reaches_the_cargo_caches() {
     assert!(reaches_cargo_caches("make test", &root));
     let _ = std::fs::remove_dir_all(&root);
 }
+
+/// A trailing subshell group runs exactly the command list inside it, so the
+/// sandbox plans the group from that list. The group's own text models no
+/// command, so without the unwrap the plan step would refuse a run the
+/// decision had already routed to the workspace sandbox.
+#[test]
+fn a_trailing_subshell_group_plans_as_the_command_list_it_runs() {
+    let root = std::env::temp_dir().join(format!("group-shape-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("web")).unwrap();
+    for directory in [root.clone(), root.join("web")] {
+        std::fs::write(directory.join("package.json"), "{\"name\":\"app\"}\n").unwrap();
+    }
+    let root = root.canonicalize().unwrap();
+    for (grouped, plain) in [
+        ("(npm run build)", "npm run build"),
+        ("(cd web && npm run build)", "cd web && npm run build"),
+    ] {
+        let group = exact_shape(grouped, &root).unwrap_or_else(|| panic!("no shape for {grouped}"));
+        let list = exact_shape(plain, &root).unwrap_or_else(|| panic!("no shape for {plain}"));
+        assert_eq!(group.bootstrap, list.bootstrap, "{grouped}");
+        assert_eq!(group.prefix, list.prefix, "{grouped}");
+        assert_eq!(group.remainder, list.remainder, "{grouped}");
+        assert_eq!(group.read_files, list.read_files, "{grouped}");
+    }
+    // A group Guard cannot read whole is no more plannable than before.
+    for text in [
+        "(cd web && npm run build) && echo done",
+        "( )",
+        "(npm run build",
+    ] {
+        assert!(exact_shape(text, &root).is_none(), "{text}");
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}

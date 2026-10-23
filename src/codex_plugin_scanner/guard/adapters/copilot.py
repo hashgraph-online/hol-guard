@@ -18,6 +18,7 @@ from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..native_path_anchor import anchor_to_process_directory
 from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
+from ..stable_guard_cli import guard_cli_launcher
 from ._modules.copilot.copilot_state_paths import (
     commit_copilot_target_and_state,
     copilot_lifecycle_install,
@@ -378,7 +379,7 @@ def _refresh_guard_proxy_entry(
     refreshed = dict(server_config)
     _command, args = _command_parts(server_config)
     _, python_args = python_proxy_launch(_command, args)
-    refreshed["command"], refreshed["args"] = mcp_proxy_launch(sys.executable, python_args)
+    refreshed["command"], refreshed["args"] = mcp_proxy_launch(guard_cli_launcher(), python_args)
     if launcher_env:
         refreshed["env"] = launcher_env
     else:

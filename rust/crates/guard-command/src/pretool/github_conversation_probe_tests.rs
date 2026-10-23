@@ -5,7 +5,6 @@ use super::*;
 use crate::pretool::PathContext;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 const ORIGIN: &str = "[remote \"origin\"]\n\turl = https://github.com/example-org/app-portal.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n";
 const PLAIN: &str = "[core]\n\tbare = false\n";
@@ -93,10 +92,7 @@ struct Checkout {
 
 impl Checkout {
     fn scratch(label: &str) -> PathBuf {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = crate::unique_nanos::unique_nanos();
         let root = std::env::temp_dir().join(format!(
             "hg-gh-conversation-{label}-{}-{nonce}",
             std::process::id()

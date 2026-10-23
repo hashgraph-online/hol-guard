@@ -70,5 +70,5 @@ def test_warmer_and_ci_share_builds_profiles_and_per_commit_deduplication() -> N
         assert checkout["with"] == {"persist-credentials": False}
         assert producer in raw_ci["jobs"]["required"]["needs"]
     # Capacity changes must not silently collapse the behavioral matrix.
-    assert raw_ci["env"]["CI_PYTEST_COVERAGE_SHARDS"] == "64"
+    assert raw_ci["env"]["CI_PYTEST_COVERAGE_SHARDS"] == "128"
     assert len(raw_ci["jobs"]["macos-gates"]["strategy"]["matrix"]["shard-index"]) == 12

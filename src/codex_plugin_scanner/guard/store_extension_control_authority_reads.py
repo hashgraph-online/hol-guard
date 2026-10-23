@@ -4,44 +4,35 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping
 from contextlib import suppress
-from dataclasses import replace
-from typing import cast
+from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
-from .managed_controls_policy_bundle import (
-    MANAGED_CONTROLS_ACTIVE_STATE_KEY,
-    MANAGED_CONTROLS_LAST_GOOD_STATE_KEY,
-    MANAGED_CONTROLS_REVISION_STATE_KEY,
-    managed_controls_revision_from_state,
+from .managed_controls_policy_bundle import MANAGED_CONTROLS_LAST_GOOD_STATE_KEY
+from .native_extension_control_authority import (
+    extension_control_authority,
+    layers_from_wire,
+    manifest_from_wire,
+    manifest_sha256,
+    raise_fault,
+    view_to_wire,
 )
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import (
-    SNAPSHOT_PURPOSE,
     AuthorityHealth,
-    AuthorityPhase,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
-    layers_from_json,
-    verify_authenticated_record,
 )
-from .runtime.extension_control_contract import (
-    ControlLayerKind,
-    ControlState,
-)
+from .runtime.extension_control_contract import ExtensionControlLayer
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
-from .store_extension_control_authority_support import (
-    _row_int,
-    _row_str,
-    preserve_managed_extension_control,
-)
 
+if TYPE_CHECKING:
+    from .store import GuardStore
 
-def _activation_layers(state, **kwargs):
-    from .store_extension_control_authority import managed_controls_layers_from_activation_state
-
-    return managed_controls_layers_from_activation_state(state, **kwargs)
+# Each writer action runs at most once, and a migration ends the read, so a
+# read settles well inside this many resident round trips.
+_MAX_READ_ROUNDS = 6
 
 
 class ExtensionControlAuthorityReadsMixin:
@@ -88,28 +79,38 @@ class ExtensionControlAuthorityReadsMixin:
             self._catalog_target_manifest(registry)
             with self._extension_control_authority_lock(shared=read_only, timeout_seconds=lock_timeout_seconds):
                 self._require_compatible_extension_control_schema()
-                view = self._read_extension_control_authority_locked(
+                view, settled = self._read_authority_locked(
                     catalog_digest,
                     migration_registry=registry,
                     allow_migration=may_migrate,
+                    compose=include_managed_controls,
                 )
                 stale_manifest: dict[str, str] | None = None
                 authority_key: bytes | None = None
-                if view.health is AuthorityHealth.PROTECTED:
-                    authority_key = self._authority_key(required=True)
-                    if authority_key is None:
-                        raise ExtensionControlAuthorityError("extension-control authority key is unavailable")
-                    view, stale_manifest = self._sync_trusted_catalog_manifest(
-                        view, registry, key=authority_key, allow_migration=may_migrate
-                    )
-                if include_managed_controls:
-                    composed = self._with_managed_controls_activation(
-                        view,
-                        current_manifest=self._catalog_target_manifest(registry),
-                        previous_manifest=stale_manifest,
-                    )
+                if settled is not None:
+                    # The resident synced the manifest and composed managed
+                    # controls in the same round trip as the read.
+                    composed = self._view_from_wire(settled.get("composed"), view.catalog_digest)
+                    stale_manifest = manifest_from_wire(settled.get("stale"))
+                    if stale_manifest is not None and may_migrate:
+                        authority_key = self._authority_key(required=True)
                 else:
-                    composed = view
+                    if view.health is AuthorityHealth.PROTECTED:
+                        authority_key = self._authority_key(required=True)
+                        if authority_key is None:
+                            raise ExtensionControlAuthorityError("extension-control authority key is unavailable")
+                        view, stale_manifest = self._sync_trusted_catalog_manifest(
+                            view, registry, key=authority_key, allow_migration=may_migrate
+                        )
+                    composed = (
+                        self._with_managed_controls_activation(
+                            view,
+                            current_manifest=self._catalog_target_manifest(registry),
+                            previous_manifest=stale_manifest,
+                        )
+                        if include_managed_controls
+                        else view
+                    )
                 if stale_manifest is not None and may_migrate:
                     if authority_key is None:
                         raise ExtensionControlAuthorityError("extension-control authority key is unavailable")
@@ -136,108 +137,22 @@ class ExtensionControlAuthorityReadsMixin:
         current_manifest: Mapping[str, str] | None = None,
         previous_manifest: Mapping[str, str] | None = None,
     ) -> ExtensionControlAuthorityView:
-        with self._connect() as connection:
-            rows = connection.execute(
-                "select state_key, payload_json from sync_state where state_key in (?, ?)",
-                (
-                    MANAGED_CONTROLS_ACTIVE_STATE_KEY,
-                    MANAGED_CONTROLS_REVISION_STATE_KEY,
-                ),
-            ).fetchall()
-        managed_state: dict[str, object] = {}
-        for row in rows:
-            try:
-                managed_state[str(row["state_key"])] = json.loads(str(row["payload_json"]))
-            except json.JSONDecodeError as exc:
-                raise ExtensionControlAuthorityError("invalid managed controls state") from exc
-        active = managed_state.get(MANAGED_CONTROLS_ACTIVE_STATE_KEY)
-        revision_state = managed_state.get(MANAGED_CONTROLS_REVISION_STATE_KEY)
-        local_layers = tuple(layer for layer in view.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN)
-        if active is None or active == {}:
-            if revision_state is None or revision_state == {}:
-                return view
-            key = self._authority_key(required=True)
-            assert key is not None
-            managed_revision = managed_controls_revision_from_state(
-                revision_state,
-                authority_key=key,
+        try:
+            key = self._authority_key(required=False)
+        except ExtensionControlAuthorityError:
+            # The resident reports a missing key only if managed state needs it.
+            key = None
+        fields: dict[str, object] = {
+            "view": view_to_wire(view),
+            "previous_manifest": dict(previous_manifest) if previous_manifest is not None else None,
+            "current_manifest_sha256": manifest_sha256(current_manifest) if current_manifest is not None else None,
+        }
+        reply = self._extension_control_authority_op("compose_managed", key=key, **fields)
+        if reply.get("need") == "current_manifest" and current_manifest is not None:
+            reply = self._extension_control_authority_op(
+                "compose_managed", key=key, **fields, current_manifest=dict(current_manifest)
             )
-            return ExtensionControlAuthorityView(
-                view.health,
-                view.revision,
-                view.catalog_digest,
-                local_layers,
-                managed_revision,
-            )
-        if view.health is not AuthorityHealth.PROTECTED:
-            raise ExtensionControlAuthorityError("managed controls require protected local authority")
-        if revision_state is None or revision_state == {}:
-            raise ExtensionControlAuthorityError("managed controls revision state is missing")
-        key = self._authority_key(required=True)
-        assert key is not None
-        if not isinstance(active, dict):
-            raise ExtensionControlAuthorityError("invalid managed controls activation state")
-        active_catalog_digest = active.get("catalogDigest")
-        if not isinstance(active_catalog_digest, str) or not active_catalog_digest:
-            raise ExtensionControlAuthorityError("invalid managed controls activation catalog")
-        managed_layers, managed_revision = _activation_layers(
-            active,
-            catalog_digest=active_catalog_digest,
-            authority_key=key,
-        )
-        fingerprint_refresh = (
-            current_manifest is not None
-            and previous_manifest is not None
-            and previous_manifest != current_manifest
-            and active_catalog_digest == view.catalog_digest
-        )
-        if active_catalog_digest != view.catalog_digest or fingerprint_refresh:
-            if any(layer.catalog_digest != active_catalog_digest for layer in managed_layers):
-                raise ExtensionControlAuthorityError("managed controls activation layer catalog mismatch")
-            if current_manifest is None:
-                raise ExtensionControlAuthorityError("managed controls current catalog manifest is missing")
-            # A missing prior manifest must not act as an implicit fingerprint
-            # match: stale managed allows remain disabled until cloud refresh.
-            if fingerprint_refresh:
-                if previous_manifest is None:
-                    raise ExtensionControlAuthorityError("managed controls current catalog manifest is missing")
-                prior_manifest: Mapping[str, str] = previous_manifest
-            else:
-                prior_manifest = self._load_catalog_manifest(active_catalog_digest, key=key) or {}
-            managed_layers = tuple(
-                replace(
-                    layer,
-                    catalog_digest=view.catalog_digest,
-                    controls=tuple(
-                        (
-                            control
-                            if preserve_managed_extension_control(
-                                control,
-                                previous_manifest=prior_manifest,
-                                current_manifest=current_manifest,
-                            )
-                            else replace(control, state=ControlState.DISABLED)
-                        )
-                        for control in layer.controls
-                    ),
-                )
-                for layer in managed_layers
-            )
-        durable_revision = managed_controls_revision_from_state(
-            revision_state,
-            authority_key=key,
-        )
-        if managed_revision != durable_revision:
-            raise ExtensionControlAuthorityError("managed controls activation revision mismatch")
-        local_layers = tuple(layer for layer in view.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN)
-        composed = ExtensionControlAuthorityView(
-            view.health,
-            view.revision,
-            view.catalog_digest,
-            (*local_layers, *managed_layers),
-            managed_revision,
-        )
-        return composed
+        return self._view_from_wire(reply.get("view"), view.catalog_digest)
 
     def managed_controls_lkg_capabilities(
         self,
@@ -256,11 +171,7 @@ class ExtensionControlAuthorityReadsMixin:
         if key is None:
             return frozenset()
         try:
-            _activation_layers(
-                state,
-                catalog_digest=str(state.get("catalogDigest", "")),
-                authority_key=key,
-            )
+            self._managed_activation(state, key=key)
         except ExtensionControlAuthorityError:
             return frozenset()
         raw = state.get("negotiatedCapabilities")
@@ -268,148 +179,213 @@ class ExtensionControlAuthorityReadsMixin:
             return frozenset()
         return frozenset(cast(list[str], raw))
 
+    def _managed_revision(self, state: object, *, key: bytes) -> int:
+        """The authenticated managed publication epoch in ``state``."""
+
+        revision = self._extension_control_authority_op("managed_revision", key=key, state=state).get("revision")
+        if type(revision) is not int:
+            raise ExtensionControlAuthorityError("invalid managed controls revision state")
+        return revision
+
+    def _seal_managed_revision(self, revision: int, *, key: bytes) -> dict[str, object]:
+        """The authenticated managed publication epoch the resident sealed for ``revision``."""
+
+        state = self._extension_control_authority_op("seal_managed_revision", key=key, revision=revision).get("state")
+        if not isinstance(state, dict):
+            raise ExtensionControlAuthorityError("invalid managed controls revision seal")
+        return cast(dict[str, object], state)
+
+    def _seal_managed_activation(
+        self, activation: Mapping[str, object], *, key: bytes, catalog_digest: str
+    ) -> dict[str, object]:
+        """The complete activation the resident built and sealed on the authority under ``catalog_digest``."""
+
+        sealed = self._extension_control_authority_op(
+            "seal_managed_activation", key=key, catalog_digest=catalog_digest, managed_activation=dict(activation)
+        ).get("activation")
+        if not isinstance(sealed, dict):
+            raise ExtensionControlAuthorityError("invalid managed controls activation seal")
+        return cast(dict[str, object], sealed)
+
+    def _managed_activation(
+        self, state: object, *, key: bytes, catalog_digest: str | None = None
+    ) -> tuple[tuple[ExtensionControlLayer, ...], int]:
+        """The authenticated signed Cloud layers and epoch in ``state``.
+
+        Without ``catalog_digest`` the state is checked against the catalog it names.
+        """
+
+        reply = self._extension_control_authority_op(
+            "managed_activation", key=key, state=state, catalog_digest=catalog_digest
+        )
+        revision = reply.get("revision")
+        if type(revision) is not int:
+            raise ExtensionControlAuthorityError("invalid managed controls activation revision")
+        return layers_from_wire(reply.get("layers")), revision
+
+    def _extension_control_authority_op(self, op: str, *, key: bytes | None, **fields: object) -> dict[str, object]:
+        """Ask the resident, record the migration events it found owed, raise its fault."""
+
+        reply = extension_control_authority(
+            store_path=Path(self.path),
+            guard_home=Path(self.guard_home),
+            op=op,
+            key=key,
+            store=cast("GuardStore", self),
+            **fields,
+        )
+        events = reply.get("events")
+        for event in events if isinstance(events, list) else ():
+            if isinstance(event, dict):
+                self._record_catalog_migrated_event_once(
+                    previous_revision=int(event["previous_revision"]),
+                    revision=int(event["revision"]),
+                    previous_catalog_digest=str(event["previous_catalog_digest"]),
+                    catalog_digest=str(event["catalog_digest"]),
+                    layers=layers_from_wire(event.get("layers")),
+                    retired_targets=tuple(str(target) for target in cast(list[object], event["retired_targets"])),
+                )
+        raise_fault(reply)
+        return reply
+
+    def _view_from_wire(self, value: object, catalog_digest: str) -> ExtensionControlAuthorityView:
+        if not isinstance(value, dict):
+            raise ExtensionControlAuthorityError("invalid extension control authority view")
+        health = value.get("health")
+        if health == "degraded":
+            return self._degraded_view(catalog_digest)
+        revision, managed_revision = value.get("revision"), value.get("managed_revision", 0)
+        digest = value.get("catalog_digest")
+        if type(revision) is not int or type(managed_revision) is not int or not isinstance(digest, str):
+            raise ExtensionControlAuthorityError("invalid extension control authority view")
+        try:
+            authority_health = AuthorityHealth(health)
+        except ValueError as exc:
+            raise ExtensionControlAuthorityError("invalid extension control authority view") from exc
+        return ExtensionControlAuthorityView(
+            authority_health, revision, digest, layers_from_wire(value.get("layers")), managed_revision
+        )
+
     def _read_extension_control_authority_locked(
         self,
         catalog_digest: str,
         *,
         migration_registry: CommandSafetyExtensionRegistry | None = None,
         allow_migration: bool = True,
-        _healed: bool = False,
+        roll_back_abandoned: bool = True,
     ) -> ExtensionControlAuthorityView:
+        """Read the authority through the resident, doing the writer work it asks for.
+
+        The resident never writes. Restoring the last-good export, resuming an
+        interrupted migration, rolling back an abandoned transition and
+        committing a catalog migration come back as actions; each runs here
+        under the lease the caller holds, at most once, before asking again.
+        A writer about to resume its own prepared row passes
+        ``roll_back_abandoned=False`` so the read leaves that row in place.
+        """
+
+        return self._read_authority_locked(
+            catalog_digest,
+            migration_registry=migration_registry,
+            allow_migration=allow_migration,
+            roll_back_abandoned=roll_back_abandoned,
+        )[0]
+
+    def _read_authority_locked(
+        self,
+        catalog_digest: str,
+        *,
+        migration_registry: CommandSafetyExtensionRegistry | None,
+        allow_migration: bool,
+        roll_back_abandoned: bool = True,
+        compose: bool = False,
+    ) -> tuple[ExtensionControlAuthorityView, dict[str, object] | None]:
+        """The view read, and with ``compose`` the resident's settled reply.
+
+        ``compose`` asks the resident to sync the catalog manifest and compose
+        managed controls in the read's round trip. The reply comes back only
+        when it did; otherwise the caller runs the separate ops on the view.
+        """
+
         with self._connect() as connection:
             if not ensure_extension_control_authority_schema(connection, require_compatible=False):
-                return self._degraded_view(catalog_digest)
-            row = connection.execute(
-                "select * from extension_control_authority_snapshot where singleton = 1"
-            ).fetchone()
+                return self._degraded_view(catalog_digest), None
         try:
-            key = self._authority_key(required=False)
-            anchor = self._read_anchor(key=key) if key is not None else None
-        except Exception:
-            return self._degraded_view(catalog_digest)
-        if row is None and anchor is None:
-            return ExtensionControlAuthorityView(AuthorityHealth.UNENROLLED, 0, catalog_digest, ())
-        if row is None and key is not None and anchor is not None:
-            # The database was re-created but the vault still holds the key and
-            # anchor. Restore the exact committed snapshot only when the
-            # authenticated last-good export matches the anchor.
-            with suppress(Exception):
-                if self._restore_last_good_authority(anchor, key=key):
-                    with self._connect() as connection:
-                        row = connection.execute(
-                            "select * from extension_control_authority_snapshot where singleton = 1"
-                        ).fetchone()
-        if row is None or key is None or anchor is None:
-            return self._tampered_view(catalog_digest)
-        try:
-            revision = int(row["revision"])
-            stored_catalog_digest = str(row["catalog_digest"])
-            validation_catalog_digest = catalog_digest
-            if stored_catalog_digest != catalog_digest and not layers_from_json(str(row["layers_json"])):
-                # No layers means nothing is bound to a catalog. Serving the
-                # authority as-is avoids committing an empty revision every time
-                # runtimes with different catalog digests read the same home.
-                validation_catalog_digest = stored_catalog_digest
-            elif stored_catalog_digest != catalog_digest:
-                if migration_registry is None or migration_registry.catalog_digest != catalog_digest:
-                    raise ExtensionControlAuthorityError("extension control catalog digest changed")
-                pending = self._pending_transition(revision + 1) if allow_migration else None
-                if pending is not None and _row_str(pending, "catalog_digest") == catalog_digest:
-                    with self._connect() as connection:
-                        resumed = self._resume_idempotent_transition(
-                            connection,
-                            pending,
-                            current=ExtensionControlAuthorityView(
-                                AuthorityHealth.RECOVERY_REQUIRED,
-                                revision,
-                                stored_catalog_digest,
-                                (),
-                            ),
-                            catalog_digest=_row_str(pending, "catalog_digest"),
-                            layers_json=_row_str(pending, "layers_json"),
-                            actor_hash=_row_str(pending, "actor_id_hash"),
-                            idempotency_hash=_row_str(pending, "idempotency_key_hash"),
-                            nonce_hash=_row_str(pending, "nonce_hash"),
-                            expected_revision=_row_int(pending, "previous_revision"),
-                            key=key,
-                        )
-                    if resumed is not None and resumed.health is AuthorityHealth.PROTECTED:
-                        return resumed
-                previous = self._read_extension_control_authority_locked(stored_catalog_digest)
-                if previous.health is not AuthorityHealth.PROTECTED:
-                    raise ExtensionControlAuthorityError("extension control catalog migration source unavailable")
-                if not allow_migration or self._catalog_migration_oscillates(
-                    revision,
-                    migrated_from=catalog_digest,
-                    migrated_to=stored_catalog_digest,
-                    key=key,
-                ):
-                    # Serve the controls under this catalog without committing
-                    # a revision. Either the caller only wants to read them --
-                    # it may hold the shared lock, where a commit would race
-                    # another reader -- or two runtimes with different catalogs
-                    # are migrating this authority back and forth. In the
-                    # second case both sides have already recorded the move
-                    # once, so committing again only hands the loop back, and
-                    # the stored revision then advances faster than a dashboard
-                    # draft can be applied. Rebind in memory exactly as a
-                    # migration would, and leave the stored revision alone.
-                    return self._rebind_extension_control_catalog(previous, registry=migration_registry, key=key)
-                return self._migrate_extension_control_catalog(previous, registry=migration_registry, key=key)
-            payload = verify_authenticated_record(
-                str(row["snapshot_json"]),
-                expected_digest=str(row["snapshot_digest"]),
-                expected_mac=str(row["snapshot_mac"]),
-                key=key,
-                purpose=SNAPSHOT_PURPOSE,
+            return self._read_through_resident(
+                catalog_digest,
+                migration_registry=migration_registry,
+                allow_migration=allow_migration,
+                roll_back_abandoned=roll_back_abandoned,
+                compose=compose and migration_registry is not None,
             )
-            expected = {
-                "revision": revision,
-                "catalog_digest": str(row["catalog_digest"]),
-                "layers_json": str(row["layers_json"]),
-                "previous_digest": row["previous_digest"],
-                "committed_at": str(row["committed_at"]),
-            }
-            if any(payload.get(name) != value for name, value in expected.items()):
-                raise ExtensionControlAuthorityError("extension control snapshot field mismatch")
-            self._validate_serialized_layers(str(row["layers_json"]))
-            layers = layers_from_json(str(row["layers_json"]))
-            self._validate_layers(layers, validation_catalog_digest)
-            if anchor.revision != revision or anchor.snapshot_digest != str(row["snapshot_digest"]):
-                pending = self._pending_transition(revision + 1)
-                if not (
-                    pending is not None
-                    and anchor.phase is AuthorityPhase.ANCHORED
-                    and anchor.revision == revision + 1
-                    and anchor.snapshot_digest == _row_str(pending, "snapshot_digest")
-                ):
-                    raise ExtensionControlAuthorityError("extension control authority rollback detected")
-                return ExtensionControlAuthorityView(AuthorityHealth.RECOVERY_REQUIRED, revision, catalog_digest, ())
-            if self._pending_transition(revision + 1) is not None:
-                if not _healed and self._roll_back_abandoned_transition(
-                    revision, snapshot_digest=_row_str(row, "snapshot_digest"), anchor=anchor, key=key
-                ):
-                    return self._read_extension_control_authority_locked(
-                        catalog_digest, migration_registry=migration_registry, _healed=True
-                    )
-                return ExtensionControlAuthorityView(
-                    AuthorityHealth.RECOVERY_REQUIRED,
-                    revision,
-                    catalog_digest,
-                    (),
-                )
-            if anchor.phase is not AuthorityPhase.COMMITTED:
-                return ExtensionControlAuthorityView(AuthorityHealth.RECOVERY_REQUIRED, revision, catalog_digest, ())
-            self._validate_transition_chain(
-                revision,
-                current_snapshot_digest=_row_str(row, "snapshot_digest"),
-                key=key,
-            )
-            self._ensure_catalog_migrated_event(
-                revision=revision,
-                catalog_digest=catalog_digest,
-                layers=layers,
-            )
-            return ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, revision, catalog_digest, layers)
         except ExtensionControlAuthorityError:
-            return self._tampered_view(catalog_digest)
+            return self._tampered_view(catalog_digest), None
+
+    def _read_through_resident(
+        self,
+        catalog_digest: str,
+        *,
+        migration_registry: CommandSafetyExtensionRegistry | None,
+        allow_migration: bool,
+        roll_back_abandoned: bool,
+        compose: bool,
+    ) -> tuple[ExtensionControlAuthorityView, dict[str, object] | None]:
+        migration = migration_registry is not None and migration_registry.catalog_digest == catalog_digest
+        attempted: dict[str, bool] = {} if roll_back_abandoned else {"rollback_attempted": True}
+        current_manifest: dict[str, str] | None = None
+        composing: dict[str, object] = {}
+        if compose and migration_registry is not None:
+            composing["current_manifest_sha256"] = manifest_sha256(self._catalog_target_manifest(migration_registry))
+        for _ in range(_MAX_READ_ROUNDS):
+            try:
+                key = self._authority_key(required=False)
+                anchor_json = self._read_anchor_json() if key is not None else None
+            except Exception:
+                return self._degraded_view(catalog_digest), None
+            reply = self._extension_control_authority_op(
+                "read_composed" if composing else "read",
+                key=key,
+                anchor_json=anchor_json,
+                catalog_digest=catalog_digest,
+                migration=migration,
+                allow_migration=allow_migration,
+                current_manifest=current_manifest,
+                **composing,
+                **attempted,
+            )
+            if "view" in reply:
+                return self._view_from_wire(reply["view"], catalog_digest), reply if "composed" in reply else None
+            if reply.get("need") == "current_manifest" and migration_registry is not None:
+                current_manifest = self._catalog_target_manifest(migration_registry)
+                continue
+            action = reply.get("action")
+            if not isinstance(action, dict) or key is None:
+                raise ExtensionControlAuthorityError("invalid extension control authority reply")
+            kind = action.get("action")
+            if kind == "restore_last_good":
+                with suppress(Exception):
+                    self._restore_last_good_authority(key=key)
+                attempted["restore_attempted"] = True
+            elif kind == "resume_pending":
+                resumed = self._resume_pending_catalog_migration(action, key=key)
+                if resumed is not None and resumed.health is AuthorityHealth.PROTECTED:
+                    return resumed, None
+                attempted["resume_attempted"] = True
+            elif kind == "roll_back_abandoned":
+                self._roll_back_abandoned_transition(
+                    int(cast(int, action["revision"])),
+                    snapshot_digest=str(action["snapshot_digest"]),
+                    key=key,
+                )
+                attempted["rollback_attempted"] = True
+            elif kind == "migrate_catalog" and migration_registry is not None:
+                return self._migrate_extension_control_catalog(action, registry=migration_registry, key=key), None
+            else:
+                raise ExtensionControlAuthorityError("invalid extension control authority action")
+        raise ExtensionControlAuthorityError("extension control authority read did not settle")
+
+    def _resume_pending_catalog_migration(
+        self, action: Mapping[str, object], *, key: bytes
+    ) -> ExtensionControlAuthorityView | None:
+        with self._connect() as connection:
+            return self._resume_transition(connection, int(cast(int, action["revision"])), key=key)

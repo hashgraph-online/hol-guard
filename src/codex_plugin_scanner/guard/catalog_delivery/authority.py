@@ -18,11 +18,9 @@ OWNER_ID = "160371962"
 SOURCE_REF = "refs/heads/main"
 WORKFLOW_PATH = ".github/workflows/extension-artifact-regen.yml"
 WORKFLOW_ID = REPOSITORY_URI + "/" + WORKFLOW_PATH + "@refs/heads/main"
-SOURCE_URI = "git+" + REPOSITORY_URI + "@refs/heads/main"
 ISSUER = "https://token.actions.githubusercontent.com"
 MAX_PROVENANCE_BYTES = 1024 * 1024
 MAX_ROOT_BYTES = 64 * 1024
-ROOT_VALIDITY_SECONDS = 7 * 24 * 60 * 60
 SHA = re.compile(r"[0-9a-f]{40}")
 DIGEST = re.compile(r"[0-9a-f]{64}")
 
@@ -43,6 +41,76 @@ def decode(data):
         return json.loads(data, object_pairs_hook=unique, parse_constant=nonfinite)
     except (RecursionError, UnicodeError) as error:
         raise ValueError("invalid release provenance encoding or depth") from error
+
+
+class ExpiredDistributionError(ValueError):
+    """Expired metadata cannot grant authority or seed a new activation."""
+
+
+# The runtime owns what a root and a provenance statement must contain and
+# answers with a stable code. These are the messages callers have always seen.
+_REASONS = {
+    "distribution_root_too_large": "release root exceeds byte limit",
+    "distribution_duplicate_field": "duplicate release provenance field",
+    "distribution_nonfinite_value": "non-finite release provenance value",
+    "distribution_encoding_invalid": "invalid release provenance encoding or depth",
+    "distribution_source_invalid": "release root identity or format invalid",
+    "distribution_identity_invalid": "release root identity or format invalid",
+    "distribution_epoch_invalid": "release authority epoch invalid",
+    "distribution_publication_invalid": "release publication identity invalid",
+    "distribution_validity_invalid": "release root is expired or its validity interval is invalid",
+    "distribution_preparation_incomplete": "release publication preparation is incomplete",
+    "distribution_legacy_status_invalid": "release compatibility status invalid",
+    "distribution_legacy_artifact_invalid": "release legacy artifact identity invalid",
+    "distribution_legacy_oversize_invalid": "release legacy oversize status invalid",
+    "distribution_references_incomplete": "release metadata references are incomplete",
+    "distribution_identities_differ": "release policy and directory identities differ",
+    "distribution_index_reference_invalid": "release index reference invalid",
+    "distribution_location_invalid": "delivery asset location invalid",
+    "distribution_location_identity_invalid": "delivery asset identity invalid",
+    "distribution_location_container_invalid": "delivery container location invalid",
+    "distribution_claim_count_invalid": "release claim index count invalid",
+    "distribution_claim_index_reference": "empty release claim index has a reference",
+    "distribution_security_count_invalid": "release security index count invalid",
+    "distribution_security_index_reference": "empty release security index has a reference",
+    "distribution_defaults_exceed": "release defaults exceed complete policy count",
+    "distribution_revocation_epoch_invalid": "release revocation epoch invalid",
+    "distribution_expired": "release root is expired; refresh before new activation",
+    "distribution_statement_payload_invalid": "release provenance payload type or length invalid",
+    "distribution_statement_type_invalid": "release provenance statement type invalid",
+    "distribution_predicate_invalid": "release provenance predicate invalid",
+    "distribution_build_definition_invalid": "release provenance build definition invalid",
+    "distribution_builder_differs": "release provenance builder or workflow differs",
+    "distribution_dependencies_invalid": "release provenance source dependencies invalid",
+    "distribution_source_differs": "release provenance source differs",
+    "distribution_subject_count_invalid": "release provenance subject count invalid",
+    "distribution_duplicate_subjects": "release provenance has duplicate subjects",
+}
+
+
+def _native(operation, **fields):
+    """Ask the runtime to judge authenticated content and keep the legacy errors."""
+    from . import lifecycle
+
+    try:
+        return lifecycle.invoke("distribution", operation=operation, **fields)
+    except ValueError as error:
+        # A refusal judges the release data, so it drops the transport error:
+        # left in the chain, that error reads as a broken installed runtime.
+        for code in re.findall(r"distribution_[a-z_]+", str(error)):
+            reason = _REASONS.get(code)
+            if code == "distribution_expired":
+                raise ExpiredDistributionError(reason) from None
+            if reason is not None:
+                raise ValueError(reason) from None
+        raise
+
+
+def _text(data):
+    try:
+        return bytes(data).decode("utf-8")
+    except UnicodeError as error:
+        raise ValueError(_REASONS["distribution_encoding_invalid"]) from error
 
 
 def _verify_attested_artifact(data, provenance, subject_name, expected_source_sha, *, offline=False):
@@ -72,6 +140,8 @@ def _verify_attested_digest(digest, provenance, subject_name, expected_source_sh
     from sigstore.models import Bundle
     from sigstore.verify import Verifier, policy
 
+    from . import lifecycle
+
     verifier = Verifier.production(offline=offline)
     binding = policy.AllOf(
         [
@@ -85,53 +155,22 @@ def _verify_attested_digest(digest, provenance, subject_name, expected_source_sh
         ]
     )
     matched = False
-    for line in lines:
-        decode(line)  # Reject duplicate keys before the library decodes a bundle.
-        bundle = Bundle.from_json(line)
-        content_type, payload = verifier.verify_dsse(bundle, binding)
-        if content_type != "application/vnd.in-toto+json" or len(payload) > MAX_PROVENANCE_BYTES:
-            raise ValueError("release provenance payload type or length invalid")
-        statement = decode(payload)
-        if (
-            not isinstance(statement, dict)
-            or statement.get("_type") != "https://in-toto.io/Statement/v1"
-            or statement.get("predicateType") != "https://slsa.dev/provenance/v1"
-        ):
-            raise ValueError("release provenance statement type invalid")
-        predicate = statement.get("predicate")
-        if not isinstance(predicate, dict):
-            raise ValueError("release provenance predicate invalid")
-        build = predicate.get("buildDefinition")
-        run = predicate.get("runDetails")
-        if (
-            not isinstance(build, dict)
-            or not isinstance(run, dict)
-            or not isinstance(build.get("externalParameters"), dict)
-            or not isinstance(run.get("builder"), dict)
-        ):
-            raise ValueError("release provenance build definition invalid")
-        workflow = build["externalParameters"].get("workflow")
-        expected = {"repository": REPOSITORY_URI, "path": WORKFLOW_PATH, "ref": "refs/heads/main"}
-        if (
-            build.get("buildType") != "https://actions.github.io/buildtypes/workflow/v1"
-            or workflow != expected
-            or run["builder"].get("id") != WORKFLOW_ID
-        ):
-            raise ValueError("release provenance builder or workflow differs")
-        dependencies = build.get("resolvedDependencies")
-        if not isinstance(dependencies, list):
-            raise ValueError("release provenance source dependencies invalid")
-        sources = [row for row in dependencies if isinstance(row, dict) and row.get("uri") == SOURCE_URI]
-        if len(sources) != 1 or sources[0].get("digest") != {"gitCommit": expected_source_sha}:
-            raise ValueError("release provenance source differs")
-        subjects = statement.get("subject")
-        if not isinstance(subjects, list) or not 0 < len(subjects) <= 64:
-            raise ValueError("release provenance subject count invalid")
-        candidates = [row for row in subjects if isinstance(row, dict) and row.get("name") == subject_name]
-        if len(candidates) > 1:
-            raise ValueError("release provenance has duplicate subjects")
-        if candidates and candidates[0].get("digest") == {"sha256": digest}:
-            matched = True
+    with lifecycle.session():
+        for line in lines:
+            decode(line)  # Reject duplicate keys before the library decodes a bundle.
+            bundle = Bundle.from_json(line)
+            content_type, payload = verifier.verify_dsse(bundle, binding)
+            # Sigstore has verified the signature. The runtime decides whether the
+            # signed statement binds this subject to this workflow and source.
+            attested = _native(
+                "provenance-statement",
+                content_type=content_type,
+                payload=_text(payload),
+                subject=subject_name,
+                digest=digest,
+                source=expected_source_sha,
+            )
+            matched = matched or attested["attested"] is True
     if not matched:
         raise ValueError("release root digest is not attested")
 
@@ -149,164 +188,22 @@ class VerifiedDistribution:
         return decode(self.data)
 
 
-def _index_reference(value, *, located):
-    fields = {"sha256", "length", "expanded_length", "kind"} | ({"location"} if located else set())
-    if (
-        not isinstance(value, dict)
-        or set(value) != fields
-        or not isinstance(value["sha256"], str)
-        or DIGEST.fullmatch(value["sha256"]) is None
-        or type(value["length"]) is not int
-        or not 0 < value["length"] <= MAX_ROOT_BYTES
-        or type(value["expanded_length"]) is not int
-        or value["expanded_length"] != value["length"]
-        or value["kind"] != "data"
-    ):
-        raise ValueError("release index reference invalid")
-    if located:
-        from .containers import location
-
-        location(value["location"], value["sha256"], "object")
-
-
-def _publication_ready(value, source):
-    if not isinstance(value, dict):
-        raise ValueError("release compatibility status invalid")
-    if value.get("status") == "available":
-        if (
-            set(value) != {"status", "manifest_sha256", "archive_sha256", "tag"}
-            or value["tag"] != "extension-artifacts-" + source
-            or any(
-                not isinstance(value[key], str) or DIGEST.fullmatch(value[key]) is None
-                for key in ("manifest_sha256", "archive_sha256")
-            )
-        ):
-            raise ValueError("release legacy artifact identity invalid")
-    elif value.get("status") == "unsupported-oversize":
-        codes = {
-            "extension-count",
-            "program-bytes",
-            "catalog-bytes",
-            "program-rules",
-            "program-nodes",
-            "source-envelope",
-            "manifest-bytes",
-            "archive-files",
-            "archive-bytes",
-            "directory-entries",
-            "directory-bytes",
-        }
-        if set(value) != {"status", "code"} or not isinstance(value["code"], str) or value["code"] not in codes:
-            raise ValueError("release legacy oversize status invalid")
-    else:
-        raise ValueError("release publication preparation is incomplete")
-
-
-class ExpiredDistributionError(ValueError):
-    """Expired metadata cannot grant authority or seed a new activation."""
-
-
 def verify_distribution(
     data: bytes, provenance: bytes, *, expected_source_sha: str, now: int, offline: bool = False
 ) -> VerifiedDistribution:
     if not data or len(data) > MAX_ROOT_BYTES:
         raise ValueError("release root exceeds byte limit")
-    root = decode(data)
-    fields = {
-        "schema",
-        "source_sha",
-        "engine",
-        "directory",
-        "policy",
-        "claim_provenance",
-        "legacy",
-        "issued_at",
-        "expires_at",
-        "authority_epoch",
-        "publication_id",
-    }
-    if (
-        not isinstance(root, dict)
-        or set(root) != fields
-        or root.get("schema") != "guard.extension-distribution.v2"
-        or root.get("source_sha") != expected_source_sha
-        or not isinstance(root.get("engine"), str)
-        or DIGEST.fullmatch(root["engine"]) is None
-    ):
-        raise ValueError("release root identity or format invalid")
-    if type(root["authority_epoch"]) is not int or root["authority_epoch"] <= 0:
-        raise ValueError("release authority epoch invalid")
-    from .selection import PUBLICATION
+    from . import lifecycle
 
-    if not isinstance(root["publication_id"], str) or PUBLICATION.fullmatch(root["publication_id"]) is None:
-        raise ValueError("release publication identity invalid")
-    issued, expires = root["issued_at"], root["expires_at"]
-    if (
-        type(now) is not int
-        or now < 0
-        or type(issued) is not int
-        or type(expires) is not int
-        or issued < 0
-        or not 0 < expires - issued <= ROOT_VALIDITY_SECONDS
-        or issued > now + 300
-    ):
-        raise ValueError("release root is expired or its validity interval is invalid")
-    if root["claim_provenance"] != "resolved":
-        raise ValueError("release publication preparation is incomplete")
-    _publication_ready(root["legacy"], expected_source_sha)
-    directory, policy_data = root["directory"], root["policy"]
-    if (
-        not isinstance(directory, dict)
-        or not isinstance(policy_data, dict)
-        or set(directory) != {"count", "index", "claims"}
-        or set(policy_data) != {"root", "transport", "defaults", "revocations"}
-    ):
-        raise ValueError("release metadata references are incomplete")
-    native = policy_data["root"]
-    if (
-        type(directory["count"]) is not int
-        or directory["count"] <= 0
-        or not isinstance(native, dict)
-        or native.get("schema") != "guard.command-pack-release.v1"
-        or native.get("engine") != root["engine"]
-        or type(native.get("extensions")) is not int
-        or native["extensions"] != directory["count"]
-    ):
-        raise ValueError("release policy and directory identities differ")
-    _index_reference(directory["index"], located=True)
-    claims = directory["claims"]
-    if (
-        not isinstance(claims, dict)
-        or set(claims) != {"count", "index"}
-        or type(claims["count"]) is not int
-        or not 0 <= claims["count"] <= directory["count"]
-    ):
-        raise ValueError("release claim index count invalid")
-    if claims["count"]:
-        _index_reference(claims["index"], located=True)
-    elif claims["index"] is not None:
-        raise ValueError("empty release claim index has a reference")
-    _index_reference(policy_data["transport"], located=True)
-    _index_reference(native.get("index"), located=False)
-    for field in ("defaults", "revocations"):
-        value = policy_data[field]
-        fields = {"count", "index"} | ({"epoch"} if field == "revocations" else set())
-        if not isinstance(value, dict) or set(value) != fields or type(value["count"]) is not int or value["count"] < 0:
-            raise ValueError("release security index count invalid")
-        if value["count"]:
-            _index_reference(value["index"], located=True)
-        elif value["index"] is not None:
-            raise ValueError("empty release security index has a reference")
-        if field == "defaults" and value["count"] > directory["count"]:
-            raise ValueError("release defaults exceed complete policy count")
-        if field == "revocations" and (type(value["epoch"]) is not int or value["epoch"] < 0):
-            raise ValueError("release revocation epoch invalid")
-    if now >= expires:
-        raise ExpiredDistributionError("release root is expired; refresh before new activation")
-    _verify_attested_artifact(data, provenance, "extension-distribution.v2.json", expected_source_sha, offline=offline)
+    with lifecycle.session():
+        # A malformed or expired root never reaches the signature verifier.
+        root = _native("root", data=_text(data), source=expected_source_sha, now=now)
+        _verify_attested_artifact(
+            data, provenance, "extension-distribution.v2.json", expected_source_sha, offline=offline
+        )
     result = object.__new__(VerifiedDistribution)
     object.__setattr__(result, "data", bytes(data))
     object.__setattr__(result, "source_sha", expected_source_sha)
     object.__setattr__(result, "digest", hashlib.sha256(data).hexdigest())
-    object.__setattr__(result, "expires_at", expires)
+    object.__setattr__(result, "expires_at", root["expires_at"])
     return result

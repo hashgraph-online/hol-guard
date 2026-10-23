@@ -14,7 +14,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from http.server import HTTPServer
 from io import StringIO
-from multiprocessing import Event, Process, Queue
+from multiprocessing import Event, Process, Queue, get_context
 from pathlib import Path
 
 import pytest
@@ -391,7 +391,8 @@ def _hold_guard_db_writer_lock(
     hold_seconds: int,
     ready_event: Event | None = None,
 ) -> None:
-    connection = sqlite3.connect(database_path, timeout=1)
+    # Wait out a writer the shim install left behind; the test needs this process to hold the lock.
+    connection = sqlite3.connect(database_path, timeout=30)
     try:
         connection.execute("BEGIN IMMEDIATE")
         connection.execute(
@@ -822,10 +823,12 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
         manager="bun",
         capsys=capsys,
     )
-    ready_event = Event()
-    lock_process = Process(target=_hold_guard_db_writer_lock, args=(str(home_dir / "guard.db"), 13, ready_event))
+    # A fresh interpreter: a forked child can inherit a lock a parent thread held at fork time.
+    spawn = get_context("spawn")
+    ready_event = spawn.Event()
+    lock_process = spawn.Process(target=_hold_guard_db_writer_lock, args=(str(home_dir / "guard.db"), 13, ready_event))
     lock_process.start()
-    assert ready_event.wait(timeout=5)
+    assert ready_event.wait(timeout=60), f"lock holder never took the lock (exitcode={lock_process.exitcode})"
     env = dict(os.environ)
     env["HOME"] = str(home_dir)
     env["PATH"] = f"{shim_path.parent}{os.pathsep}{fake_bin}{os.pathsep}{env.get('PATH', '')}"

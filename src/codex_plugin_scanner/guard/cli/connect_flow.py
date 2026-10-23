@@ -883,7 +883,7 @@ def revoke_guard_self_oauth_grant(
     urlopen=managed_urlopen,
     now: datetime | None = None,
 ) -> None:
-    revoke_url = f"{oauth_client.issuer.rstrip('/')}/api/guard/oauth/revoke/self"
+    revoke_url = f"{oauth_client.issuer.rstrip('/')}{_SELF_REVOKE_PATH}"
     dpop_nonce: str | None = None
     nonce_retry_count = 0
     while True:

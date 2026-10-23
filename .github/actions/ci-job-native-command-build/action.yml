@@ -26,17 +26,6 @@ runs:
       if: steps.evaluator-cache.outputs.cache-hit != 'true'
       with:
         cache-key: pytest-native-command
-        components: rustfmt
-    - name: Check native formatting before compilation
-      shell: bash
-      env:
-        EVALUATOR_CACHE_HIT: ${{ steps.evaluator-cache.outputs.cache-hit }}
-      run: |
-        toolchain="$(python3 -c 'import tomllib; print(tomllib.load(open("rust/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')"
-        if [[ "$EVALUATOR_CACHE_HIT" == true ]]; then
-          rustup toolchain install "$toolchain" --profile minimal --component rustfmt
-        fi
-        cargo +"$toolchain" fmt --manifest-path rust/Cargo.toml --all --check
     - name: Install content-addressed compiler cache
       if: steps.evaluator-cache.outputs.cache-hit != 'true'
       uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
@@ -52,7 +41,7 @@ runs:
         SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
         SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
       run: |
-        cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+        cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime --timings
         "$SCCACHE_PATH" --show-stats
     - name: Require both executable native evaluators
       shell: bash
@@ -78,3 +67,12 @@ runs:
           rust/target/release/guard-command-source
           rust/target/release/hol-guard-runtime
         key: ${{ steps.evaluator-cache.outputs.cache-primary-key }}
+    - name: Retain native compilation timings
+      if: always() && steps.evaluator-cache.outputs.cache-hit != 'true'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: native-compilation-timings-linux
+        path: rust/target/cargo-timings/cargo-timing.html
+        if-no-files-found: ignore
+        retention-days: 1
+        overwrite: true

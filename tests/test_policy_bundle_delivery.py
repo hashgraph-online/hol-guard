@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import copy
 import json
+import tempfile
+from functools import cache
 from pathlib import Path
 
 from codex_plugin_scanner.guard.policy_bundle_v2 import validated_policy_bundle_v2_acknowledgement
@@ -11,10 +13,18 @@ _ROOT = Path(__file__).resolve().parents[1]
 _VECTOR = json.loads(
     (_ROOT / "contracts/managed-controls/v1/policy-bundle-v2-extension-signature-vector.json").read_text()
 )
-_WIRE_CATALOG_DIGEST = build_builtin_extension_catalog_wire(
-    guard_version="test",
-    generated_at="2026-08-25T00:00:00Z",
-)["catalogDigest"]
+
+
+@cache
+def _wire_catalog_digest() -> str:
+    # The native runtime computes this digest, so do it on first use rather than at collection,
+    # in an isolated Guard home rather than the user's.
+    with tempfile.TemporaryDirectory() as guard_home:
+        return build_builtin_extension_catalog_wire(
+            guard_version="test",
+            generated_at="2026-08-25T00:00:00Z",
+            guard_home=Path(guard_home),
+        )["catalogDigest"]
 
 
 def _bundle() -> dict[str, object]:
@@ -35,7 +45,7 @@ def _delivery() -> dict[str, object]:
         "deliveryId": "00000000-0000-4000-8000-000000000001",
         "policyRevision": 7,
         "extensionAuthorityRevision": 7,
-        "catalogDigest": _WIRE_CATALOG_DIGEST,
+        "catalogDigest": _wire_catalog_digest(),
         "effectiveProjectionDigest": "sha256:" + "c" * 64,
         "payloadHash": bundle["payloadHash"],
         "extensionProjectionDigest": "sha256:" + "d" * 64,

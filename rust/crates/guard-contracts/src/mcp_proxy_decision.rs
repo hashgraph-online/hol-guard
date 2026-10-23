@@ -33,6 +33,12 @@ pub const MCP_PROXY_INLINE_APPROVAL_REPLY_FEATURE: &str = "mcp-proxy-inline-appr
 /// caller asks for this capability before sending it.
 pub const MCP_PROXY_ARCHIVE_BINDING_REQUIRED_FEATURE: &str =
     "mcp-proxy-archive-binding-required-v1";
+
+/// The resident spells the sensitive read's artifact content hash itself, from
+/// the artifact fields the context query now carries. An older resident
+/// rejects those fields as unknown, so a caller asks for this capability
+/// before sending them.
+pub const MCP_SENSITIVE_READ_ARTIFACT_FEATURE: &str = "mcp-sensitive-read-artifact-v1";
 /// Largest request the op accepts (a `tools/list` page rides inside it).
 pub const MCP_PROXY_DECISION_MAX_BYTES: usize = 5 * 1024 * 1024;
 

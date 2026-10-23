@@ -129,37 +129,9 @@ pub(crate) fn credential_routing_environment_name(name: &str) -> bool {
 /// `RUSTFLAGS`, `RUSTC_WRAPPER`, `PYTHONSTARTUP`, `CLASSPATH`). A data path
 /// such as `OUTPUT_PATH` cannot be told apart by name, so it fails closed too.
 const CODE_LOADING_MARKERS: &[&str] = &[
-    "ARGS",
-    "BIN",
-    "BROWSER",
-    "CMD",
-    "COMMAND",
-    "EDITOR",
-    "EXEC",
-    "FLAGS",
-    "HOOK",
-    "IMPORT",
-    "INIT",
-    "LIB",
-    "LOAD",
-    "MODULE",
-    "OPT",
-    "PAGER",
-    "PLUGIN",
-    "REQUIRE",
-    "LINKER",
-    "RUNNER",
-    "RUSTC",
-    "RUSTDOC",
-    "SCRIPT",
-    "SHELL",
-    "STARTUP",
-    "VISUAL",
-    "WRAPPER",
-    "USERBASE",
-    "GEMFILE",
-    "LESSOPEN",
-    "LESSCLOSE",
+    "ARGS", "BIN", "BROWSER", "CMD", "COMMAND", "EDITOR", "EXEC", "FLAGS", "HOOK", "IMPORT",
+    "INIT", "LIB", "LOAD", "MODULE", "OPT", "PAGER", "PLUGIN", "REQUIRE", "LINKER", "RUNNER",
+    "RUSTC", "RUSTDOC", "SCRIPT", "SHELL", "STARTUP", "VISUAL", "WRAPPER", "USERBASE", "GEMFILE",
     "PATH",
 ];
 
@@ -175,7 +147,9 @@ const CODE_LOADING_NAMES: &[&str] = &[
 ];
 
 /// Exact names a program, its shell or Git runs as code or reads a toolchain
-/// or interpreter home from, which no marker above covers.
+/// or interpreter home from, which no marker above covers. `MORE` and `LV`
+/// carry a pager's start-up options, and those options include the shell
+/// escape that runs a command of their own.
 const CODE_LOADING_EXACT: &[&str] = &[
     "BASH_ENV",
     "CARGO_HOME",
@@ -187,6 +161,8 @@ const CODE_LOADING_EXACT: &[&str] = &[
     "GOROOT",
     "GOTOOLCHAIN",
     "JAVA_HOME",
+    "LV",
+    "MORE",
     "PYTHONHOME",
     "RUSTUP_HOME",
     "SSH_ASKPASS",
@@ -196,17 +172,47 @@ const CODE_LOADING_EXACT: &[&str] = &[
 /// other code (`NODE_OPTIONS`, `RUSTC_WRAPPER`, `npm_config_script_shell`,
 /// `LD_PRELOAD`, `DYLD_INSERT_LIBRARIES`, `CXX`). It is matched by fragment,
 /// not by a closed list, so new wrapper and loader names fail closed too.
+/// The whole `LESS*` family is spelled as a prefix: `LESS` itself holds the
+/// options `less` starts with, and `LESS=+!cmd` makes the pager run `cmd`
+/// before it shows a line, so the bare name redirects execution as surely as
+/// `LESSOPEN` does.
 pub(crate) fn code_loading_environment_name(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     let upper = upper.as_str();
     CODE_LOADING_NAMES.contains(&upper)
         || CODE_LOADING_EXACT.contains(&upper)
-        || ["LD_", "DYLD_", "BASH_FUNC_", "NPM_CONFIG_"]
+        || ["LD_", "DYLD_", "BASH_FUNC_", "NPM_CONFIG_", "LESS"]
             .iter()
             .any(|prefix| upper.starts_with(prefix))
         || CODE_LOADING_MARKERS
             .iter()
             .any(|marker| upper.contains(marker))
+}
+
+/// Fragments of settings that choose which certificates a later program
+/// trusts, or whether it verifies them at all (`SSL_CERT_FILE`,
+/// `CURL_CA_BUNDLE`, `REQUESTS_CA_BUNDLE`, `PGSSLMODE`). None of them names
+/// code, a config file or a home, so the markers above let them through,
+/// while the value they carry decides whose certificate a later fetch
+/// accepts.
+const TRUST_ANCHOR_MARKERS: &[&str] = &[
+    "CAINFO",
+    "CAPATH",
+    "CA_BUNDLE",
+    "CA_CERT",
+    "CERT",
+    "SSL",
+    "TLS",
+];
+
+/// A setting that moves the trust anchor of a program that runs later. A
+/// binding outlives the list item that made it, so one of these names
+/// decides whom the rest of the command believes.
+pub(crate) fn trust_anchor_environment_name(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    TRUST_ANCHOR_MARKERS
+        .iter()
+        .any(|marker| upper.contains(marker))
 }
 
 /// A code-loading setting, or one that redirects config or home. The
@@ -216,6 +222,38 @@ pub(crate) fn code_or_redirect_environment_name(name: &str) -> bool {
         let upper = name.to_ascii_uppercase();
         REDIRECT_MARKERS.iter().any(|marker| upper.contains(marker))
     }
+}
+
+/// Fragments of settings that move where a later program connects: a host,
+/// a port, a database endpoint, a package index or a mirror. None of them
+/// names code, a config file, a home or a trust anchor, so the markers above
+/// let them through, while the value they carry decides whose server answers.
+/// `PG*` is spelled as a prefix because libpq settings (`PGHOST`, `PGUSER`,
+/// `PGSERVICE`) steer a connection under names that carry no marker word.
+const ENDPOINT_MARKERS: &[&str] = &[
+    "ADDR", "DSN", "ENDPOINT", "HOST", "INDEX", "MIRROR", "PORT", "PROXY", "REGISTRY", "SERVER",
+    "URI", "URL",
+];
+
+/// A setting that redirects where a later program connects.
+pub(crate) fn endpoint_steering_environment_name(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    upper.starts_with("PG") || ENDPOINT_MARKERS.iter().any(|marker| upper.contains(marker))
+}
+
+/// A setting whose whole effect is a value the command reads for itself:
+/// either a known-inert name such as `CI` or `NODE_ENV`, or an ordinary
+/// project name that steers nothing. Every family that can redirect what
+/// runs — lookup, loading, config, home, credentials, the trust anchor and
+/// the endpoint — keeps its signal, so a caller can treat the rest as a
+/// value and nothing more.
+pub(crate) fn ordinary_setting_name(name: &str) -> bool {
+    !trust_anchor_environment_name(name)
+        && !endpoint_steering_environment_name(name)
+        && !credential_routing_environment_name(name)
+        && (inert_environment_name(name)
+            || (crate::pretool::generic::chain_literals::ordinary_name(name)
+                && !code_or_redirect_environment_name(name)))
 }
 
 #[cfg(test)]

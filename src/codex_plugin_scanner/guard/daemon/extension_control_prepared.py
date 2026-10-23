@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from collections import OrderedDict
@@ -11,6 +10,7 @@ from dataclasses import dataclass, replace
 from ..catalog_delivery import activation_store, activation_transition, lifecycle, lifecycle_store, preparation
 from ..catalog_delivery.pack_store import decode
 from ..catalog_delivery.preparation_authority import installed_bundle_type, load_installed_bundle
+from ..native_extension_control import candidate_nonce
 from ..runtime.extension_control_authority import layers_to_json
 from ..runtime.extension_control_contract import (
     ControlLayerKind,
@@ -23,7 +23,6 @@ from .extension_control_errors import ExtensionControlApiError
 from .extension_control_preparation_failure import preparation_unavailable
 
 MAX_CANDIDATES = 8
-_REQUEST_FIELDS = ("previous_revision", "catalog_digest", "layers", "actor_id", "idempotency_key", "nonce")
 
 
 def expired(candidates):
@@ -80,14 +79,6 @@ def release_all_leases(service, *, timeout=5.0):
     finally:
         for lock in reversed(held):
             lock.release()
-
-
-def request_digest(payload):
-    return hashlib.sha256(
-        json.dumps(
-            {field: payload.get(field) for field in _REQUEST_FIELDS}, sort_keys=True, separators=(",", ":")
-        ).encode()
-    ).hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,12 +177,14 @@ def prepare_candidate(store, registry, mutation, effective_layers, *, managed_re
     layers = tuple(replace(layer, catalog_digest=candidate_registry.catalog_digest) for layer in mutation.layers)
     # The proof's exact mutation also binds the immutable activation record,
     # including authority/profile/root and program/catalog/trust identities.
-    nonce = hashlib.sha256(
-        json.dumps(
-            [mutation.nonce, draft.digest, draft.lifecycle_before, draft.lifecycle_after, draft.security_digest],
-            separators=(",", ":"),
-        ).encode()
-    ).hexdigest()
+    nonce = candidate_nonce(
+        nonce=mutation.nonce,
+        activation_digest=draft.digest,
+        lifecycle_before=draft.lifecycle_before,
+        lifecycle_after=draft.lifecycle_after,
+        security_digest=draft.security_digest,
+        guard_home=store.guard_home,
+    )
     mapped = replace(mutation, catalog_digest=candidate_registry.catalog_digest, layers=layers, nonce=nonce)
     managed = tuple(layer for layer in effective_layers if layer.kind is ControlLayerKind.SIGNED_CLOUD)
     publication = decode(prepared._publication)

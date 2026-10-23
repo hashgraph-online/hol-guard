@@ -5,6 +5,10 @@ on:
     paths:
       - .github/workflows/release-native-prepare.yml
       - scripts/release/prepared_native.py
+      - scripts/release/native_cache_key.py
+      - scripts/release/native_artifact.py
+      - scripts/ci/native_cache_environment.py
+      - scripts/ci/normalize_rust_toolchains.py
       - rust/**
       - contracts/**
       - contributions/command-sources/**
@@ -18,6 +22,11 @@ on:
       version:
         required: true
         type: string
+      target:
+        description: One approved Rust target; empty retains the five-target main warmer.
+        required: false
+        type: string
+        default: ''
       fast_codegen:
         description: Alpha-only per-crate codegen; the version must be a canonical alpha.
         required: false
@@ -25,12 +34,12 @@ on:
         default: false
 permissions:
   contents: read
-# Main pushes only warm the trusted compiler caches; they upload nothing that a
-# release consumes. A newer main push therefore replaces a superseded warm run.
-# Publish calls compile their own exact-SHA binaries in a per-run group, so a
-# push can never cancel a release compilation.
+  actions: read
+# Main pushes prepare exact-source binaries as well as compiler objects.
+# A newer main push replaces a superseded warm run, while publish calls keep
+# their own workflow group and validate the requested source and version.
 concurrency:
-  group: ${{ github.event_name == 'push' && format('release-native-prepare-{0}', github.ref) || format('release-native-prepare-call-{0}', github.run_id) }}
+  group: ${{ github.event_name == 'push' && format('release-native-prepare-{0}', github.ref) || format('release-native-prepare-call-{0}-{1}', github.run_id, inputs.target || 'all') }}
   cancel-in-progress: ${{ github.event_name == 'push' }}
 jobs:
   compile:
@@ -39,33 +48,16 @@ jobs:
     # publish.yml. Their caches stay read-only (see save-if and SCCACHE_GHA_RW_MODE).
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
+    concurrency:
+      # Stable publish calls and main preparation share work for one source and
+      # target. Alpha/canary versions keep separate groups and cache identities.
+      group: release-native-build-${{ inputs.source_sha || github.sha }}-${{ matrix.target }}-${{ (inputs.fast_codegen == true || github.event_name == 'pull_request') && inputs.version || 'release' }}
+      cancel-in-progress: false
+      queue: max
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            suffix: ''
-          # Intel binaries are cross-compiled on Apple silicon; the native
-          # macos-15-intel wheel job self-tests and verifies them before packaging.
-          - runner: macos-15
-            target: x86_64-apple-darwin
-            suffix: ''
-            cross: true
-          - runner: macos-15
-            target: aarch64-apple-darwin
-            suffix: ''
-          - runner: windows-latest
-            target: x86_64-pc-windows-msvc
-            suffix: .exe
-            rustflags: -C link-arg=/Brepro
-          # Windows ARM64 binaries are cross-compiled on x64; the native
-          # windows-11-arm wheel job self-tests and verifies them before packaging.
-          - runner: windows-latest
-            target: aarch64-pc-windows-msvc
-            suffix: .exe
-            rustflags: -C link-arg=/Brepro
-            cross: true
+        include: ${{ fromJSON('{"":[{"runner":"ubuntu-latest","target":"x86_64-unknown-linux-musl","suffix":""},{"runner":"macos-15","target":"x86_64-apple-darwin","suffix":"","cross":true},{"runner":"macos-15","target":"aarch64-apple-darwin","suffix":""},{"runner":"windows-latest","target":"x86_64-pc-windows-msvc","suffix":".exe","rustflags":"-C link-arg=/Brepro"},{"runner":"windows-latest","target":"aarch64-pc-windows-msvc","suffix":".exe","rustflags":"-C link-arg=/Brepro","cross":true}],"x86_64-unknown-linux-musl":[{"runner":"ubuntu-latest","target":"x86_64-unknown-linux-musl","suffix":""}],"x86_64-apple-darwin":[{"runner":"macos-15","target":"x86_64-apple-darwin","suffix":"","cross":true}],"aarch64-apple-darwin":[{"runner":"macos-15","target":"aarch64-apple-darwin","suffix":""}],"x86_64-pc-windows-msvc":[{"runner":"windows-latest","target":"x86_64-pc-windows-msvc","suffix":".exe","rustflags":"-C link-arg=/Brepro"}],"aarch64-pc-windows-msvc":[{"runner":"windows-latest","target":"aarch64-pc-windows-msvc","suffix":".exe","rustflags":"-C link-arg=/Brepro","cross":true}]}')[inputs.target || ''] || fromJSON('[]') }}
     env:
       SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
       VERSION: ${{ inputs.version }}
@@ -90,6 +82,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ inputs.source_sha || github.sha }}
+          fetch-depth: 2
           persist-credentials: false
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
@@ -125,20 +118,57 @@ jobs:
           echo "HOL_GUARD_BUILD_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
       - name: Verify release enrollment root
         run: python scripts/ci/native_approval_contract_gate.py --root . --require-release-root
-      - name: Install pinned Rust target
+      - name: Identify exact release binaries
+        id: native-identity
         if: env.UNSHIPPED_TARGET != 'true'
+        shell: bash
+        run: |
+          identity="$(python -m scripts.release.native_cache_key)"
+          echo "build-id=$identity" >> "$GITHUB_OUTPUT"
+          echo "PREPARED_NATIVE_BUILD_ID=$identity" >> "$GITHUB_ENV"
+      - name: Restore exact release binaries
+        id: native-cache
+        if: env.UNSHIPPED_TARGET != 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: prepared-native
+          # No fallback: a source, version, target, root, image or flag change
+          # requires fresh binaries. The existing cleanup retains this family.
+          key: release-native-binaries-v1-${{ matrix.target }}-${{ inputs.fast_codegen == true && 'fast' || 'release' }}-${{ steps.native-identity.outputs.build-id }}
+      - name: Restore retained trusted preparation
+        id: native-artifact
+        if: env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python -m scripts.release.native_artifact restore
+      - name: Verify restored native release inputs
+        if: env.UNSHIPPED_TARGET != 'true' && (steps.native-cache.outputs.cache-hit == 'true' || steps.native-artifact.outputs.accepted == 'true')
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/release/prepared_native.py install --directory prepared-native
+          if [[ "$CROSS_COMPILED" != "true" ]]; then
+            python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"
+            "$RUNTIME" self-test --json
+          fi
+      - name: Install pinned Rust target
+        if: env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true' && steps.native-artifact.outputs.accepted != 'true'
         shell: bash
         run: |
           rustup toolchain install 1.88.0 --profile minimal
           rustup default 1.88.0
           rustup target add "$RUST_TARGET"
+      - name: Normalize hosted Windows Rust compiler inventory
+        if: runner.environment == 'github-hosted' && runner.os == 'Windows' && runner.arch == 'X64' && env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true' && steps.native-artifact.outputs.accepted != 'true'
+        shell: bash
+        run: python scripts/ci/normalize_rust_toolchains.py --toolchain 1.88.0
       - name: Install Linux static toolchain
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.native-cache.outputs.cache-hit != 'true' && steps.native-artifact.outputs.accepted != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends musl-tools
       - name: Cache trusted release compilation
-        if: env.UNSHIPPED_TARGET != 'true'
+        if: env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true' && steps.native-artifact.outputs.accepted != 'true'
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
           prefix-key: release-native-v1${{ inputs.fast_codegen == true && '-fast' || '' }}
@@ -152,12 +182,12 @@ jobs:
           # main alpha dispatches (never pull requests) may populate.
           save-if: ${{ (github.event_name == 'push' || inputs.fast_codegen == true) && github.ref == 'refs/heads/main' }}
       - name: Install content-addressed compiler cache
-        if: env.UNSHIPPED_TARGET != 'true'
+        if: env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true' && steps.native-artifact.outputs.accepted != 'true'
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
         with:
           version: v0.18.0
       - name: Compile canonical release inputs
-        if: env.UNSHIPPED_TARGET != 'true'
+        if: env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true' && steps.native-artifact.outputs.accepted != 'true'
         shell: bash
         env:
           # Only workspace members are wrapped; third-party crates come from rust-cache.
@@ -190,6 +220,35 @@ jobs:
           fi
           python scripts/release/prepared_native.py pack --directory prepared-native
           "$SCCACHE_PATH" --show-stats
+      - name: Save verified release binaries
+        if: >-
+          env.UNSHIPPED_TARGET != 'true' &&
+          steps.native-cache.outputs.cache-hit != 'true' &&
+          (github.event_name == 'push' || inputs.fast_codegen == true) &&
+          github.ref == 'refs/heads/main'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: prepared-native
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
+      - name: Admit bounded stable preparation retention
+        id: native-retention
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          # Optional existing repository allocation; this never changes billing settings.
+          RELEASE_NATIVE_ARTIFACT_BUDGET_BYTES: ${{ vars.RELEASE_NATIVE_ARTIFACT_BUDGET_BYTES }}
+        run: python -m scripts.release.native_artifact admit-upload
+      - name: Retain stable version-change binaries
+        if: steps.native-retention.outputs.accepted == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-native-warm-${{ matrix.target }}
+          path: prepared-native/*
+          if-no-files-found: error
+          # Stored ZIP gives a strict input-size-plus-header bound (128 MiB/target).
+          compression-level: 0
+          retention-days: 1
       - name: Upload exact-run binaries
         if: >-
           env.UNSHIPPED_TARGET != 'true' &&

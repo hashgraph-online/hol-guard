@@ -15,7 +15,24 @@ GITHUB_DELETE_CASE = "explicit-disabled-github-delete-permission"
 GITHUB_LOOKUP_CASE = "omp-native-github-search-prs"
 GITHUB_LOOKUP_REPO = "example-org/example-repo"
 GITHUB_LOOKUP_QUERY = "is:pr metrics OR analytics"
-GITHUB_STUB_CASES = frozenset({GITHUB_REVIEW_CASE, GITHUB_DELETE_CASE, GITHUB_LOOKUP_CASE})
+GITHUB_METADATA_CASE = "github-metadata-command-reads"
+GITHUB_METADATA_CONTROL = "github-metadata-mutation-control"
+GITHUB_STUB_CASES = frozenset(
+    {GITHUB_REVIEW_CASE, GITHUB_DELETE_CASE, GITHUB_LOOKUP_CASE, GITHUB_METADATA_CASE, GITHUB_METADATA_CONTROL}
+)
+METADATA_CALLS = (
+    ("cache", "list", "--limit", "5"),
+    ("label", "list", "--json", "name"),
+    ("secret", "list"),
+    ("variable", "list"),
+    ("codespace", "list"),
+    ("org", "list"),
+    ("project", "list", "--owner", "example-org"),
+    ("alias", "list"),
+    ("extension", "list"),
+    ("config", "list"),
+    ("config", "get", "editor"),
+)
 WORKTREE_CASE = "linked-worktree-edit-from-main-checkout"
 # Writes into a harness plan folder pass; the hooks file beside it stays reviewed.
 PLAN_NOTE_PROTECTION_CASE = "plan-note-protection-codex-hooks"
@@ -129,6 +146,10 @@ def _is_lookup_call(call: tuple[str, ...]) -> bool:
 
 
 def github_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
+    if scenario_id == GITHUB_METADATA_CASE:
+        return {"github-metadata-calls-exact": recorded_gh_calls(workspace) == list(METADATA_CALLS)}
+    if scenario_id == GITHUB_METADATA_CONTROL:
+        return {"github-metadata-control-not-executed": recorded_gh_calls(workspace) is None}
     if scenario_id == GITHUB_REVIEW_CASE:
         return {"github-stub-calls-exact": recorded_gh_calls(workspace) == list(EXPECTED_GH_CALLS)}
     if scenario_id == GITHUB_LOOKUP_CASE:

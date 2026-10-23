@@ -4,6 +4,15 @@ from __future__ import annotations
 
 import argparse
 
+from ..approval_wait_limits import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
+
+
+def _wait_timeout(value: str) -> int:
+    seconds = int(value)
+    if not 0 <= seconds <= MAX_APPROVAL_WAIT_TIMEOUT_SECONDS:
+        raise argparse.ArgumentTypeError(f"timeout must be between 0 and {MAX_APPROVAL_WAIT_TIMEOUT_SECONDS} seconds")
+    return seconds
+
 
 def add_approval_parser(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
@@ -60,6 +69,14 @@ def add_approval_parser(
     )
     add_common_args(list_parser)
     list_parser.add_argument("--json", action="store_true")
+
+    wait_parser = approvals_subparsers.add_parser("wait", help="Wait for a decision without resolving or executing it")
+    wait_parser.add_argument("request_id")
+    wait_parser.add_argument(
+        "--timeout", type=_wait_timeout, default=120, help="Wait at most this many seconds (0-600)"
+    )
+    add_common_args(wait_parser)
+    wait_parser.add_argument("--json", action="store_true")
 
     clear_history_parser = approvals_subparsers.add_parser(
         "clear-history",

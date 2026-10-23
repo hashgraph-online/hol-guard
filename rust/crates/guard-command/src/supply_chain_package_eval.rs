@@ -66,9 +66,9 @@ use contracts::{
     ensure_terminal_punctuation, json_obj, optional_string, registry_default_ranges,
     severity_rank_map, string_tuple, value_str, CLOUD_INBOX_URL_RE,
     EXTERNAL_ARCHIVE_MAX_AGGREGATE_BYTES, EXTERNAL_ARCHIVE_MAX_TARGETS,
-    LOCAL_APPROVAL_INSTRUCTION_RE, LOCAL_APPROVAL_REQUEST_URL_RE, LOCAL_REVIEW_INSTRUCTION_RE,
-    LOCKFILE_PARSE_BUDGET_SECONDS, NAMED_SOURCE_SEPARATOR_RE, RETRY_TIMEOUT_SECONDS,
-    TARBALL_SCAN_MAX_BYTES, TIMEOUT_SECONDS,
+    LEGACY_LOCAL_APPROVAL_INSTRUCTION_RE, LOCAL_APPROVAL_INSTRUCTION_RE,
+    LOCAL_APPROVAL_REQUEST_URL_RE, LOCAL_REVIEW_INSTRUCTION_RE, LOCKFILE_PARSE_BUDGET_SECONDS,
+    NAMED_SOURCE_SEPARATOR_RE, RETRY_TIMEOUT_SECONDS, TARBALL_SCAN_MAX_BYTES, TIMEOUT_SECONDS,
 };
 pub use contracts::{
     EXTERNAL_ARCHIVE_REQUEST_TIMEOUT_SECONDS, TARBALL_SCAN_MAX_FILES,
@@ -104,7 +104,7 @@ mod evaluation;
 pub(crate) use empty_material::{empty_package_material_result, hold_unresolved_package_cwd};
 use evaluation::{
     artifact_has_flag, artifact_has_package_material, cache_reusable_cloud_validation_error,
-    decision_rank, decision_to_guard_action_variant, normalize_package_name,
+    decision_rank, decision_to_guard_action_variant, guard_action_variant, normalize_package_name,
     parse_evaluation_timestamp, reason_severity, severity_rank_value,
 };
 pub use evaluation::{

@@ -23,6 +23,9 @@ mod owner;
 mod registry;
 #[cfg(windows)]
 mod secure_storage;
+#[cfg(all(test, windows))]
+#[path = "../../../test_support/unique_nanos.rs"]
+mod unique_nanos;
 #[cfg(windows)]
 mod windows;
 

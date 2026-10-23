@@ -43,6 +43,23 @@ def _timeout(value: str) -> bool:
     return bool(value) and len(value) <= 10 and value.isascii() and value.isdigit()
 
 
+def skip_exec_launcher(tokens: list[str], index: int) -> int:
+    """Step past an ``exec`` that hands the run to the program the text names.
+
+    The native parser reads a bare ``exec`` as a launcher and reports the
+    program behind it as the executable. Every spelling it refuses to read that
+    way - an option word, a script file, a path, an interpreter, or no program
+    at all - leaves ``exec`` itself as the executable, and ``exec`` there is a
+    nested command executor, which the parser reports as uncertain with no
+    segment at all. So a segment that still carries ``exec`` in front of its
+    program is one the parser stepped past, and stepping past it here reads the
+    same words rather than repeating the launcher's grammar.
+    """
+    while index + 1 < len(tokens) and tokens[index] == "exec":
+        index += 1
+    return index
+
+
 _INLINE_SHELLS = frozenset({"sh", "bash", "dash", "ash"})
 
 
