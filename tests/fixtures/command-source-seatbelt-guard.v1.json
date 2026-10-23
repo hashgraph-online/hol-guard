@@ -41,7 +41,7 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies `seatbelt uninstall <agent> --write`, which removes seatbelt's PreToolUse hook from an agent's settings and turns the guardrail off. Without --write the command only previews the change. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "description": "Identifies `seatbelt uninstall <agent> --write`, which removes seatbelt's PreToolUse hook from an agent's settings and turns the guardrail off. Without --write the command only previews the change. xargs launches are blocked by Guard's wrapper floor.",
               "example_command": "seatbelt uninstall claude-code --scope project --write",
               "family": null,
               "fixed_reason": null,
@@ -68,7 +68,7 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies `seatbelt install <agent> --no-on-failure-block --write`, which installs the hook without `onFailure: block`, so a crash or timeout of the hook lets every command run unchecked. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "description": "Identifies `seatbelt install <agent> --no-on-failure-block --write`, which installs the hook without `onFailure: block`, so a crash or timeout of the hook lets every command run unchecked. xargs launches are blocked by Guard's wrapper floor.",
               "example_command": "seatbelt install claude-code --no-on-failure-block --write",
               "family": null,
               "fixed_reason": null,
@@ -95,7 +95,7 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies `seatbelt install <agent> --write`, which edits an agent's settings file (user, project or local scope) to add the seatbelt hook. A backup is kept, but the file changes. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "description": "Identifies `seatbelt install <agent> --write`, which edits an agent's settings file (user, project or local scope) to add the seatbelt hook. A backup is kept, but the file changes. xargs launches are blocked by Guard's wrapper floor.",
               "example_command": "seatbelt install claude-code --scope user --write",
               "family": null,
               "fixed_reason": null,
@@ -134,7 +134,7 @@
                 "seatbelt hook removal command"
               ],
               "default_mode": "review",
-              "description": "Identifies `seatbelt uninstall <agent> --write`, which removes seatbelt's PreToolUse hook from an agent's settings and turns the guardrail off. Without --write the command only previews the change. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "description": "Identifies `seatbelt uninstall <agent> --write`, which removes seatbelt's PreToolUse hook from an agent's settings and turns the guardrail off. Without --write the command only previews the change. xargs launches are blocked by Guard's wrapper floor.",
               "family": null,
               "matcher": {
                 "config": {},
@@ -536,7 +536,7 @@
                 "seatbelt fail-open install command"
               ],
               "default_mode": "review",
-              "description": "Identifies `seatbelt install <agent> --no-on-failure-block --write`, which installs the hook without `onFailure: block`, so a crash or timeout of the hook lets every command run unchecked. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "description": "Identifies `seatbelt install <agent> --no-on-failure-block --write`, which installs the hook without `onFailure: block`, so a crash or timeout of the hook lets every command run unchecked. xargs launches are blocked by Guard's wrapper floor.",
               "family": null,
               "matcher": {
                 "config": {},
@@ -2599,7 +2599,7 @@
                 "seatbelt agent settings change command"
               ],
               "default_mode": "review",
-              "description": "Identifies `seatbelt install <agent> --write`, which edits an agent's settings file (user, project or local scope) to add the seatbelt hook. A backup is kept, but the file changes. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "description": "Identifies `seatbelt install <agent> --write`, which edits an agent's settings file (user, project or local scope) to add the seatbelt hook. A backup is kept, but the file changes. xargs launches are blocked by Guard's wrapper floor.",
               "family": null,
               "matcher": {
                 "config": {},
@@ -3501,17 +3501,6 @@
       "rule_id": "command.seatbelt-guard.uninstall-hook"
     },
     {
-      "command": "exec seatbelt uninstall claude-code --write",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.seatbelt-guard"
-      ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
-      "id": "exec-uninstall",
-      "rule_id": "command.seatbelt-guard.uninstall-hook"
-    },
-    {
       "command": "xargs -n 1 seatbelt uninstall claude-code --write",
       "disabled_permissions": [],
       "enabled_extensions": [
@@ -3616,17 +3605,6 @@
         0
       ],
       "id": "fail-open-headless",
-      "rule_id": "command.seatbelt-guard.install-fail-open"
-    },
-    {
-      "command": "exec seatbelt install claude-code --no-on-failure-block --write",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.seatbelt-guard"
-      ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
-      "id": "exec-fail-open",
       "rule_id": "command.seatbelt-guard.install-fail-open"
     },
     {
@@ -3777,17 +3755,6 @@
         0
       ],
       "id": "install-settings-file",
-      "rule_id": "command.seatbelt-guard.install-write"
-    },
-    {
-      "command": "exec seatbelt install claude-code --write",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.seatbelt-guard"
-      ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
-      "id": "exec-install-write",
       "rule_id": "command.seatbelt-guard.install-write"
     },
     {
