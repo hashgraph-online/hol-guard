@@ -3,7 +3,7 @@
   "id": "mcp.arch",
   "version": "1.0.0",
   "name": "Arch",
-  "description": "Local stdio server from tnvolman/arch-cursor-plugin. To get Guard's review defaults, set the MCP command to the script path so the basename is index.mjs, not node plus args. At eaf99bbc server/index.mjs is mode 100644, not executable. arch_review POSTs {text, max_tokens?, payment_method_id?, idempotency_key?} to https://arch.tnvolman.com/v1/review and sends ARCH_API_KEY as X-API-Key. kjv_lookup sends nothing. Off until you turn it on.",
+  "description": "Arch is a pay-per-call theological review of writing against Scripture. Local stdio server from tnvolman/arch-cursor-plugin. To get Guard's review defaults, set the MCP command to the script path so the basename is index.mjs, not node plus args. At eaf99bbc server/index.mjs is mode 100644, not executable. arch_review POSTs {text, max_tokens?, payment_method_id?, idempotency_key?} to https://arch.tnvolman.com/v1/review and sends ARCH_API_KEY as X-API-Key. kjv_lookup sends nothing. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -47,16 +47,24 @@
     "https://github.com/tnvolman/arch-cursor-plugin/commit/eaf99bbc8fd66fcf89f058c1415eaabcc1e5f799",
     "https://arch.tnvolman.com/v1/review",
     "https://arch.tnvolman.com/privacy",
-    "https://arch.tnvolman.com/terms"
+    "https://arch.tnvolman.com/terms",
+    "https://www.anthropic.com/legal/commercial-terms",
+    "https://privacy.claude.com/en/articles/7996866-how-long-do-you-store-my-organization-s-data",
+    "https://privacy.anthropic.com/en/articles/7996868-is-my-data-used-for-model-training",
+    "https://docs.railway.com/observability/logs",
+    "https://developers.cloudflare.com/logs/logpull/enabling-log-retention/",
+    "https://developers.cloudflare.com/logs/logpull/understanding-the-basics/",
+    "https://developers.cloudflare.com/analytics/graphql-api/limits/",
+    "https://github.com/tnvolman/the-forge/blob/06544142cf71cea2775a39abfc5569f31ca19a46/src/routes/arch.py"
   ],
   "saferAlternatives": [
-    "To get Guard's review defaults, set the MCP command to the script path itself so the basename is index.mjs. Guard matches any stdio command named index.mjs. node plus args is not matched.",
-    "Published mcp.json uses node and ./server/index.mjs. At eaf99bbc that file is mode 100644, not executable, despite its node shebang. There is no PRIVACY.md in the plugin repo.",
+    "To get Guard's review defaults, set the MCP command to the script path itself so the basename is index.mjs. Guard matches any stdio command named index.mjs. node plus args is not matched. Published mcp.json uses node ./server/index.mjs. No PRIVACY.md.",
+    "Node v22.23.4 (undici 6.29.1) https fetch adds user-agent node, accept-language *, sec-fetch-mode cors, accept-encoding br, gzip, deflate, host, content-length, and connection keep-alive, besides the plugin headers. Other Node 18+ versions are unverified.",
     "arch_review only POSTs JSON {text, max_tokens?, payment_method_id?, idempotency_key?} to https://arch.tnvolman.com/v1/review. Code sets Content-Type, Accept, X-API-Key (the ARCH_API_KEY value), and Idempotency-Key when idempotency_key is non-empty.",
     "If ARCH_API_KEY is missing or empty, or text is empty or over 50000 characters, arch_review sends nothing. kjv_lookup only reads bundled server/data/kjv.json and sends no reference, verse text, or API key.",
-    "The plugin does not write the review text or the key. https://arch.tnvolman.com/privacy (updated 19 October 2026) says Arch sends the text to Anthropic, holds it in memory for the request, then discards it, and does not store it in its database.",
-    "That policy says call count and last-used time on the key, and a charge ledger of payment-intent id, amount, currency, status, and character count (not the text), stay until deleted on request. Railway logs record character count and key prefix.",
-    "Operational logs record character count, not the text. Anthropic retention, Railway log duration, and whether logs keep the full X-API-Key are unverified. The policy says review text is not used to train models.",
-    "The privacy page says Cloudflare and Railway see IP, user agent, and timestamps. How long they keep that metadata is unverified. The plugin calls only POST /v1/review. Extra headers from Node fetch are unverified."
+    "Plugin stores neither text nor the key. Privacy page (19 Oct 2026): text is sent to Anthropic, held in memory, not stored. Call count, last-used, and charge rows (intent id, amount, currency, status, char count; not the text) stay until deleted on request.",
+    "the-forge 06544142 arch.py:264 logs email and key_prefix (first 12 chars). :338 and :570 log character count. :939 stores an 8-char prefix and a hash. No reviewed log writes the full X-API-Key. Exception strings at :206, :368, and :620 are unverified.",
+    "Commercial terms: \"Anthropic may not train models on Customer Content from Services.\" 7996866: deleted \"within 30 days of receipt or generation,\" except longer retention, an agreement, Usage Policy, and law. Covered Models and Arch agreement unverified.",
+    "Railway: \"Depending on your plan, logs are retained for a certain amount of time.\" Free 3, Trial/Hobby 7, Pro 30, Enterprise up to 90 days. Cloudflare: \"By default, your HTTP request logs are not retained.\" at least 3, up to 7 days. Plan, zone unverified."
   ]
 }
