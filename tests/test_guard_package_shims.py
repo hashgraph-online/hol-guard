@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from http.server import HTTPServer
 from io import StringIO
 from multiprocessing import Event, Process, Queue
+from multiprocessing.synchronize import Event as EventHandle
 from pathlib import Path
 
 import pytest
@@ -386,14 +387,22 @@ def _install_single_manager_shim(
     return Path(str(payload["shim_dir"])) / manager
 
 
+# How long the helper may spend reaching the write lock before the test calls
+# it unobtainable. A coverage shard starts a whole interpreter for this process
+# on a runner already running every other shard, and the first attempt can lose
+# a race with a writer the test's own process still holds, so the second sqlite
+# waits on its own is nowhere near the budget this needs.
+_WRITER_LOCK_DEADLINE_SECONDS = 60.0
+
+
 def _hold_guard_db_writer_lock(
     database_path: str,
     hold_seconds: int,
-    ready_event: Event | None = None,
+    ready_event: EventHandle | None = None,
 ) -> None:
     connection = sqlite3.connect(database_path, timeout=1)
     try:
-        connection.execute("BEGIN IMMEDIATE")
+        _begin_immediate(connection)
         connection.execute(
             "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
             ("lock-test", "{}", "2026-06-20T00:00:00Z"),
@@ -404,6 +413,46 @@ def _hold_guard_db_writer_lock(
         connection.rollback()
     finally:
         connection.close()
+
+
+def _begin_immediate(connection: sqlite3.Connection) -> None:
+    """Take the database's write lock, waiting out whoever else holds it.
+
+    Losing the race once is not the condition under test: the test needs the
+    lock held while the shim runs, and a single refused attempt used to end the
+    process without ever saying so, leaving the test waiting on a readiness
+    signal nothing would send.
+    """
+
+    deadline = time.monotonic() + _WRITER_LOCK_DEADLINE_SECONDS
+    while True:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            return
+        except sqlite3.OperationalError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.1)
+
+
+def _await_writer_lock(lock_process: Process, ready_event: EventHandle) -> None:
+    """Wait for the helper to hold the write lock, or say why it never did.
+
+    The wait is generous because the cost of being wrong is a flake, and it
+    stops early if the helper has exited: a process that died on its way to the
+    lock will never set the event, and a minute of waiting would only delay the
+    report of it.
+    """
+
+    deadline = time.monotonic() + _WRITER_LOCK_DEADLINE_SECONDS
+    while time.monotonic() < deadline:
+        if ready_event.wait(timeout=0.5):
+            return
+        if not lock_process.is_alive():
+            break
+    lock_process.terminate()
+    lock_process.join(timeout=20)
+    pytest.fail(f"the lock holder never took the write lock (exit code {lock_process.exitcode})")
 
 
 def _run_guard_protect_command(
@@ -825,7 +874,7 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
     ready_event = Event()
     lock_process = Process(target=_hold_guard_db_writer_lock, args=(str(home_dir / "guard.db"), 13, ready_event))
     lock_process.start()
-    assert ready_event.wait(timeout=5)
+    _await_writer_lock(lock_process, ready_event)
     env = dict(os.environ)
     env["HOME"] = str(home_dir)
     env["PATH"] = f"{shim_path.parent}{os.pathsep}{fake_bin}{os.pathsep}{env.get('PATH', '')}"
