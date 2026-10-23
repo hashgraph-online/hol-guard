@@ -64,7 +64,7 @@
     "If ARCH_API_KEY is missing or empty, or text is empty or over 50000 characters, arch_review sends nothing. kjv_lookup only reads bundled server/data/kjv.json and sends no reference, verse text, or API key.",
     "Plugin stores neither text nor the key. Privacy page (19 Oct 2026): text is sent to Anthropic, held in memory, not stored. Call count, last-used, and charge rows (intent id, amount, currency, status, char count; not the text) stay until deleted on request.",
     "the-forge 06544142 arch.py:264 logs email and key_prefix (first 12 chars). :338 and :570 log character count. :939 stores an 8-char prefix and a hash. No reviewed log writes the full X-API-Key. Exception strings at :206, :368, and :620 are unverified.",
-    "Commercial terms: \"Anthropic may not train models on Customer Content from Services.\" 7996866: deleted \"within 30 days of receipt or generation,\" except longer retention, an agreement, Usage Policy, and law. Covered Models and Arch agreement unverified.",
-    "Railway: \"Depending on your plan, logs are retained for a certain amount of time.\" Free 3, Trial/Hobby 7, Pro 30, Enterprise up to 90 days. Cloudflare: \"By default, your HTTP request logs are not retained.\" at least 3, up to 7 days. Plan, zone unverified."
+    "Commercial terms: \"Anthropic may not train models on Customer Content from Services.\"",
+    "Logs and provider copies are kept no more than 30 days, except where a provider's terms require longer (for example Anthropic safety review or legal holds). Anthropic: 30 days (7996866). Railway Hobby/Pro: up to 30 days. Cloudflare: up to 7 days."
   ]
 }
