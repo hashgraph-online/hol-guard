@@ -25,6 +25,25 @@ from .native_policy_snapshot_test_fixtures import _ack, _config, _resident_gener
 __test__ = False
 
 
+def _await_error(publisher: NativePolicySnapshotPublisher, expected: str) -> str | None:
+    """The publisher's error once it is ``expected``, else whatever it holds.
+
+    The publisher sends and judges its request on its own thread, so the error
+    appears some time after ``wait_until_ready`` gives up, and an earlier
+    attempt may have left a different one behind. Reading the error once after
+    a short window makes the assertion a race: on a loaded host the thread may
+    not have delivered a single request yet, and the error reads as ``None``
+    while nothing is actually wrong. An error that never becomes ``expected``
+    is still returned, so a publisher that records the wrong one fails the
+    assertion as it did before.
+    """
+
+    deadline = time.monotonic() + 10.0
+    while publisher.last_error != expected and time.monotonic() < deadline:
+        time.sleep(0.01)
+    return publisher.last_error
+
+
 def test_publisher_startup_ack_and_mutation_push(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
@@ -254,7 +273,7 @@ def test_publisher_rejects_mutated_ack_without_opening_barrier(
     publisher.start()
     try:
         assert not publisher.wait_until_ready(time.monotonic() + 0.5)
-        assert publisher.last_error == "native_policy_snapshot_ack_mismatch"
+        assert _await_error(publisher, "native_policy_snapshot_ack_mismatch") == "native_policy_snapshot_ack_mismatch"
         assert not publisher.is_ready()
     finally:
         publisher.close()

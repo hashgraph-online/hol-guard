@@ -6,15 +6,11 @@ use super::*;
 fn managed_owner_lock_is_exclusive_for_resident_lifetime() {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-owner-lock-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&root).unwrap();
     fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
@@ -42,15 +38,10 @@ fn managed_owner_lock_is_exclusive_for_resident_lifetime() {
 #[cfg(unix)]
 #[test]
 fn managed_owner_barrier_allows_authority_load_in_same_process() {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-owner-authority-load-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&root).unwrap();
     fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
@@ -72,7 +63,6 @@ fn managed_owner_lock_rejects_second_process() {
     use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
     use std::process::{Command, Stdio};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     if let Some(root) = std::env::var_os("HOL_GUARD_OWNER_LOCK_CHILD") {
         let root = PathBuf::from(root);
@@ -85,10 +75,7 @@ fn managed_owner_lock_rejects_second_process() {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-managed-owner-lock-process-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&root).unwrap();
     fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();

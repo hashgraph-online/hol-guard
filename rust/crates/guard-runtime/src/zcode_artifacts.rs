@@ -26,47 +26,7 @@ const HOOK_EVENT_NAMES: [&str; 7] = [
 ];
 const MANAGED_MARKER: &str = "HOL_GUARD_MANAGED_ZCODE";
 
-pub(crate) struct Scope<'a> {
-    pub(crate) harness: &'a str,
-    pub(crate) scope: &'a str,
-}
-
-#[derive(Default)]
-pub(crate) struct Fields<'a> {
-    pub(crate) command: Option<&'a str>,
-    pub(crate) args: Vec<String>,
-    pub(crate) url: Option<&'a str>,
-    pub(crate) transport: Option<&'a str>,
-    pub(crate) publisher: Option<&'a str>,
-}
-
-impl Scope<'_> {
-    pub(crate) fn wire(
-        &self,
-        artifact_id: String,
-        name: &str,
-        artifact_type: &str,
-        config_path: &Path,
-        fields: Fields<'_>,
-        metadata: Map<String, Value>,
-    ) -> Value {
-        json!({
-            "artifact_id": artifact_id,
-            "name": name,
-            "harness": self.harness,
-            "artifact_type": artifact_type,
-            "source_scope": self.scope,
-            "config_path": config_path.to_string_lossy(),
-            "command": fields.command,
-            "args": fields.args,
-            "url": fields.url,
-            "transport": fields.transport,
-            "publisher": fields.publisher,
-            "metadata": metadata,
-        })
-    }
-}
-
+pub(crate) use guard_adapter_detection::{Fields, Scope};
 fn python_lower(text: &str) -> String {
     text.to_lowercase()
 }

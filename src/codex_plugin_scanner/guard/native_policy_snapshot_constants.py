@@ -104,37 +104,6 @@ _REQUIRED_PUBLISH_FEATURES = frozenset(
     }
 )
 _VALID_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
-_VALID_POSTURES = frozenset({"protected", "extra_careful", "watch"})
-_VALID_SECURITY_LEVELS = frozenset({"relaxed", "gentle", "balanced", "strict", "paranoid", "custom"})
-_VALID_SANDBOX_ANALYSIS = frozenset({"off", "suspicious", "strict"})
-_VALID_REDACTION_LEVELS = frozenset({"full", "partial", "none"})
-_VALID_RISK_ACTION_KEYS = frozenset(
-    {
-        "local_secret_read",
-        "credential_exfiltration",
-        "data_flow_exfiltration",
-        "destructive_shell",
-        "encoded_execution",
-        "network_egress",
-        "prompt_injection",
-        "mcp_dangerous_tool",
-        "malicious_skill",
-        "package_script",
-        "persistence",
-        "guard_bypass",
-        "cloud_advisory",
-        "encoded_exfiltration",
-        "package_unknown",
-        "package_lockfile_drift",
-        "package_direct_source",
-        "package_custom_registry",
-        "package_install",
-        "low_trust_artifact",
-        "execution",
-        "supply_chain",
-        "policy_bypass",
-    }
-)
 _VALID_INPUT_MODES = frozenset({"observe", "prompt", "enforce"})
 _MAX_U64 = (1 << 64) - 1
 
@@ -183,22 +152,6 @@ _ACTION_SEVERITY = {
     "sandbox-required": 4,
     "block": 5,
 }
-# ``watch`` is observe-only; it must never override an enforcing posture when
-# home/workspace policies are composed into one resident snapshot.
-_POSTURE_SEVERITY = {"watch": 0, "protected": 1, "extra_careful": 2}
-_SECURITY_LEVEL_SEVERITY = {
-    "relaxed": 0,
-    "gentle": 1,
-    "balanced": 2,
-    "strict": 3,
-    "paranoid": 4,
-    # ``custom`` is a validated configuration value whose individual floors
-    # are represented by the action maps below. It must not be weakened by a
-    # less-specific workspace overlay.
-    "custom": 5,
-}
-_SANDBOX_SEVERITY = {"off": 0, "suspicious": 1, "strict": 2}
-_REDACTION_SEVERITY = {"none": 0, "partial": 1, "full": 2}
 
 
 class NativePolicySnapshotError(RuntimeError):

@@ -18,6 +18,7 @@ from ..approval_gate import (
 )
 from ..daemon.client import GuardDaemonRequestError, GuardDaemonTransportError, GuardSurfaceDaemonClient
 from ..daemon.runtime_peer import load_guard_daemon_endpoint
+from ..native_extension_control import NativeExtensionControlError
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_authority import AuthorityHealth, ExtensionControlAuthorityError
@@ -116,6 +117,7 @@ def _enroll(guard_home: Path, actor: str, output_stream: TextIO | None) -> int:
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
         actor_id=actor,
         nonce=secrets.token_hex(16),
+        guard_home=guard_home,
     )
     gate_input = prompt_for_approval_gate(guard_home, use_cooldown=False)
     proof = issue_extension_control_enrollment_proof(
@@ -405,6 +407,10 @@ def run_extension_controls_command(
     except GuardDaemonRequestError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 4 if error.status in {401, 403, 423} else 2
+    except NativeExtensionControlError as error:
+        # Enrollment asks the native runtime for its digest before prompting.
+        print(f"Error: the native extension-control runtime did not answer ({error.code}); retry.", file=sys.stderr)
+        return 2
     except (TypeError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2

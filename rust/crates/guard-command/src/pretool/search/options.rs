@@ -1,5 +1,6 @@
 use super::{
-    glob_can_select_sensitive_path, sensitive_path_argument, ReadContext, SearchValueRole,
+    glob_can_select_sensitive_path, literal_glob_names_sensitive_path, sensitive_path_argument,
+    ReadContext, SearchValueRole,
 };
 
 pub(super) fn unsafe_search_value(
@@ -46,7 +47,20 @@ pub(super) fn unsafe_search_value(
         }),
         SearchValueRole::RgType => !SOURCE_TYPES.contains(&value),
         SearchValueRole::DirectoryAction => value.eq_ignore_ascii_case("recurse"),
-        SearchValueRole::Pattern | SearchValueRole::Other => false,
+        // A pattern matches the text a stage is handed, so an ordinary word
+        // there names no file. The shell reaches it first: `.env{,.local}`
+        // leaves `.env` as the pattern and `.env.local` as an operand the
+        // stage then opens, and `.env*` becomes one as soon as a second name
+        // is beside it. A pattern whose expansions can select a credential
+        // path is therefore not a pattern yet.
+        //
+        // Only the glob's own text answers that question. A regex carries
+        // `.*` wherever it joins two words, and asking whether some string
+        // the glob could match would start with or hold a credential marker
+        // says yes to every one of them: `rg 'Delegate\b.*=>' src` and
+        // `rg 'Auth.*Provider' src` are searches, not file names.
+        SearchValueRole::Pattern => literal_glob_names_sensitive_path(value),
+        SearchValueRole::Other => false,
     }
 }
 

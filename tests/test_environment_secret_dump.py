@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.daemon.diagnostics import DaemonDiagnostics
 from codex_plugin_scanner.guard.redaction import redact_text
 from tests.native_command_test_support import (
     extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
@@ -108,6 +109,16 @@ def test_inspect_command_reviews_python_environ_dump() -> None:
     assert "local_secret_read" in payload["risk_classes"]
 
 
+def _guard_log_tail(guard_home: Path) -> str:
+    """Return the end of Guard's own log, where a generic hook deny records its cause."""
+
+    log_path = DaemonDiagnostics(guard_home, start_worker=False, rotate=False).log_path
+    try:
+        return log_path.read_text(encoding="utf-8", errors="replace")[-6000:]
+    except OSError as error:
+        return f"Guard log unavailable: {type(error).__name__}"
+
+
 @pytest.mark.usefixtures("native_hook_force")
 def test_grok_pretool_denies_python_environ_dump(tmp_path: Path, monkeypatch, capsys) -> None:
     home_dir = tmp_path / "home"
@@ -143,7 +154,8 @@ def test_grok_pretool_denies_python_environ_dump(tmp_path: Path, monkeypatch, ca
 
     assert rc == 2
     assert payload["decision"] == "deny"
-    assert "environment" in str(payload.get("reason", "")).lower() or "secret" in str(payload.get("reason", "")).lower()
+    reason = str(payload.get("reason", "")).lower()
+    assert "environment" in reason or "secret" in reason, _guard_log_tail(guard_home)
 
 
 def test_redact_text_masks_aws_secret_in_mapping() -> None:

@@ -193,7 +193,7 @@ const COMMAND_PREFIXES: &[&str] = &[
     "nohup",
 ];
 
-fn command_index(words: &[&str]) -> Option<usize> {
+pub(super) fn command_index(words: &[&str]) -> Option<usize> {
     let mut index = 0;
     let mut option_of: Option<&str> = None;
     while index < words.len() {
@@ -379,7 +379,7 @@ fn named_program(word: &str, replace: Option<&str>) -> bool {
 
 /// A program named outright: not built from an expansion, a glob or a
 /// substitution, and not an interpreter that runs something else.
-fn plain_program(word: &str) -> bool {
+pub(super) fn plain_program(word: &str) -> bool {
     !word.contains(['$', '*', '?', '[', '`', '\'', '"', '='])
         && !INTERPRETERS.contains(&command_basename(word).as_str())
 }

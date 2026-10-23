@@ -165,6 +165,26 @@ fn to_read_factor(row: &ReadFactorRow) -> crate::effect_decision::DecisionFactor
     }
 }
 
+/// Names, labels and example commands are display text the catalog may reword
+/// without changing any decision, so the oracle pins semantics, not wording.
+/// Risk tiers and families stay compared: they drive the caution a
+/// recommendation shows.
+fn adopt_display_metadata(expected: &mut CatalogExtension, live: Option<&CatalogExtension>) {
+    let Some(live) = live else { return };
+    expected.name = live.name.clone();
+    for permission in &mut expected.permissions {
+        let Some(current) = live
+            .permissions
+            .iter()
+            .find(|current| current.permission_id == permission.permission_id)
+        else {
+            continue;
+        };
+        permission.label = current.label.clone();
+        permission.example_command = current.example_command.clone();
+    }
+}
+
 #[test]
 fn evaluate_command_matches_python_oracle() {
     let raw = include_str!("../testdata/evaluate_command_oracle.json");
@@ -180,10 +200,12 @@ fn evaluate_command_matches_python_oracle() {
         !fixture.catalog_extensions.is_empty(),
         "oracle catalog is empty"
     );
-    for expected in &fixture.catalog_extensions {
+    for expected in &mut fixture.catalog_extensions {
+        let live = catalog.get(&expected.extension_id);
+        adopt_display_metadata(expected, live);
         assert_eq!(
-            catalog.get(&expected.extension_id),
-            Some(expected),
+            live,
+            Some(&*expected),
             "oracle catalog semantics changed for {}; regenerate the Python oracle",
             expected.extension_id
         );

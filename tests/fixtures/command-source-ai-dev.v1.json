@@ -8812,9 +8812,11 @@
         "command.ai-dev"
       ],
       "disabled_permissions": [],
-      "expected_action": "block",
+      "expected_action": "review",
       "rule_id": "command.ai-dev.integrations-install-force",
-      "expected_effective_segments": []
+      "expected_effective_segments": [
+        0
+      ]
     },
     {
       "id": "integrations-install-force-project",
@@ -9082,9 +9084,11 @@
         "command.ai-dev"
       ],
       "disabled_permissions": [],
-      "expected_action": "block",
+      "expected_action": "review",
       "rule_id": "command.ai-dev.index-daemon-start",
-      "expected_effective_segments": []
+      "expected_effective_segments": [
+        0
+      ]
     },
     {
       "id": "index-daemon-start-project",
@@ -9352,9 +9356,11 @@
         "command.ai-dev"
       ],
       "disabled_permissions": [],
-      "expected_action": "block",
+      "expected_action": "review",
       "rule_id": "command.ai-dev.index-daemon-stop",
-      "expected_effective_segments": []
+      "expected_effective_segments": [
+        0
+      ]
     },
     {
       "id": "index-daemon-stop-project",
@@ -9622,9 +9628,11 @@
         "command.ai-dev"
       ],
       "disabled_permissions": [],
-      "expected_action": "block",
+      "expected_action": "review",
       "rule_id": "command.ai-dev.agents-claim",
-      "expected_effective_segments": []
+      "expected_effective_segments": [
+        0
+      ]
     },
     {
       "id": "agents-claim-project",
@@ -9892,9 +9900,11 @@
         "command.ai-dev"
       ],
       "disabled_permissions": [],
-      "expected_action": "block",
+      "expected_action": "review",
       "rule_id": "command.ai-dev.agents-release",
-      "expected_effective_segments": []
+      "expected_effective_segments": [
+        0
+      ]
     },
     {
       "id": "agents-release-project",

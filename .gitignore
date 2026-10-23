@@ -12,6 +12,8 @@ build/
 *.egg-info/
 *.egg
 rust/target
+# The workspace-excluded host compiler crate resolves its own build directory.
+rust/crates/guard-command-build/target
 
 # Native binaries are staged only for wheel and frozen builds.
 /src/codex_plugin_scanner/_native/
@@ -88,3 +90,6 @@ dashboard/.impeccable/hook.cache.json
 
 # Dashboard integration run output can hold local session URLs.
 /dashboard/e2e/proofs/integration-output/
+
+# Scratch pull-request description written by the stacked-PR tooling.
+/pr-body.md

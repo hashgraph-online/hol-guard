@@ -23,11 +23,16 @@ const INVALID: StoreError = StoreError::Invalid("native_guard_store_args_invalid
 
 const RECEIPT_COLUMNS: &str =
     "receipt_id, artifact_name, capabilities_summary, provenance_summary, \
-     source_scope, scanner_evidence_json, artifact_id, harness, artifact_hash, timestamp";
+     source_scope, scanner_evidence_json, artifact_id, harness, artifact_hash, timestamp, \
+     approval_request_id";
 const INVENTORY_COLUMNS: &str = "artifact_name, launch_command, source_scope, harness, artifact_id";
 const APPROVAL_COLUMNS: &str =
     "request_id, artifact_name, launch_summary, launch_target, workspace, \
-     resolved_at, trigger_summary, resolution_scope, harness, artifact_id, artifact_hash";
+     resolved_at, trigger_summary, resolution_scope, resolution_action, harness, artifact_id, artifact_hash";
+
+/// Decisions persisted from a native exact approval carry this token as
+/// their hash instead of the approval's own hash, so no hash join exists.
+const APPROVAL_CONTEXT_PREFIX: &str = "guard-approval-context:v1:";
 
 struct Item {
     harness: String,
@@ -35,6 +40,8 @@ struct Item {
     artifact_hash: Option<String>,
     workspace: Option<String>,
     reason: Option<String>,
+    action: Option<String>,
+    updated_at: Option<String>,
 }
 
 impl Item {
@@ -46,9 +53,68 @@ impl Item {
         self.artifact_hash.as_deref()
     }
 
-    /// Artifact-id buckets apply without a hash or with a runtime-exact hash.
+    /// Artifact-id buckets apply without a hash, with a runtime-exact hash,
+    /// or with an approval-context token (which names no approval row).
     fn uses_artifact_buckets(&self) -> bool {
-        truthy(self.id()) && (!truthy(self.hash()) || is_runtime_exact_key(self.hash()))
+        truthy(self.id())
+            && (!truthy(self.hash())
+                || is_runtime_exact_key(self.hash())
+                || is_context_token(self.hash()))
+    }
+}
+
+fn is_context_token(hash: Option<&str>) -> bool {
+    hash.is_some_and(|value| value.starts_with(APPROVAL_CONTEXT_PREFIX))
+}
+
+/// `YYYY-MM-DD[T ]HH:MM:SS[.fraction][UTC marker]` -> `YYYY-MM-DDTHH:MM:SS.ffffff`.
+/// Producers spell the same UTC instant differently (`Z`, `+00:00`, missing
+/// fractional digits when microseconds are zero). Only UTC offsets normalize;
+/// anything else returns None so callers fall back to byte equality.
+fn utc_instant_key(value: &str) -> Option<String> {
+    let value = value.trim();
+    let (date, tail) = value.split_once(['T', ' '])?;
+    if date.len() != 10 || !date.bytes().all(|b| b.is_ascii_digit() || b == b'-') {
+        return None;
+    }
+    let mut time = tail;
+    if let Some(stripped) = time.strip_suffix(['Z', 'z']) {
+        time = stripped;
+    } else if let Some(position) = time.rfind(['+', '-']) {
+        let offset = &time[position..];
+        if offset.bytes().any(|b| b.is_ascii_digit() && b != b'0') {
+            return None;
+        }
+        time = &time[..position];
+    }
+    let (clock, fraction) = match time.split_once('.') {
+        Some((clock, fraction)) => {
+            if !fraction.bytes().all(|b| b.is_ascii_digit()) || fraction.len() > 6 {
+                return None;
+            }
+            (clock, format!("{fraction:0<6}"))
+        }
+        None => (time, "000000".to_owned()),
+    };
+    if clock.len() != 8 || !clock.bytes().all(|b| b.is_ascii_digit() || b == b':') {
+        return None;
+    }
+    Some(format!("{date}T{clock}.{fraction}"))
+}
+
+/// True when two stored timestamps name the same instant. Both sides must be
+/// present — missing values never match. Byte equality first, then normalized
+/// UTC instant equality; unparseable spellings compare as raw strings.
+fn same_instant(a: Option<&str>, b: Option<&str>) -> bool {
+    let (Some(a), Some(b)) = (a, b) else {
+        return false;
+    };
+    if a == b {
+        return true;
+    }
+    match (utc_instant_key(a), utc_instant_key(b)) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
     }
 }
 
@@ -71,6 +137,8 @@ fn parse_items(args: &Args) -> StoreResult<Vec<Item>> {
                 artifact_hash: field("artifact_hash")?,
                 workspace: field("workspace")?,
                 reason: field("reason")?,
+                action: field("action")?,
+                updated_at: field("updated_at")?,
             })
         })
         .collect()
@@ -108,6 +176,10 @@ struct Table {
     rows: Vec<Row>,
     by_artifact: Buckets,
     by_hash: Buckets,
+    /// `approval_request_id -> positions`, newest first (rows arrive
+    /// timestamp-desc), so a chosen approval finds its receipt without
+    /// rescanning the table.
+    by_approval_request: HashMap<String, Vec<usize>>,
 }
 
 impl Table {
@@ -115,6 +187,15 @@ impl Table {
         let mut table = Table::default();
         for (position, row) in rows.iter().enumerate() {
             let harness = cell(row, "harness").unwrap_or_default();
+            if let Some(request_id) =
+                cell(row, "approval_request_id").filter(|value| !value.is_empty())
+            {
+                table
+                    .by_approval_request
+                    .entry(request_id)
+                    .or_default()
+                    .push(position);
+            }
             if let Some(artifact_id) =
                 cell(row, "artifact_id").filter(|value| !py_strip(value).is_empty())
             {
@@ -338,7 +419,7 @@ fn approval_matches(item: &Item, approvals: &Table, candidates: Vec<usize>) -> V
             if !artifact_matches_candidate(item.id(), row_id.as_deref()) {
                 return false;
             }
-            if truthy(item.hash()) {
+            if truthy(item.hash()) && !is_context_token(item.hash()) {
                 let row_hash = cell(row, "artifact_hash").unwrap_or_default();
                 if !variants.contains(&row_hash)
                     && runtime_exact_key(row_id.as_deref()).as_deref() != item.hash()
@@ -453,17 +534,6 @@ fn context_from_rows(
 }
 
 fn lookup(index: &Index, item: &Item) -> Value {
-    let mut receipt_candidates = Vec::new();
-    index
-        .receipts
-        .hash_candidates(item, &mut receipt_candidates);
-    index
-        .receipts
-        .artifact_candidates(item, &mut receipt_candidates);
-    let receipt = index
-        .receipts
-        .best(&receipt_candidates, item.id(), "timestamp");
-
     let inventory = item
         .id()
         .filter(|value| !py_strip(value).is_empty() && item.harness != "*")
@@ -481,9 +551,84 @@ fn lookup(index: &Index, item: &Item) -> Value {
         .approvals
         .hash_candidates(item, &mut approval_candidates);
     let approval_candidates = approval_matches(item, &index.approvals, approval_candidates);
-    let approval = index
-        .approvals
-        .best(&approval_candidates, item.id(), "resolved_at");
+
+    // A context-token decision has no hash join, and its artifact bucket is
+    // shared by every exact action of that tool — picking the newest row
+    // would name the wrong command. The decision row is written in the same
+    // store operation that resolves its approval, so the approval resolved
+    // at exactly the decision's updated_at is the action that was approved.
+    // Require exactly one such approval; ambiguity stays unnamed.
+    let context_token = is_context_token(item.hash());
+    let approval = if context_token {
+        let timed: Vec<&Row> = approval_candidates
+            .iter()
+            .map(|&position| &index.approvals.rows[position])
+            .filter(|row| {
+                same_instant(
+                    cell(row, "resolved_at").as_deref(),
+                    item.updated_at.as_deref(),
+                ) && cell(row, "resolution_action").as_deref() == item.action.as_deref()
+            })
+            .collect();
+        if let [only] = timed.as_slice() {
+            Some(*only)
+        } else {
+            None
+        }
+    } else {
+        index
+            .approvals
+            .best(&approval_candidates, item.id(), "resolved_at")
+    };
+
+    let receipt = if context_token {
+        approval.and_then(|approval_row| {
+            let request_id = cell(approval_row, "request_id").unwrap_or_default();
+            let resolved_at = cell(approval_row, "resolved_at").unwrap_or_default();
+            index
+                .receipts
+                .by_approval_request
+                .get(&request_id)
+                .and_then(|positions| positions.first())
+                .map(|&position| &index.receipts.rows[position])
+                .or_else(|| {
+                    let mut bucket = Vec::new();
+                    index.receipts.artifact_candidates(item, &mut bucket);
+                    let timed: Vec<&Row> = bucket
+                        .iter()
+                        .map(|&position| &index.receipts.rows[position])
+                        .filter(|row| {
+                            row.get("harness").and_then(Value::as_str)
+                                == Some(item.harness.as_str())
+                                && artifact_matches_candidate(
+                                    item.id(),
+                                    row.get("artifact_id").and_then(Value::as_str),
+                                )
+                                && same_instant(
+                                    cell(row, "timestamp").as_deref(),
+                                    Some(resolved_at.as_str()),
+                                )
+                        })
+                        .collect();
+                    if let [only] = timed.as_slice() {
+                        Some(*only)
+                    } else {
+                        None
+                    }
+                })
+        })
+    } else {
+        let mut receipt_candidates = Vec::new();
+        index
+            .receipts
+            .hash_candidates(item, &mut receipt_candidates);
+        index
+            .receipts
+            .artifact_candidates(item, &mut receipt_candidates);
+        index
+            .receipts
+            .best(&receipt_candidates, item.id(), "timestamp")
+    };
 
     context_from_rows(item, receipt, inventory, approval)
 }
@@ -503,3 +648,7 @@ pub(crate) fn policy_source_contexts(
         items.iter().map(|item| lookup(&index, item)).collect(),
     ))
 }
+
+#[cfg(test)]
+#[path = "guard_store_policy_source_context_tests.rs"]
+mod tests;

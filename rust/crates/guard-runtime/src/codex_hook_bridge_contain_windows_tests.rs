@@ -1,6 +1,6 @@
-//! The Windows Codex contained rewrite: Python parity for the PowerShell
-//! quoting, the bootstrap's package root, the launching Codex's name and
-//! the snapshot the sink reads.
+//! The Windows Codex contained rewrite: Python parity for the sink command
+//! line, the bootstrap's package root, the launching Codex's name and the
+//! snapshot the sink reads.
 
 use std::path::Path;
 use std::time::{Duration, SystemTime};
@@ -57,6 +57,65 @@ fn powershell_join_refuses_arguments_it_cannot_carry() {
 }
 
 #[test]
+fn the_sink_line_is_one_both_shells_read_the_same_way() {
+    let argv = owned(&[
+        PYTHON,
+        "-I",
+        "-c",
+        "import sys;sys.path.insert(0, 'C:/Guard/site-packages');from codex_plugin_scanner.cli import main;raise SystemExit(main(sys.argv[1:]))",
+        "guard",
+        r"C:\Users\a b\x;$y&`z`",
+    ]);
+    assert_eq!(
+        sink_command_line(&argv).as_deref(),
+        Some(concat!(
+            "C:/Python/python.exe '-I' '-c' ",
+            "'import sys;sys.path.insert(0,sys.argv.pop(1));from codex_plugin_scanner.cli import main;raise SystemExit(main(sys.argv[1:]))' ",
+            r"'C:/Guard/site-packages' 'guard' 'C:\Users\a b\x;$y&`z`'",
+        ))
+    );
+    let frozen = owned(&[r"C:\Guard\hol-guard.exe", "execute-contained-test"]);
+    assert_eq!(
+        sink_command_line(&frozen).as_deref(),
+        Some("C:/Guard/hol-guard.exe 'execute-contained-test'")
+    );
+}
+
+#[test]
+fn a_sink_line_only_powershell_reads_is_the_fallback() {
+    // A program path no bare word can hold, or an argument with a quote in
+    // it, keeps the PowerShell call operator form.
+    for (argv, expected) in [
+        (
+            owned(&[r"C:\Program Files\py.exe", "x"]),
+            r"& 'C:\Program Files\py.exe' 'x'",
+        ),
+        (
+            owned(&[r"C:\Guard\hol-guard.exe", "it's"]),
+            r"& 'C:\Guard\hol-guard.exe' 'it''s'",
+        ),
+        (
+            owned(&[r"\\server\py.exe", "x"]),
+            r"& '\\server\py.exe' 'x'",
+        ),
+        (
+            owned(&[PYTHON, "-I", "-c", BOOTSTRAP, "guard"]),
+            &format!(
+                "& '{PYTHON}' '-I' '-c' '{}' 'guard'",
+                BOOTSTRAP.replace('\'', "''")
+            ),
+        ),
+    ] {
+        assert_eq!(
+            sink_command_line(&argv).as_deref(),
+            Some(expected),
+            "{argv:?}"
+        );
+    }
+    assert_eq!(sink_command_line(&owned(&[PYTHON, "say \"hi\""])), None);
+}
+
+#[test]
 fn the_bootstrap_names_the_package_root_with_forward_slashes() {
     let prefix = owned(&[PYTHON, "-I", "-c", BOOTSTRAP]);
     assert_eq!(
@@ -109,14 +168,14 @@ fn a_tilde_workspace_expands_only_for_the_current_user() {
     assert_eq!(plain_path(r"\\?\C:\x"), r"C:\x");
 }
 
-/// The request file a routed PowerShell command names.
+/// The request file a routed sink command names.
 fn request_path(command: &str) -> String {
     let (_, rest) = command.split_once("'--request-file' '").unwrap();
     rest.split_once('\'').unwrap().0.to_owned()
 }
 
 #[test]
-fn a_contained_python_call_is_rewritten_to_a_powershell_sink_command() {
+fn a_contained_python_call_is_rewritten_to_a_sink_command_both_shells_run() {
     let workspace = tempfile::tempdir().unwrap();
     let resolved = plain_path(
         std::fs::canonicalize(workspace.path())
@@ -178,7 +237,7 @@ fn a_contained_python_call_is_rewritten_to_a_powershell_sink_command() {
         .is_some_and(|name| name.starts_with(REQUEST_DIRECTORY_PREFIX)));
     assert!(
         command.starts_with(&format!(
-            "& '{PYTHON}' '-I' '-c' 'import sys;sys.path.insert(0, ''C:/Guard/site-packages'');"
+            "C:/Python/python.exe '-I' '-c' '{ARGV_BOOTSTRAP}' 'C:/Guard/site-packages' "
         )),
         "{command}"
     );
@@ -197,7 +256,7 @@ fn a_contained_python_call_is_rewritten_to_a_powershell_sink_command() {
 }
 
 #[test]
-fn a_call_powershell_cannot_quote_keeps_the_denial() {
+fn a_call_no_shell_can_quote_keeps_the_denial() {
     let workspace = tempfile::tempdir().unwrap();
     let payload = serde_json::json!({
         "hook_event_name": "PreToolUse",

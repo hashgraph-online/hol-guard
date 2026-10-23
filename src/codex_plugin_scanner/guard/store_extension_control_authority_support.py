@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import hmac
 import sqlite3
 import sys
 from collections.abc import Generator
@@ -26,7 +25,6 @@ from .runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
-    anchor_to_json,
     layers_from_json,
 )
 from .runtime.extension_control_contract import (
@@ -153,7 +151,16 @@ class _ExtensionControlAuthoritySupportMixin:
         return anchor_from_wire(reply.get("anchor"))
 
     def _write_and_verify_anchor(self, anchor: AuthorityAnchor, *, key: bytes) -> None:
-        encoded = anchor_to_json(anchor, key=key)
+        sealed = self._extension_control_authority_op(
+            "seal_anchor",
+            key=key,
+            revision=anchor.revision,
+            snapshot_digest=anchor.snapshot_digest,
+            phase=anchor.phase.value,
+        ).get("anchor_json")
+        if not isinstance(sealed, str):
+            raise ExtensionControlAuthorityError("invalid extension control anchor seal")
+        encoded = sealed
         self._secret_store().set_secret(self._anchor_ref(), encoded)
         observed = self._secret_store().get_secret(self._anchor_ref())
         if observed != encoded:
@@ -349,10 +356,38 @@ def _row_int(row: sqlite3.Row, name: str) -> int:
     return value
 
 
-def _private_hash(value: str, *, key: bytes, purpose: str) -> str:
-    framed = b"hol-guard.extension-control.private-ref.v1\x00" + purpose.encode("ascii")
-    return hmac.new(key, framed + b"\x00" + value.encode("utf-8"), hashlib.sha256).hexdigest()
-
-
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _plan_int(plan: dict[str, object], name: str) -> int:
+    value = plan.get(name)
+    if type(value) is not int:
+        raise ExtensionControlAuthorityError("invalid extension control authority plan")
+    return value
+
+
+def _plan_pack_digest(plan: dict[str, object]) -> str | None:
+    """The command-pack record digest the resident found the transition binds."""
+
+    value = plan.get("command_pack_record_digest")
+    if value is not None and not isinstance(value, str):
+        raise ExtensionControlAuthorityError("invalid extension control authority plan")
+    return value
+
+
+def _plan_map(plan: dict[str, object], name: str) -> dict[str, object]:
+    value = plan.get(name)
+    if not isinstance(value, dict):
+        raise ExtensionControlAuthorityError("invalid extension control authority plan")
+    return cast(dict[str, object], value)
+
+
+def _plan_record(plan: dict[str, object], name: str) -> tuple[str, str, str]:
+    """The ``json``, ``digest`` and ``mac`` of a record the resident sealed."""
+
+    record = _plan_map(plan, name)
+    sealed = (record.get("json"), record.get("digest"), record.get("mac"))
+    if not all(isinstance(part, str) for part in sealed):
+        raise ExtensionControlAuthorityError("invalid extension control authority plan")
+    return cast(tuple[str, str, str], sealed)

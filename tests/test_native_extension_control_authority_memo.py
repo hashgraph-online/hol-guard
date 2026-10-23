@@ -18,7 +18,7 @@ from codex_plugin_scanner.guard.store_extension_control_authority_schema import 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="the memo keeps nothing on Windows")
 
 
-def _store(directory: Path) -> Path:
+def _store(directory: Path, *, activate_packs: bool = True) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / "guard.db"
     with sqlite3.connect(path) as connection:
@@ -30,7 +30,7 @@ def _store(directory: Path) -> Path:
         connection.execute(
             "create table sync_state (state_key text primary key, payload_json text not null, updated_at text not null)"
         )
-        ensure_extension_control_authority_schema(connection)
+        ensure_extension_control_authority_schema(connection, activate_packs=activate_packs)
     return path
 
 
@@ -77,10 +77,35 @@ def test_settled_reply_outlives_unrelated_commits_but_not_an_authority_write(tmp
     assert memo.lookup(_wire(store))[1] is None
 
 
+def test_legacy_schema_memo_stops_serving_when_pack_schema_activates(tmp_path: Path) -> None:
+    store = _store(tmp_path, activate_packs=False)
+    reply = {"view": {"health": "protected"}}
+    _keep(_wire(store), reply)
+    assert memo.lookup(_wire(store))[1] == reply
+    with sqlite3.connect(store) as connection:
+        epoch = connection.execute("select epoch from extension_control_authority_epoch").fetchone()[0]
+        ensure_extension_control_authority_schema(connection, activate_packs=True)
+        # The schema identity itself must invalidate the token, independently
+        # of the migration's writes to the authority epoch.
+        connection.execute("update extension_control_authority_epoch set epoch=?", (epoch,))
+    assert memo.lookup(_wire(store))[1] is None
+    _keep(_wire(store), reply)
+    _commit(store, "insert into extension_command_pack_activation values (1, 0, '{}', 'd', 'm', 't')")
+    assert memo.lookup(_wire(store))[1] is None
+
+
+def test_pack_schema_with_missing_activation_table_never_memoizes(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _keep(_wire(store), {"view": {"health": "protected"}})
+    _commit(store, "drop table extension_command_pack_activation")
+    assert memo.lookup(_wire(store)) == (None, None)
+
+
 @pytest.mark.parametrize(
     "statement",
     [
         "insert into extension_control_catalog_manifest values ('d', '{}', '{}', 'r', 'm', 't')",
+        "insert into extension_command_pack_activation values (1, 0, '{}', 'd', 'm', 't')",
         "insert into guard_events (event_name, payload_json, occurred_at) "
         "values ('extension_control_authority_catalog_migrated', '{}', 't')",
         "insert into sync_state values ('managed_controls_active', '{}', 't')",

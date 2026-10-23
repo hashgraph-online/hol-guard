@@ -11,6 +11,10 @@
       ],
       "remediation": [
         {
+          "label": "How Guard checks version coverage",
+          "url": "https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/harness-version-coverage.md"
+        },
+        {
           "label": "Oh My Pi versions on npm",
           "url": "https://www.npmjs.com/package/@oh-my-pi/pi-coding-agent?activeTab=versions"
         },

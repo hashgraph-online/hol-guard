@@ -21,7 +21,7 @@ class SnapshotClaimHistory:
     lists use the existing paginated REST reader rather than guessing.
     """
 
-    def __init__(self, client: Any, paths: list[str], source_sha: str) -> None:
+    def __init__(self, client: Any, paths: list[str], source_sha: str, *, additional_commits=()) -> None:
         self.client = client
         self.prepared_history: dict[str, list[tuple[str, str]]] = {}
         self._associated: dict[str, list[dict[str, int]]] = {}
@@ -35,7 +35,9 @@ class SnapshotClaimHistory:
                 self.prepared_history[path] = _history_changes(client, path, source_sha, get)
             except ClaimProvenanceError:
                 continue
-        commits = sorted({history[-1][0] for history in self.prepared_history.values() if history})
+        commits = sorted(
+            {history[-1][0] for history in self.prepared_history.values() if history} | set(additional_commits)
+        )
         owner, repo = client.repo.split("/")
         fields = """... on Commit {
           oid associatedPullRequests(first:9) {
@@ -51,7 +53,9 @@ class SnapshotClaimHistory:
             batch = commits[offset:offset + 30]
             objects = " ".join(f"c{i}: object(oid:{json.dumps(sha)}) {{ {fields} }}" for i, sha in enumerate(batch))
             query = f"query {{ repository(owner:{json.dumps(owner)},name:{json.dumps(repo)}) {{ {objects} }} }}"
-            result = client._request("https://api.github.com/graphql", method="POST", payload={"query": query})
+            result = client._request(
+                "https://api.github.com/graphql", method="POST", payload={"query": query}, read_only=True,
+            )
             if not isinstance(result, dict) or result.get("errors"):
                 raise RuntimeError("Snapshot claim history query failed")
             repository = result.get("data", {}).get("repository")

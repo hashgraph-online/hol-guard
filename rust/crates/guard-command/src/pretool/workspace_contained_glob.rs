@@ -274,10 +274,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!(
             "guard-glob-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos(),
+            crate::unique_nanos::unique_nanos(),
         ));
         std::fs::create_dir_all(root.join("src/nested")).unwrap();
         std::fs::create_dir(root.join("dist")).unwrap();

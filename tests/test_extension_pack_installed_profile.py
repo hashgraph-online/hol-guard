@@ -54,7 +54,7 @@ def test_installed_profile_has_no_fabricated_remote_validity(installed, delivery
     store = SimpleNamespace(guard_home=delivery.cache.parent / "installed-device")
     store.guard_home.mkdir(mode=0o700)
     seed(store)
-    key = b"installed-profile-fixture-key!!!!"
+    key = b"installed-profile-fixture-key!!!"
     prepared = preparation.prepare(installed, [], delivery.cache, engine="1" * 64, now=10000)
     assert prepared.authority_profile == "installed"
     draft = activation_transition.stage(None, prepared, verifier_key=key, store=store, now=10000)

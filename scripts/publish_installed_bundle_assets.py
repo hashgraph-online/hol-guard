@@ -16,12 +16,12 @@ from collections import defaultdict
 from pathlib import Path
 
 import extension_delivery_github as provider
+from extension_delivery_containers import member, target, verify_inventory
 from extension_delivery_inventory_store import InventoryStore
 from extension_delivery_objects import entries
 from extension_delivery_policy_lookup import read_transport_page, validate_record
 
-from codex_plugin_scanner.guard.catalog_delivery.containers import member, verify_inventory
-from codex_plugin_scanner.guard.catalog_delivery.installed_bundle import ROOT, asset_path, target, validate
+from codex_plugin_scanner.guard.catalog_delivery.installed_bundle import ROOT, asset_path, validate
 from codex_plugin_scanner.guard.extension_builder.io import checked_path, read_bytes
 
 

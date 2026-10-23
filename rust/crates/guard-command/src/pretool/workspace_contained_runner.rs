@@ -1,7 +1,8 @@
 //! Project tools started through a package runner.
 //!
-//! `npx <tool>`, `bunx <tool>` and `bun x <tool>` run the project's own
-//! `node_modules/.bin/<tool>` when it is installed there, exactly as
+//! `npx <tool>`, `bunx <tool>`, `bun x <tool>` and a manager's `exec`
+//! spelling (`npm exec`, `npm x`, `pnpm exec`, `yarn exec`) run the project's
+//! own `node_modules/.bin/<tool>` when it is installed there, exactly as
 //! `./node_modules/.bin/<tool>` would, and fetch from the registry only when
 //! it is not. A runner whose tool is installed where it runs is local work the
 //! sandbox bounds; one that could fetch keeps its package review.
@@ -36,7 +37,10 @@ pub(super) fn runner_arguments(segment: &CommandSegmentV1) -> Option<&[String]> 
             Some((verb, rest)) if verb == "x" => Some(rest),
             _ => None,
         },
-        _ => None,
+        manager => super::super::restricted_test_commands::manager_local_bin_arguments(
+            manager,
+            &segment.arguments,
+        ),
     }
 }
 

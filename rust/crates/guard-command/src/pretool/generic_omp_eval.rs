@@ -196,10 +196,21 @@ pub(super) fn evaluate(
             context.path,
             context.execution_environment,
         );
-        if result.action.sensitive_target
-            || (result.minimum_action != "allow" && !contained_bash(call, &result))
-        {
+        if result.action.sensitive_target {
             return None;
+        }
+        if result.minimum_action != "allow" && !contained_bash(call, &result) {
+            // One bridged call is the whole program, so the bridge adds
+            // nothing to judge: the program carries that call's own verdict
+            // instead of the unknown-tool review the fall-through gives it,
+            // which named no reason the person could act on and left the
+            // review without the approval the direct call offers. A program
+            // of several calls keeps the fall-through: no single verdict
+            // speaks for it. Containment is the inner call's own hook to
+            // arrange, so a sandbox verdict keeps the fall-through too.
+            return (calls.len() == 1
+                && matches!(result.minimum_action.as_str(), "review" | "block"))
+            .then_some(result);
         }
     }
     let (action_type, operation) = if ran_shell {

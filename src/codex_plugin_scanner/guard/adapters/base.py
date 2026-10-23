@@ -271,22 +271,26 @@ class HarnessAdapter:
 
         from ..inventory_cisco import run_cisco_inventory_scans
         from ..inventory_contract import inventory_snapshot_from_detection
+        from ..native_context import bound_context_digest_home
 
         detection = self.detect(context)
-        return inventory_snapshot_from_detection(
-            detection,
-            generated_at=generated_at,
-            home_dir=context.home_dir,
-            workspace_dir=context.workspace_dir,
-            cisco_runs=run_cisco_inventory_scans(
-                harness=self.harness,
-                context=context,
-                detection=detection,
-                mcp_mode=cisco_mcp_scan,
-                skill_mode=cisco_skill_scan,
-                timeout_seconds=cisco_timeout_seconds,
-            ),
+        cisco_runs = run_cisco_inventory_scans(
+            harness=self.harness,
+            context=context,
+            detection=detection,
+            mcp_mode=cisco_mcp_scan,
+            skill_mode=cisco_skill_scan,
+            timeout_seconds=cisco_timeout_seconds,
         )
+        # Redaction asks the resident of this context's home.
+        with bound_context_digest_home(getattr(context, "guard_home", None)):
+            return inventory_snapshot_from_detection(
+                detection,
+                generated_at=generated_at,
+                home_dir=context.home_dir,
+                workspace_dir=context.workspace_dir,
+                cisco_runs=cisco_runs,
+            )
 
     @_owned_adapter_mutation
     def install(self, context: HarnessContext) -> dict[str, object]:

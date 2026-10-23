@@ -24,6 +24,7 @@ from .store_local_cli_capabilities import (
     write_local_cli_capabilities,
 )
 from .store_local_cli_schema import ensure_local_cli_schema
+from .store_mcp_catalog import acknowledge_catalog_changes
 from .store_mcp_provider_permissions import ProviderUpdate, write_provider_choices
 
 
@@ -44,6 +45,8 @@ class CustomExtensionContinuityMutation:
     catalog_seeds: Mapping[str, Sequence[LocalCliCommand]] | None = None
     # Only the local authority apply sets this; signed continuity never does.
     capability_updates: Mapping[str, Mapping[str, str]] | None = None
+    # The MCP catalog revision each saved choice set was made against.
+    catalog_reviews: Mapping[str, int] | None = None
 
 
 class StoreCustomExtensionContinuityMixin:
@@ -64,6 +67,7 @@ class StoreCustomExtensionContinuityMixin:
         provider_updates: Mapping[str, Sequence[ProviderUpdate]] | None = None,
         catalog_seeds: Mapping[str, Sequence[LocalCliCommand]] | None = None,
         capability_updates: Mapping[str, Mapping[str, str]] | None = None,
+        catalog_reviews: Mapping[str, int] | None = None,
     ) -> int:
         """Commit exact local authority, continuity state, and receipts together."""
 
@@ -78,6 +82,7 @@ class StoreCustomExtensionContinuityMixin:
             provider_updates=provider_updates,
             catalog_seeds=catalog_seeds,
             capability_updates=capability_updates,
+            catalog_reviews=catalog_reviews,
         )
         with self._connect() as connection:
             _ = connection.execute("begin immediate")
@@ -120,6 +125,7 @@ def apply_custom_extension_continuity_mutation_locked(
             current_revision=current_revision,
             updated_at=mutation.updated_at,
             command_states=command_states,
+            reviewed_catalog_revision=(mutation.catalog_reviews or {}).get(identity.cli_id),
         )
         updates = (mutation.provider_updates or {}).get(identity.cli_id, ())
         if updates:
@@ -264,6 +270,7 @@ def _write_local_cli_grant(
     current_revision: int,
     updated_at: str,
     command_states: Mapping[str, LocalCliCommandState] | None,
+    reviewed_catalog_revision: int | None = None,
 ) -> int:
     from .store_local_cli import _write_command_states
 
@@ -299,6 +306,14 @@ def _write_local_cli_grant(
             else:
                 _ = connection.execute("delete from local_cli_command_grant where cli_id = ?", (identity.cli_id,))
             _write_command_states(connection, identity.cli_id, command_states)
+            if observation is not None and observation[0] == "mcp" and reviewed_catalog_revision is not None:
+                acknowledge_catalog_changes(
+                    connection,
+                    identity.cli_id,
+                    identity.identity_hash,
+                    set(command_states),
+                    catalog_revision=reviewed_catalog_revision,
+                )
     _ = connection.execute("update local_cli_authority set revision = ? where singleton = 1", (next_revision,))
     return next_revision
 

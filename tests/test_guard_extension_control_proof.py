@@ -166,11 +166,12 @@ def test_enrollment_proof_is_exact_one_use_and_redacted(tmp_path: Path) -> None:
 
 
 def test_enrollment_proof_rejects_remote_terminal(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    enrollment = _enrollment()
     _configure(tmp_path)
     monkeypatch.setenv("SSH_CONNECTION", "client server")
 
     with pytest.raises(ExtensionControlProofError, match="requires a local terminal"):
-        _require_local_terminal_confirmation(_enrollment())
+        _require_local_terminal_confirmation(enrollment)
 
 
 @pytest.mark.parametrize("console_mode_result, expected", [(1, True), (0, False)])
@@ -334,6 +335,8 @@ def test_windows_session_probe_rejects_native_api_failure(monkeypatch: pytest.Mo
 
 
 def test_windows_enrollment_uses_console_stdio_without_posix_flags(monkeypatch: pytest.MonkeyPatch) -> None:
+    enrollment = _enrollment()
+
     class ConsoleStream(io.StringIO):
         def __init__(self, value: str, descriptor: int) -> None:
             super().__init__(value)
@@ -361,12 +364,14 @@ def test_windows_enrollment_uses_console_stdio_without_posix_flags(monkeypatch: 
         lambda: True,
     )
 
-    _require_local_terminal_confirmation(_enrollment())
+    _require_local_terminal_confirmation(enrollment)
 
     assert 'Type "ENROLL EXTENSION CONTROL local-admin"' in stdout.getvalue()
 
 
 def test_windows_enrollment_rejects_mismatched_confirmation(monkeypatch: pytest.MonkeyPatch) -> None:
+    enrollment = _enrollment()
+
     class ConsoleStream(io.StringIO):
         def __init__(self, value: str, descriptor: int) -> None:
             super().__init__(value)
@@ -397,10 +402,12 @@ def test_windows_enrollment_rejects_mismatched_confirmation(monkeypatch: pytest.
     )
 
     with pytest.raises(ExtensionControlProofError, match="confirmation did not match"):
-        _require_local_terminal_confirmation(_enrollment())
+        _require_local_terminal_confirmation(enrollment)
 
 
 def test_windows_enrollment_rejects_redirected_stdio(monkeypatch: pytest.MonkeyPatch) -> None:
+    enrollment = _enrollment()
+
     class RedirectedStream(io.StringIO):
         def fileno(self) -> int:
             return 10
@@ -413,10 +420,11 @@ def test_windows_enrollment_rejects_redirected_stdio(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr("codex_plugin_scanner.guard.runtime.extension_control_proof.sys.stdout", RedirectedStream())
 
     with pytest.raises(ExtensionControlProofError, match="requires an interactive local terminal"):
-        _require_local_terminal_confirmation(_enrollment())
+        _require_local_terminal_confirmation(enrollment)
 
 
 def test_windows_enrollment_rejects_ssh_before_console_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    enrollment = _enrollment()
     monkeypatch.setattr("codex_plugin_scanner.guard.runtime.extension_control_proof.os.name", "nt")
     monkeypatch.setenv("SSH_CONNECTION", "client server")
     monkeypatch.setattr(
@@ -425,10 +433,12 @@ def test_windows_enrollment_rejects_ssh_before_console_probe(monkeypatch: pytest
     )
 
     with pytest.raises(ExtensionControlProofError, match="requires a local terminal"):
-        _require_local_terminal_confirmation(_enrollment())
+        _require_local_terminal_confirmation(enrollment)
 
 
 def test_windows_enrollment_rejects_remote_session_before_console_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    enrollment = _enrollment()
+
     class ConsoleStream(io.StringIO):
         def fileno(self) -> int:
             return 10
@@ -455,7 +465,7 @@ def test_windows_enrollment_rejects_remote_session_before_console_probe(monkeypa
     )
 
     with pytest.raises(ExtensionControlProofError, match="requires a local terminal"):
-        _require_local_terminal_confirmation(_enrollment())
+        _require_local_terminal_confirmation(enrollment)
 
 
 def test_terminal_descriptors_accept_linux_tty_alias_and_stdin_pty(
@@ -506,6 +516,7 @@ def test_terminal_descriptors_fail_closed_when_session_cannot_be_read(
 def test_enrollment_accepts_linux_tty_alias_for_same_controlling_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    enrollment = _enrollment()
     expected = "ENROLL EXTENSION CONTROL local-admin\n"
     process_groups = {10: 4200, 11: 4200}
 
@@ -552,7 +563,7 @@ def test_enrollment_accepts_linux_tty_alias_for_same_controlling_session(
         type("InteractiveInput", (), {"isatty": lambda self: True, "fileno": lambda self: 11})(),
     )
 
-    _require_local_terminal_confirmation(_enrollment())
+    _require_local_terminal_confirmation(enrollment)
 
 
 @pytest.mark.parametrize(
@@ -679,10 +690,11 @@ def test_terminal_locality_rejects_remote_logind_session_without_login_record(
 
 
 def test_enrollment_proof_rejects_mosh_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
+    enrollment = _enrollment()
     monkeypatch.setenv("MOSH_CONNECTION", "client server")
 
     with pytest.raises(ExtensionControlProofError, match="requires a local terminal"):
-        _require_local_terminal_confirmation(_enrollment())
+        _require_local_terminal_confirmation(enrollment)
 
 
 def test_extension_control_proof_rejects_stale_grant(tmp_path: Path) -> None:
@@ -741,3 +753,98 @@ def test_preview_digest_is_independent_of_layer_and_control_order() -> None:
     second = _mutation(layers=(cloud, reordered_local))
 
     assert first.canonical_digest == second.canonical_digest
+
+
+# The digests the Python proof computed for these inputs before the resident
+# took them over; the resident must keep issuing them so outstanding proofs
+# and recorded commits stay valid.
+_GOLDEN_CATALOG = "ab" * 32
+_GOLDEN_ACTOR = "local-admin é"
+
+
+def test_resident_mutation_digest_matches_the_python_digest() -> None:
+    local = ExtensionControlLayer(
+        "1.0.0",
+        ControlLayerKind.LOCAL_ADMIN,
+        _GOLDEN_CATALOG,
+        False,
+        (
+            ExtensionControl(
+                ControlTarget(ControlTargetKind.PERMISSION, "command.alpha.permission.write"), ControlState.ENABLED
+            ),
+            ExtensionControl(ControlTarget(ControlTargetKind.EXTENSION, "command.alpha"), ControlState.DISABLED),
+            ExtensionControl(ControlTarget(ControlTargetKind.EXTENSION, "command.alpha"), ControlState.ENABLED),
+        ),
+    )
+    cloud = ExtensionControlLayer("1.0.0", ControlLayerKind.SIGNED_CLOUD, _GOLDEN_CATALOG, True, ())
+    mutation = ExtensionControlMutation(
+        previous_revision=7,
+        catalog_digest=_GOLDEN_CATALOG,
+        layers=(cloud, local),
+        actor_id=_GOLDEN_ACTOR,
+        idempotency_key="mutation-1",
+        nonce="nonce-1",
+    )
+
+    assert mutation.canonical_digest == "864b425798605db58a8af6761e9224c5f8efca61761e95a8d3ecba1964c1febf"
+
+
+def test_resident_enrollment_digest_matches_the_python_digest() -> None:
+    enrollment = ExtensionControlEnrollment(
+        catalog_digest=_GOLDEN_CATALOG, actor_id=_GOLDEN_ACTOR, nonce="enrollment-nonce"
+    )
+
+    assert enrollment.canonical_digest == "c11b524f977b40ba53292b2d956770a4186c3e46c9f88d2e46a1536ba2ec29e0"
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"previous_revision": -1}, "invalid previous revision"),
+        ({"previous_revision": True}, "invalid previous revision"),
+        ({"previous_revision": 2**63}, "invalid previous revision"),
+        ({"actor_id": "\ud800"}, "invalid mutation identity"),
+        ({"catalog_digest": "AB" * 32}, "invalid catalog digest"),
+        ({"actor_id": " \t"}, "invalid mutation identity"),
+        ({"nonce": "n" * 257}, "invalid mutation identity"),
+    ],
+)
+def test_resident_refuses_an_invalid_mutation(changes: dict[str, object], message: str) -> None:
+    fields: dict[str, object] = {
+        "previous_revision": 0,
+        "catalog_digest": _GOLDEN_CATALOG,
+        "layers": (),
+        "actor_id": "local-admin",
+        "idempotency_key": "mutation-1",
+        "nonce": "nonce-1",
+    }
+    with pytest.raises(ExtensionControlProofError, match=message):
+        ExtensionControlMutation(**{**fields, **changes})  # type: ignore[arg-type]
+
+
+def test_resident_refuses_an_invalid_enrollment() -> None:
+    with pytest.raises(ExtensionControlProofError, match="invalid catalog digest"):
+        ExtensionControlEnrollment(catalog_digest="", actor_id="local-admin", nonce="nonce")
+    with pytest.raises(ExtensionControlProofError, match="invalid enrollment identity"):
+        ExtensionControlEnrollment(catalog_digest=_GOLDEN_CATALOG, actor_id="  ", nonce="nonce")
+    with pytest.raises(ExtensionControlProofError, match="invalid enrollment identity"):
+        ExtensionControlEnrollment(catalog_digest=_GOLDEN_CATALOG, actor_id="\ud800", nonce="nonce")
+
+
+def test_enrollment_asks_the_resident_of_the_selected_guard_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.runtime import extension_control_proof
+
+    homes: list[object] = []
+
+    def digest(*, guard_home: object = None, **_fields: object) -> str:
+        homes.append(guard_home)
+        return "0" * 64
+
+    monkeypatch.setattr(extension_control_proof, "enrollment_digest", digest)
+    ExtensionControlEnrollment(
+        catalog_digest=_GOLDEN_CATALOG, actor_id="local-admin", nonce="nonce", guard_home=tmp_path
+    )
+
+    assert homes == [tmp_path]

@@ -132,6 +132,12 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     for route in routes:
         assert _GuardDaemonHandler._is_dashboard_route(route)
     assert _GuardDaemonHandler._is_dashboard_route("/extensions/command.git")
+    # The Releases tab is reachable as a page, not only as a client-side
+    # view: opening or reloading /releases must serve the dashboard rather
+    # than 404, and the screen reads the archive without writing state.
+    assert routes["/releases"].auth_required is True
+    assert routes["/releases"].writes_state is False
+    assert _GuardDaemonHandler._is_dashboard_route("/releases")
     apis_by_method = {(api.method, api.path): api for api in LOCAL_API_OWNERSHIP}
     assert apis_by_method[("POST", "/v1/initialize")].auth_required is False
     assert apis_by_method[("GET", "/v1/connect/state")].writes_state is False

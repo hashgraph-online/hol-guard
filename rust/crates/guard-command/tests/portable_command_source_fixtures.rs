@@ -47,11 +47,8 @@ fn validation_catalog() -> Value {
     };
     let commands = records("contributions/command-sources");
     let servers = records("contributions/mcp-servers");
-    let mut trust: Value = serde_json::from_slice(include_bytes!(concat!(
-        env!("OUT_DIR"),
-        "/trust-class-map.v1.json"
-    )))
-    .unwrap();
+    let mut trust: Value =
+        serde_json::from_slice(guard_command_catalog_data::TRUST_MAP_JSON).unwrap();
     for class in trust["classes"].as_object_mut().unwrap().values_mut() {
         *class = json!([]);
     }

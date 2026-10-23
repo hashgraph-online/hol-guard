@@ -186,7 +186,7 @@ def pause_native_pre_tool_for_approval(
     )
     if settled is not None:
         return settled
-    from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
+    from ..blocked_request_mode import approval_wait_hint, asks_for_approval, safe_alternative_reason
     from ..config import load_guard_config
 
     try:
@@ -247,6 +247,9 @@ def pause_native_pre_tool_for_approval(
         # ordinary review, so it links like any other that the user's approval can release.
         link = approval_can_unblock and (ask or setup_reason is None or connector_is_local(connector))
         raw_url = queued.get("approval_url") if queued is not None and link else None
+        request_id = queued.get("request_id") if queued is not None else None
+        if identity is not None and isinstance(request_id, str):
+            reason = f"{reason} {approval_wait_hint(request_id, guard_home=guard_home, home_dir=home_dir)}".strip()
         if isinstance(raw_url, str) and raw_url.strip():
             # The agent passes the link on, so the user can open the queued row.
             reason = native_review_reason(canonical_harness(harness), reason, raw_url.strip(), guard_home=guard_home)
@@ -255,11 +258,9 @@ def pause_native_pre_tool_for_approval(
         response = render_pre_tool(harness, blocked, guard_home=guard_home, deadline=deadline)
         response["prompted"] = False
         response["blocked_request_mode"] = "safe-alternative"
-        # The OMP extension waits for this approval in the background and then
-        # asks the agent to run the identical call again. Only a review bound
-        # to that retry gets the handle: approving any other row cannot let it run.
-        request_id = queued.get("request_id") if queued is not None else None
-        if identity is not None and isinstance(request_id, str) and request_id and canonical_harness(harness) == "omp":
+        # Extensions can watch the handle; other harnesses get the wait command
+        # in their reason. Neither path consumes the bound approval.
+        if identity is not None and isinstance(request_id, str) and request_id:
             response["approval_resume"] = {"request_id": request_id, "poll_path": f"/v1/requests/{request_id}"}
         return response
 

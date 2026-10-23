@@ -268,9 +268,9 @@ def contained_zcode_response(
             args.extend(["--home", cli_args[cli_args.index("--home") + 1]])
         command = (*_sink_command_prefix(config), *args)
         if sys.platform == "win32" and config.get("harness") == "codex":
-            from ..windows_powershell_quote import powershell_join
+            from ..windows_powershell_quote import sink_command_line
 
-            shell_command = powershell_join(command)
+            shell_command = sink_command_line(command)
         else:
             shell_command = shlex.join(command)
         if shell_command is None:

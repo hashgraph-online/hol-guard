@@ -1,17 +1,22 @@
-"""Fresh, mutation-bound approval proofs for extension-control authority changes."""
+"""Fresh, mutation-bound approval proofs for extension-control authority changes.
+
+The digest a proof binds is the resident's (``extension_control``): it checks
+the mutation or enrollment and computes the canonical digest, and the commit
+plan recomputes it from the layers it seals. Python asks for the digest and
+renders a refusal; a resident that does not answer fails the proof closed.
+"""
 
 from __future__ import annotations
 
-import hashlib
 import hmac
-import json
 import os
 import secrets
 import stat
 import subprocess
 import sys
+from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import InitVar, dataclass, field
 from pathlib import Path
 
 from ..approval_gate import (
@@ -20,14 +25,15 @@ from ..approval_gate import (
     consume_extension_control_grant,
     require_extension_control,
 )
-from .extension_control_authority import layers_to_json
+from ..native_extension_control import NativeExtensionControlError, enrollment_digest, mutation_digest
 from .extension_control_contract import ExtensionControlLayer
 
-EXTENSION_CONTROL_PREVIEW_SCHEMA = "guard.extension-control-preview.v1"
 EXTENSION_CONTROL_PROOF_ACTION = "commit-layers"
-EXTENSION_CONTROL_ENROLLMENT_SCHEMA = "guard.extension-control-enrollment.v1"
 EXTENSION_CONTROL_ENROLLMENT_ACTION = "enroll-authority"
 _MAX_IDENTITY_LENGTH = 256
+_INVALID_REVISION = "native_extension_control_invalid_revision"
+_INVALID_CATALOG_DIGEST = "native_extension_control_invalid_catalog_digest"
+_INVALID_IDENTITY = "native_extension_control_invalid_identity"
 _ENROLLMENT_CONFIRMATION_PREFIX = "ENROLL EXTENSION CONTROL"
 _REMOTE_TERMINAL_ENVIRONMENT = ("SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY", "MOSH_CONNECTION")
 _WINDOWS_SM_REMOTESESSION = 0x1000
@@ -39,33 +45,70 @@ class ExtensionControlProofError(PermissionError):
     """Raised when an extension-control proof is malformed or mismatched."""
 
 
+def _resident_digest(compute: Callable[[], str], identity_refusal: str) -> str:
+    """``compute``'s digest, with the resident's field refusals as proof errors.
+
+    Any other resident failure propagates: without the resident's digest there
+    is no proof to issue or check.
+    """
+
+    try:
+        return compute()
+    except NativeExtensionControlError as error:
+        refusal = {
+            _INVALID_REVISION: "invalid previous revision",
+            _INVALID_CATALOG_DIGEST: "invalid catalog digest",
+            _INVALID_IDENTITY: identity_refusal,
+        }.get(error.code)
+        if refusal is None:
+            raise
+        raise ExtensionControlProofError(refusal) from None
+
+
+def _transportable(values: tuple[object, ...]) -> bool:
+    """Whether every value is a string the resident request can carry.
+
+    A lone surrogate is a Python string but not UTF-8, so the resident could
+    not decode the request; refusing it here keeps it a field refusal rather
+    than a resident failure.
+    """
+
+    for value in values:
+        if not isinstance(value, str):
+            return False
+        try:
+            _ = value.encode("utf-8")
+        except UnicodeEncodeError:
+            return False
+    return True
+
+
 @dataclass(frozen=True, slots=True)
 class ExtensionControlEnrollment:
     catalog_digest: str
     actor_id: str
     nonce: str
+    _digest: str = field(init=False, repr=False, compare=False)
+    # The home whose resident digests the enrollment; not part of the proof.
+    guard_home: InitVar[Path | None] = None
 
-    def __post_init__(self) -> None:
-        if len(self.catalog_digest) != 64 or any(
-            character not in "0123456789abcdef" for character in self.catalog_digest
-        ):
-            raise ExtensionControlProofError("invalid catalog digest")
-        for value in (self.actor_id, self.nonce):
-            if not value.strip() or len(value) > _MAX_IDENTITY_LENGTH:
-                raise ExtensionControlProofError("invalid enrollment identity")
+    def __post_init__(self, guard_home: Path | None) -> None:
+        if not _transportable((self.catalog_digest, self.actor_id, self.nonce)):
+            raise ExtensionControlProofError("invalid enrollment identity")
+        digest = _resident_digest(
+            lambda: enrollment_digest(
+                catalog_digest=self.catalog_digest,
+                actor_id=self.actor_id,
+                nonce=self.nonce,
+                guard_home=guard_home,
+            ),
+            "invalid enrollment identity",
+        )
+        object.__setattr__(self, "_digest", digest)
 
     @property
     def canonical_digest(self) -> str:
-        payload = {
-            "action": EXTENSION_CONTROL_ENROLLMENT_ACTION,
-            "actor_id": self.actor_id,
-            "catalog_digest": self.catalog_digest,
-            "nonce": self.nonce,
-            "schema_version": EXTENSION_CONTROL_ENROLLMENT_SCHEMA,
-        }
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
-        framed = f"{EXTENSION_CONTROL_ENROLLMENT_SCHEMA}\x00{len(canonical)}\x00{canonical}"
-        return hashlib.sha256(framed.encode("utf-8")).hexdigest()
+        return self._digest
 
 
 @dataclass(frozen=True, slots=True)
@@ -398,54 +441,30 @@ class ExtensionControlMutation:
     idempotency_key: str
     nonce: str
 
-    def _canonical_layers(self) -> tuple[ExtensionControlLayer, ...]:
-        return tuple(
-            ExtensionControlLayer(
-                schema_version=layer.schema_version,
-                kind=layer.kind,
-                catalog_digest=layer.catalog_digest,
-                global_lockdown=layer.global_lockdown,
-                controls=tuple(
-                    sorted(
-                        layer.controls,
-                        key=lambda control: (
-                            control.target.kind.value,
-                            control.target.target_id,
-                            control.state.value,
-                        ),
-                    )
-                ),
-            )
-            for layer in sorted(self.layers, key=lambda value: value.kind.value)
-        )
+    _digest: str = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        if type(self.previous_revision) is not int or self.previous_revision < 0:
+        # The resident reads the revision as a signed 64-bit integer.
+        if type(self.previous_revision) is not int or not -(2**63) <= self.previous_revision < 2**63:
             raise ExtensionControlProofError("invalid previous revision")
-        if len(self.catalog_digest) != 64 or any(
-            character not in "0123456789abcdef" for character in self.catalog_digest
-        ):
-            raise ExtensionControlProofError("invalid catalog digest")
-        for value in (self.actor_id, self.idempotency_key, self.nonce):
-            if not value.strip() or len(value) > _MAX_IDENTITY_LENGTH:
-                raise ExtensionControlProofError("invalid mutation identity")
+        if not _transportable((self.catalog_digest, self.actor_id, self.idempotency_key, self.nonce)):
+            raise ExtensionControlProofError("invalid mutation identity")
+        digest = _resident_digest(
+            lambda: mutation_digest(
+                previous_revision=self.previous_revision,
+                catalog_digest=self.catalog_digest,
+                layers=self.layers,
+                actor_id=self.actor_id,
+                idempotency_key=self.idempotency_key,
+                nonce=self.nonce,
+            ),
+            "invalid mutation identity",
+        )
+        object.__setattr__(self, "_digest", digest)
 
     @property
     def canonical_digest(self) -> str:
-        canonical_layers = self._canonical_layers()
-        payload = {
-            "action": EXTENSION_CONTROL_PROOF_ACTION,
-            "actor_id": self.actor_id,
-            "catalog_digest": self.catalog_digest,
-            "idempotency_key": self.idempotency_key,
-            "layers": json.loads(layers_to_json(canonical_layers)),
-            "nonce": self.nonce,
-            "previous_revision": self.previous_revision,
-            "schema_version": EXTENSION_CONTROL_PREVIEW_SCHEMA,
-        }
-        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
-        framed = f"{EXTENSION_CONTROL_PREVIEW_SCHEMA}\x00{len(canonical)}\x00{canonical}"
-        return hashlib.sha256(framed.encode("utf-8")).hexdigest()
+        return self._digest
 
 
 @dataclass(frozen=True, slots=True)

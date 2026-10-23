@@ -57,6 +57,8 @@ def lifecycle_gate_requirement(args: argparse.Namespace) -> LifecycleGateRequire
         return None
     if _bool_attribute(args, "dry_run"):
         return None
+    if command == "desktop" and _string_attribute(args, "desktop_command") == "converge":
+        return LifecycleGateRequirement("update", "hol-guard")
     if command in {"install", "uninstall", "update", "disconnect"}:
         return LifecycleGateRequirement(command, _command_subject(args))
     apps_command = _string_attribute(args, "apps_command")

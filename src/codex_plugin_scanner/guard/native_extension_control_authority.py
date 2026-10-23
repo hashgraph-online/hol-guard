@@ -44,7 +44,12 @@ EXTENSION_CONTROL_AUTHORITY_FEATURE = "extension-control-authority-v1"
 _REQUEST_SCHEMA = "guard-extension-control-authority-request.v1"
 _RESULT_SCHEMA = "guard-extension-control-authority-result.v1"
 _TIMEOUT_SECONDS = 10.0
-_MAX_REQUEST_BYTES = 16 * 1024 * 1024
+# The largest envelope an authority request will frame, which is more than
+# ``EXTENSION_CONTROL_AUTHORITY_MAX_BYTES``: that bound counts the op's own
+# canonical request and this counts the envelope around it. Held under the
+# transport's frame limit so a request past it is refused for its size rather
+# than as a malformed frame.
+_MAX_REQUEST_BYTES = 6 * 1024 * 1024 - 64 * 1024
 _FLAGS = ("migration", "allow_migration", "restore_attempted", "resume_attempted", "rollback_attempted")
 
 

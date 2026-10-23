@@ -401,7 +401,7 @@ def test_group_ids_match_the_resident_vectors() -> None:
 
 
 def test_the_regroup_reasons_are_the_texts_the_resident_stores() -> None:
-    pretool = (_ROOT / "rust/crates/guard-command/src/pretool.rs").read_text(encoding="utf-8")
+    pretool = (_ROOT / "rust/crates/guard-command/src/pretool/mod.rs").read_text(encoding="utf-8")
     contained = (_ROOT / "rust/crates/guard-command/src/pretool/workspace_contained.rs").read_text(encoding="utf-8")
     fragments = re.findall(r'"([^"\n]*)"', contained[contained.index("concat!(") :][:200])
 

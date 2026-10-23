@@ -25,6 +25,9 @@ pub(super) fn normalize_package_user_copy(
     );
     if terminal_action {
         dashboard_url = None;
+        harness_message = LEGACY_LOCAL_APPROVAL_INSTRUCTION_RE
+            .replace_all(&harness_message, "")
+            .to_string();
         harness_message = LOCAL_APPROVAL_INSTRUCTION_RE
             .replace_all(&harness_message, "")
             .to_string();

@@ -24,7 +24,11 @@ if TYPE_CHECKING:
     from .commands_support_runtime_resolution import _runtime_capabilities_summary
 
 
-from ..models import GuardAction
+from ..models import GuardAction, GuardArtifact
+from ..native_artifact_content_hash import (
+    ArtifactContentHashUnavailableError,
+    native_artifact_content_hash,
+)
 from ..native_hook_authority_state import (
     HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE,
     flag_field,
@@ -38,6 +42,20 @@ from ..native_hook_render import (
 )
 from ._commands_shared import *
 from .commands_parser_helpers import *
+
+
+def _content_hash(artifact: GuardArtifact, *, guard_home: Path | None) -> str | None:
+    """The approval key for ``artifact``, or ``None`` when nobody can spell it.
+
+    The hash keys the allowance this path is about to mint, so a resident that
+    cannot answer leaves the approval pending: the caller treats ``None`` as a
+    refusal to mint rather than reaching for a hash of its own.
+    """
+
+    try:
+        return native_artifact_content_hash(artifact, guard_home=guard_home)
+    except ArtifactContentHashUnavailableError:
+        return None
 
 
 def _cursor_runtime_artifact_from_pending(pending: Mapping[str, object]) -> GuardArtifact | None:
@@ -357,7 +375,7 @@ def _persist_cursor_native_permission_after_shell(
     runtime_artifact = _cursor_runtime_artifact_from_pending(pending)
     runtime_artifact_hash = _optional_string(pending.get("artifact_hash"))
     if runtime_artifact is not None and runtime_artifact_hash is None:
-        runtime_artifact_hash = artifact_hash(runtime_artifact)
+        runtime_artifact_hash = _content_hash(runtime_artifact, guard_home=guard_home)
     if runtime_artifact is None:
         action_envelope = _hook_action_envelope(
             harness=harness,
@@ -375,7 +393,7 @@ def _persist_cursor_native_permission_after_shell(
             workspace=workspace,
         )
         if runtime_artifact is not None:
-            runtime_artifact_hash = artifact_hash(runtime_artifact)
+            runtime_artifact_hash = _content_hash(runtime_artifact, guard_home=guard_home)
     if runtime_artifact is None or runtime_artifact_hash is None:
         return False
     session_saved = _record_cursor_native_shell_allow_state(

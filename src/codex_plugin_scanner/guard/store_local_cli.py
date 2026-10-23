@@ -241,6 +241,7 @@ class StoreLocalCliMixin:
         expected_revision: int,
         updated_at: str,
         command_states: Mapping[str, LocalCliCommandState] | None = None,
+        reviewed_catalog_revision: int | None = None,
     ) -> int:
         if state not in {"allowed", "blocked", "unset"}:
             raise ValueError("invalid local CLI grant state")
@@ -259,6 +260,7 @@ class StoreLocalCliMixin:
                 current_revision=current_revision,
                 updated_at=updated_at,
                 command_states=command_states,
+                reviewed_catalog_revision=reviewed_catalog_revision,
             )
         return next_revision
 

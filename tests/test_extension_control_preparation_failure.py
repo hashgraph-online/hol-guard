@@ -19,15 +19,14 @@ from codex_plugin_scanner.guard.daemon.extension_control_errors import (
     _CAUSE_RECOVERY_ACTIONS,
     ExtensionControlApiError,
 )
-from codex_plugin_scanner.guard.extension_builder.native_source_compiler import (
-    NativeRequestTooLargeError,
-    NativeSourceCompilerError,
-)
 from codex_plugin_scanner.guard.daemon.extension_control_preparation_failure import (
     classify,
     preparation_unavailable,
 )
-
+from codex_plugin_scanner.guard.extension_builder.native_source_compiler import (
+    NativeRequestTooLargeError,
+    NativeSourceCompilerError,
+)
 
 _CAUSES = (
     "installed_runtime_incomplete",
@@ -47,7 +46,7 @@ def _wrapped(error: BaseException) -> ValueError:
 
     try:
         raise error
-    except BaseException as exc:  # noqa: BLE001 - the chain is the point
+    except BaseException as exc:
         wrapper = ValueError(f"installed bundle metadata unavailable: {exc}")
         wrapper.__cause__ = exc
         return wrapper
@@ -329,3 +328,26 @@ def test_a_request_past_the_bound_reaches_that_answer_through_the_lifecycle_adap
     assert payload["cause"] == "native_request_too_large"
     assert payload["recovery"] == {"action": "inspect_daemon_log"}
     assert payload["recovery"] != {"action": "repair_guard_installation"}
+
+
+def test_a_release_root_the_runtime_refuses_is_not_answered_with_a_reinstall(monkeypatch):
+    """A refused root names bad release data, not a broken installation."""
+
+    from codex_plugin_scanner.guard.catalog_delivery import authority, lifecycle
+    from codex_plugin_scanner.guard.extension_builder import native_source_compiler as transport
+
+    monkeypatch.setattr(lifecycle._Session, "executable", lambda self: Path("/nonexistent/hol-guard-runtime"))
+    refusal = (1, b'{"code":"distribution_identity_invalid"}', b"")
+    monkeypatch.setattr(transport, "_run_bounded", lambda *args, **kwargs: refusal)
+
+    with pytest.raises(ValueError, match="identity") as raised:
+        authority._native("root", data="{}", source="0" * 40, now=0)
+
+    assert not any(isinstance(error, NativeSourceCompilerError) for error in _chain(raised.value))
+    assert classify(raised.value) not in {"installed_runtime_incomplete", "installed_runtime_unresponsive"}
+
+
+def _chain(error):
+    while error is not None:
+        yield error
+        error = error.__cause__ or (None if error.__suppress_context__ else error.__context__)

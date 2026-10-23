@@ -640,6 +640,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
+name = "guard-adapter-detection"
+version = "0.1.0"
+dependencies = [
+ "guard-runtime-pyjson",
+ "serde_json",
+]
+
+[[package]]
 name = "guard-alloc-probe"
 version = "0.1.0"
 
@@ -670,9 +678,10 @@ dependencies = [
  "flate2",
  "fs2",
  "getrandom 0.3.4",
- "guard-command-build",
+ "guard-command-catalog-data",
  "guard-contained-process",
  "guard-contracts",
+ "guard-hook-payload",
  "guard-runtime-windows-process",
  "guard-scanner",
  "guard-secure-fs",
@@ -704,7 +713,6 @@ dependencies = [
  "unicode-normalization",
  "ureq",
  "url",
- "zstd",
 ]
 
 [[package]]
@@ -718,6 +726,7 @@ dependencies = [
  "fs2",
  "getrandom 0.3.4",
  "guard-contracts",
+ "guard-hook-payload",
  "guard-runtime-windows-process",
  "guard-scanner",
  "guard-secure-fs",
@@ -745,6 +754,18 @@ dependencies = [
  "unicode-normalization",
  "ureq",
  "url",
+]
+
+[[package]]
+name = "guard-command-catalog-data"
+version = "0.1.0"
+dependencies = [
+ "guard-command-build",
+ "hex",
+ "ruzstd",
+ "serde_json",
+ "sha2",
+ "zstd",
 ]
 
 [[package]]
@@ -807,11 +828,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "guard-hook-payload"
+version = "0.1.0"
+dependencies = [
+ "fancy-regex 0.19.2",
+ "guard-contracts",
+ "hex",
+ "regex",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "guard-pack-compiler"
 version = "0.1.0"
 dependencies = [
  "guard-command-build",
  "serde_json",
+]
+
+[[package]]
+name = "guard-policy-bundle"
+version = "0.1.0"
+dependencies = [
+ "base64ct",
+ "flate2",
+ "guard-contracts",
+ "guard-policy-snapshot",
+ "hex",
+ "rsa",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -844,6 +891,13 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "sha2",
+]
+
+[[package]]
+name = "guard-runtime-pyjson"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -943,14 +997,17 @@ dependencies = [
  "flate2",
  "fs2",
  "getrandom 0.3.4",
+ "guard-adapter-detection",
  "guard-archive",
  "guard-command",
  "guard-contained-process",
  "guard-contracts",
  "guard-google-identity",
  "guard-hook-core",
+ "guard-policy-bundle",
  "guard-policy-snapshot",
  "guard-rule-contract",
+ "guard-runtime-pyjson",
  "guard-runtime-windows-process",
  "guard-scanner",
  "guard-seatbelt",

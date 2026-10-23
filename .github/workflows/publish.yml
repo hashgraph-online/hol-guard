@@ -43,6 +43,7 @@ on:
       - "!.github/workflows/**"
       - ".github/workflows/publish.yml"
       - ".github/workflows/release-native-prepare.yml"
+      - ".github/workflows/release-native-wheel.yml"
       - "README.md"
       - "src/**"
       - "scripts/**"
@@ -251,8 +252,8 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Resolved PR canary version: $VERSION"
 
-  precompile-native:
-    name: Prepare native release binaries
+  precompile-native-linux-x64:
+    name: Prepare native release binaries (x86_64-unknown-linux-musl)
     needs: [authorize-release, resolve-alpha-version, resolve-canary-version]
     # Stable tag dispatches, authorized main alpha dispatches and opted-in PR canaries
     # compile once, beside Build + Verify. The wheel jobs then only verify, self-test on
@@ -288,6 +289,7 @@ jobs:
       )
     uses: ./.github/workflows/release-native-prepare.yml
     with:
+      target: x86_64-unknown-linux-musl
       source_sha: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
       version: ${{ needs.resolve-alpha-version.outputs.version || needs.resolve-canary-version.outputs.version || inputs.release_version }}
       # Alpha native wheels ship only on the GitHub prerelease, never on PyPI, so they
@@ -295,6 +297,195 @@ jobs:
       fast_codegen: ${{ inputs.release_channel == 'alpha' }}
     permissions:
       contents: read
+      actions: read
+
+  precompile-native-macos-x64:
+    name: Prepare native release binaries (x86_64-apple-darwin)
+    needs: [authorize-release, resolve-alpha-version, resolve-canary-version]
+    # Stable tag dispatches, authorized main alpha dispatches and opted-in PR canaries
+    # compile once, beside Build + Verify. The wheel jobs then only verify, self-test on
+    # native hardware, and package. A failed version resolution skips this job, so wheels
+    # fall back to an in-job compile and Build + Verify still rejects the dispatch on its own.
+    # PR canaries keep the stable fat-LTO profile, so their wheels still prove the PyPI
+    # size budgets, and their compiles only read the trusted caches.
+    if: >-
+      always() && !cancelled() &&
+      needs.authorize-release.result == 'success' &&
+      (
+        (
+          vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+          github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
+          (
+            (
+              github.ref == format('refs/tags/v{0}', inputs.release_version) &&
+              inputs.release_channel == 'stable' && inputs.release_train == 'main'
+            ) ||
+            (
+              github.ref == 'refs/heads/main' &&
+              inputs.release_channel == 'alpha' && inputs.release_train == 'main' &&
+              needs.resolve-alpha-version.result == 'success'
+            )
+          )
+        ) ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'publish-testpypi-canary') &&
+          needs.resolve-canary-version.result == 'success'
+        )
+      )
+    uses: ./.github/workflows/release-native-prepare.yml
+    with:
+      target: x86_64-apple-darwin
+      source_sha: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+      version: ${{ needs.resolve-alpha-version.outputs.version || needs.resolve-canary-version.outputs.version || inputs.release_version }}
+      # Alpha native wheels ship only on the GitHub prerelease, never on PyPI, so they
+      # use fast per-crate codegen. Stable keeps whole-program fat LTO.
+      fast_codegen: ${{ inputs.release_channel == 'alpha' }}
+    permissions:
+      contents: read
+      actions: read
+
+  precompile-native-macos-arm64:
+    name: Prepare native release binaries (aarch64-apple-darwin)
+    needs: [authorize-release, resolve-alpha-version, resolve-canary-version]
+    # Stable tag dispatches, authorized main alpha dispatches and opted-in PR canaries
+    # compile once, beside Build + Verify. The wheel jobs then only verify, self-test on
+    # native hardware, and package. A failed version resolution skips this job, so wheels
+    # fall back to an in-job compile and Build + Verify still rejects the dispatch on its own.
+    # PR canaries keep the stable fat-LTO profile, so their wheels still prove the PyPI
+    # size budgets, and their compiles only read the trusted caches.
+    if: >-
+      always() && !cancelled() &&
+      needs.authorize-release.result == 'success' &&
+      (
+        (
+          vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+          github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
+          (
+            (
+              github.ref == format('refs/tags/v{0}', inputs.release_version) &&
+              inputs.release_channel == 'stable' && inputs.release_train == 'main'
+            ) ||
+            (
+              github.ref == 'refs/heads/main' &&
+              inputs.release_channel == 'alpha' && inputs.release_train == 'main' &&
+              needs.resolve-alpha-version.result == 'success'
+            )
+          )
+        ) ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'publish-testpypi-canary') &&
+          needs.resolve-canary-version.result == 'success'
+        )
+      )
+    uses: ./.github/workflows/release-native-prepare.yml
+    with:
+      target: aarch64-apple-darwin
+      source_sha: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+      version: ${{ needs.resolve-alpha-version.outputs.version || needs.resolve-canary-version.outputs.version || inputs.release_version }}
+      # Alpha native wheels ship only on the GitHub prerelease, never on PyPI, so they
+      # use fast per-crate codegen. Stable keeps whole-program fat LTO.
+      fast_codegen: ${{ inputs.release_channel == 'alpha' }}
+    permissions:
+      contents: read
+      actions: read
+
+  precompile-native-windows-x64:
+    name: Prepare native release binaries (x86_64-pc-windows-msvc)
+    needs: [authorize-release, resolve-alpha-version, resolve-canary-version]
+    # Stable tag dispatches, authorized main alpha dispatches and opted-in PR canaries
+    # compile once, beside Build + Verify. The wheel jobs then only verify, self-test on
+    # native hardware, and package. A failed version resolution skips this job, so wheels
+    # fall back to an in-job compile and Build + Verify still rejects the dispatch on its own.
+    # PR canaries keep the stable fat-LTO profile, so their wheels still prove the PyPI
+    # size budgets, and their compiles only read the trusted caches.
+    if: >-
+      always() && !cancelled() &&
+      needs.authorize-release.result == 'success' &&
+      (
+        (
+          vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+          github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
+          (
+            (
+              github.ref == format('refs/tags/v{0}', inputs.release_version) &&
+              inputs.release_channel == 'stable' && inputs.release_train == 'main'
+            ) ||
+            (
+              github.ref == 'refs/heads/main' &&
+              inputs.release_channel == 'alpha' && inputs.release_train == 'main' &&
+              needs.resolve-alpha-version.result == 'success'
+            )
+          )
+        ) ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'publish-testpypi-canary') &&
+          needs.resolve-canary-version.result == 'success'
+        )
+      )
+    uses: ./.github/workflows/release-native-prepare.yml
+    with:
+      target: x86_64-pc-windows-msvc
+      source_sha: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+      version: ${{ needs.resolve-alpha-version.outputs.version || needs.resolve-canary-version.outputs.version || inputs.release_version }}
+      # Alpha native wheels ship only on the GitHub prerelease, never on PyPI, so they
+      # use fast per-crate codegen. Stable keeps whole-program fat LTO.
+      fast_codegen: ${{ inputs.release_channel == 'alpha' }}
+    permissions:
+      contents: read
+      actions: read
+
+  precompile-native-windows-arm64:
+    name: Prepare native release binaries (aarch64-pc-windows-msvc)
+    needs: [authorize-release, resolve-alpha-version, resolve-canary-version]
+    # Stable tag dispatches, authorized main alpha dispatches and opted-in PR canaries
+    # compile once, beside Build + Verify. The wheel jobs then only verify, self-test on
+    # native hardware, and package. A failed version resolution skips this job, so wheels
+    # fall back to an in-job compile and Build + Verify still rejects the dispatch on its own.
+    # PR canaries keep the stable fat-LTO profile, so their wheels still prove the PyPI
+    # size budgets, and their compiles only read the trusted caches.
+    if: >-
+      always() && !cancelled() &&
+      needs.authorize-release.result == 'success' &&
+      (
+        (
+          vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+          github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
+          (
+            (
+              github.ref == format('refs/tags/v{0}', inputs.release_version) &&
+              inputs.release_channel == 'stable' && inputs.release_train == 'main'
+            ) ||
+            (
+              github.ref == 'refs/heads/main' &&
+              inputs.release_channel == 'alpha' && inputs.release_train == 'main' &&
+              needs.resolve-alpha-version.result == 'success'
+            )
+          )
+        ) ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'publish-testpypi-canary') &&
+          needs.resolve-canary-version.result == 'success'
+        )
+      )
+    uses: ./.github/workflows/release-native-prepare.yml
+    with:
+      target: aarch64-pc-windows-msvc
+      source_sha: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+      version: ${{ needs.resolve-alpha-version.outputs.version || needs.resolve-canary-version.outputs.version || inputs.release_version }}
+      # Alpha native wheels ship only on the GitHub prerelease, never on PyPI, so they
+      # use fast per-crate codegen. Stable keeps whole-program fat LTO.
+      fast_codegen: ${{ inputs.release_channel == 'alpha' }}
+    permissions:
+      contents: read
+      actions: read
 
   build:
     name: Build + Verify
@@ -321,6 +512,7 @@ jobs:
       source_sha: ${{ steps.version.outputs.source_sha }}
       release_repair: ${{ steps.version.outputs.release_repair }}
       native_wheel_matrix: ${{ steps.native_wheel_matrix.outputs.matrix }}
+      native_wheel_targets: ${{ steps.native_wheel_matrix.outputs.targets }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -664,6 +856,7 @@ jobs:
             filter='map(select(.platform_tag != "win_arm64"))'
           fi
           echo "matrix=$(jq -c "$filter" <<< "$NATIVE_WHEEL_MATRIX")" >> "$GITHUB_OUTPUT"
+          echo "targets=$(jq -c "$filter | map(.target)" <<< "$NATIVE_WHEEL_MATRIX")" >> "$GITHUB_OUTPUT"
       - name: Verify release toolchain and write SBOM
         env:
           EXPECTED_UV_VERSION: "0.9.26"
@@ -853,11 +1046,12 @@ jobs:
 
 
 
-  build-native-guard-wheels:
-    name: Build native Guard wheel (${{ matrix.target }})
+  build-native-guard-wheel-linux-x64:
+    name: Build native Guard wheel (x86_64-unknown-linux-musl)
     if: >-
       always() && !cancelled() && needs.build.result == 'success' &&
-      (needs.precompile-native.result == 'success' || needs.precompile-native.result == 'skipped') &&
+      (needs.precompile-native-linux-x64.result == 'success' || needs.precompile-native-linux-x64.result == 'skipped') &&
+      contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'x86_64-unknown-linux-musl') &&
       (
         (
           github.event_name == 'pull_request' &&
@@ -884,237 +1078,193 @@ jobs:
           github.event.inputs.release_train == 'main'
         )
       )
-    needs: [build, precompile-native]
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
+    needs: [build, precompile-native-linux-x64]
+    uses: ./.github/workflows/release-native-wheel.yml
+    with:
+      target: x86_64-unknown-linux-musl
+      source_sha: ${{ needs.build.outputs.source_sha }}
+      version: ${{ needs.build.outputs.version }}
+      channel: ${{ needs.build.outputs.channel }}
+      precompiled: ${{ needs.precompile-native-linux-x64.result == 'success' }}
+      release_repair: ${{ needs.build.outputs.release_repair == 'true' }}
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.build.outputs.native_wheel_matrix) }}
-    steps:
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: "3.12"
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          persist-credentials: false
-          ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || needs.build.outputs.source_sha }}
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
-        with:
-          version: "0.9.26"
-          enable-cache: true
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: distributions
-          path: base-dist/
-      - name: Verify release approval enrollment root pin
-        if: needs.build.outputs.channel != 'canary'
-        env:
-          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
-          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
-        run: python scripts/ci/native_approval_contract_gate.py --root . --require-release-root
-      - name: Install pinned Rust target
-        if: needs.precompile-native.result != 'success'
-        shell: bash
-        env:
-          RUST_TARGET: ${{ matrix.target }}
-        run: |
-          rustup toolchain install 1.88.0 --profile minimal
-          rustup default 1.88.0
-          rustup target add "$RUST_TARGET"
-      - name: Install Linux static toolchain
-        if: runner.os == 'Linux' && needs.precompile-native.result != 'success'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends musl-tools
-      - name: Cache trusted release compilation
-        if: needs.precompile-native.result != 'success'
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
-        with:
-          prefix-key: release-native-v1
-          workspaces: rust
-          shared-key: release-${{ matrix.target }}
-          # Shares keys with release-native-prepare.yml; workspace crates are
-          # always stale after a fresh checkout, so storing them only spends quota.
-          cache-workspace-crates: false
-          cache-bin: false
-          # Release builds never consume the validation cache. PR canaries can
-          # restore this trusted cache, but cannot publish entries to it.
-          save-if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/3.0') }}
-      - name: Build version-matched runtime
-        if: needs.precompile-native.result != 'success'
-        shell: bash
-        env:
-          HOL_GUARD_BUILD_SHA: ${{ needs.build.outputs.source_sha }}
-          HOL_GUARD_PACKAGE_VERSION: ${{ needs.build.outputs.version }}
-          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
-          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
-          RUSTFLAGS: ${{ matrix.rustflags }}
-          RUST_TARGET: ${{ matrix.target }}
-          RUNTIME: ${{ matrix.runtime }}
-          SOURCE_COMPILER: ${{ matrix.source_compiler }}
-        run: |
-          # One invocation keeps feature unification identical to the verification build below,
-          # so that build finds everything fresh instead of recompiling shared crates.
-          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" \
-            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
-          "$RUNTIME" self-test --json
-      - name: Restore exact-run native binaries
-        if: needs.precompile-native.result == 'success'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: release-native-${{ matrix.target }}
-          path: prepared-native/
-      - name: Verify and install prepared native binaries
-        if: needs.precompile-native.result == 'success'
-        shell: bash
-        env:
-          RUNTIME: ${{ matrix.runtime }}
-          SOURCE_COMPILER: ${{ matrix.source_compiler }}
-          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
-          VERSION: ${{ needs.build.outputs.version }}
-        run: python scripts/release/prepared_native.py install --directory prepared-native
-      - name: Self-test prepared runtime on native hardware
-        if: needs.precompile-native.result == 'success'
-        shell: bash
-        env:
-          RUNTIME: ${{ matrix.runtime }}
-        # Prepared binaries may be cross-compiled; every target is executed
-        # on its own architecture here before projection checks and packaging.
-        run: '"$RUNTIME" self-test --json'
-      - name: Verify native command program is current
-        shell: bash
-        env:
-          HOL_GUARD_BUILD_SHA: ${{ needs.build.outputs.source_sha }}
-          HOL_GUARD_PACKAGE_VERSION: ${{ needs.build.outputs.version }}
-          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
-          HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX }}
-          RUSTFLAGS: ${{ matrix.rustflags }}
-          SOURCE_COMPILER: ${{ matrix.source_compiler }}
-          RUST_TARGET: ${{ matrix.target }}
-          PRECOMPILED: ${{ needs.precompile-native.result == 'success' }}
-        run: |
-          # Generated projections may lag their canonical tagged inputs.
-          # Bind both the binary and packaged JSON to this release build.
-          python scripts/build_native_command_program.py --compiler "$SOURCE_COMPILER"
-          if [[ "$PRECOMPILED" != "true" ]]; then
-            cargo build --manifest-path rust/Cargo.toml --locked --release --target "$RUST_TARGET" \
-              -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
-          fi
-          arguments=(--compiler "$SOURCE_COMPILER")
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            arguments+=(--changed-from "${{ github.event.pull_request.base.sha }}")
-          fi
-          python scripts/ci/verify_native_command_program.py "${arguments[@]}"
-      - name: Verify native source compiler output
-        shell: bash
-        env:
-          SOURCE_COMPILER: ${{ matrix.source_compiler }}
-        run: |
-          # Python instead of jq: the Windows ARM64 runner image does not ship jq.
-          python - <<'PY'
-          import json
-          import os
-          import subprocess
-          import sys
-          import tempfile
-          from pathlib import Path
 
-          sys.path[:0] = [str(Path("scripts").resolve()), str(Path("src").resolve())]
-          from prepare_extension_contribution import _development_release
-          from codex_plugin_scanner.guard.extension_builder.bundle_baseline import authoring_request
+  build-native-guard-wheel-macos-x64:
+    name: Build native Guard wheel (x86_64-apple-darwin)
+    if: >-
+      always() && !cancelled() && needs.build.result == 'success' &&
+      (needs.precompile-native-macos-x64.result == 'success' || needs.precompile-native-macos-x64.result == 'skipped') &&
+      contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'x86_64-apple-darwin') &&
+      (
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'publish-testpypi-canary') &&
+          needs.build.outputs.channel == 'canary'
+        ) ||
+        (
+          needs.build.outputs.channel == 'alpha' &&
+          (
+            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') ||
+            (
+              github.event_name == 'workflow_dispatch' &&
+              (github.event.inputs.release_train == '3.0' || github.event.inputs.release_train == 'main')
+            )
+          )
+        ) ||
+        (
+          needs.build.outputs.channel == 'stable' &&
+          github.event_name == 'workflow_dispatch' &&
+          github.run_attempt == 1 &&
+          (github.ref == 'refs/heads/main' || github.ref == format('refs/tags/v{0}', github.event.inputs.release_version)) &&
+          github.event.inputs.release_channel == 'stable' &&
+          github.event.inputs.release_train == 'main'
+        )
+      )
+    needs: [build, precompile-native-macos-x64]
+    uses: ./.github/workflows/release-native-wheel.yml
+    with:
+      target: x86_64-apple-darwin
+      source_sha: ${{ needs.build.outputs.source_sha }}
+      version: ${{ needs.build.outputs.version }}
+      channel: ${{ needs.build.outputs.channel }}
+      precompiled: ${{ needs.precompile-native-macos-x64.result == 'success' }}
+      release_repair: ${{ needs.build.outputs.release_repair == 'true' }}
+    permissions:
+      contents: read
 
-          compiler = Path(os.environ["SOURCE_COMPILER"]).resolve(strict=True)
-          source = json.loads(Path("rust/crates/guard-command/tests/fixtures/command-source-example.v1.json").read_text(encoding="utf-8"))
-          trust = json.loads(Path("contracts/extensions/build-trust-class-map.v1.json").read_text(encoding="utf-8"))
-          build = {"schema": "guard.command-extension-build.v1", "sources": [source], "mcp_sources": [], "trust": trust, "base": "packaged"}
-          # Use the same native global admission context as maintainer authoring.
-          with tempfile.TemporaryDirectory(prefix="hol-guard-publish-context-") as scratch:
-              request = authoring_request(
-                  "compile", build, compiler, installed=False,
-                  cache_directory=Path(scratch).resolve(strict=True), development=_development_release,
-              )
-              result = subprocess.run(
-                  [str(compiler), "compile"], input=json.dumps(request), text=True,
-                  stdout=subprocess.PIPE, check=True,
-              )
-          compiled = json.loads(result.stdout)
-          assert any(item["extension_id"] == source["extension"]["extension_id"] for item in compiled["program"]["extensions"])
-          assert compiled["base_program_digest"] and compiled["implementation_digest"]
-          Path("source-compiled.json").write_text(result.stdout, encoding="utf-8")
-          PY
-      - name: Rebuild Guard base wheel after projection regeneration
-        shell: bash
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-          HOL_GUARD_BUILD_SOURCE_COMPILER: ${{ matrix.source_compiler }}
-        run: |
-          CURRENT_VERSION=$(uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --check)
-          if [[ "$CURRENT_VERSION" != "$VERSION" ]]; then
-            uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --version "$VERSION"
-          fi
-          BACKUP="$RUNNER_TEMP/hol-guard-pyproject.toml"
-          cp pyproject.toml "$BACKUP"
-          restore_pyproject() {
-            cp "$BACKUP" pyproject.toml
-          }
-          trap restore_pyproject EXIT
-          python3 - <<'PY'
-          from pathlib import Path
+  build-native-guard-wheel-macos-arm64:
+    name: Build native Guard wheel (aarch64-apple-darwin)
+    if: >-
+      always() && !cancelled() && needs.build.result == 'success' &&
+      (needs.precompile-native-macos-arm64.result == 'success' || needs.precompile-native-macos-arm64.result == 'skipped') &&
+      contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'aarch64-apple-darwin') &&
+      (
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'publish-testpypi-canary') &&
+          needs.build.outputs.channel == 'canary'
+        ) ||
+        (
+          needs.build.outputs.channel == 'alpha' &&
+          (
+            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') ||
+            (
+              github.event_name == 'workflow_dispatch' &&
+              (github.event.inputs.release_train == '3.0' || github.event.inputs.release_train == 'main')
+            )
+          )
+        ) ||
+        (
+          needs.build.outputs.channel == 'stable' &&
+          github.event_name == 'workflow_dispatch' &&
+          github.run_attempt == 1 &&
+          (github.ref == 'refs/heads/main' || github.ref == format('refs/tags/v{0}', github.event.inputs.release_version)) &&
+          github.event.inputs.release_channel == 'stable' &&
+          github.event.inputs.release_train == 'main'
+        )
+      )
+    needs: [build, precompile-native-macos-arm64]
+    uses: ./.github/workflows/release-native-wheel.yml
+    with:
+      target: aarch64-apple-darwin
+      source_sha: ${{ needs.build.outputs.source_sha }}
+      version: ${{ needs.build.outputs.version }}
+      channel: ${{ needs.build.outputs.channel }}
+      precompiled: ${{ needs.precompile-native-macos-arm64.result == 'success' }}
+      release_repair: ${{ needs.build.outputs.release_repair == 'true' }}
+    permissions:
+      contents: read
 
-          path = Path("pyproject.toml")
-          text = path.read_text(encoding="utf-8")
-          start = text.index("[project.scripts]")
-          end = text.index("\n\n[project.urls]")
-          scripts = "[project.scripts]\n" \
-              'hol-guard = "codex_plugin_scanner.cli:main"\n' \
-              'plugin-guard = "codex_plugin_scanner.cli:main"\n' \
-              'hol-guard-eval = "codex_plugin_scanner.guard.evaluation_cli:main"'
-          path.write_text(text[:start] + scripts + text[end:], encoding="utf-8")
-          PY
-          uv build --wheel --out-dir "$RUNNER_TEMP/hol-guard-base-dist"
-          mv "$RUNNER_TEMP/hol-guard-base-dist/hol_guard-${VERSION}-py3-none-any.whl" \
-            "base-dist/hol_guard-${VERSION}-py3-none-any.whl"
-      - name: Verify Linux runtime is static
-        if: runner.os == 'Linux'
-        shell: bash
-        env:
-          RUNTIME: ${{ matrix.runtime }}
-        run: |
-          LDD_OUTPUT=$(ldd "$RUNTIME" 2>&1 || true)
-          if ! grep -Eq 'not a dynamic executable|statically linked' <<< "$LDD_OUTPUT"; then
-            printf '%s\n' "$LDD_OUTPUT" >&2
-            exit 1
-          fi
-      - name: Assemble native wheel
-        shell: bash
-        env:
-          PLATFORM_TAG: ${{ matrix.platform_tag }}
-          RUNTIME: ${{ matrix.runtime }}
-          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
-          TARGET: ${{ matrix.target }}
-          VERSION: ${{ needs.build.outputs.version }}
-          RELEASE_REPAIR: ${{ needs.build.outputs.release_repair }}
-        run: |
-          RULE_DIGEST=$("$RUNTIME" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
-          python scripts/build_native_hol_guard_wheel.py \
-            --wheel "base-dist/hol_guard-${VERSION}-py3-none-any.whl" \
-            --runtime "$RUNTIME" \
-            --output-dir native-dist \
-            --version "$VERSION" \
-            --platform-tag "$PLATFORM_TAG" \
-            --target "$TARGET" \
-            --source-sha "$SOURCE_SHA" \
-            --rule-digest "$RULE_DIGEST" \
-            --implementation-digest "$(python -c 'import json,sys; print(json.load(open("source-compiled.json"))["implementation_digest"])')" \
-            --base-program-digest "$(python -c 'import json,sys; print(json.load(open("source-compiled.json"))["base_program_digest"])')"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: native-guard-wheel-${{ matrix.platform_tag }}
-          path: native-dist/*.whl
-          if-no-files-found: error
+  build-native-guard-wheel-windows-x64:
+    name: Build native Guard wheel (x86_64-pc-windows-msvc)
+    if: >-
+      always() && !cancelled() && needs.build.result == 'success' &&
+      (needs.precompile-native-windows-x64.result == 'success' || needs.precompile-native-windows-x64.result == 'skipped') &&
+      contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'x86_64-pc-windows-msvc') &&
+      (
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'publish-testpypi-canary') &&
+          needs.build.outputs.channel == 'canary'
+        ) ||
+        (
+          needs.build.outputs.channel == 'alpha' &&
+          (
+            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') ||
+            (
+              github.event_name == 'workflow_dispatch' &&
+              (github.event.inputs.release_train == '3.0' || github.event.inputs.release_train == 'main')
+            )
+          )
+        ) ||
+        (
+          needs.build.outputs.channel == 'stable' &&
+          github.event_name == 'workflow_dispatch' &&
+          github.run_attempt == 1 &&
+          (github.ref == 'refs/heads/main' || github.ref == format('refs/tags/v{0}', github.event.inputs.release_version)) &&
+          github.event.inputs.release_channel == 'stable' &&
+          github.event.inputs.release_train == 'main'
+        )
+      )
+    needs: [build, precompile-native-windows-x64]
+    uses: ./.github/workflows/release-native-wheel.yml
+    with:
+      target: x86_64-pc-windows-msvc
+      source_sha: ${{ needs.build.outputs.source_sha }}
+      version: ${{ needs.build.outputs.version }}
+      channel: ${{ needs.build.outputs.channel }}
+      precompiled: ${{ needs.precompile-native-windows-x64.result == 'success' }}
+      release_repair: ${{ needs.build.outputs.release_repair == 'true' }}
+    permissions:
+      contents: read
+
+  build-native-guard-wheel-windows-arm64:
+    name: Build native Guard wheel (aarch64-pc-windows-msvc)
+    if: >-
+      always() && !cancelled() && needs.build.result == 'success' &&
+      (needs.precompile-native-windows-arm64.result == 'success' || needs.precompile-native-windows-arm64.result == 'skipped') &&
+      contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'aarch64-pc-windows-msvc') &&
+      (
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'publish-testpypi-canary') &&
+          needs.build.outputs.channel == 'canary'
+        ) ||
+        (
+          needs.build.outputs.channel == 'alpha' &&
+          (
+            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') ||
+            (
+              github.event_name == 'workflow_dispatch' &&
+              (github.event.inputs.release_train == '3.0' || github.event.inputs.release_train == 'main')
+            )
+          )
+        ) ||
+        (
+          needs.build.outputs.channel == 'stable' &&
+          github.event_name == 'workflow_dispatch' &&
+          github.run_attempt == 1 &&
+          (github.ref == 'refs/heads/main' || github.ref == format('refs/tags/v{0}', github.event.inputs.release_version)) &&
+          github.event.inputs.release_channel == 'stable' &&
+          github.event.inputs.release_train == 'main'
+        )
+      )
+    needs: [build, precompile-native-windows-arm64]
+    uses: ./.github/workflows/release-native-wheel.yml
+    with:
+      target: aarch64-pc-windows-msvc
+      source_sha: ${{ needs.build.outputs.source_sha }}
+      version: ${{ needs.build.outputs.version }}
+      channel: ${{ needs.build.outputs.channel }}
+      precompiled: ${{ needs.precompile-native-windows-arm64.result == 'success' }}
+      release_repair: ${{ needs.build.outputs.release_repair == 'true' }}
+    permissions:
+      contents: read
 
   publish-installed-bundle-assets:
     name: Publish package-pinned immutable data before installable packages
@@ -1196,9 +1346,18 @@ jobs:
     if: >-
       always() && !cancelled() &&
       needs.build.result == 'success' &&
-      needs.build-native-guard-wheels.result == 'success' &&
+      ((contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'x86_64-unknown-linux-musl') && needs.build-native-guard-wheel-linux-x64.result == 'success') ||
+       (!contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'x86_64-unknown-linux-musl') && needs.build-native-guard-wheel-linux-x64.result == 'skipped')) &&
+      ((contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'x86_64-apple-darwin') && needs.build-native-guard-wheel-macos-x64.result == 'success') ||
+       (!contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'x86_64-apple-darwin') && needs.build-native-guard-wheel-macos-x64.result == 'skipped')) &&
+      ((contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'aarch64-apple-darwin') && needs.build-native-guard-wheel-macos-arm64.result == 'success') ||
+       (!contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'aarch64-apple-darwin') && needs.build-native-guard-wheel-macos-arm64.result == 'skipped')) &&
+      ((contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'x86_64-pc-windows-msvc') && needs.build-native-guard-wheel-windows-x64.result == 'success') ||
+       (!contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'x86_64-pc-windows-msvc') && needs.build-native-guard-wheel-windows-x64.result == 'skipped')) &&
+      ((contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'aarch64-pc-windows-msvc') && needs.build-native-guard-wheel-windows-arm64.result == 'success') ||
+       (!contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'aarch64-pc-windows-msvc') && needs.build-native-guard-wheel-windows-arm64.result == 'skipped')) &&
       needs.publish-installed-bundle-assets.result == 'success'
-    needs: [build, build-native-guard-wheels, publish-installed-bundle-assets]
+    needs: [build, build-native-guard-wheel-linux-x64, build-native-guard-wheel-macos-x64, build-native-guard-wheel-macos-arm64, build-native-guard-wheel-windows-x64, build-native-guard-wheel-windows-arm64, publish-installed-bundle-assets]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -1211,6 +1370,67 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
+      - name: Validate source-bound native wheel inventory
+        shell: python
+        env:
+          SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+          CHANNEL: ${{ needs.build.outputs.channel }}
+          NATIVE_WHEEL_TARGETS: ${{ needs.build.outputs.native_wheel_targets }}
+          NATIVE_WHEEL_MATRIX: ${{ needs.build.outputs.native_wheel_matrix }}
+        run: |
+          import json
+          import os
+          import subprocess
+
+          try:
+              selected = json.loads(os.environ.get("NATIVE_WHEEL_TARGETS", ""))
+              matrix = json.loads(os.environ.get("NATIVE_WHEEL_MATRIX", ""))
+          except ValueError:
+              raise SystemExit("Native wheel inventory outputs must be valid JSON")
+          if not isinstance(selected, list) or not selected or any(not isinstance(item, str) for item in selected):
+              raise SystemExit("Native wheel targets must be a nonempty list of strings")
+          if len(selected) != len(set(selected)) or not isinstance(matrix, list) or not matrix:
+              raise SystemExit("Native wheel inventory must be nonempty and unique")
+          metadata = {
+              "x86_64-unknown-linux-musl": ("ubuntu-latest", "manylinux_2_17_x86_64"),
+              "x86_64-apple-darwin": ("macos-15-intel", "macosx_13_0_x86_64"),
+              "aarch64-apple-darwin": ("macos-15", "macosx_11_0_arm64"),
+              "x86_64-pc-windows-msvc": ("windows-latest", "win_amd64"),
+              "aarch64-pc-windows-msvc": ("windows-11-arm", "win_arm64"),
+          }
+          matrix_targets = []
+          for row in matrix:
+              target = row.get("target") if isinstance(row, dict) else None
+              if not isinstance(target, str) or target not in metadata:
+                  raise SystemExit("Native wheel matrix contains an unapproved target")
+              runner, platform = metadata[target]
+              suffix = ".exe" if target.endswith("-pc-windows-msvc") else ""
+              expected = {
+                  "runner": runner, "platform_tag": platform, "target": target,
+                  "runtime": f"rust/target/{target}/release/hol-guard-runtime{suffix}",
+                  "source_compiler": f"rust/target/{target}/release/guard-command-source{suffix}",
+              }
+              if suffix:
+                  expected["rustflags"] = "-C link-arg=/Brepro"
+              if row != expected:
+                  raise SystemExit("Native wheel matrix tuple does not match its approved target")
+              matrix_targets.append(target)
+          if len(matrix_targets) != len(set(matrix_targets)) or set(selected) != set(matrix_targets):
+              raise SystemExit("Native wheel target and matrix inventories do not match uniquely")
+          source = os.environ.get("SOURCE_SHA", "")
+          if subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() != source:
+              raise SystemExit("Native wheel inventory checkout is not the qualified source")
+          channel = os.environ.get("CHANNEL", "")
+          if channel not in {"stable", "alpha", "canary"}:
+              raise SystemExit("Native wheel inventory has no supported release channel")
+          manifest = subprocess.check_output(
+              ["git", "ls-tree", "--name-only", source, "--", "scripts/embed_native_wheel_manifest.py"], text=True,
+          ).strip()
+          required = set(metadata)
+          if channel == "canary" or not manifest:
+              required.remove("aarch64-pc-windows-msvc")
+          if set(selected) != required:
+              raise SystemExit("Native wheel inventory does not match the qualified source and channel")
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"

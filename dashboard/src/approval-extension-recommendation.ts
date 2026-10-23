@@ -92,6 +92,8 @@ function extensionNames(recommendation: GuardApprovalExtensionRecommendation): s
 
 export type ApprovalExtensionRecommendationCopy = {
   commands: string[];
+  /** The commands joined for a sentence, such as "git add and git commit". */
+  commandText: string;
   title: string;
   body: string;
   primaryLabel: string;
@@ -124,6 +126,7 @@ export function approvalExtensionRecommendationCopy(
   const firstExtension = recommendation.permissions[0]?.extension_name ?? owner;
   return {
     commands,
+    commandText,
     title: `${owner} covers ${commandText}`,
     body: `${owner} asks before agents run ${commandText}. Allow it in ${owner} and future ${commandText} commands run without asking. Other protections still apply.`,
     primaryLabel: `Approve & always allow ${commandText}`,

@@ -18,10 +18,7 @@ struct Fixture {
 
 impl Fixture {
     fn new(tag: &str) -> Self {
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
+        let nonce = crate::unique_nanos::unique_nanos();
         let home = std::env::temp_dir().join(format!(
             "hol-guard-inventory-pages-{tag}-{}-{nonce}",
             std::process::id()

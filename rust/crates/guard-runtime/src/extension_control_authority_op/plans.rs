@@ -9,13 +9,14 @@
 use rusqlite::params;
 use serde_json::{json, Map, Value};
 
-use super::layers::validate_serialized_layers;
+use super::layers::{layers_from_json, validate_serialized_layers};
 use super::records::{
-    authenticated_record, degraded, fields_match, private_hash, query_row, row_int, row_py_int,
-    row_str, row_text, tampered, verify_record, Anchor, Fault, Phase, Res, Row, SNAPSHOT_PURPOSE,
-    TRANSITION_PURPOSE,
+    authenticated_record, degraded, field, fields_match, private_hash, query_row, row_int,
+    row_py_int, row_str, row_text, snapshot_pack_binding, tampered, verify_record, Anchor, Fault,
+    Phase, Res, Row, SNAPSHOT_PURPOSE, TRANSITION_PURPOSE,
 };
 use super::{Ctx, View, PROTECTED, RECOVERY_REQUIRED};
+use crate::extension_control_proof::{mutation_digest, Mutation};
 use crate::policy_bundle_time::from_isoformat;
 
 /// A request that failed after preparing its transition may be retried with
@@ -86,7 +87,7 @@ fn utc_micros(text: &str) -> Option<i64> {
     from_isoformat(text)?.utc_micros()
 }
 
-fn sealed(payload: Value, key: &[u8], purpose: &str) -> Res<Value> {
+pub(super) fn sealed(payload: Value, key: &[u8], purpose: &str) -> Res<Value> {
     let Value::Object(payload) = payload else {
         return Err(degraded("authority record is not encodable"));
     };
@@ -94,21 +95,21 @@ fn sealed(payload: Value, key: &[u8], purpose: &str) -> Res<Value> {
     Ok(json!({ "json": record, "digest": digest, "mac": mac }))
 }
 
-fn with_pack(mut payload: Value, pack_record_digest: Option<&str>) -> Value {
+pub(super) fn with_pack(mut payload: Value, pack_record_digest: Option<&str>) -> Value {
     if let (Some(digest), Value::Object(fields)) = (pack_record_digest, &mut payload) {
         fields.insert("command_pack_record_digest".to_owned(), json!(digest));
     }
     payload
 }
 
-fn plan(outcome: &str, fields: Map<String, Value>) -> Value {
+pub(super) fn plan(outcome: &str, fields: Map<String, Value>) -> Value {
     let mut plan = fields;
     plan.insert("outcome".to_owned(), json!(outcome));
     json!({ "plan": plan })
 }
 
 impl Ctx<'_> {
-    fn anchor(&self) -> Res<Option<Anchor>> {
+    pub(super) fn anchor(&self) -> Res<Option<Anchor>> {
         let key = self.require_key()?;
         self.request
             .anchor_json
@@ -117,7 +118,7 @@ impl Ctx<'_> {
             .transpose()
     }
 
-    fn snapshot_row(&self) -> Res<Option<Row>> {
+    pub(super) fn snapshot_row(&self) -> Res<Option<Row>> {
         query_row(
             self.connection,
             "select * from extension_control_authority_snapshot where singleton = 1",
@@ -125,8 +126,15 @@ impl Ctx<'_> {
         )
     }
 
-    /// `_resume_idempotent_transition`, up to the writes it performs.
-    fn resume(&self, row: &Row, expected: &Expected, current: Option<&View>) -> Res<Resume> {
+    /// `_resume_idempotent_transition`, up to the writes it performs, with
+    /// the command-pack record digest the authenticated transition binds
+    /// (null when it binds none).
+    fn resume(
+        &self,
+        row: &Row,
+        expected: &Expected,
+        current: Option<&View>,
+    ) -> Res<(Resume, Value)> {
         let key = self.require_key()?;
         validate_serialized_layers(&expected.layers_json)?;
         if row_int(row, "previous_revision")? != expected.expected_revision
@@ -181,6 +189,10 @@ impl Ctx<'_> {
         ) {
             return Err(tampered("idempotent transition authentication mismatch"));
         }
+        let pack = field(&transition, "command_pack_record_digest").clone();
+        if !(pack.is_null() || pack.is_string()) {
+            return Err(tampered("idempotent transition authentication mismatch"));
+        }
         let sealed_snapshot = verify_record(
             &row_str(row, "snapshot_json")?,
             &snapshot_digest,
@@ -210,22 +222,23 @@ impl Ctx<'_> {
             && anchor.phase == Phase::Committed
             && phase == Phase::Prepared.as_str()
         {
-            return Ok(Resume::Abandon);
+            return Ok((Resume::Abandon, pack));
         }
         if anchor.revision == revision
             && anchor.snapshot_digest == snapshot_digest
             && matches!(anchor.phase, Phase::Anchored | Phase::Committed)
         {
-            return Ok(if snapshot_revision == previous_revision {
+            let outcome = if snapshot_revision == previous_revision {
                 Resume::CommitPending
             } else if phase != Phase::Committed.as_str() {
                 Resume::MarkCommitted
             } else {
                 Resume::Finish
-            });
+            };
+            return Ok((outcome, pack));
         }
         if current.is_some_and(|view| view.health == PROTECTED && view.revision == revision) {
-            return Ok(Resume::Current);
+            return Ok((Resume::Current, pack));
         }
         Err(tampered("idempotent transition state mismatch"))
     }
@@ -240,10 +253,13 @@ impl Ctx<'_> {
         let Some(row) = self.pending_transition(revision)? else {
             return Ok(plan("absent", Map::new()));
         };
-        let outcome = self.resume(&row, &Expected::of_row(&row)?, None)?;
+        let (outcome, pack) = self.resume(&row, &Expected::of_row(&row)?, None)?;
         Ok(plan(
             outcome.as_str(),
-            Map::from_iter([("revision".to_owned(), json!(revision))]),
+            Map::from_iter([
+                ("revision".to_owned(), json!(revision)),
+                ("command_pack_record_digest".to_owned(), pack),
+            ]),
         ))
     }
 
@@ -284,7 +300,7 @@ impl Ctx<'_> {
         }
         match Expected::of_row(&pending).and_then(|expected| self.resume(&pending, &expected, None))
         {
-            Ok(Resume::Abandon) => Ok(plan(
+            Ok((Resume::Abandon, _)) => Ok(plan(
                 "abandon",
                 Map::from_iter([("revision".to_owned(), json!(revision + 1))]),
             )),
@@ -307,6 +323,22 @@ impl Ctx<'_> {
         };
         let current = View::from_value(self.request.view.as_ref())?;
         validate_serialized_layers(&commit.layers_json)?;
+        // The proof was granted for one mutation digest. Recompute it from the
+        // layers and identities this plan seals, so a grant cannot commit
+        // anything other than what was approved.
+        let layers = layers_from_json(&commit.layers_json)?;
+        let sealed_digest = mutation_digest(&Mutation {
+            previous_revision: commit.expected_revision,
+            catalog_digest,
+            layers: &layers,
+            actor_id: &commit.actor_id,
+            idempotency_key: &commit.idempotency_key,
+            nonce: &commit.nonce,
+        })
+        .map_err(|_| tampered("invalid extension control commit request"))?;
+        if sealed_digest != commit.mutation_digest {
+            return Err(tampered("extension control proof does not match mutation"));
+        }
         let actor_hash = private_hash(&commit.actor_id, key, "actor");
         let idempotency_hash = private_hash(&commit.idempotency_key, key, "idempotency");
         let nonce_hash = private_hash(&commit.nonce, key, "nonce");
@@ -351,11 +383,12 @@ impl Ctx<'_> {
                 nonce_hash: nonce_hash.clone(),
                 expected_revision: commit.expected_revision,
             };
-            let outcome = self.resume(replay, &expected, Some(&current))?;
+            let (outcome, pack) = self.resume(replay, &expected, Some(&current))?;
             return Ok(plan(
                 outcome.as_str(),
                 Map::from_iter([
                     ("revision".to_owned(), json!(row_int(replay, "revision")?)),
+                    ("command_pack_record_digest".to_owned(), pack),
                     ("proof_recorded".to_owned(), json!(proof.is_some())),
                     ("hashes".to_owned(), hashes),
                 ]),
@@ -387,14 +420,13 @@ impl Ctx<'_> {
         )? {
             return Err(tampered("extension control authority proof replay"));
         }
-        let previous_digest = row_text(
-            &self
-                .snapshot_row()?
-                .ok_or_else(|| tampered("extension control authority snapshot missing"))?,
-            "snapshot_digest",
-        )?;
+        let source = self
+            .snapshot_row()?
+            .ok_or_else(|| tampered("extension control authority snapshot missing"))?;
+        let previous_digest = row_text(&source, "snapshot_digest")?;
         let revision = current.revision + 1;
         let pack = commit.pack_record_digest.as_deref();
+        let retained = snapshot_pack_binding(&source, key)?;
         let snapshot = sealed(
             with_pack(
                 json!({
@@ -404,7 +436,7 @@ impl Ctx<'_> {
                     "previous_digest": previous_digest,
                     "committed_at": created_at,
                 }),
-                pack,
+                pack.or(retained.as_deref()),
             ),
             key,
             SNAPSHOT_PURPOSE,

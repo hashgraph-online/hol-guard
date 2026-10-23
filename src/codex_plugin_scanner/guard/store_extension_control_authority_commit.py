@@ -5,18 +5,17 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import secrets
 
 from .native_extension_control_authority import view_to_wire
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import (
-    SNAPSHOT_PURPOSE,
     AuthorityAnchor,
     AuthorityHealth,
     AuthorityPhase,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
-    authenticated_record,
     layers_to_json,
 )
 from .runtime.extension_control_contract import (
@@ -34,25 +33,11 @@ from .runtime.extension_control_proof import (
     validate_extension_control_proof,
 )
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
-from .store_extension_control_authority_support import _now
+from .store_extension_control_authority_support import _now, _plan_int, _plan_map, _plan_pack_digest, _plan_record
 
 # A commit re-reads at most once to roll back another request's abandoned
 # transition and once after abandoning its own; the resident decides each round.
 _MAX_COMMIT_ROUNDS = 4
-
-
-def _plan_int(plan: dict[str, object], name: str) -> int:
-    value = plan.get(name)
-    if type(value) is not int:
-        raise ExtensionControlAuthorityError("invalid extension control authority plan")
-    return value
-
-
-def _plan_map(plan: dict[str, object], name: str) -> dict[str, object]:
-    value = plan.get(name)
-    if not isinstance(value, dict):
-        raise ExtensionControlAuthorityError("invalid extension control authority plan")
-    return value
 
 
 class ExtensionControlAuthorityCommitMixin:
@@ -77,12 +62,15 @@ class ExtensionControlAuthorityCommitMixin:
             record_background_event("installed_authority_release_absent", "detail=installed bundle not advertised")
             return
         with self._extension_control_authority_lock(shared=True):
-            if lifecycle_store.migration_retained(self):
-                return
-        with self._extension_control_authority_lock():
-            with self._connect() as connection:
-                ensure_extension_control_authority_schema(connection)
-            lifecycle_store.migrate_installed(self, installed)
+            retained = lifecycle_store.migration_retained(self)
+        if not retained:
+            with self._extension_control_authority_lock():
+                with self._connect() as connection:
+                    ensure_extension_control_authority_schema(connection)
+                lifecycle_store.migrate_installed(self, installed)
+        from .catalog_delivery.installed_upgrade import migrate_active
+
+        migrate_active(self, installed)
 
     def enroll_extension_control_authority(
         self,
@@ -96,6 +84,7 @@ class ExtensionControlAuthorityCommitMixin:
             catalog_digest=catalog_digest,
             actor_id=actor_id,
             nonce=nonce,
+            guard_home=self.guard_home,
         )
         validate_extension_control_enrollment_proof(proof, enrollment)
         with self._extension_control_authority_lock():
@@ -103,19 +92,53 @@ class ExtensionControlAuthorityCommitMixin:
             if current.health is not AuthorityHealth.UNENROLLED:
                 raise ExtensionControlAuthorityError("extension control authority already enrolled")
             consume_extension_control_enrollment_proof(self.guard_home, proof, enrollment)
-            from .catalog_delivery import lifecycle_store
-            from .catalog_delivery.preparation_authority import load_installed_bundle
+            return self._enroll_unenrolled_authority(catalog_digest)
 
-            installed = load_installed_bundle()
-            if installed is not None and not lifecycle_store.floor_enrolled(self):
-                # Startup migration now enrolls the floor on an install that
-                # carries no legacy controls, so by the time an operator
-                # enrolls the authority the floor is usually already there.
-                # Enrolling it a second time is refused, and that refusal
-                # would fail the enrollment the operator is waiting on. A
-                # floor without its stamp still goes through the refusal.
-                lifecycle_store.enroll_installed(self, installed)
+    def enroll_extension_control_authority_by_default(self, catalog_digest: str) -> ExtensionControlAuthorityView:
+        """Enroll a never-enrolled authority at daemon startup, with no layers.
+
+        Only a home with neither a snapshot nor a vault anchor reads as
+        unenrolled; a home that lost one of them reads as tampered or restores
+        from its export, so this never re-enrolls over existing controls. The
+        authority starts at revision 0 with no layers, which grants nothing the
+        packaged defaults do not already allow; every later control change
+        still needs an approval-gated proof. Any other health is returned as is.
+        """
+
+        with self._extension_control_authority_lock():
+            current = self._read_extension_control_authority_locked(catalog_digest)
+            if current.health is not AuthorityHealth.UNENROLLED:
+                return current
+            return self._enroll_unenrolled_authority(catalog_digest)
+
+    def _enroll_unenrolled_authority(self, catalog_digest: str) -> ExtensionControlAuthorityView:
+        """Enroll the installed floor if it is missing, then bootstrap revision 0.
+
+        The caller holds the authority lease and has read the home as
+        unenrolled. Startup migration usually enrolled the floor already, and
+        enrolling it twice is refused; a floor without its stamp still goes
+        through that refusal. Bootstrap commits the snapshot before its vault
+        anchor, so a failure in between would leave a snapshot the next read
+        calls tampered. Removing the revision-0 row and anchor this call wrote
+        returns the home to unenrolled, and the next attempt starts over.
+        """
+
+        from .catalog_delivery import lifecycle_store
+        from .catalog_delivery.preparation_authority import load_installed_bundle
+
+        installed = load_installed_bundle()
+        if installed is not None and not lifecycle_store.floor_enrolled(self):
+            lifecycle_store.enroll_installed(self, installed)
+        try:
             return self._bootstrap_extension_control_authority(catalog_digest, key=None)
+        except Exception:
+            with contextlib.suppress(Exception), self._connect() as connection:
+                connection.execute(
+                    "delete from extension_control_authority_snapshot where singleton = 1 and revision = 0"
+                )
+            with contextlib.suppress(Exception):
+                self._secret_store().delete_secret(self._anchor_ref())
+            raise
 
     def commit_extension_control_layers(
         self,
@@ -245,7 +268,14 @@ class ExtensionControlAuthorityCommitMixin:
                 revision = _plan_int(plan, "revision")
                 proof_hash = str(_plan_map(plan, "hashes")["proof"])
                 with self._connect() as connection:
-                    resumed = self._apply_resumed_transition(connection, outcome, revision, current=current, key=key)
+                    resumed = self._apply_resumed_transition(
+                        connection,
+                        outcome,
+                        revision,
+                        current=current,
+                        key=key,
+                        pack_record_digest=_plan_pack_digest(plan),
+                    )
                     if resumed is not None:
                         consumed_at = _now()
                         if plan.get("proof_recorded") is not True:
@@ -361,7 +391,12 @@ class ExtensionControlAuthorityCommitMixin:
                 pending = connection.execute(
                     "select * from extension_control_authority_transition where revision=?", (revision,)
                 ).fetchone()
-                finish(self, connection, pending)
+                finish(
+                    self,
+                    connection,
+                    pending,
+                    expected_pack=pack_activation.digest if pack_activation is not None else None,
+                )
                 connection.execute(
                     "update extension_control_authority_transition set phase = ? where revision = ?",
                     (AuthorityPhase.ANCHORED.value, revision),
@@ -426,25 +461,13 @@ class ExtensionControlAuthorityCommitMixin:
         if key is None:
             key = secrets.token_bytes(32)
             self._secret_store().set_secret(self._key_ref(), base64.urlsafe_b64encode(key).decode())
-        committed_at = _now()
-        layers_json = layers_to_json(())
-        snapshot_json, digest, mac = authenticated_record(
-            {
-                "revision": 0,
-                "catalog_digest": catalog_digest,
-                "layers_json": layers_json,
-                "previous_digest": None,
-                "committed_at": committed_at,
-            },
-            key=key,
-            purpose=SNAPSHOT_PURPOSE,
+        plan = _plan_map(
+            self._extension_control_authority_op("bootstrap_plan", key=key, catalog_digest=catalog_digest, now=_now()),
+            "plan",
         )
+        snapshot_json, digest, mac = _plan_record(plan, "snapshot")
+        layers_json, committed_at = str(plan["layers_json"]), str(plan["committed_at"])
         with self._connect() as connection:
-            existing = connection.execute(
-                "select 1 from extension_control_authority_snapshot where singleton = 1"
-            ).fetchone()
-            if existing is not None:
-                raise ExtensionControlAuthorityError("extension control authority already exists")
             connection.execute(
                 """
                 insert into extension_control_authority_snapshot (

@@ -7,6 +7,7 @@ import sqlite3
 from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, cast
 
+from .catalog_delivery import lifecycle
 from .native_command_control_authority_io import hold_command_control_authority_lock
 from .native_policy_snapshot_codec import _strict_json_loads_v3
 from .native_policy_snapshot_constants import (
@@ -23,34 +24,20 @@ from .native_policy_snapshot_direct_lane import (
     local_cli_block_rules_present,
     with_direct_hook_state,
 )
-from .native_policy_snapshot_direct_lane_review import (
-    recheckable_review_facts,
-    review_facts_bound,
-    with_review_facts,
-)
+from .native_policy_snapshot_direct_lane_review import recheckable_review_facts, review_facts_bound, with_review_facts
 from .native_policy_snapshot_direct_lane_saved import refresh_integrity_state, with_saved_decision_state
-from .native_policy_snapshot_direct_lane_structured import (
-    bound_structured_output_view,
-    with_structured_output_view,
-)
+from .native_policy_snapshot_direct_lane_structured import bound_structured_output_view, with_structured_output_view
 from .native_policy_snapshot_harness_postures import (
     HARNESS_POSTURES_BINDING_KEY,
     valid_harness_postures,
     write_harness_postures_sidecar,
 )
+from .native_policy_snapshot_reconcile import reconcile_policy_inputs
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from .native_policy_snapshot_publisher import NativePolicySnapshotPublisher
-
-
-def _local_cli_revision_or_none(publisher: NativePolicySnapshotPublisher) -> int | None:
-    try:
-        return publisher._current_local_cli_revision()
-    except (NativePolicySnapshotError, OSError, RuntimeError, ValueError, sqlite3.Error):
-        # -1 is never a bound revision, so an unreadable one closes the lane.
-        return -1
 
 
 def _publisher_api():
@@ -72,31 +59,7 @@ class NativePolicySnapshotPublicationMixin:
                 if publisher._closed:
                     return
                 publisher._mark_expired_locked()
-            fingerprint = publisher._current_input_fingerprint()
-            if publisher._input_fingerprint is None:
-                publisher._input_fingerprint = fingerprint
-            elif fingerprint[1] != publisher._input_fingerprint[1]:
-                publisher._accept_resident_fingerprint(fingerprint)
-            elif fingerprint[0] != publisher._input_fingerprint[0]:
-                previous_inputs = dict(publisher._input_fingerprint[0])
-                current_inputs = dict(fingerprint[0])
-                changed_paths = {
-                    path
-                    for path in previous_inputs.keys() | current_inputs.keys()
-                    if previous_inputs.get(path) != current_inputs.get(path)
-                }
-                publisher._input_fingerprint = fingerprint
-                if publisher._policy_input_changed(changed_paths):
-                    publisher._republish_preserving_watch()
-            if publisher._monotonic_clock() >= publisher._reconcile_due_monotonic:
-                publisher._reconcile_due_monotonic = publisher._monotonic_clock() + 1.0
-                if publisher._policy_input_changed():
-                    publisher._republish_preserving_watch()
-                publisher._recheck_direct_lane_local_cli(_local_cli_revision_or_none(publisher))
-                publisher._recheck_direct_lane_review_facts()
-                publisher._recheck_direct_lane_structured_output()
-                publisher._recheck_direct_lane_mcp_relay()
-                publisher._recheck_direct_lane_saved_state()
+            reconcile_policy_inputs(publisher)
             with publisher._condition:
                 if publisher._closed:
                     return
@@ -235,6 +198,9 @@ class NativePolicySnapshotPublicationMixin:
         if revive_due:
             publisher._start_resident_revival()
 
+    # Every authenticated read in one attempt shares a single verified runtime
+    # instead of verifying and copying it again for each read.
+    @lifecycle.one_runtime
     def _publish_once(self, *, renew_after_generation: int | None = None) -> None:
         publisher = cast("NativePolicySnapshotPublisher", self)
         with publisher._condition:

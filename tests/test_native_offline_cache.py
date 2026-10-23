@@ -30,9 +30,39 @@ from codex_plugin_scanner.guard.catalog_delivery.installed_bundle import MANIFES
 from codex_plugin_scanner.guard.catalog_delivery.metadata_objects import encoded
 from codex_plugin_scanner.guard.extension_builder import native_source_compiler as bridge
 from tests.extension_builder_support import use_installed_native_source_compiler
+from tests.offline_data_fixture import offline_data_owner as offline_data_owner
+from tests.offline_data_fixture import offline_data_path as offline_data_path
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = Path(os.environ.get("HOL_GUARD_NATIVE_BINARY", ROOT / "rust/target/debug/hol-guard-runtime"))
+
+
+def test_export_adapter_leaves_exclusive_destination_creation_to_native(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+
+    destination = tmp_path / "export"
+    source = tmp_path / "cache"
+    authority = object()
+    calls = []
+    monkeypatch.setattr(offline, "Lease", lambda _: Mock(close=lambda: None))
+    monkeypatch.setattr(offline, "prefetch", lambda *_: None)
+
+    def request(given_authority, directory, operation, **fields):
+        assert given_authority is authority
+        calls.append(operation)
+        if operation == "export-fresh-copy":
+            assert directory == source
+            assert fields["destination"] == destination
+            assert not destination.exists()
+            destination.mkdir(mode=0o700)
+        else:
+            assert operation == "import" and directory == destination
+            assert destination.is_dir()
+        return {"complete": True}
+
+    monkeypatch.setattr(offline, "_request", request)
+    assert offline.export_release(authority, source, destination) == {"complete": True}
+    assert calls == ["export-fresh-copy", "import"]
 
 
 @pytest.fixture(scope="module")
@@ -138,18 +168,33 @@ def packaged(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
-def complete(packaged):
-    authority, base, report = packaged
-    directory = base / "cache"
-    plan = offline.prefetch(authority, directory)
+def complete(packaged, offline_data_owner):
+    authority, _base, report = packaged
+    directory = offline_data_owner / "cache"
+    batch_sizes = []
+    run_bounded = bridge._run_bounded
+
+    def count_batches(arguments, payload, **kwargs):
+        result = run_bounded(arguments, payload, **kwargs)
+        if arguments[1:] == ["pack-lifecycle", "--stdin"]:
+            request = json.loads(payload)
+            if request.get("kind") == "object" and request.get("operation") == "installed-batch":
+                batch_sizes.append(len(request["items"]))
+        return result
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(bridge, "_run_bounded", count_batches)
+        plan = offline.prefetch(authority, directory)
     assert plan["complete"] and plan["extensions"] == report["extensions"]
     assert len(plan["archives"]) > 512
+    assert batch_sizes and len(batch_sizes) < sum(batch_sizes)
+    print(json.dumps({"native_object_batches": len(batch_sizes), "native_object_reads": sum(batch_sizes)}))
     print(json.dumps({"offline_plan": {k: v if k not in {"objects", "archives"} else len(v) for k, v in plan.items()}}))
     return authority, directory, plan
 
 
 @pytest.fixture(scope="module")
-def exported(complete, tmp_path_factory):
+def exported(complete, offline_data_owner):
     from types import SimpleNamespace
 
     from codex_plugin_scanner.guard.catalog_delivery import activation_store, preparation_authority
@@ -157,7 +202,7 @@ def exported(complete, tmp_path_factory):
 
     _authority, directory, _plan = complete
     (directory / "private-controls.json").write_text("private inventory and credential sentinel")
-    destination = tmp_path_factory.mktemp("public-export").resolve() / "export"
+    destination = offline_data_owner / "export"
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(preparation_authority, "load_installed_bundle", installed_bundle.load_installed_bundle)
         patch.setattr(activation_store, "prepare_directory_for_store", lambda store: directory)
@@ -167,7 +212,7 @@ def exported(complete, tmp_path_factory):
     return destination
 
 
-def test_complete_export_import_and_cached_vs_uncached_enable(complete, exported, tmp_path, monkeypatch):
+def test_complete_export_import_and_cached_vs_uncached_enable(complete, exported, offline_data_path, monkeypatch):
     authority, _directory, plan = complete
     destination = exported
     assert sorted(p.name for p in destination.iterdir()) == ["archives", "objects", "root.json"]
@@ -177,21 +222,23 @@ def test_complete_export_import_and_cached_vs_uncached_enable(complete, exported
         raise OSError("offline fixture transport")
 
     monkeypatch.setattr(installed_bundle.VerifiedInstalledBundle, "fetch", disconnected)
-    imported = tmp_path / "imported"
+    imported = offline_data_path / "imported"
     assert offline.import_release(authority, destination, imported)["complete"]
     prepared = preparation.prepare(authority, ["command.offlinefixture0439"], imported, engine=authority.engine)
     assert "command.offlinefixture0439" in prepared.selected
     # Preparation grants no controls or floors. A failure cannot replace them.
     with pytest.raises(OSError, match="offline fixture"):
-        preparation.prepare(authority, ["command.offlinefixture0439"], tmp_path / "uncached", engine=authority.engine)
+        preparation.prepare(
+            authority, ["command.offlinefixture0439"], offline_data_path / "uncached", engine=authority.engine
+        )
     assert prepared.metadata.program_digest
     assert not (imported / "controls.json").exists()
 
 
 @pytest.mark.parametrize("fault", ["corrupt-object", "missing-object", "wrong-root", "symlink"])
-def test_import_rejects_corruption_missing_wrong_release_and_traversal(complete, exported, tmp_path, fault):
+def test_import_rejects_corruption_missing_wrong_release_and_traversal(complete, exported, offline_data_path, fault):
     authority, _directory, plan = complete
-    damaged = tmp_path / "export"
+    damaged = offline_data_path / "export"
     shutil.copytree(exported, damaged)
     target = damaged / "objects" / (plan["objects"][0] + ".json")
     if fault == "corrupt-object":
@@ -201,12 +248,12 @@ def test_import_rejects_corruption_missing_wrong_release_and_traversal(complete,
     elif fault == "wrong-root":
         (damaged / "root.json").write_bytes(authority.data.replace(b'"0.0"', b'"0.1"'))
     else:
-        original = tmp_path / "outside"
+        original = offline_data_path / "outside"
         target.rename(original)
         target.symlink_to(original)
     with pytest.raises(ValueError):
-        offline.import_release(authority, damaged, tmp_path / "reject-cache")
-    assert not (tmp_path / "reject-cache/objects").exists()
+        offline.import_release(authority, damaged, offline_data_path / "reject-cache")
+    assert not (offline_data_path / "reject-cache/objects").exists()
 
 
 @pytest.mark.parametrize("fault", ["traversal", "duplicate", "symlink", "compressed", "digest"])
@@ -242,10 +289,10 @@ def test_native_archive_admissibility_rejects_malicious_zip(tmp_path, fault):
     assert result.returncode != 0
 
 
-def test_active_pending_and_inflight_pins_and_inactive_eviction(complete, tmp_path):
+def test_active_pending_and_inflight_pins_and_inactive_eviction(complete, offline_data_path):
     authority, directory, _plan = complete
     # Separate device cache avoids mutating the shared complete fixture.
-    cache = tmp_path / "device"
+    cache = offline_data_path / "device"
     shutil.copytree(directory, cache)
     key = b"k" * 32
     active = preparation.prepare(authority, ["command.offlinefixture0001"], cache, engine=authority.engine)

@@ -26,6 +26,7 @@ from codex_plugin_scanner.guard.runtime.github_workflow_runtime import (
     claim_resolved_github_workflow_authorization,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_base import _canonical_utc_timestamp
 from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import canonical_framed_payload, format_utc_timestamp
 from tests.github_workflow_test_support import capability_id as _capability_id
@@ -81,7 +82,7 @@ def test_approval_resolution_implicit_timestamp_issues_claimable_capability(
         reason="reviewed exact maintenance task",
     )
 
-    assert resolved["resolved_at"] == _ISSUED.isoformat()
+    assert resolved["resolved_at"] == _canonical_utc_timestamp(_ISSUED.isoformat())
     authorization = claim_resolved_github_workflow_authorization(store, "request-github-1", descriptor)
     assert authorization is not None
     signed = store.lookup_workflow_capability(_capability_id("request-github-1"))

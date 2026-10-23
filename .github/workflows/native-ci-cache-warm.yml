@@ -49,7 +49,9 @@ jobs:
 
   macos:
     runs-on: macos-latest
-    timeout-minutes: 15
+    # Matches ci.yml macos-native-runtime (25): the warmer must finish the same
+    # cold crate-graph compile to seed the namespace on main.
+    timeout-minutes: 25
     concurrency:
       group: native-ci-build-${{ github.sha }}-macos
       cancel-in-progress: false

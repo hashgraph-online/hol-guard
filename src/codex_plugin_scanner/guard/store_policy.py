@@ -14,8 +14,7 @@ from .managed_controls_policy_bundle import (
     MANAGED_CONTROLS_LAST_GOOD_STATE_KEY,
     MANAGED_CONTROLS_NEGOTIATED_CAPABILITIES_STATE_KEY,
     MANAGED_CONTROLS_REVISION_STATE_KEY,
-    build_managed_controls_activation_state,
-    build_managed_controls_revision_state,
+    managed_controls_activation_input,
 )
 from .native_policy_bundle import PolicyBundleNativeError, PolicyBundleNativeUnavailableError
 from .policy_bundle_activation import (
@@ -641,14 +640,17 @@ class StorePolicyMixin:
                     if previous_bundle_hash == policy_bundle.get("bundleHash") and previous_revision > 0
                     else previous_revision + 1
                 )
-                managed_state = build_managed_controls_activation_state(
-                    dict(policy_bundle),
-                    managed_controls_policy,
-                    base_authority=managed_base_authority,
-                    managed_revision=managed_revision,
-                    negotiated_capabilities=managed_controls_negotiated_capabilities,
-                    authority_key=managed_authority_key,
-                    base_snapshot_digest=managed_base_snapshot[1],
+                managed_state = self._seal_managed_activation(
+                    managed_controls_activation_input(
+                        policy_bundle,
+                        managed_controls_policy,
+                        base_authority=managed_base_authority,
+                        managed_revision=managed_revision,
+                        negotiated_capabilities=managed_controls_negotiated_capabilities,
+                        base_snapshot_digest=managed_base_snapshot[1],
+                    ),
+                    key=managed_authority_key,
+                    catalog_digest=managed_base_authority.catalog_digest,
                 )
                 encoded_payloads[MANAGED_CONTROLS_ACTIVE_STATE_KEY] = json.dumps(
                     managed_state,
@@ -659,10 +661,7 @@ class StorePolicyMixin:
                     allow_nan=False,
                 )
                 encoded_payloads[MANAGED_CONTROLS_REVISION_STATE_KEY] = json.dumps(
-                    build_managed_controls_revision_state(
-                        managed_revision,
-                        authority_key=managed_authority_key,
-                    ),
+                    self._seal_managed_revision(managed_revision, key=managed_authority_key),
                     allow_nan=False,
                 )
                 if update_last_good:
@@ -675,10 +674,7 @@ class StorePolicyMixin:
                 if managed_revision > 0:
                     assert managed_authority_key is not None
                     encoded_payloads[MANAGED_CONTROLS_REVISION_STATE_KEY] = json.dumps(
-                        build_managed_controls_revision_state(
-                            managed_revision,
-                            authority_key=managed_authority_key,
-                        ),
+                        self._seal_managed_revision(managed_revision, key=managed_authority_key),
                         allow_nan=False,
                     )
                 connection.execute(
@@ -832,10 +828,7 @@ class StorePolicyMixin:
             if managed_revision > 0:
                 assert managed_authority_key is not None
                 encoded_payloads[MANAGED_CONTROLS_REVISION_STATE_KEY] = json.dumps(
-                    build_managed_controls_revision_state(
-                        managed_revision,
-                        authority_key=managed_authority_key,
-                    ),
+                    self._seal_managed_revision(managed_revision, key=managed_authority_key),
                     allow_nan=False,
                 )
             self._replace_remote_policy_rows_locked(connection, ())

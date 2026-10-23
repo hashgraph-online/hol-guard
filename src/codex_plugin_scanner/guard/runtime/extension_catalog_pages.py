@@ -21,7 +21,7 @@ def encoded(value: object) -> bytes:
 
 def native_call(home: Path, **request: object) -> dict[str, Any]:
     from ..native_execution import _resident_request
-    from .extension_catalog_sync import ExtensionCatalogLimitError
+    from .extension_catalog_sync import ExtensionCatalogLimitError, ExtensionCatalogUnavailableError
 
     reply = _resident_request(
         operation="cloud_catalog",
@@ -33,7 +33,7 @@ def native_call(home: Path, **request: object) -> dict[str, Any]:
         max_request_bytes=4 * 1024 * 1024,
     )
     if not isinstance(reply, dict):
-        raise RuntimeError("Native complete catalog producer unavailable")
+        raise ExtensionCatalogUnavailableError("Native complete catalog producer unavailable")
     if reply.get("error") == "catalog_limit":
         raise ExtensionCatalogLimitError("Complete catalog exceeds native wire limits")
     payload = reply.get("payload")

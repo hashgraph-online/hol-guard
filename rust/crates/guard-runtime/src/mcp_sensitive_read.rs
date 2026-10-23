@@ -11,6 +11,7 @@ use guard_command::approval_reuse::{
     evaluate_approval_reuse, ApprovalReuseDecision, APPROVAL_REUSE_CLAIM_FAILED,
     APPROVAL_REUSE_NO_SAVED_DECISION,
 };
+use guard_command::artifact_hash::artifact_hash;
 use guard_contracts::{
     most_restrictive_guard_action, ContextDigestComponentsV1, GuardAction,
     McpSensitiveReadConfigV1, McpSensitiveReadContextQueryV1, McpSensitiveReadHintQueryV1,
@@ -83,8 +84,26 @@ fn policy_context(config: &McpSensitiveReadConfigV1, effective: GuardAction) -> 
     Value::Object(policy)
 }
 
+/// The content hash that binds the token to the artifact under review.
+///
+/// `GuardStore` keys a saved approval by this digest, so it is spelled here
+/// from the artifact's own fields rather than taken from the caller. The
+/// recorded parity vectors predate that: they carry the hash the retired
+/// Python helper computed and cannot be re-derived, so a query without an
+/// artifact still uses the text it was handed.
+fn content_hash(query: &McpSensitiveReadContextQueryV1) -> Option<String> {
+    match (&query.artifact, &query.content) {
+        (Some(artifact), _) => Some(artifact_hash(artifact)),
+        (None, Some(recorded)) => Some(recorded.clone()),
+        (None, None) => None,
+    }
+}
+
 /// The current action and the exact-context approval token of one read.
 pub(crate) fn context(query: &McpSensitiveReadContextQueryV1) -> Value {
+    let Some(content) = content_hash(query) else {
+        return Value::Null;
+    };
     let (effective, policy, sandbox) = match &query.config {
         Some(config) => {
             let effective = current_action(config);
@@ -109,7 +128,7 @@ pub(crate) fn context(query: &McpSensitiveReadContextQueryV1) -> Value {
     };
     let token = build_context_token(&ContextDigestComponentsV1 {
         identity: query.identity.clone(),
-        content: string(&query.content),
+        content: string(&content),
         capabilities: query.capabilities.clone(),
         policy,
         sandbox,

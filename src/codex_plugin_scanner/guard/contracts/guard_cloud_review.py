@@ -39,11 +39,6 @@ CONTRACT_PATH: Final = _artifact_path("v2/contract.json")
 COMMAND_RESULT_CONTRACT_PATH: Final = _artifact_path("v2/command-result.json")
 FIXTURES_PATH: Final = _artifact_path("v2/fixtures.json")
 PUBLIC_DOCUMENTATION_PATH: Final = _artifact_path("guard-cloud-review.md")
-_GENERATED_ARTIFACTS: Final = {
-    "commandResult": (COMMAND_RESULT_CONTRACT_PATH, "contracts/guard-cloud-review/v2/command-result.json"),
-    "fixtures": (FIXTURES_PATH, "contracts/guard-cloud-review/v2/fixtures.json"),
-    "publicDocumentation": (PUBLIC_DOCUMENTATION_PATH, "docs/guard/contracts/guard-cloud-review.md"),
-}
 _MISSING: Final = object()
 _RFC3339_DATE_TIME: Final = re.compile(
     r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T([01]\d|2[0-3]):[0-5]\d:[0-5]\d"

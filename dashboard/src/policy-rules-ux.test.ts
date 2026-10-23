@@ -73,6 +73,8 @@ assert.ok(!filterBar.includes("<select"), "evidence filters have no bare native 
 const inspector = read("policy-rule-inspector.tsx");
 assert.ok(inspector.includes('role="dialog"'), "inspector is a modal dialog");
 assert.ok(inspector.includes("Remove rule"), "inspector reuses the remove path");
+assert.ok(inspector.includes("Exact action approved"), "inspector names the exact approved action");
+assert.ok(inspector.includes("resolveExactApprovedAction"), "inspector reads the exact action from the decision");
 assert.ok(inspector.includes("resolvePolicyEvidenceHref"), "inspector links the approval record");
 
 console.log("policy-rules-ux.test.ts: all assertions passed");

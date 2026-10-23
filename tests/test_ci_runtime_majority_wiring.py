@@ -187,7 +187,7 @@ def test_shipped_rust_exclusions_carry_evidence_and_unwired_is_reported() -> Non
     assert result["rust"]["unwired_loc"] > 0
     counted = {item["path"] for item in result["rust"]["files"]}
     assert not counted & {item["path"] for item in result["rust"]["unwired_files"]}
-    assert f"{CRATES}/guard-command/src/hook_responses.rs" in counted
+    assert f"{CRATES}/guard-command/src/hook_responses/mod.rs" in counted
 
 
 def test_declaration_without_a_remaining_site_is_an_error(tmp_path: Path) -> None:
@@ -382,3 +382,23 @@ def test_pub_in_super_reaches_the_file_above_like_pub_super(tmp_path: Path) -> N
     result = build_report(repo, scope_path)
     wired = {item["path"].rsplit("/", 1)[1] for item in result["rust"]["files"]}
     assert "deep.rs" in wired
+
+
+def test_binary_crate_with_own_library_links_the_library_tree(tmp_path: Path) -> None:
+    """hol-guard-runtime ships src/main.rs plus src/lib.rs; both targets count."""
+    scope = _scope()
+    repo, scope_path = _repo(tmp_path, scope)
+    _write(
+        repo / CRATES / "bin" / "src" / "lib.rs",
+        "mod inside;\npub fn launch() {\n    inside::go();\n}\n",
+    )
+    _write(repo / CRATES / "bin" / "src" / "inside.rs", "pub fn go() -> u8 {\n    1\n}\n")
+    _write(
+        repo / CRATES / "bin" / "src" / "main.rs",
+        "fn main() {\n    bin::launch();\n}\n",
+    )
+    result = build_report(repo, scope_path)
+    wired = {item["path"].rsplit("/", 1)[1] for item in result["rust"]["files"]}
+    assert {"main.rs", "lib.rs", "inside.rs"} <= wired
+    unlinked = {item["path"].rsplit("/", 1)[1] for item in result["exclusions"] if item["category"] == "not_in_module_tree"}
+    assert "inside.rs" not in unlinked

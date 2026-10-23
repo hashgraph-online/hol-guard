@@ -78,10 +78,7 @@ pub(crate) fn session(label: &str) -> Session {
     let home = std::fs::canonicalize(base).unwrap().join(format!(
         "guard-git-session-{label}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let cleanup = FixtureCleanup(home.clone());
     let org = home.join("org");
@@ -173,6 +170,29 @@ impl Session {
             ("allow", reason_code),
             "{command}"
         );
+    }
+
+    /// `command` runs without a review: Git's own write proof allows it with
+    /// `reason_code`, or, on a host with a workspace sandbox, the sink runs it
+    /// contained there. A linked worktree takes the second route.
+    pub(crate) fn quiet_at(
+        &self,
+        command: &str,
+        cwd: &Path,
+        reason_code: &str,
+    ) -> Result<(), String> {
+        let result = self.evaluate_at(command, cwd);
+        let (action, reason) = (result.minimum_action.as_str(), result.reason_code.as_str());
+        let allowed = action == "allow" && reason == reason_code;
+        let contained =
+            action == "sandbox-required" && reason == "native_workspace_containment_required";
+        (allowed || contained)
+            .then_some(())
+            .ok_or(format!("{command}: {action} {reason}"))
+    }
+
+    pub(crate) fn assert_quiet(&self, command: &str, reason_code: &str) {
+        self.quiet_at(command, &self.org, reason_code).unwrap();
     }
 
     pub(crate) fn assert_not_allow(&self, command: &str) {
@@ -441,8 +461,11 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
             .then_some(())
             .ok_or(format!("{command}: {}", result.reason_code))
     };
-    session.assert_allow(&format!("cd {worktree} && git add notes.md"), WRITE);
-    session.assert_allow(
+    // The sandbox may take these into the worktree's shared Git directory
+    // instead; either way they raise no review.
+    let quiet = |command: &str| session.quiet_at(command, &session.worktree, WRITE);
+    session.assert_quiet(&format!("cd {worktree} && git add notes.md"), WRITE);
+    session.assert_quiet(
         &format!("cd {worktree} && git rm -q tracked.txt && git status --short | head -10"),
         WRITE,
     );
@@ -460,7 +483,7 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
         "git stash apply",
         "git stash pop",
     ] {
-        allowed(command).unwrap();
+        quiet(command).unwrap();
     }
     for command in [
         "git add -f notes.md",
@@ -487,20 +510,20 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
         session.config(&["--unset-all", key]);
     }
     // Signing by default asks of a commit what `-S` asks, and of nothing else.
-    let explicit = allowed("git add -A && git commit -S -m x").is_ok();
+    let explicit = quiet("git add -A && git commit -S -m x").is_ok();
     session.config(&["commit.gpgSign", "true"]);
-    allowed("git add -A").unwrap();
-    allowed("git switch -c feat/signed").unwrap();
-    assert_eq!(allowed("git add -A && git commit -m x").is_ok(), explicit);
+    quiet("git add -A").unwrap();
+    quiet("git switch -c feat/signed").unwrap();
+    assert_eq!(quiet("git add -A && git commit -m x").is_ok(), explicit);
     session.config(&["gpg.program", "/tmp/gpg"]);
-    allowed("git add -A").unwrap();
+    quiet("git add -A").unwrap();
     assert!(allowed("git add -A && git commit -m x").is_err());
     session.config(&["--unset-all", "gpg.program"]);
     session.config(&["--unset-all", "commit.gpgSign"]);
     // Each form answers only for the hooks it runs.
     let hook = session.primary.join(".git/hooks/pre-commit");
     executable_hook(&hook);
-    allowed("git add notes.md").unwrap();
+    quiet("git add notes.md").unwrap();
     assert!(allowed("git commit -m x").is_err());
     std::fs::remove_file(hook).unwrap();
     executable_hook(&session.primary.join(".git/hooks/post-index-change"));

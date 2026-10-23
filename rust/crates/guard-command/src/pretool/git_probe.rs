@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 #[path = "git_probe_repository.rs"]
 mod repository;
-pub(super) use repository::repository_inert;
+pub(super) use repository::{bisect_log_inert, repository_inert};
 
 /// Wall-clock budget for one configuration probe. A loaded host can need more
 /// than a second for the config, attribute and index queries together; the

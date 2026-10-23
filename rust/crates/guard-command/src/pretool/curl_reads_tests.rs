@@ -39,6 +39,7 @@ fn plain_public_reads_are_proven() {
         "curl -sS -D - https://example.com/api/health -o /dev/null",
         "curl -sS --dump-header=- https://example.com/",
         "curl -sSD /dev/null https://example.com/",
+        "curl -s example.com",
     ] {
         assert!(proven(command), "{command}");
     }
@@ -83,7 +84,6 @@ fn bodies_files_credentials_and_routing_stay_reviewed() {
         "curl -s https://example.com/$PATH_PART",
         "curl -H \"Accept: $TYPE\" https://example.com/",
         "curl -s",
-        "curl -s example.com",
     ] {
         assert!(!proven(command), "{command}");
     }
@@ -100,6 +100,73 @@ fn local_dev_server_reads_are_proven() {
         "curl -s --url http://127.0.0.1:8080/api/items?page=2",
     ] {
         assert!(proven(command), "{command}");
+    }
+}
+
+#[test]
+fn a_dev_server_read_written_without_a_scheme_is_proven() {
+    // curl fetches a URL written without `://` over HTTP, which is how a local
+    // server is usually named, so the same host and port decide it here. A
+    // public host written the same way is the same request too.
+    for command in [
+        "curl localhost:3000/",
+        "curl -s localhost:3000/health",
+        "curl -s 127.0.0.1:8080/api/items",
+        "curl -fsS LOCALHOST:4173/game.js",
+        "curl -s example.com/api/health",
+    ] {
+        assert!(proven(command), "{command}");
+    }
+}
+
+#[test]
+fn a_url_in_a_query_does_not_pass_for_the_scheme_of_the_request() {
+    // `://` inside a query names where the server should send the caller
+    // next, not how curl reaches the server. The request itself is the dev
+    // server's, over HTTP, so it decides the read.
+    for command in [
+        "curl localhost:3000/redirect?next=https://app.example.com",
+        "curl -s 127.0.0.1:8080/api/fetch?url=https://example.com/data.json",
+        "curl -s example.com/go?to=https://example.org/",
+    ] {
+        assert!(proven(command), "{command}");
+    }
+}
+
+#[test]
+fn an_internationalized_host_is_read_without_panicking() {
+    // The protocol prefixes are ASCII, and a host that is not cannot start
+    // with one. Comparing them by byte length alone cut through a character
+    // and brought the scan down with it, so the command got no decision at
+    // all. Each of these returns one.
+    for command in [
+        "curl ééé.example.com/data.json",
+        "curl -s café.example.com",
+        "curl -s café.example.com/api/items?page=2",
+    ] {
+        let _ = proven(command);
+    }
+    // A name whose prefix still picks another protocol keeps its review.
+    for command in ["curl smtp.café.example.com/", "curl ftp.café.example.com/d"] {
+        assert!(!proven(command), "{command}");
+    }
+}
+
+#[test]
+fn a_scheme_curl_would_not_guess_as_http_stays_reviewed() {
+    // Only curl's HTTP guess is taken: a name whose prefix picks another
+    // protocol, and an address no scheme makes public, keep their review.
+    for command in [
+        "curl ftp.example.com/dump.sql",
+        "curl FTP.example.com/dump.sql",
+        "curl smtp.example.com/",
+        "curl :@ftp.example.com/dump.sql",
+        "curl user@ftp.example.com/dump.sql",
+        "curl 169.254.169.254/latest/meta-data/",
+        "curl 10.0.0.5:8080/admin",
+        "curl /etc/passwd",
+    ] {
+        assert!(!proven(command), "{command}");
     }
 }
 
@@ -202,7 +269,8 @@ fn local_admin_ports_and_other_loopback_spellings_stay_reviewed() {
         "curl -L http://127.0.0.1:3000/",
         "curl -X POST http://localhost:3000/api/items",
         "curl -d x=1 http://localhost:3000/api/items",
-        "curl localhost:3000/",
+        "curl localhost:2375/containers/json",
+        "curl 127.0.0.2:3000/",
     ] {
         assert!(!proven(command), "{command}");
     }

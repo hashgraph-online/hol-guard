@@ -506,3 +506,25 @@ def test_a_composed_request_demands_the_compose_capability(monkeypatch: pytest.M
     decision.native_post_claim_decision(_claim_with_tokens(_SAVED_TOKEN))
     decision.native_post_claim_decision(_CLAIM)
     assert asked == [decision.HOOK_DECISION_POST_CLAIM_COMPOSE_FEATURE, decision.HOOK_DECISION_FEATURE]
+
+
+def test_an_edge_bearing_request_demands_the_edge_reason_capability(monkeypatch: pytest.MonkeyPatch) -> None:
+    # `native_edge` now names the reason the edge result reached its action, and
+    # the edge denies unknown fields, so a resident built before the field has
+    # to be replaced rather than asked. The demanded feature is what this test
+    # reads off the transport; the reply itself is rejected.
+    asked: list[str] = []
+
+    def transport(*, request: dict[str, Any], required_feature: str, **_kwargs: object) -> dict[str, Any]:
+        asked.append(required_feature)
+        return _good(request)
+
+    _resident_returning(monkeypatch, lambda _request: None)
+    monkeypatch.setattr(decision, "_resident_request", transport)
+    for ask in (
+        lambda: decision.native_compose_current(_BASE_INPUTS, {}),
+        lambda: decision.native_finalize(_BASE_INPUTS, {}),
+    ):
+        with pytest.raises(decision.NativeHookDecisionError):
+            ask()
+    assert asked == [decision.HOOK_DECISION_NATIVE_EDGE_REASON_FEATURE] * 2

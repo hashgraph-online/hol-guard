@@ -11,6 +11,7 @@ import pytest
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status, review_post_tool_native
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS
 
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
 pytestmark = pytest.mark.skipif(not _NATIVE_BINARY, reason="compiled native runtime is required")
@@ -51,7 +52,7 @@ def _stop_native_runtime(runtime: Path, guard_home: Path) -> None:
         (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
         check=False,
         capture_output=True,
-        timeout=2,
+        timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
     )
 
 

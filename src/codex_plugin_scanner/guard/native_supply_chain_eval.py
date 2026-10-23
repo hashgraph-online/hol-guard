@@ -23,8 +23,11 @@ from typing import Any, TypeGuard
 from .models import GuardArtifact
 from .native_context import _canonical_request_sha256, ensure_resident_prerequisite
 from .native_package_authority import (
+    _EVALUATION_VIEW_WIRE_FIELDS,
     _REQUEST_SCHEMA,
     _RESULT_SCHEMA,
+    NativePackageEvaluationViewUnavailableError,
+    _evaluation_from_view,
     _request_id,
     _resident_request,
     evaluation_from_native_payload,
@@ -307,6 +310,7 @@ def _saved_policy_decision(
     artifact: GuardArtifact,
     workspace_dir: Path | None,
     cached_payload: dict[str, Any],
+    guard_home: Path,
     now: str,
 ) -> dict[str, Any] | None:
     """Read the saved policy row that covers a cached Cloud validation error.
@@ -326,9 +330,20 @@ def _saved_policy_decision(
             artifact=artifact,
             store=store,
             workspace_dir=workspace_dir,
-            evaluation=evaluation_from_native_payload(cached_payload),
+            evaluation=evaluation_from_native_payload(cached_payload, guard_home=guard_home),
         )
-    except (ImportError, TypeError, ValueError, KeyError, AttributeError, OSError, NativePackageApprovalHashError):
+    except (
+        ImportError,
+        TypeError,
+        ValueError,
+        KeyError,
+        AttributeError,
+        OSError,
+        NativePackageApprovalHashError,
+        NativePackageEvaluationViewUnavailableError,
+    ):
+        # No view of the cached row means no approval identity to look a saved
+        # decision up under, so the cached verdict stands on its own.
         return None
     lookup = store.resolve_policy_decision_lookup(
         artifact.harness,
@@ -412,11 +427,24 @@ def evaluate_package_request_native(
                 artifact=artifact,
                 workspace_dir=workspace_dir,
                 cached_payload=cached,
+                guard_home=guard_home,
                 now=_now_text(now),
             ),
         )
-        evaluation = evaluation_from_native_payload(payload)
-    except (NativeSupplyChainEvalError, TypeError, ValueError, KeyError, AttributeError):
+        # The settled reply already carries the resident's view of this
+        # evaluation, so it is read as one rather than sent back to be viewed.
+        # Transport-only keys such as the archive descriptors are not part of it.
+        evaluation = _evaluation_from_view(
+            {key: value for key, value in payload.items() if key in _EVALUATION_VIEW_WIRE_FIELDS}
+        )
+    except (
+        NativeSupplyChainEvalError,
+        NativePackageEvaluationViewUnavailableError,
+        TypeError,
+        ValueError,
+        KeyError,
+        AttributeError,
+    ):
         _cleanup(downloads)
         return unavailable_block_evaluation(artifact)
     except BaseException:

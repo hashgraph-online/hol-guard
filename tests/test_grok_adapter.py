@@ -131,6 +131,19 @@ class TestGrokHookPayload:
         assert normalized["tool_name"] == "Bash"
         assert normalized["session_id"] == "session-redacted-001"
 
+    def test_prepare_grok_hook_payload_leaves_no_second_tool_name(self) -> None:
+        # Grok names the tool in ``toolName``. Writing the canonical name to
+        # ``tool_name`` and leaving the harness spelling behind it gives the
+        # payload two names for one call, which the generic extractor reports
+        # as ambiguous and the hook turns into a denial of ordinary work.
+        normalized = prepare_grok_hook_payload(_fixture("pretooluse_bash.json"))
+        assert {normalized[key] for key in ("tool_name", "toolName") if key in normalized} == {"Bash"}
+
+    def test_prepare_grok_hook_payload_agrees_on_the_mcp_tool_name(self) -> None:
+        normalized = prepare_grok_hook_payload(_fixture("pretooluse_mcp.json"))
+        names = {normalized[key] for key in ("tool_name", "toolName", "toolname", "tool") if key in normalized}
+        assert len(names) == 1
+
     def test_prepare_grok_hook_payload_maps_read_fixture(self) -> None:
         normalized = prepare_grok_hook_payload(_fixture("pretooluse_read_secret.json"))
         assert normalized["tool_name"] == "Read"

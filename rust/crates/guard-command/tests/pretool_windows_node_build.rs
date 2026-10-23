@@ -16,10 +16,7 @@ const HARNESSES: [&str; 3] = ["omp", "claude-code", "codex"];
 /// A repository with a flat install of Vite, which is the install the direct
 /// build sink stages, and the declared home beside it.
 fn project() -> (PathBuf, PathBuf) {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir().join(format!("guard-win-build-{}-{nonce}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();

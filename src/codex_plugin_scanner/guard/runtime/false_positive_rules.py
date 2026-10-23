@@ -7,8 +7,9 @@ resident as part of the runtime detector run; see ``native_runtime_detectors``.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
+
+from ..native_cli_runtime_support import cli_runtime_support
 
 SOURCE_INSPECTION_PARTS = frozenset(
     {
@@ -90,96 +91,18 @@ FD_OPTION_VALUE_FLAGS = frozenset(
 )
 
 
+def _bound_rule(operation: str, params: dict[str, object]) -> bool:
+    result = cli_runtime_support(operation, params)
+    if not isinstance(result, bool):
+        raise ValueError("native_cli_runtime_support_result_invalid")
+    return result
+
+
 def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None) -> bool:
     """Return true for known local skill-doc roots without resolving user path text."""
-    if any(marker in target for marker in ("$", "`", "<", ">", "|", ";", "&")):
-        return False
-    # Handle skill:// URIs: resolve the skill name against known doc roots.
-    if target.startswith("skill://"):
-        skill_name = target[len("skill://") :].strip().strip("'\"")
-        if skill_name:
-            skill_name = os.path.normpath(skill_name).replace("\\", "/")
-            if not skill_name or skill_name.startswith("..") or skill_name == "." or skill_name.startswith("/"):
-                return False
-            home = os.path.normpath(str(home_dir or Path.home())).replace("\\", "/")
-            for suffix in KNOWN_SKILL_DOC_ROOT_SUFFIXES:
-                root = f"{home}/{suffix}"
-                candidate_dir = f"{root}/{skill_name}"
-                candidate_file = f"{candidate_dir}/SKILL.md"
-                if not os.path.isfile(candidate_file):
-                    continue
-                # Skill directories are often symlinks managed by the harness
-                # (e.g. ~/.claude/skills/foo -> /project/.agents/skills/foo).
-                # Require SKILL.md to exist and not be a symlink escaping its dir.
-                real_candidate = os.path.realpath(candidate_dir)
-                real_file = os.path.realpath(candidate_file)
-                if real_file != real_candidate and not real_file.startswith(f"{real_candidate}/"):
-                    continue
-                return True
-        return False
-    if target == "~" or target.startswith("~/"):
-        expanded = f"{home_dir or Path.home()}{target[1:]}"
-    else:
-        expanded = os.path.expanduser(target)
-    normalized = os.path.normpath(expanded).replace("\\", "/")
-    home = os.path.normpath(str(home_dir or Path.home())).replace("\\", "/")
-    for suffix in KNOWN_SKILL_DOC_ROOT_SUFFIXES:
-        root = f"{home}/{suffix}"
-        if normalized != root and not normalized.startswith(f"{root}/"):
-            continue
-        if os.path.islink(root):
-            continue
-        if not _path_has_symlink_component(normalized, root=root):
-            return True
-        relative_parts = Path(normalized).relative_to(root).parts
-        if len(relative_parts) != 2 or relative_parts[-1] != "SKILL.md":
-            continue
-        candidate_dir = Path(root) / relative_parts[0]
-        candidate_file = candidate_dir / "SKILL.md"
-        try:
-            real_candidate = candidate_dir.resolve(strict=True)
-            real_file = candidate_file.resolve(strict=True)
-        except (OSError, RuntimeError):
-            continue
-        if candidate_file.is_file() and real_candidate in real_file.parents:
-            return True
-    for suffix in KNOWN_AGENT_DOC_SUFFIXES:
-        expected = f"{home}/{suffix}"
-        if (
-            normalized == expected
-            and os.path.isfile(expected)
-            and not os.path.islink(home)
-            and not _path_has_symlink_component(normalized, root=home)
-        ):
-            return True
-    return False
-
-
-def _path_has_symlink_component(normalized_target: str, *, root: str) -> bool:
-    if os.path.islink(root):
-        return True
-    if normalized_target == root:
-        return False
-    relative = normalized_target.removeprefix(f"{root}/")
-    current = root
-    for part in relative.split("/"):
-        if not part:
-            return True
-        current = f"{current}/{part}"
-        if os.path.islink(current):
-            return True
-    return False
+    home = str(home_dir) if home_dir is not None else str(Path.home())
+    return _bound_rule("skill_doc_path", {"value": target, "home_dir": home})
 
 
 def fd_arg_requests_exec(arg: str) -> bool:
-    if arg in {"-x", "-X", "--exec", "--exec-batch"} or arg.startswith(("-x", "-X", "--exec=", "--exec-batch=")):
-        return True
-    if not arg.startswith("-") or arg.startswith("--"):
-        return False
-    cluster = arg[1:]
-    for flag in cluster:
-        if flag in {"d", "E", "e", "j", "o", "S", "t"}:
-            return False
-        if flag in {"x", "X"}:
-            return True
-    return False
+    return _bound_rule("fd_exec_request", {"value": arg})

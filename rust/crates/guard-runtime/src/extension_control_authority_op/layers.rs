@@ -117,7 +117,6 @@ pub(super) fn layers_to_values(layers: &[ExtensionControlLayer]) -> Value {
 }
 
 /// `layers_to_json`.
-#[cfg(test)]
 pub(super) fn layers_to_json(layers: &[ExtensionControlLayer]) -> Res<String> {
     canonical(&layers_to_values(layers))
 }

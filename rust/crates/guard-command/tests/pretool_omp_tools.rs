@@ -27,10 +27,7 @@ fn fixture() -> Fixture {
         .join(format!(
             "home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     std::fs::create_dir_all(&root).unwrap();
     let root = std::fs::canonicalize(root).unwrap();
@@ -1284,9 +1281,23 @@ fn eval_scalar_options_are_preserved_or_reviewed() {
         "display(await tool.glob({path:'.', depth: 3}))",
         "display(await tool.read({path:'calc.py', limit: 1000000}))",
         "display(await tool.read({path:'calc.py', limit: 1.5}))",
-        "display(await tool.bash({command:'cat calc.py', timeout: 5}))",
+        // A timeout is a bounded whole number of seconds or it is not
+        // modeled at all.
+        "display(await tool.bash({command:'cat calc.py', timeout: 1.5}))",
+        "display(await tool.bash({command:'cat calc.py', timeout: 500000}))",
+        "display(await tool.bash({command:'cat calc.py', timeout: '5'}))",
     ] {
         assert!(!allowed(&eval_code(&f, code)), "{code}");
+    }
+    // The session-tool wrapper puts its own bounded `timeout` on every call
+    // it wraps. It bounds how long the call may run and changes nothing
+    // about what runs, so the call keeps the verdict it has without it.
+    for code in [
+        "display(await tool.bash({command:'cat calc.py', timeout: 5}))",
+        "display(await tool.read({path:'calc.py', timeout: 300}))",
+    ] {
+        let result = eval_code(&f, code);
+        assert!(allowed(&result), "{code}: {}", result.reason_code);
     }
 }
 

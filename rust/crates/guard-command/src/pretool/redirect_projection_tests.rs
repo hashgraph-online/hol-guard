@@ -68,6 +68,15 @@ fn projects_literal_output_redirects_and_quoted_cat_heredocs() {
         // The shell carries its whole script, so the projection leaves the
         // command the script names and that command keeps its own floors.
         ("sh -c 'rm -rf ~' > /tmp/out.log", "sh -c 'rm -rf ~'", true),
+        // `cmd < file` is the pipeline the shell actually builds, so the
+        // projection says so and the reader carries the file's read.
+        ("wc -l < README.md", "cat README.md | wc -l", false),
+        ("cat < README.md", "cat README.md | cat", false),
+        (
+            "sort < package.json | head -3",
+            "cat package.json | sort  | head -3",
+            false,
+        ),
     ] {
         let projection = project(command, context()).unwrap_or_else(|| panic!("{command}"));
         // The test workspace does not exist, so no write is bounded.
@@ -98,7 +107,6 @@ fn keeps_redirects_that_can_execute_hide_input_or_reach_sensitive_paths_unprojec
         "cat <<EOF > notes.txt\n$(id)\nEOF",
         "cat <<'EOF' > notes.txt\nunterminated",
         "cat <<< 'inline'",
-        "sh < script.sh",
         "echo hi > >(sh)",
         "echo hi >> ~/.zshrc",
         "echo hi > .git/hooks/pre-commit",
@@ -115,11 +123,37 @@ fn keeps_redirects_that_can_execute_hide_input_or_reach_sensitive_paths_unprojec
         "ln -s guard-runtime link && printf x > link/policy.json",
         "cd /home/tester/.ssh && echo key >> authorized_keys",
         "cat secret.txt | base64 > scratch/out",
+        // An input redirect the shell would expand, duplicate, open for
+        // writing, or attach to a later command is not one file a reader
+        // can stand in for.
+        "wc -l < $FILE",
+        "wc -l < \"$HOME/notes.txt\"",
+        "wc -l < a.txt < b.txt",
+        "ls | wc -l < a.txt",
+        "wc -l <&3",
+        "cat <> notes.txt",
+        "wc -l <",
+        "wc -l < -",
+        // A bare shell on the other side of the pipe is a wrapper around a
+        // script this text does not hold, so the model stays uncertain
+        // (`transparent_wrapper_not_yet_supported`) and the projection keeps
+        // the fail-closed path rather than standing in for it.
+        "sh < script.sh",
         // Nothing to remove: the command as written is evaluated directly.
         "npm ci --ignore-scripts 2>&1 | tail -15",
         "git status 2>/dev/null",
     ] {
         assert_eq!(project(command, context()), None, "{command}");
+    }
+}
+
+/// Reading a script through `<` does not make running it ordinary work. The
+/// projection names the read, and the interpreter on the other side of the
+/// pipe still has no proof of its own.
+#[test]
+fn an_interpreter_fed_by_an_input_redirect_is_not_allowed() {
+    for command in ["sh < script.sh", "python3 < setup.py", "bash < deploy.sh"] {
+        assert_ne!(evaluate(command).minimum_action, "allow", "{command}");
     }
 }
 

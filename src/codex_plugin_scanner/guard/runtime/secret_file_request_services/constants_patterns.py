@@ -244,44 +244,6 @@ _SAFE_NODE_GENERATED_FILE_ROOTS = ("/tmp/", "/private/tmp/", "/var/tmp/", "/priv
 
 _DESTRUCTIVE_GIT_SUBCOMMANDS = frozenset({"clean", "reset", "restore", "rm"})
 
-_READ_ONLY_INTERPRETER_MUTATION_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"\bwrite_(?:text|bytes)\s*\(", re.IGNORECASE),
-    re.compile(r"\bunlink\b", re.IGNORECASE),
-    re.compile(
-        r"\b(?:unlink|rmdir|remove|removedirs|rename|replace|chmod|chown|mkdir|makedirs|truncate)\s*\(", re.IGNORECASE
-    ),
-    re.compile(r"\b(?:copy|copy2|copyfile|copyfileobj|copytree|move|rmtree|symlink|link)\s*\(", re.IGNORECASE),
-    re.compile(
-        r"\bopen\s*\([^)]*(?:,\s*['\"][^'\"]*[wax+][^'\"]*['\"]|\bmode\s*=\s*['\"][^'\"]*[wax+][^'\"]*['\"])",
-        re.IGNORECASE,
-    ),
-    re.compile(r"\.\s*open\s*\(\s*['\"][^'\"]*[wax+][^'\"]*['\"]", re.IGNORECASE),
-    re.compile(r"\b(?:fdopen|os\.fdopen)\s*\([^)]*,\s*['\"][^'\"]*[wax+][^'\"]*['\"]", re.IGNORECASE),
-    re.compile(r"\bos\.open\s*\([^)]*\b(?:O_WRONLY|O_RDWR|O_CREAT|O_TRUNC|O_APPEND)\b", re.IGNORECASE),
-    re.compile(r"\bos\.write\s*\(", re.IGNORECASE),
-    re.compile(r"\bos\.exec(?:l|le|lp|lpe|v|ve|vp|vpe)\s*\(", re.IGNORECASE),
-    re.compile(
-        r"\b(?:os\.system|subprocess\.(?:run|popen|call|check_call|check_output)|run|popen|call|check_call|check_output|system)\s*\(",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\bpath\s*\([^)]*\)\s*\.\s*(?:write_text|write_bytes|touch|unlink|rename|replace|chmod|mkdir|rmdir|symlink_to|hardlink_to|link_to)\s*\(",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\b(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*path\s*\([^)]*\)\s*\.\s*(?:write_text|write_bytes|touch|unlink|rename|replace|chmod|mkdir|rmdir|symlink_to|hardlink_to|link_to)\b[\s;]+(?P=alias)\s*\(",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\.\s*(?:write_text|write_bytes|touch|unlink|rename|replace|chmod|mkdir|rmdir|symlink_to|hardlink_to|link_to)\s*\(",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        r"\b(?P<alias>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*path\s*\([^)]*\)\s*\.\s*open\b[\s;]+(?P=alias)\s*\(\s*['\"][^'\"]*[wax+][^'\"]*['\"]",
-        re.IGNORECASE,
-    ),
-)
-
 _GIT_GLOBAL_OPTIONS_WITH_VALUE = frozenset(
     {
         "-C",
@@ -360,7 +322,6 @@ __all__ = [
     "_PYTEST_EXECUTOR_COMMANDS",
     "_PYTEST_RUNNER_OPTIONS_WITH_VALUES",
     "_PYTEST_RUNNER_POSITIONAL_PREFIX_COUNTS",
-    "_READ_ONLY_INTERPRETER_MUTATION_PATTERNS",
     "_SAFE_INTERPRETER_SETUP_SEGMENT_PATTERN",
     "_SAFE_NODE_GENERATED_FILE_EXTENSIONS",
     "_SAFE_NODE_GENERATED_FILE_ROOTS",

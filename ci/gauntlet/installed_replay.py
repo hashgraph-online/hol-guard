@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from .installed_registration import guard_handlers, handler_argv
+from .installed_registration import guard_handlers, handler_argv, hook_groups
 from .installed_runtime import isolated_environment
+from .latency import summarize_process_latency
 
 #: Decisions that let the tool call through untouched.
 ALLOW_DECISIONS = {"allow", "allow_original", "approve", "quiet"}
@@ -28,13 +30,47 @@ ALLOW_DECISIONS = {"allow", "allow_original", "approve", "quiet"}
 #: input as protection.
 NON_ANSWERS = {"timeout", "no-envelope", "unknown"}
 
+# Fail-closed transport and policy-publication failures are not evidence that
+# the attack was evaluated. Keep these independent of the product's decoder.
+NON_DECISION_REASONS = {
+    "native_policy_not_ready",
+    "native_pre_tool_unavailable",
+    "native_hook_worker_exception",
+    "native_request_invalid_json",
+    "native_request_schema_unsupported",
+    "daemon_hook_deadline_exhausted",
+    "native_policy_update_in_progress",
+    "native_hook_event_unavailable",
+    "native_post_tool_unavailable",
+    "native_overloaded",
+    "native_hook_worker_unavailable",
+    "native_hook_worker_unavailable_before_compatibility",
+    "native_hook_worker_unsupported",
+    "native_hook_compatibility_disabled",
+    "native_hook_edge_invalid_response",
+    "native_hook_edge_unavailable",
+    "python_hook_oracle_unavailable",
+    "python_oracle_exception",
+    "watch_recording_only",
+    "daemon_hook_queue_capacity",
+    "daemon_hook_queue_bytes",
+    "daemon_hook_process_deadline_exhausted",
+    "daemon_hook_process_not_ready",
+    "daemon_hook_process_failed",
+    "daemon_hook_process_invalid_request",
+    "daemon_hook_process_guard_home_mismatch",
+    "daemon_worker_exception",
+    "harness_not_managed",
+    "invalid_hook_payload_reference",
+}
+
 _REPLAY_TIMEOUT = 120.0
 
 
 def registered_argv(home: Path, expectation: dict[str, Any], config: dict[str, Any]) -> list[str] | None:
     """Find the argv registered for the contract's replay event, if any."""
 
-    hooks = config.get(expectation.get("hooks_key", "hooks"))
+    hooks = hook_groups(config, expectation)
     if not isinstance(hooks, dict):
         return None
     event = expectation.get("replay_event")
@@ -99,7 +135,10 @@ def verdict(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
         reason = (completed.stderr or "").strip()[-200:]
     else:
         decision, reason = _decision_from(response)
-    return {"decision": decision, "reason": reason, "exit_code": completed.returncode}
+    result = {"decision": decision, "reason": reason, "exit_code": completed.returncode}
+    if response is not None and isinstance(response.get("reason_code"), str):
+        result["reason_code"] = response["reason_code"]
+    return result
 
 
 def signature(result: dict[str, Any]) -> str:
@@ -124,6 +163,7 @@ def replay_case(
     environment = isolated_environment(home=home, guard_home=guard_home)
     runs: list[dict[str, Any]] = []
     for _ in range(repeat):
+        started = time.monotonic()
         try:
             completed = subprocess.run(
                 argv,
@@ -136,15 +176,23 @@ def replay_case(
                 check=False,
             )
         except subprocess.TimeoutExpired:
-            runs.append({"decision": "timeout", "reason": "hook did not answer", "exit_code": -1})
-            continue
-        runs.append(verdict(completed))
+            result = {"decision": "timeout", "reason": "hook did not answer", "exit_code": -1}
+        else:
+            result = verdict(completed)
+        result["elapsed_ms"] = round((time.monotonic() - started) * 1000, 3)
+        runs.append(result)
     signatures = Counter(signature(run) for run in runs)
     failures: list[str] = []
     if len(signatures) > 1:
         spelled = ", ".join(f"{value} x{count}" for value, count in sorted(signatures.items()))
         failures.append(f"{case['id']}: identical input produced disagreeing verdicts across {repeat} runs ({spelled})")
     allowed = [run["decision"] in ALLOW_DECISIONS for run in runs]
+    infrastructure = sorted({run["reason_code"] for run in runs if run.get("reason_code") in NON_DECISION_REASONS})
+    if infrastructure:
+        failures.append(
+            f"{case['id']}: hook infrastructure failed ({', '.join(infrastructure)}); "
+            "a fail-closed error is not a policy decision"
+        )
     if case["expect"] == "allow" and not all(allowed):
         failures.append(f"{case['id']}: ordinary work was not allowed quietly ({runs[0]['decision']})")
     if case["expect"] == "not-allow":
@@ -162,6 +210,7 @@ def replay_case(
         "repeat": repeat,
         "signatures": dict(signatures),
         "runs": runs,
+        "latency": summarize_process_latency(runs),
         "failures": failures,
         "deterministic": len(signatures) == 1,
     }
@@ -187,6 +236,7 @@ def replay_harness(
         "harness": harness,
         "argv": argv,
         "cases": results,
+        "latency": summarize_process_latency([run for case in results for run in case["runs"]]),
         "failures": failures,
         "deterministic": all(result["deterministic"] for result in results),
     }

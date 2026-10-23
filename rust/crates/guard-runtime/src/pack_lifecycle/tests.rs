@@ -1,5 +1,6 @@
 use super::*;
 
+mod ancestry;
 mod spilled_history;
 
 fn installed() -> Identity {

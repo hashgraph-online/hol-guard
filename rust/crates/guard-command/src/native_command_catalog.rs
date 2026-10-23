@@ -20,8 +20,7 @@ use crate::native_command_program::packaged_command_program;
 use crate::workspace_inventory::python_strip;
 
 #[cfg(not(guard_source_bootstrap))]
-static EMBEDDED_CATALOG: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/command-catalog.v1.json.zst"));
+static EMBEDDED_CATALOG: &[u8] = guard_command_catalog_data::CATALOG_JSON_ZST;
 
 /// The verified-at-build catalog bytes, for read-only projections such as
 /// [`crate::catalog_read_model`] that need fields this module does not type.
@@ -36,8 +35,8 @@ pub(crate) fn embedded_catalog_bytes() -> &'static [u8] {
             .get_or_init(|| {
                 crate::packaged_blob::decode(
                     EMBEDDED_CATALOG,
-                    env!("GUARD_PACKAGED_CATALOG_LEN"),
-                    env!("GUARD_PACKAGED_CATALOG_SHA256"),
+                    guard_command_catalog_data::CATALOG_JSON_LEN,
+                    guard_command_catalog_data::CATALOG_JSON_SHA256,
                 )
             })
             .as_ref()
@@ -100,6 +99,15 @@ pub struct CatalogPermission {
     pub typed_capabilities: Vec<String>,
     pub description: String,
     pub deprecated: bool,
+    /// Display metadata; absent from older pack catalogs.
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub risk_tier: String,
+    #[serde(default)]
+    pub example_command: Option<String>,
+    #[serde(default)]
+    pub family: Option<String>,
 }
 
 /// One extension's metadata — `GeneratedCommandExtension`.
@@ -110,6 +118,9 @@ pub struct CatalogExtension {
     pub source: String,
     pub required: bool,
     pub trust_class: String,
+    /// Display name; absent from older pack catalogs.
+    #[serde(default)]
+    pub name: String,
     #[serde(default)]
     pub aliases: Vec<String>,
     /// `dependencies` — resolver extension-closure input.

@@ -21,15 +21,23 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 
-from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
-from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
-from codex_plugin_scanner.guard.native_resident_client import close_native_residents, native_resident_client_request
-from codex_plugin_scanner.guard.native_route_receipt import native_hook_route, reset_native_hook_route
-from codex_plugin_scanner.guard.native_runtime import (
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.append(str(_REPO_ROOT))
+
+from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process  # noqa: E402
+from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot  # noqa: E402
+from codex_plugin_scanner.guard.native_resident_client import (  # noqa: E402
+    close_native_residents,
+    native_resident_client_request,
+)
+from codex_plugin_scanner.guard.native_route_receipt import native_hook_route, reset_native_hook_route  # noqa: E402
+from codex_plugin_scanner.guard.native_runtime import (  # noqa: E402
     native_runtime_status,
     review_post_tool_native,
 )
-from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
+from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest  # noqa: E402
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS  # noqa: E402
 
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _MAX_WARM_P95_MS = 20.0
@@ -149,7 +157,7 @@ def _stop_native_resident(runtime: Path, state_dir: Path, workspace: Path) -> No
         input_text="",
         cwd=runtime.parent,
         environment=_native_environment(workspace),
-        timeout_seconds=3.0,
+        timeout_seconds=RESIDENT_STOP_TIMEOUT_SECONDS,
         output_limit=_MAX_RESPONSE_BYTES,
     )
     if result.returncode != 0 or result.timed_out or result.containment_failed:

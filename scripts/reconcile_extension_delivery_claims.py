@@ -8,13 +8,15 @@ import os
 import time
 from pathlib import Path
 
+from extension_delivery_fetch import cached_fetcher
 from extension_delivery_located_store import LocatedStore
 from extension_delivery_objects import entries, lookup_entry
+from extension_delivery_runtime import pinned_runtime
 from notify_merged_extension_claimants import GitHubApi
 from reconcile_extension_claim_notices import pending_entries
 
 from codex_plugin_scanner.guard.catalog_delivery.authority import MAX_PROVENANCE_BYTES, verify_distribution
-from codex_plugin_scanner.guard.catalog_delivery.transport import PROVENANCE_ASSET, ROOT_ASSET, cached_fetcher
+from codex_plugin_scanner.guard.catalog_delivery.transport import PROVENANCE_ASSET, ROOT_ASSET
 from codex_plugin_scanner.guard.extension_builder.io import read_bytes
 
 
@@ -68,4 +70,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    with pinned_runtime():
+        main()

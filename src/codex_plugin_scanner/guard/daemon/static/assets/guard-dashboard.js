@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-Wxa6VirA.js","assets/chunks/home-protection-module-Du65PsUR.js","assets/chunks/about-content-BwtrHEyh.js","assets/chunks/app-catalog-BU3dzTBu.js","assets/chunks/fleet-workspace-CkMTJ0-Z.js","assets/chunks/harness-version-label-0p6P70WE.js","assets/chunks/connect-guard-cloud-button-COC8NKLs.js","assets/chunks/settings-save-proof-modal-DSJONzDi.js","assets/chunks/settings-workspace-DdhT0dGq.js","assets/chunks/confirm-dialog-DoiBaaXB.js","assets/chunks/extensions-workspace-CmoIi2sh.js","assets/chunks/app-detail-workspace-B9rlD0o5.js","assets/chunks/policy-workspace-page-VXBC0Fjp.js","assets/chunks/about-workspace-C1-uAYDr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BXyV7oNP.js","assets/chunks/home-protection-module-Du65PsUR.js","assets/chunks/about-content-Bsz4ilTC.js","assets/chunks/app-catalog-BU3dzTBu.js","assets/chunks/fleet-workspace-CbqphIX4.js","assets/chunks/harness-version-label-BEu-FrKY.js","assets/chunks/connect-guard-cloud-button-D3-S0tLq.js","assets/chunks/settings-save-proof-modal-DSJONzDi.js","assets/chunks/settings-workspace-CpitooFy.js","assets/chunks/confirm-dialog-DClNtuX1.js","assets/chunks/extensions-workspace-BiG33v6D.js","assets/chunks/app-detail-workspace-3cnkv6h5.js","assets/chunks/policy-workspace-page--QnvLElq.js","assets/chunks/about-workspace-93T2cVjf.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -12752,6 +12752,9 @@ function HiMiniXMark(props) {
 function HiMiniXCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM8.28 7.22a.75.75 0 0 0-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 1 0 1.06 1.06L10 11.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L11.06 10l1.72-1.72a.75.75 0 0 0-1.06-1.06L10 8.94 8.28 7.22Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniWrench(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M19 5.5a4.5 4.5 0 0 1-4.791 4.49c-.873-.055-1.808.128-2.368.8l-6.024 7.23a2.724 2.724 0 1 1-3.837-3.837L9.21 8.16c.672-.56.855-1.495.8-2.368a4.5 4.5 0 0 1 5.873-4.575c.324.105.39.51.15.752L13.34 4.66a.455.455 0 0 0-.11.494 3.01 3.01 0 0 0 1.617 1.617c.17.07.363.02.493-.111l2.692-2.692c.241-.241.647-.174.752.15.14.435.216.9.216 1.382ZM4 17a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniWrenchScrewdriver(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M14.5 10a4.5 4.5 0 0 0 4.284-5.882c-.105-.324-.51-.391-.752-.15L15.34 6.66a.454.454 0 0 1-.493.11 3.01 3.01 0 0 1-1.618-1.616.455.455 0 0 1 .11-.494l2.694-2.692c.24-.241.174-.647-.15-.752a4.5 4.5 0 0 0-5.873 4.575c.055.873-.128 1.808-.8 2.368l-7.23 6.024a2.724 2.724 0 1 0 3.837 3.837l6.024-7.23c.56-.672 1.495-.855 2.368-.8.096.007.193.01.291.01ZM5 16a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "d": "M14.5 11.5c.173 0 .345-.007.514-.022l3.754 3.754a2.5 2.5 0 0 1-3.536 3.536l-4.41-4.41 2.172-2.607c.052-.063.147-.138.342-.196.202-.06.469-.087.777-.067.128.008.257.012.387.012ZM6 4.586l2.33 2.33a.452.452 0 0 1-.08.09L6.8 8.214 4.586 6H3.309a.5.5 0 0 1-.447-.276l-1.7-3.402a.5.5 0 0 1 .093-.577l.49-.49a.5.5 0 0 1 .577-.094l3.402 1.7A.5.5 0 0 1 6 3.31v1.277Z" }, "child": [] }] })(props);
 }
@@ -12803,6 +12806,9 @@ function HiMiniPencilSquare(props) {
 function HiMiniNoSymbol(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "m5.965 4.904 9.131 9.131a6.5 6.5 0 0 0-9.131-9.131Zm8.07 10.192L4.904 5.965a6.5 6.5 0 0 0 9.131 9.131ZM4.343 4.343a8 8 0 1 1 11.314 11.314A8 8 0 0 1 4.343 4.343Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniMinus(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4 10a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H4.75A.75.75 0 0 1 4 10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniMinusCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM6.75 9.25a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -12850,6 +12856,9 @@ function HiMiniExclamationTriangle(props) {
 }
 function HiMiniExclamationCircle(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniEllipsisHorizontal(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M3 10a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0ZM8.5 10a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0ZM15.5 8.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z" }, "child": [] }] })(props);
 }
 function HiMiniDocumentText(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -12947,6 +12956,9 @@ function HiMiniArrowUp(props) {
 function HiMiniArrowUpTray(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M9.25 13.25a.75.75 0 0 0 1.5 0V4.636l2.955 3.129a.75.75 0 0 0 1.09-1.03l-4.25-4.5a.75.75 0 0 0-1.09 0l-4.25 4.5a.75.75 0 1 0 1.09 1.03L9.25 4.636v8.614Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" }, "child": [] }] })(props);
 }
+function HiMiniArrowUpCircle(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-.75-4.75a.75.75 0 0 0 1.5 0V8.66l1.95 2.1a.75.75 0 1 0 1.1-1.02l-3.25-3.5a.75.75 0 0 0-1.1 0L6.2 9.74a.75.75 0 1 0 1.1 1.02l1.95-2.1v4.59Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniArrowTopRightOnSquare(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h5a.75.75 0 0 1 0 1.5h-5Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.194 12.753a.75.75 0 0 0 1.06.053L16.5 4.44v2.81a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0 0 1.5h2.553l-9.056 8.194a.75.75 0 0 0-.053 1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -12955,6 +12967,9 @@ function HiMiniArrowRight(props) {
 }
 function HiMiniArrowPath(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H3.989a.75.75 0 0 0-.75.75v4.242a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm1.23-3.723a.75.75 0 0 0 .219-.53V2.929a.75.75 0 0 0-1.5 0V5.36l-.31-.31A7 7 0 0 0 3.239 8.188a.75.75 0 1 0 1.448.389A5.5 5.5 0 0 1 13.89 6.11l.311.31h-2.432a.75.75 0 0 0 0 1.5h4.243a.75.75 0 0 0 .53-.219Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniArrowLongRight(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 10a.75.75 0 0 1 .75-.75h12.59l-2.1-1.95a.75.75 0 1 1 1.02-1.1l3.5 3.25a.75.75 0 0 1 0 1.1l-3.5 3.25a.75.75 0 1 1-1.02-1.1l2.1-1.95H2.75A.75.75 0 0 1 2 10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniArrowLeft(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -15666,11 +15681,11 @@ function computePeriodComparison(receipts, days, now2) {
 function nonNegativeNumber(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 }
-function isRecord$9(value) {
+function isRecord$a(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function normalizeOperatorHealth(raw) {
-  if (!isRecord$9(raw)) {
+  if (!isRecord$a(raw)) {
     return void 0;
   }
   const state = raw["state"];
@@ -15780,7 +15795,7 @@ const PROTECTION_CHECK_IDS = [
 ];
 const CORE_CHECK_IDS = PROTECTION_CHECK_IDS.filter((checkId) => checkId !== "decision_stream");
 const STABLE_ID$1 = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
-function isRecord$8(value) {
+function isRecord$9(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function copyForState(state) {
@@ -15813,7 +15828,7 @@ function deriveState(checks) {
   return byId.get("decision_stream")?.status === "pass" ? "protected" : "partial";
 }
 function normalizeCheck(value) {
-  if (!isRecord$8(value)) return null;
+  if (!isRecord$9(value)) return null;
   const checkId = value.check_id;
   const status = value.status;
   const reasonCode = value.reason_code;
@@ -15904,7 +15919,7 @@ function useProtectionPresentationState(health) {
   });
 }
 function normalizeApp(value) {
-  if (!isRecord$8(value)) return null;
+  if (!isRecord$9(value)) return null;
   const harness = value.harness;
   if (typeof harness !== "string" || harness.length > 64 || !STABLE_ID$1.test(harness)) return null;
   const checks = normalizeChecks(value.checks);
@@ -15912,7 +15927,7 @@ function normalizeApp(value) {
   return { harness, ...healthFromChecks(checks) };
 }
 function normalizeProtectionHealth(value) {
-  if (!isRecord$8(value) || value.schema_version !== "guard.protection-health.v1") {
+  if (!isRecord$9(value) || value.schema_version !== "guard.protection-health.v1") {
     return unavailableProtectionHealth();
   }
   const checks = normalizeChecks(value.checks);
@@ -16010,12 +16025,12 @@ function remainingProtectionRepairMessage(health, displayName) {
     message: `${remaining} Open the repair details below for the exact check.`
   };
 }
-function isRecord$7(value) {
+function isRecord$8(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 const REASON_CODE_ID = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 function checkReasonMapValue(value) {
-  if (!isRecord$7(value)) return {};
+  if (!isRecord$8(value)) return {};
   const reasons2 = {};
   for (const [checkId, reason] of Object.entries(value)) {
     if (!REASON_CODE_ID.test(checkId) || checkId.length > 96) continue;
@@ -16024,7 +16039,7 @@ function checkReasonMapValue(value) {
   }
   return reasons2;
 }
-function isRecord$6(value) {
+function isRecord$7(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function stringValue$2(value) {
@@ -16051,7 +16066,7 @@ function normalizeSupplyChainRepairResult(result) {
   const failures = [];
   if (Array.isArray(result.failed_steps)) {
     for (const candidate of result.failed_steps) {
-      if (!isRecord$6(candidate)) continue;
+      if (!isRecord$7(candidate)) continue;
       const parsed = failedStep(candidate);
       if (parsed !== null) failures.push(parsed);
     }
@@ -16059,7 +16074,7 @@ function normalizeSupplyChainRepairResult(result) {
   const remaining = [];
   if (Array.isArray(result.remaining_steps)) {
     for (const candidate of result.remaining_steps) {
-      if (!isRecord$6(candidate)) continue;
+      if (!isRecord$7(candidate)) continue;
       const parsed = remainingStep(candidate);
       if (parsed !== null) remaining.push(parsed);
     }
@@ -16221,6 +16236,88 @@ function getDemoDiff(artifactId, harness) {
   }
   return demoDiff;
 }
+const APPROVAL_EXTENSION_COVERAGE_SCHEMA = "guard.approval-extension-coverage.v1";
+const MAX_SEGMENTS = 12;
+const MAX_PER_SEGMENT = 12;
+const MAX_SEGMENT_INDEX = 255;
+const CATALOG_ID$1 = /^command\.[A-Za-z0-9._-]{1,248}$/;
+const DIGEST$4 = /^[0-9a-f]{64}$/;
+const EXECUTABLE = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
+function isRecord$6(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function boundedText$1(value, limit) {
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized ? normalized.slice(0, limit) : null;
+}
+function catalogId$1(value) {
+  return typeof value === "string" && CATALOG_ID$1.test(value) ? value : null;
+}
+function normalizeExtension(raw) {
+  if (!isRecord$6(raw)) return null;
+  const extensionId = catalogId$1(raw.extension_id);
+  const name = boundedText$1(raw.name, 120);
+  if (extensionId === null || name === null) return null;
+  const focus = raw.focus_rule_id === null || raw.focus_rule_id === void 0 ? null : catalogId$1(raw.focus_rule_id);
+  if (raw.focus_rule_id !== null && raw.focus_rule_id !== void 0 && focus === null) return null;
+  return { extension_id: extensionId, name, focus_rule_id: focus };
+}
+function normalizeRule(raw) {
+  if (!isRecord$6(raw)) return null;
+  const ruleId = catalogId$1(raw.rule_id);
+  const title = boundedText$1(raw.title, 120);
+  const severity = boundedText$1(raw.severity, 32);
+  if (ruleId === null || title === null || severity === null) return null;
+  return { rule_id: ruleId, title, severity };
+}
+function normalizePermission$1(raw) {
+  if (!isRecord$6(raw)) return null;
+  const permissionId = catalogId$1(raw.permission_id);
+  const label = boundedText$1(raw.label, 120);
+  if (permissionId === null || label === null || typeof raw.configurable !== "boolean") return null;
+  return { permission_id: permissionId, label, configurable: raw.configurable };
+}
+function normalizeList(raw, normalize) {
+  if (!Array.isArray(raw)) return null;
+  const items = raw.map(normalize);
+  if (items.some((item) => item === null)) return null;
+  return items.slice(0, MAX_PER_SEGMENT);
+}
+function normalizeSegment(raw) {
+  if (!isRecord$6(raw)) return null;
+  const { index } = raw;
+  if (typeof index !== "number" || !Number.isInteger(index) || index < 0 || index > MAX_SEGMENT_INDEX) return null;
+  const executable = raw.executable === null || raw.executable === void 0 ? null : typeof raw.executable === "string" && EXECUTABLE.test(raw.executable) ? raw.executable : void 0;
+  if (executable === void 0) return null;
+  const extensions = normalizeList(raw.extensions, normalizeExtension);
+  const rules = normalizeList(raw.rules, normalizeRule);
+  const permissions = normalizeList(raw.permissions, normalizePermission$1);
+  if (extensions === null || rules === null || permissions === null || extensions.length === 0) return null;
+  return { index, executable, extensions, rules, permissions };
+}
+function normalizeApprovalExtensionCoverage(raw) {
+  if (!isRecord$6(raw) || raw.schema !== APPROVAL_EXTENSION_COVERAGE_SCHEMA) return null;
+  if (typeof raw.catalog_digest !== "string" || !DIGEST$4.test(raw.catalog_digest)) return null;
+  if (typeof raw.compound !== "boolean" || !Array.isArray(raw.segments)) return null;
+  if (raw.segments.length === 0) return null;
+  const segments = raw.segments.slice(0, MAX_SEGMENTS).map(normalizeSegment);
+  if (segments.some((segment) => segment === null)) return null;
+  return {
+    schema: APPROVAL_EXTENSION_COVERAGE_SCHEMA,
+    catalog_digest: raw.catalog_digest,
+    segments: segments.slice().sort((left, right) => left.index - right.index),
+    compound: raw.compound
+  };
+}
+function coverageScopeLine(coverage) {
+  if (!coverage.compound) return null;
+  return "Allowing a step here settles that step only. The rest of this command still comes back for review.";
+}
+function coverageStepLabel(segment) {
+  const step = `Step ${segment.index + 1}`;
+  return segment.executable === null ? step : `${step} · ${segment.executable}`;
+}
 const RECOMMENDATION_SCHEMA = "guard.approval-extension-recommendation.v1";
 const MAX_PERMISSIONS$1 = 3;
 const CATALOG_ID = /^command\.[A-Za-z0-9._-]{1,248}$/;
@@ -16312,6 +16409,7 @@ function approvalExtensionRecommendationCopy(recommendation) {
   const firstExtension = recommendation.permissions[0]?.extension_name ?? owner;
   return {
     commands,
+    commandText,
     title: `${owner} covers ${commandText}`,
     body: `${owner} asks before agents run ${commandText}. Allow it in ${owner} and future ${commandText} commands run without asking. Other protections still apply.`,
     primaryLabel: `Approve & always allow ${commandText}`,
@@ -17336,6 +17434,13 @@ async function fetchExtensionDiscoveryApi(input, init) {
   }
   return fetchWithGuardAuth(input, init);
 }
+async function fetchReleaseFeedApi(input, init) {
+  const approvedPath = typeof input === "string" && /^\/v1\/releases\/(?:index|release)(?:\?[A-Za-z0-9=&_.-]*)?$/.test(input);
+  if (!approvedPath) {
+    throw new Error("Invalid release feed API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
 function guardAuthHeaders() {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
@@ -17621,9 +17726,11 @@ function normalizeApprovalRequest(item) {
   const {
     decision_contract_error: rawContractError,
     extension_recommendation: rawExtensionRecommendation,
+    extension_coverage: rawExtensionCoverage,
     ...baseItem
   } = item;
   const extensionRecommendation = normalizeApprovalExtensionRecommendation(rawExtensionRecommendation);
+  const extensionCoverage = normalizeApprovalExtensionCoverage(rawExtensionCoverage);
   const policyAction = normalizeGuardAction(item.policy_action);
   const decisionV2 = parseDecisionV2(item.decision_v2_json);
   const actionEnvelope = parseActionEnvelope(item.action_envelope_json);
@@ -17684,6 +17791,7 @@ function normalizeApprovalRequest(item) {
     action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
     ...extensionRecommendation !== null && !hasDecisionContractError ? { extension_recommendation: extensionRecommendation } : {},
+    ...extensionCoverage !== null && !hasDecisionContractError ? { extension_coverage: extensionCoverage } : {},
     ...hasDecisionContractError ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT } : {}
   };
 }
@@ -21731,6 +21839,15 @@ const SHELL_NAV_ITEMS = [
     view: "evidence",
     group: "manage",
     icon: HiMiniDocumentText
+  },
+  {
+    href: "/releases",
+    label: "Releases",
+    shortLabel: "Releases",
+    description: "Published versions and what each one changed",
+    view: "releases",
+    group: "support",
+    icon: HiMiniRocketLaunch
   },
   {
     href: "/about",
@@ -29133,17 +29250,29 @@ const TIER_LABEL = {
   high: "High risk"
 };
 function QueueBulkStickyBar(props) {
-  if (!props.visible) return null;
-  const unit = props.selectedActionCount === 1 ? "action" : "actions";
+  const blockButton = reactExports.useRef(null);
+  const previousStep = reactExports.useRef(props.blockStep);
+  reactExports.useEffect(() => {
+    if (previousStep.current === "confirming" && props.blockStep === "idle") blockButton.current?.focus();
+    previousStep.current = props.blockStep;
+  }, [props.blockStep]);
+  if (!props.visible) {
+    return props.blockError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mb-4 text-xs text-brand-attention", children: props.blockError }) : null;
+  }
+  const total = props.selectedRequestCount;
+  const unit = total === 1 ? "request" : "requests";
+  const approvableNote = props.selectedActionCount === total ? "approve once" : `${props.selectedActionCount} can be approved at once`;
   const ChipIcon = toneIcon(props.riskTone);
+  const confirmingBlock = props.blockStep !== "idle";
+  const blocking = props.blockStep === "blocking";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
       className: "sticky top-2 z-20 mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md backdrop-blur",
       role: "region",
-      "aria-label": "Bulk approval selection",
+      "aria-label": "Bulk selection",
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        props.canApprove ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "span",
           {
             className: `inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${toneChip(props.riskTone)}`,
@@ -29152,15 +29281,48 @@ function QueueBulkStickyBar(props) {
               TIER_LABEL[props.riskTier]
             ]
           }
-        ),
+        ) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "min-w-0 flex-1 text-sm font-medium text-brand-dark", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-base font-semibold", children: props.selectedActionCount }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-base font-semibold", children: total }),
           " ",
           unit,
-          " selected · approve once"
+          " selected",
+          props.canApprove ? ` · ${approvableNote}` : ""
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+        confirmingBlock ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", role: "group", "aria-label": "Confirm block", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
+            "Block ",
+            total,
+            " ",
+            unit,
+            " just this once? Any agent still waiting is told no."
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              onClick: props.onConfirmBlock,
+              disabled: blocking,
+              className: "inline-flex min-h-9 items-center gap-1.5 rounded-full bg-brand-dark px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark/90 disabled:cursor-wait disabled:opacity-60",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-4 w-4", "aria-hidden": "true" }),
+                blocking ? "Blocking…" : `Block ${total}`
+              ]
+            }
+          ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: props.onCancelBlock,
+              disabled: blocking,
+              autoFocus: true,
+              className: "inline-flex min-h-9 items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark disabled:opacity-60",
+              children: "Cancel"
+            }
+          )
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+          props.canApprove ? /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
               type: "button",
@@ -29168,7 +29330,20 @@ function QueueBulkStickyBar(props) {
               className: "inline-flex min-h-9 items-center rounded-full bg-brand-blue px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90",
               children: "Review & approve"
             }
-          ),
+          ) : null,
+          props.blockAvailable ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              ref: blockButton,
+              type: "button",
+              onClick: props.onRequestBlock,
+              className: "inline-flex min-h-9 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-1.5 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-4 w-4", "aria-hidden": "true" }),
+                "Block selected"
+              ]
+            }
+          ) : null,
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
@@ -29178,7 +29353,8 @@ function QueueBulkStickyBar(props) {
               children: "Clear"
             }
           )
-        ] })
+        ] }),
+        props.blockError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "w-full text-xs text-brand-attention", children: props.blockError }) : null
       ]
     }
   );
@@ -29494,6 +29670,73 @@ function QueueBulkDrawer(props) {
     }
   );
 }
+class BulkBlockError extends Error {
+  failedIds;
+  constructor(message, failedIds) {
+    super(message);
+    this.name = "BulkBlockError";
+    this.failedIds = failedIds;
+  }
+}
+const MAX_REASONS$1 = 3;
+async function blockRequestsOnce(groups, lookup, resolve) {
+  let blocked = 0;
+  const failures = /* @__PURE__ */ new Map();
+  const fail = (requestId, error) => {
+    failures.set(requestId, error instanceof Error ? error.message : String(error));
+  };
+  const blockOnce = async (item) => {
+    const payload = buildDecisionPayload({ item, action: "block", scope: "artifact", reason: "blocked in bulk review" });
+    if (payload.scope !== "artifact") {
+      throw new Error("A request could not be blocked just this once. Open it to choose how to block it.");
+    }
+    return resolve(payload);
+  };
+  for (const group of groups) {
+    const settled = /* @__PURE__ */ new Set();
+    try {
+      const result = await blockOnce(group.primary);
+      for (const id2 of result.resolved_duplicate_ids) settled.add(id2);
+      blocked += 1;
+    } catch (error) {
+      fail(group.primary.request_id, error);
+    }
+    for (const duplicateId of group.duplicateIds) {
+      if (settled.has(duplicateId)) {
+        blocked += 1;
+        continue;
+      }
+      const duplicate = lookup(duplicateId);
+      try {
+        if (duplicate === void 0) throw new Error("A selected request is no longer in the queue.");
+        const result = await blockOnce(duplicate);
+        for (const id2 of result.resolved_duplicate_ids) settled.add(id2);
+        blocked += 1;
+      } catch (error) {
+        fail(duplicateId, error);
+      }
+    }
+    for (const id2 of settled) {
+      if (failures.delete(id2)) blocked += 1;
+    }
+  }
+  const reasons2 = [];
+  for (const reason of failures.values()) {
+    if (reasons2.length < MAX_REASONS$1 && !reasons2.includes(reason)) reasons2.push(reason);
+  }
+  return { blocked, failed: failures.size, reasons: reasons2, failedIds: [...failures.keys()] };
+}
+function bulkBlockSummary(outcome) {
+  const unit = outcome.blocked === 1 ? "request" : "requests";
+  return `${outcome.blocked} ${unit} blocked.`;
+}
+function bulkBlockFailureMessage(outcome) {
+  const reason = outcome.reasons.length > 0 ? ` ${outcome.reasons.join(" ")}` : "";
+  if (outcome.blocked === 0) {
+    return `Guard could not block the selected requests. Open them to block them one at a time.${reason}`;
+  }
+  return `${outcome.blocked} blocked, ${outcome.failed} failed. Open the failed requests to block them one at a time.${reason}`;
+}
 const BULK_LOW_TIER_THRESHOLD = 5;
 const BULK_HIGH_TIER_THRESHOLD = 10;
 function resolveBulkRiskTier(stats) {
@@ -29631,6 +29874,13 @@ function buildBulkRiskDisclosure(stats) {
     confirmPhrase: phrase
   };
 }
+function isBulkBlockableGroup(group) {
+  const status = group.primary.status;
+  return (status === void 0 || status === "pending") && requestResolutionBlockReason(group.primary) === null;
+}
+function bulkBlockGroups(groups, selectedIds) {
+  return groups.filter((group) => isBulkBlockableGroup(group) && selectedIds.has(group.primary.request_id));
+}
 function useQueueBulkApprove(props) {
   const [drawerOpen, setDrawerOpen] = reactExports.useState(false);
   const [drawerStep, setDrawerStep] = reactExports.useState("review");
@@ -29640,6 +29890,9 @@ function useQueueBulkApprove(props) {
   const [typedConfirm, setTypedConfirm] = reactExports.useState("");
   const [bulkApproveError, setBulkApproveError] = reactExports.useState(null);
   const [bulkCompletedActionCount, setBulkCompletedActionCount] = reactExports.useState(null);
+  const [blockStep, setBlockStep] = reactExports.useState("idle");
+  const [blockError, setBlockError] = reactExports.useState(null);
+  const blocking = reactExports.useRef(false);
   const groups = reactExports.useMemo(() => groupDuplicates(props.items), [props.items]);
   const bulkEligibleGroups = reactExports.useMemo(
     () => groups.filter((group) => isBulkApprovableGroup(group)),
@@ -29654,6 +29907,12 @@ function useQueueBulkApprove(props) {
   const hasBulkHandler = props.onBulkApprove !== void 0;
   const hasEligibleGroups = bulkEligibleGroups.length >= 1;
   const showBulkApprove = hasBulkHandler && bulkGateReady && hasEligibleGroups;
+  const hasBlockHandler = props.onBulkBlock !== void 0 && props.approvalGate?.strict_all_decisions !== true;
+  const selectableGroups = reactExports.useMemo(
+    () => hasBlockHandler ? groups.filter((group) => isBulkBlockableGroup(group)) : bulkEligibleGroups,
+    [bulkEligibleGroups, groups, hasBlockHandler]
+  );
+  const selectionMode = showBulkApprove || hasBlockHandler && selectableGroups.length > 0;
   const selectedBulkGroups = reactExports.useMemo(
     () => bulkEligibleGroups.filter((group) => selectedBulkIds.has(group.primary.request_id)),
     [bulkEligibleGroups, selectedBulkIds]
@@ -29663,6 +29922,15 @@ function useQueueBulkApprove(props) {
     [selectedBulkGroups]
   );
   const selectedGroupCount = selectedBulkGroups.length;
+  const selectedBlockGroups = reactExports.useMemo(
+    () => hasBlockHandler ? bulkBlockGroups(groups, selectedBulkIds) : [],
+    [groups, hasBlockHandler, selectedBulkIds]
+  );
+  const selectedSelectableGroups = reactExports.useMemo(
+    () => selectableGroups.filter((group) => selectedBulkIds.has(group.primary.request_id)),
+    [selectableGroups, selectedBulkIds]
+  );
+  const selectedRequestCount = bulkApproveActionCount(selectedSelectableGroups);
   const selectionStats = reactExports.useMemo(() => {
     let highActionCount = 0;
     let elevatedActionCount = 0;
@@ -29715,12 +29983,44 @@ function useQueueBulkApprove(props) {
     setTypedConfirm("");
     setBulkApproveError(null);
     setBulkCompletedActionCount(null);
+    setBlockStep("idle");
+    setBlockError(null);
   }, []);
   const handleClearSelection = reactExports.useCallback(() => {
+    if (blocking.current) return;
     setSelectedBulkIds(/* @__PURE__ */ new Set());
     setTypedConfirm("");
     setBulkApproveError(null);
+    setBlockStep("idle");
+    setBlockError(null);
   }, []);
+  const handleRequestBlock = reactExports.useCallback(() => {
+    if (selectedBlockGroups.length === 0) return;
+    setBlockStep("confirming");
+    setBlockError(null);
+  }, [selectedBlockGroups.length]);
+  const handleCancelBlock = reactExports.useCallback(() => {
+    if (blockStep === "blocking") return;
+    setBlockStep("idle");
+  }, [blockStep]);
+  const handleConfirmBlock = reactExports.useCallback(async () => {
+    if (blockStep === "blocking" || selectedBlockGroups.length === 0 || !hasBlockHandler || props.onBulkBlock === void 0) {
+      return;
+    }
+    blocking.current = true;
+    setBlockStep("blocking");
+    setBlockError(null);
+    try {
+      await props.onBulkBlock(selectedBlockGroups);
+      setSelectedBulkIds(/* @__PURE__ */ new Set());
+    } catch (error) {
+      if (error instanceof BulkBlockError) setSelectedBulkIds(new Set(error.failedIds));
+      setBlockError(error instanceof Error ? error.message : "Blocking the selected requests failed.");
+    } finally {
+      blocking.current = false;
+      setBlockStep("idle");
+    }
+  }, [blockStep, hasBlockHandler, props.onBulkBlock, selectedBlockGroups]);
   const handleStartReview = reactExports.useCallback(() => {
     if (selectedBulkGroups.length === 0) {
       return;
@@ -29743,6 +30043,7 @@ function useQueueBulkApprove(props) {
     setBulkApproveTotpCode("");
   }, [drawerStep, resetBulkFlow]);
   const handleBulkToggleSelect = reactExports.useCallback((requestId) => {
+    if (blocking.current) return;
     setSelectedBulkIds((current) => {
       const next = new Set(current);
       if (next.has(requestId)) {
@@ -29754,18 +30055,21 @@ function useQueueBulkApprove(props) {
     });
     setTypedConfirm("");
     setBulkApproveError(null);
+    setBlockStep("idle");
+    setBlockError(null);
   }, []);
   const handleBulkToggleMany = reactExports.useCallback(
     (items, selectAll) => {
+      if (blocking.current) return;
       setSelectedBulkIds(() => {
         if (!selectAll) return /* @__PURE__ */ new Set();
-        const eligibleIds = new Set(bulkApprovePrimaryIds(bulkEligibleGroups));
+        const eligibleIds = new Set(bulkApprovePrimaryIds(selectableGroups));
         const targetIds = /* @__PURE__ */ new Set();
         for (const item of items) {
           if (eligibleIds.has(item.request_id)) {
             targetIds.add(item.request_id);
           } else {
-            for (const group of bulkEligibleGroups) {
+            for (const group of selectableGroups) {
               if (group.duplicateIds.includes(item.request_id)) {
                 targetIds.add(group.primary.request_id);
                 break;
@@ -29777,8 +30081,10 @@ function useQueueBulkApprove(props) {
       });
       setTypedConfirm("");
       setBulkApproveError(null);
+      setBlockStep("idle");
+      setBlockError(null);
     },
-    [bulkEligibleGroups]
+    [selectableGroups]
   );
   const handleBulkApprovePasswordChange = reactExports.useCallback((event) => {
     setBulkApprovePassword(event.target.value);
@@ -29843,14 +30149,14 @@ function useQueueBulkApprove(props) {
   const bulkSelectableMap = reactExports.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
     for (const group of groups) {
-      const isApprovable = isBulkApprovableGroup(group);
-      map.set(group.primary.request_id, isApprovable);
+      const selectable = hasBlockHandler ? isBulkBlockableGroup(group) : isBulkApprovableGroup(group);
+      map.set(group.primary.request_id, selectable);
       for (const id2 of group.duplicateIds) {
-        map.set(id2, isApprovable);
+        map.set(id2, selectable);
       }
     }
     return map;
-  }, [groups]);
+  }, [groups, hasBlockHandler]);
   const groupIdMap = reactExports.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
     for (const group of groups) {
@@ -29862,8 +30168,8 @@ function useQueueBulkApprove(props) {
     return map;
   }, [groups]);
   const isSelectable = reactExports.useCallback(
-    (item) => bulkSelectableMap.get(item.request_id) ?? isBulkApprovableGroup({ primary: item }),
-    [bulkSelectableMap]
+    (item) => bulkSelectableMap.get(item.request_id) ?? (hasBlockHandler ? isBulkBlockableGroup({ primary: item }) : isBulkApprovableGroup({ primary: item })),
+    [bulkSelectableMap, hasBlockHandler]
   );
   const isSelected = reactExports.useCallback(
     (item) => selectedBulkIds.has(groupIdMap.get(item.request_id) ?? item.request_id),
@@ -29885,7 +30191,8 @@ function useQueueBulkApprove(props) {
     },
     [groupIdMap, handleBulkToggleMany]
   );
-  const stickyBarVisible = showBulkApprove && selectedGroupCount > 0 && drawerStep !== "completed";
+  const canApprove = showBulkApprove && selectedGroupCount > 0;
+  const stickyBarVisible = (canApprove || selectedBlockGroups.length > 0) && drawerStep !== "completed";
   const gatePromptVisible = hasBulkHandler && hasEligibleGroups && !bulkGateReady;
   const eligibleActionCount = reactExports.useMemo(
     () => bulkApproveActionCount(bulkEligibleGroups),
@@ -29895,22 +30202,30 @@ function useQueueBulkApprove(props) {
     groups,
     showBulkApprove,
     bulkSelection: {
-      selectionMode: showBulkApprove,
+      selectionMode,
       isSelectable,
       isSelected,
       onToggle,
       onToggleMany,
-      selectedActionCount,
-      selectedGroupCount
+      selectedActionCount: hasBlockHandler ? selectedRequestCount : selectedActionCount,
+      selectedGroupCount: hasBlockHandler ? selectedSelectableGroups.length : selectedGroupCount
     },
     stickyBar: {
       visible: stickyBarVisible,
       selectedGroupCount,
       selectedActionCount,
+      selectedRequestCount: hasBlockHandler ? selectedRequestCount : selectedActionCount,
+      canApprove,
       riskTier: riskDisclosure.tier,
       riskTone: riskDisclosure.tone,
       gateReady: bulkGateReady,
+      blockAvailable: hasBlockHandler,
+      blockStep,
+      blockError,
       onStartReview: handleStartReview,
+      onRequestBlock: handleRequestBlock,
+      onConfirmBlock: handleConfirmBlock,
+      onCancelBlock: handleCancelBlock,
       onClearSelection: handleClearSelection
     },
     drawer: {
@@ -30833,88 +31148,56 @@ function BusinessReviewSummaryPanel({ requestId }) {
   ] });
   return state.summary ? /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryDetails, { summary: state.summary }) : null;
 }
-function ApprovalProofModal(props) {
-  const {
-    title,
-    detail,
-    confirmLabel,
-    approvalGate,
-    busy = false,
-    busyLabel = "Repairing…",
-    error = null,
-    requireFreshTotp = false,
-    onCancel,
-    onConfirm
-  } = props;
-  const [password, setPassword] = reactExports.useState("");
-  const [totpCode, setTotpCode] = reactExports.useState("");
-  const formRef = reactExports.useRef(null);
-  useFocusTrap(true, formRef);
-  const handlePasswordChange = reactExports.useCallback((event) => {
-    setPassword(event.target.value);
+function segmentDetail(segment) {
+  const titles = segment.rules.map((rule2) => rule2.title);
+  const labels = segment.permissions.filter((permission2) => permission2.configurable).map((item) => item.label);
+  const parts = titles.length > 0 ? titles : labels;
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+function ApprovalExtensionCoverageCard(props) {
+  const { coverage, hasRecommendation } = props;
+  const open = reactExports.useCallback((extensionId, ruleId) => {
+    commitDashboardLocation(extensionPatternHref(extensionId, ruleId));
   }, []);
-  const handleTotpChange = reactExports.useCallback((event) => {
-    setTotpCode(event.target.value);
-  }, []);
-  const confirmDisabled = isApprovalProofSubmitDisabled(
-    approvalGate,
-    { approvalPassword: password, approvalTotpCode: totpCode },
-    busy,
-    requireFreshTotp
-  );
-  const handleSubmit = reactExports.useCallback((event) => {
-    event.preventDefault();
-    if (confirmDisabled) {
-      return;
-    }
-    onConfirm(buildApprovalProofCredentials(
-      approvalGate,
-      { approvalPassword: password, approvalTotpCode: totpCode },
-      requireFreshTotp
-    ));
-  }, [approvalGate, confirmDisabled, onConfirm, password, requireFreshTotp, totpCode]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/30 px-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "form",
+  if (!coverage) return null;
+  const scopeLine = coverageScopeLine(coverage);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "section",
     {
-      ref: formRef,
-      role: "dialog",
-      "aria-modal": "true",
-      "aria-labelledby": "approval-proof-modal-title",
-      "aria-describedby": "approval-proof-modal-detail",
-      className: "w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl",
-      onSubmit: handleSubmit,
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval required" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "approval-proof-modal-title", className: "mt-2 text-base font-semibold text-brand-dark", children: title }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "approval-proof-modal-detail", className: "mt-1 text-sm text-slate-500", children: detail }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ApprovalProofFieldInputs,
-          {
-            approvalGate,
-            approvalPassword: password,
-            approvalTotpCode: totpCode,
-            requireFreshTotp,
-            onApprovalPasswordChange: handlePasswordChange,
-            onApprovalTotpCodeChange: handleTotpChange
-          }
-        ) }),
-        error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.06] px-3 py-2 text-sm text-brand-attention", children: error }) : null,
-        busy ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "p",
-          {
-            role: "status",
-            tabIndex: 0,
-            className: "mt-4 text-sm font-medium text-brand-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
-            children: busyLabel
-          }
-        ) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex justify-end gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { type: "button", variant: "outline", onClick: onCancel, disabled: busy, children: "Cancel" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { type: "submit", disabled: confirmDisabled, children: busy ? busyLabel : confirmLabel })
+      className: "mt-5 rounded-xl border border-slate-200 bg-slate-50/70 p-4",
+      "aria-labelledby": "approval-extension-coverage-title",
+      "data-testid": "approval-extension-coverage",
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "mt-0.5 h-5 w-5 shrink-0 text-slate-500", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-slate-500", children: "Set this up in advance" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "approval-extension-coverage-title", className: "mt-1 text-sm font-semibold text-brand-dark", children: hasRecommendation ? "Where this command is configured" : "Extensions cover this command" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/80", children: "Decide ahead of time how commands like these are handled, so the ones you trust stop coming here." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-2", "aria-label": "Steps an extension covers", children: coverage.segments.map((segment) => {
+            const detail = segmentDetail(segment);
+            return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-xs text-slate-500", children: coverageStepLabel(segment) }),
+              detail && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-brand-dark/80", children: detail }),
+              segment.extensions.map((extension2) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  type: "button",
+                  onClick: () => open(extension2.extension_id, extension2.focus_rule_id),
+                  className: "inline-flex min-h-7 items-center gap-1 rounded-lg px-1.5 text-sm font-medium text-brand-blue underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+                  children: [
+                    extension2.name,
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+                  ]
+                },
+                extension2.extension_id
+              ))
+            ] }, segment.index);
+          }) }),
+          scopeLine && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: scopeLine })
         ] })
-      ]
+      ] })
     }
-  ) });
+  );
 }
 const DIGEST$2 = /^[a-f0-9]{64}$/;
 const EXTENSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -31706,6 +31989,314 @@ async function applyExtensionMutation(payload) {
     throw new ExtensionControlApiError(error instanceof Error ? error.message : "Guard returned an invalid apply response", 502);
   }
 }
+const DEFAULT_ENROLL_COMMAND = "hol-guard command controls enroll";
+const DEFAULT_RECOVER_COMMAND = "hol-guard command controls recover-authority";
+const AUTHORITY_WATCH_INTERVAL_MS = 5e3;
+function useExtensionAuthorityWatch(input) {
+  const { active, requestId, onAvailable } = input;
+  const [effective, setEffective] = reactExports.useState(null);
+  const [liveGate, setLiveGate] = reactExports.useState(null);
+  const [loadFailed, setLoadFailed] = reactExports.useState(false);
+  const [checking, setChecking] = reactExports.useState(false);
+  const [checkResult, setCheckResult] = reactExports.useState(null);
+  const [noOption, setNoOption] = reactExports.useState(null);
+  const inFlight = reactExports.useRef(null);
+  const mounted = reactExports.useRef(true);
+  reactExports.useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const load = reactExports.useCallback(async () => {
+    try {
+      const [nextEffective, settings, item] = await Promise.all([
+        fetchEffectiveExtensionControls(),
+        fetchSettings().catch(() => null),
+        fetchRequest(requestId)
+      ]);
+      if (!mounted.current) return "unchanged";
+      setEffective(nextEffective);
+      setLoadFailed(false);
+      const gate = settings?.settings.approval_gate;
+      if (gate !== void 0 && gate !== null) setLiveGate(gate);
+      if (item.status !== "pending") {
+        setNoOption("resolved");
+        return "unchanged";
+      }
+      if (nextEffective.health !== "protected") {
+        setNoOption(null);
+        return "unchanged";
+      }
+      const recommendation = item.extension_recommendation;
+      if (recommendation?.status !== "available") {
+        setNoOption("unavailable");
+        return "unchanged";
+      }
+      if (settings === null) throw new Error("approval settings unavailable");
+      onAvailable(recommendation);
+      return "available";
+    } catch {
+      if (mounted.current) setLoadFailed(true);
+      return "failed";
+    }
+  }, [onAvailable, requestId]);
+  const refresh = reactExports.useCallback(() => {
+    if (inFlight.current === null) {
+      inFlight.current = load().finally(() => {
+        inFlight.current = null;
+      });
+    }
+    return inFlight.current;
+  }, [load]);
+  reactExports.useEffect(() => {
+    if (!active || noOption) return void 0;
+    void refresh();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh();
+    }, AUTHORITY_WATCH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [active, noOption, refresh]);
+  const checkAgain = reactExports.useCallback(() => {
+    if (checking) return;
+    setChecking(true);
+    setCheckResult(null);
+    void refresh().then((outcome) => {
+      if (!mounted.current) return;
+      setChecking(false);
+      setCheckResult(outcome === "available" ? null : outcome);
+    });
+  }, [checking, refresh]);
+  return { effective, approvalGate: liveGate ?? input.approvalGate, loadFailed, checking, checkResult, noOption, checkAgain };
+}
+function SetupStep(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "span",
+      {
+        className: `mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${props.done ? "bg-brand-green-text text-white" : props.current ? "bg-brand-blue text-white" : "border border-slate-300 bg-white text-slate-600"}`,
+        "aria-hidden": "true",
+        children: props.done ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "size-4" }) : props.index
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
+        props.title,
+        props.done && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: " (done)" })
+      ] }),
+      props.children
+    ] })
+  ] });
+}
+function CopyCommand(props) {
+  const [state, setState] = reactExports.useState("idle");
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(props.command);
+      setState("copied");
+    } catch {
+      setState("failed");
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row sm:items-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2.5 font-mono text-xs text-brand-dark", children: props.command }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: () => void copy(),
+          "aria-label": state === "copied" ? "Command copied" : props.label,
+          className: "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-blue hover:border-brand-blue/40 focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+          children: [
+            state === "copied" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "size-4", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "size-4", "aria-hidden": "true" }),
+            state === "copied" ? "Copied" : "Copy"
+          ]
+        }
+      )
+    ] }),
+    state === "failed" && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-brand-dark/70", role: "status", children: "Copy is unavailable here. Select the command and copy it." })
+  ] });
+}
+function CheckAgain(props) {
+  const { watch } = props;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-x-3 gap-y-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: watch.checkAgain, disabled: watch.checking, "aria-busy": watch.checking, children: watch.checking ? "Checking…" : "Check again" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "min-w-0 flex-1 text-xs leading-5 text-slate-600", role: "status", "aria-live": "polite", children: watch.checking ? "Checking this device…" : watch.checkResult === "failed" ? "Guard could not reach this device's protection settings. Try again in a moment." : watch.checkResult === "unchanged" && watch.noOption === null ? "Not finished yet. Guard keeps checking while this page is open." : props.note })
+  ] });
+}
+function approvalProofName(gate) {
+  return gate?.totp_enabled ? "authenticator code" : "approval password";
+}
+function ExtensionAuthoritySetup(props) {
+  const { watch, commandText } = props;
+  const health = watch.effective?.health ?? null;
+  if (watch.effective === null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/80", role: "status", children: watch.loadFailed ? "Guard could not read this device's protection settings." : "Checking whether this device can save extension settings…" }),
+      watch.loadFailed && /* @__PURE__ */ jsxRuntimeExports.jsx(CheckAgain, { watch, note: "" })
+    ] });
+  }
+  if (watch.noOption !== null) {
+    let message = "Protection settings are ready, but this request no longer offers Always allow. You can still change the permission in the extension.";
+    if (watch.noOption === "resolved") {
+      message = health === "protected" ? "Protection settings are ready. This request was already answered, so there is nothing left to allow here. You can still change the permission in the extension." : "This request was already answered, so there is nothing left to allow here.";
+    }
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/80", role: "status", children: message }) });
+  }
+  const gate = watch.approvalGate;
+  const proofName = approvalProofName(gate);
+  const terminal = watch.effective.terminal_commands;
+  const terminalName = terminal?.shell === "powershell" ? "PowerShell" : "a terminal";
+  if (health === "unenrolled") {
+    const gateReady = isBulkApproveGateReady(gate);
+    const lost = watch.effective.revision > 0 || watch.effective.layers.length > 0;
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 border-t border-brand-blue/15 pt-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-relaxed text-brand-dark/80", children: lost ? `This device's saved extension settings were lost. Two steps set them up again and let you allow ${commandText} from here.` : `This device hasn't saved its extension settings yet. Two one-time steps let you allow ${commandText} from here.` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("ol", { className: "mt-3 space-y-4", "aria-label": lost ? "Setup" : "One-time setup", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SetupStep, { index: 1, done: gateReady, current: !gateReady, title: "Set up local approval", children: gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm text-brand-dark/70", children: "Local approval is on." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-sm leading-relaxed text-brand-dark/70", children: gate?.configured ? "Turn local approval back on. It keeps agents from changing protection on their own." : "Choose an approval password. It stays on this device and keeps agents from changing protection on their own." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/settings?section=approval", variant: "primary", className: "mt-2", children: "Open approval settings" })
+        ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(SetupStep, { index: 2, done: false, current: gateReady, title: "Enroll this device", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 text-sm leading-relaxed text-brand-dark/70", children: [
+            "Run this once in ",
+            terminalName,
+            ". It asks for your ",
+            proofName,
+            "."
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommand, { command: terminal?.enroll ?? DEFAULT_ENROLL_COMMAND, label: "Copy enroll command" })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CheckAgain,
+        {
+          watch,
+          note: `When enrollment finishes, Approve & always allow ${commandText} appears here.`
+        }
+      )
+    ] });
+  }
+  if (health === "protected") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark/80", role: "status", children: [
+        "Protection settings are ready. Loading the option to always allow ",
+        commandText,
+        "…"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CheckAgain, { watch, note: "" })
+    ] });
+  }
+  if (health === "degraded-unacknowledged" || health === "degraded-acknowledged") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm leading-relaxed text-brand-dark/80", children: [
+        "Guard cannot fully verify this device's protection settings and is staying fail-safe. Rebuild them from",
+        " ",
+        terminalName,
+        ", then you can allow ",
+        commandText,
+        " from here. It asks for your ",
+        proofName,
+        "."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CopyCommand, { command: terminal?.recover_authority ?? DEFAULT_RECOVER_COMMAND, label: "Copy repair command" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CheckAgain, { watch, note: `When the repair finishes, Approve & always allow ${commandText} appears here.` })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm leading-relaxed text-brand-dark/80", children: [
+      "Guard is staying fail-safe because this device's protection settings need repair. Repair them, then you can allow ",
+      commandText,
+      " from here."
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 flex flex-wrap items-center gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/protection/repair", variant: "primary", children: "Repair protection" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CheckAgain, { watch, note: "" })
+  ] });
+}
+function ApprovalProofModal(props) {
+  const {
+    title,
+    detail,
+    confirmLabel,
+    approvalGate,
+    busy = false,
+    busyLabel = "Repairing…",
+    error = null,
+    requireFreshTotp = false,
+    onCancel,
+    onConfirm
+  } = props;
+  const [password, setPassword] = reactExports.useState("");
+  const [totpCode, setTotpCode] = reactExports.useState("");
+  const formRef = reactExports.useRef(null);
+  useFocusTrap(true, formRef);
+  const handlePasswordChange = reactExports.useCallback((event) => {
+    setPassword(event.target.value);
+  }, []);
+  const handleTotpChange = reactExports.useCallback((event) => {
+    setTotpCode(event.target.value);
+  }, []);
+  const confirmDisabled = isApprovalProofSubmitDisabled(
+    approvalGate,
+    { approvalPassword: password, approvalTotpCode: totpCode },
+    busy,
+    requireFreshTotp
+  );
+  const handleSubmit = reactExports.useCallback((event) => {
+    event.preventDefault();
+    if (confirmDisabled) {
+      return;
+    }
+    onConfirm(buildApprovalProofCredentials(
+      approvalGate,
+      { approvalPassword: password, approvalTotpCode: totpCode },
+      requireFreshTotp
+    ));
+  }, [approvalGate, confirmDisabled, onConfirm, password, requireFreshTotp, totpCode]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/30 px-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "form",
+    {
+      ref: formRef,
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "approval-proof-modal-title",
+      "aria-describedby": "approval-proof-modal-detail",
+      className: "w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl",
+      onSubmit: handleSubmit,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval required" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "approval-proof-modal-title", className: "mt-2 text-base font-semibold text-brand-dark", children: title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "approval-proof-modal-detail", className: "mt-1 text-sm text-slate-500", children: detail }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ApprovalProofFieldInputs,
+          {
+            approvalGate,
+            approvalPassword: password,
+            approvalTotpCode: totpCode,
+            requireFreshTotp,
+            onApprovalPasswordChange: handlePasswordChange,
+            onApprovalTotpCodeChange: handleTotpChange
+          }
+        ) }),
+        error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.06] px-3 py-2 text-sm text-brand-attention", children: error }) : null,
+        busy ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "p",
+          {
+            role: "status",
+            tabIndex: 0,
+            className: "mt-4 text-sm font-medium text-brand-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
+            children: busyLabel
+          }
+        ) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex justify-end gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { type: "button", variant: "outline", onClick: onCancel, disabled: busy, children: "Cancel" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { type: "submit", disabled: confirmDisabled, children: busy ? busyLabel : confirmLabel })
+        ] })
+      ]
+    }
+  ) });
+}
 function cloneLayers(layers) {
   return layers.map((layer) => ({
     ...layer,
@@ -31872,7 +32463,8 @@ async function approveWithExtensionAllow(deps, permissionIds, credentials) {
   return { status: "approved", revision };
 }
 function ApprovalExtensionRecommendationCard(props) {
-  const recommendation = props.item.extension_recommendation;
+  const [liveRecommendation, setLiveRecommendation] = reactExports.useState(null);
+  const recommendation = liveRecommendation ?? props.item.extension_recommendation;
   const [confirmOpen, setConfirmOpen] = reactExports.useState(false);
   const [busy, setBusy] = reactExports.useState(false);
   const inFlight = reactExports.useRef(false);
@@ -31883,16 +32475,41 @@ function ApprovalExtensionRecommendationCard(props) {
     [recommendation]
   );
   const primary = recommendation?.permissions[0] ?? null;
-  const { item, allowScope, approvalGate, onResolve, onApproved, onDialogActiveChange, persistExactAction = false } = props;
+  const { item, allowScope, onResolve, onApproved, onDialogActiveChange, persistExactAction = false } = props;
   const resolutionAvailable = !retryCannotReuseApproval(item) || persistExactAction;
+  const authorityUnavailable = recommendation?.status === "authority_unavailable";
+  const handleAvailable = reactExports.useCallback((next) => {
+    setLiveRecommendation(next);
+  }, []);
+  const watch = useExtensionAuthorityWatch({
+    active: authorityUnavailable,
+    requestId: item.request_id,
+    approvalGate: props.approvalGate,
+    onAvailable: handleAvailable
+  });
+  const approvalGate = watch.approvalGate;
+  const justEnrolled = liveRecommendation !== null;
   const dialogActive = confirmOpen || busy;
   reactExports.useEffect(() => {
     onDialogActiveChange?.(dialogActive);
   }, [dialogActive, onDialogActiveChange]);
   reactExports.useEffect(() => () => onDialogActiveChange?.(false), [onDialogActiveChange]);
-  const openPattern = reactExports.useCallback(() => {
-    if (primary) commitDashboardLocation(extensionPatternHref(primary.extension_id, primary.rule_id));
-  }, [primary]);
+  const configurable = reactExports.useMemo(() => {
+    const seen2 = /* @__PURE__ */ new Map();
+    for (const permission2 of recommendation?.permissions ?? []) {
+      if (!seen2.has(permission2.extension_id)) {
+        seen2.set(permission2.extension_id, {
+          extensionId: permission2.extension_id,
+          extensionName: permission2.extension_name,
+          ruleId: permission2.rule_id
+        });
+      }
+    }
+    return [...seen2.values()];
+  }, [recommendation]);
+  const openPattern = reactExports.useCallback((extensionId, ruleId) => {
+    commitDashboardLocation(extensionPatternHref(extensionId, ruleId));
+  }, []);
   const openConfirm = reactExports.useCallback(() => {
     setError(null);
     setConfirmOpen(true);
@@ -31946,7 +32563,6 @@ function ApprovalExtensionRecommendationCard(props) {
   );
   if (!recommendation || !copy || !primary) return null;
   const caution = recommendation.caution;
-  const authorityUnavailable = recommendation.status === "authority_unavailable";
   const gateReady = isBulkApproveGateReady(approvalGate);
   const gateLocked = approvalGateIsLocked(approvalGate);
   const tone = caution ? "border-brand-attention/30 bg-brand-attention/[0.05]" : "border-brand-blue/20 bg-brand-blue/[0.04]";
@@ -31964,7 +32580,8 @@ function ApprovalExtensionRecommendationCard(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "approval-extension-recommendation-title", className: "mt-1 text-sm font-semibold text-brand-dark", children: copy.title }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/80", children: copy.body }),
             copy.cautionLines.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", "aria-label": "Before you allow this", children: copy.cautionLines.map((line) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "text-sm font-medium text-brand-attention", children: line }, line)) }),
-            authorityUnavailable && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/80", children: "Protection settings need attention before Guard can change them from here." }),
+            authorityUnavailable && /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionAuthoritySetup, { watch, commandText: copy.commandText }),
+            justEnrolled && savedMessage === null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm font-medium text-brand-green-text", role: "status", children: "This device is set up. You can now approve and always allow from here." }),
             !resolutionAvailable && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/80", children: "Inspect this permission in Extensions. Approving this request once is unavailable." }),
             savedMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm font-medium text-brand-green-text", role: "status", children: savedMessage }),
             error && !confirmOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-purple", role: "alert", children: error }),
@@ -31979,18 +32596,19 @@ function ApprovalExtensionRecommendationCard(props) {
                 }
               ),
               resolutionAvailable && !authorityUnavailable && savedMessage === null && !gateReady && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/settings?section=approval", variant: "outline", children: "Set up approval password" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              configurable.map((entry) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
                 "button",
                 {
                   type: "button",
-                  onClick: openPattern,
+                  onClick: () => openPattern(entry.extensionId, entry.ruleId),
                   className: "inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-medium text-brand-blue underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
                   children: [
-                    copy.configureLabel,
+                    configurable.length === 1 ? copy.configureLabel : `Configure in ${entry.extensionName}`,
                     /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
                   ]
-                }
-              )
+                },
+                entry.extensionId
+              ))
             ] }),
             gateReady && gateLocked && !authorityUnavailable && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-slate-500", children: [
               "Approval gate is temporarily locked. Try again in ",
@@ -32641,6 +33259,13 @@ function ReviewDecisionCard(props) {
           onDialogActiveChange: setExtensionDialogActive
         },
         item.request_id
+      ),
+      resolutionBlockReason === null && resolved === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ApprovalExtensionCoverageCard,
+        {
+          coverage: item.extension_coverage,
+          hasRecommendation: item.extension_recommendation !== void 0
+        }
       ),
       resolutionBlockReason === null && resolved === null && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ReviewScopeControls,
@@ -33315,7 +33940,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
     },
     [item, onToggleSelect, canSelect]
   );
-  const checkboxLabel = canSelect ? `Select ${preview} for bulk approval` : `Not eligible for bulk approval: ${category.shortLabel.toLowerCase()}`;
+  const checkboxLabel = canSelect ? `Select ${preview}` : `Not eligible for bulk approval: ${category.shortLabel.toLowerCase()}`;
   const rowClassName = (() => {
     if (selected) return "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20";
     if (active) return "border border-brand-blue bg-brand-blue/[0.06]";
@@ -34355,6 +34980,10 @@ class LocalCliApiError extends Error {
     this.code = code;
   }
 }
+function unreviewedToolChangeCount(item) {
+  const changes = item.mcp_catalog?.changes;
+  return (changes?.added.length ?? 0) + (changes?.changed.length ?? 0);
+}
 function customExtensionNeedsReview(item) {
   return item.stale || item.state === "unset" || item.mcp_catalog?.stale || item.mcp_catalog?.complete === false || Boolean(item.mcp_catalog?.changes?.added.length) || Boolean(item.mcp_catalog?.changes?.changed.length);
 }
@@ -35246,6 +35875,7 @@ function ReviewWorkspace(props) {
     items: filteredRequests,
     approvalGate: props.approvalGate ?? null,
     onBulkApprove: props.onBulkApprove,
+    onBulkBlock: props.onBulkBlock,
     settingsHref: guardAwareHref("/settings")
   });
   reactExports.useEffect(() => {
@@ -35328,7 +35958,7 @@ function ReviewWorkspace(props) {
       bulkApprove.bulkSelection.selectedActionCount,
       " of ",
       filteredRequests.length,
-      " reads selected for bulk approval."
+      " requests selected."
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(QueueBulkDrawer, { ...bulkApprove.drawer }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -36033,7 +36663,7 @@ function turnProtectionOnUpdate(snapshot) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-CdbiqqaN.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-MUAws0Y5.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -36106,7 +36736,8 @@ function renderInboxContent(props) {
       onResolve: props.onResolve,
       onGoHome: props.onGoHome,
       onRetryResume: props.onRetryResume,
-      onBulkApprove: props.onBulkApprove
+      onBulkApprove: props.onBulkApprove,
+      onBulkBlock: props.onBulkBlock
     }
   );
 }
@@ -36142,6 +36773,9 @@ function renderViewContent(props) {
   }
   if (props.view === "about") {
     return props.aboutContent ?? null;
+  }
+  if (props.view === "releases") {
+    return props.releasesContent ?? null;
   }
   if (props.view === "policy") {
     return props.policyContent ?? null;
@@ -36450,30 +37084,34 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
   }, [view, mainSelector]);
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-Wxa6VirA.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-CkMTJ0-Z.js"), true ? __vite__mapDeps([4,3,5,6,7]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-DdhT0dGq.js"), true ? __vite__mapDeps([8,7,3,9,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-BXyV7oNP.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-CbqphIX4.js"), true ? __vite__mapDeps([4,3,5,6,7]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-CpitooFy.js"), true ? __vite__mapDeps([8,7,3,9,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-CmoIi2sh.js"), true ? __vite__mapDeps([10,9]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-BiG33v6D.js"), true ? __vite__mapDeps([10,9]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-B9rlD0o5.js"), true ? __vite__mapDeps([11,5]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-3cnkv6h5.js"), true ? __vite__mapDeps([11,5]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-B0TZsHE3.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BvuDt7F-.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-DabvDO9V.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-VXBC0Fjp.js"), true ? __vite__mapDeps([12,6]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page--QnvLElq.js"), true ? __vite__mapDeps([12,6]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-C1-uAYDr.js"), true ? __vite__mapDeps([13,2]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-93T2cVjf.js"), true ? __vite__mapDeps([13,2]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+);
+const ReleasesWorkspace = lazyWorkspace(
+  "releases-workspace",
+  () => __vitePreload(() => import("./chunks/releases-workspace-DDSlU5cV.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-C7iXdeiN.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-zjCZDbfH.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -36514,6 +37152,7 @@ function viewTitle(view) {
   if (view === "policy") return "Rules & exceptions";
   if (view === "feed-health") return "Feed Health";
   if (view === "about") return "About";
+  if (view === "releases") return "Releases";
   if (view === "extensions") return "Extensions";
   if (view === "protection-repair") return "Repair protection";
   return "App detail";
@@ -36565,6 +37204,9 @@ function resolveView(pathname) {
   }
   if (pathname === "/about") {
     return "about";
+  }
+  if (pathname === "/releases") {
+    return "releases";
   }
   if (pathname === "/inbox" || pathname === "/requests" || pathname === "/approvals" || pathname.startsWith("/requests/") || pathname.startsWith("/approvals/")) {
     return "inbox";
@@ -36785,7 +37427,7 @@ function App() {
       }
     }).catch(() => {
     });
-    if (view === "about") {
+    if (view === "about" || view === "releases") {
       fetchGuardUpdateStatus().then((status) => {
         if (!cancelled && status.current_version) {
           setGuardVersion(status.current_version);
@@ -37117,6 +37759,26 @@ function App() {
       bulkApproveInFlight.current = false;
     }
   }, [refreshApprovalGate, refreshStateAfterAction, setResolutionMessage]);
+  const handleBulkBlock = reactExports.useCallback(async (selected) => {
+    if (bulkApproveInFlight.current || resolutionInFlight.current) {
+      throw new Error("Another decision is still being saved. Try again in a moment.");
+    }
+    bulkApproveInFlight.current = true;
+    resolutionInFlight.current = true;
+    const queued = new Map((requests.kind === "ready" ? requests.items : []).map((item) => [item.request_id, item]));
+    try {
+      const outcome = await blockRequestsOnce(selected, (id2) => queued.get(id2), resolveRequestWithQueueResult);
+      resolutionInFlight.current = false;
+      await refreshStateAfterAction();
+      if (outcome.failed > 0) {
+        throw new BulkBlockError(bulkBlockFailureMessage(outcome), outcome.failedIds);
+      }
+      setResolutionMessage(bulkBlockSummary(outcome));
+    } finally {
+      resolutionInFlight.current = false;
+      bulkApproveInFlight.current = false;
+    }
+  }, [refreshStateAfterAction, requests, setResolutionMessage]);
   const handleRetry = reactExports.useCallback(() => {
     setRuntime({ kind: "loading" });
     setRequests({ kind: "loading" });
@@ -37277,6 +37939,7 @@ function App() {
         onOpenRequest: handleOpenRequest,
         onResolve: handleResolve,
         onBulkApprove: handleBulkApprove,
+        onBulkBlock: handleBulkBlock,
         onRetry: handleRetry,
         onRetryDetail: () => setDetailRefreshKey((key) => key + 1),
         onRepair: handleRepair,
@@ -37316,6 +37979,7 @@ function App() {
           }
         ) }) : null,
         policyContent,
+        releasesContent: view === "releases" ? /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(ReleasesWorkspace, { installedVersion: guardVersion }) }) : null,
         aboutContent: /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.Suspense, { fallback: /* @__PURE__ */ jsxRuntimeExports.jsx(LazyFallback, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx(AboutWorkspace, { runtimeSummary: runtime.kind === "ready" ? {
           // TODO: GuardRuntimeSnapshot does not yet expose guard_version or protected_app_count.
           // When those fields are added, populate them here instead of null/0.
@@ -37465,14 +38129,14 @@ export {
   useResolvedApprovalGate as bQ,
   groupPermissionsByFamily as bR,
   HiMiniInformationCircle as bS,
-  approvalProofRecentlySatisfied as bT,
-  bulkCommandState as bU,
-  fetchLocalCliApi as bV,
-  ExtensionBrandMark as bW,
-  fetchMcpProviderActions as bX,
-  previewLocalCliMutation as bY,
-  applyLocalCliMutation as bZ,
-  LocalCliApiError as b_,
+  LocalCliApiError as bT,
+  approvalProofRecentlySatisfied as bU,
+  bulkCommandState as bV,
+  fetchLocalCliApi as bW,
+  ExtensionBrandMark as bX,
+  fetchMcpProviderActions as bY,
+  previewLocalCliMutation as bZ,
+  applyLocalCliMutation as b_,
   WorkspacePageHeader as ba,
   commitDashboardLocation as bb,
   guardAwareHref as bc,
@@ -37500,7 +38164,7 @@ export {
   normalizeExtensionCatalogItem as by,
   guardApiCacheScope as bz,
   HiMiniChevronDown as c,
-  HiMiniHome as c$,
+  fetchPolicy as c$,
   readJson as c0,
   enrollablePackageScriptCommands as c1,
   seenSuggestionMeta as c2,
@@ -37511,33 +38175,33 @@ export {
   filterExtensionSuggestions as c7,
   suggestedHarnessExtensions as c8,
   suggestedSeenExtensions as c9,
-  extensionDisplayName as cA,
-  catalogRowSecondLine as cB,
-  extensionStateLabel as cC,
-  HiMiniGlobeAlt as cD,
-  HiMiniFunnel as cE,
-  discoveryFailureMessage as cF,
-  refreshCodexHostInventory as cG,
-  CODEX_HOST_FALLBACK as cH,
-  CONFIGURED_CONNECTIONS_FALLBACK as cI,
-  loadCurrentDashboardBuild as cJ,
-  canonicalExtensionId as cK,
-  extensionDetailHref as cL,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as cM,
-  acknowledgeDegradedExtensionControlAuthority as cN,
-  recoverExtensionControlAuthority as cO,
-  readExtensionDetailUrlState as cP,
-  parseProtectionRoute as cQ,
-  addCustomExtensionHref as cR,
-  GuardModalLayer as cS,
-  runHarnessAction as cT,
-  GuardHarnessActionError as cU,
-  HiMiniRocketLaunch as cV,
-  HiMiniTrash as cW,
-  fetchGuardApi as cX,
-  formatHarnessCommand as cY,
-  fetchApprovalPage as cZ,
-  fetchPolicy as c_,
+  customExtensionNeedsReview as cA,
+  extensionDisplayName as cB,
+  catalogRowSecondLine as cC,
+  extensionStateLabel as cD,
+  HiMiniGlobeAlt as cE,
+  HiMiniFunnel as cF,
+  discoveryFailureMessage as cG,
+  refreshCodexHostInventory as cH,
+  CODEX_HOST_FALLBACK as cI,
+  CONFIGURED_CONNECTIONS_FALLBACK as cJ,
+  loadCurrentDashboardBuild as cK,
+  canonicalExtensionId as cL,
+  extensionDetailHref as cM,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as cN,
+  acknowledgeDegradedExtensionControlAuthority as cO,
+  recoverExtensionControlAuthority as cP,
+  readExtensionDetailUrlState as cQ,
+  parseProtectionRoute as cR,
+  addCustomExtensionHref as cS,
+  GuardModalLayer as cT,
+  runHarnessAction as cU,
+  GuardHarnessActionError as cV,
+  HiMiniRocketLaunch as cW,
+  HiMiniTrash as cX,
+  fetchGuardApi as cY,
+  formatHarnessCommand as cZ,
+  fetchApprovalPage as c_,
   keepsPackageScriptCatalog as ca,
   recognizeLocalCli as cb,
   preferredPackageScriptExtension as cc,
@@ -37547,101 +38211,108 @@ export {
   HiMiniArrowLeft as cg,
   fetchLocalCliList as ch,
   normalizeLocalCliList as ci,
-  refreshMcpInventory as cj,
-  startGuardCloudConnect as ck,
-  extensionEffectiveState as cl,
-  permissionEffectiveState as cm,
-  HiMiniArrowTopRightOnSquare as cn,
-  fetchExtensionControlApi as co,
-  permissionForRule as cp,
-  refreshEffectiveExtensionControls as cq,
-  fetchExtensionDiscoveryApi as cr,
-  HiMiniClock as cs,
-  startCancelableDiscoveryJob as ct,
-  waitForMcpDiscoveryJob as cu,
-  isLocalCliId as cv,
-  localCliHref as cw,
-  filterCodexHostApps as cx,
-  connectorWorkspaceItems as cy,
-  customExtensionNeedsReview as cz,
+  unreviewedToolChangeCount as cj,
+  refreshMcpInventory as ck,
+  startGuardCloudConnect as cl,
+  extensionEffectiveState as cm,
+  permissionEffectiveState as cn,
+  HiMiniArrowTopRightOnSquare as co,
+  fetchExtensionControlApi as cp,
+  permissionForRule as cq,
+  refreshEffectiveExtensionControls as cr,
+  fetchExtensionDiscoveryApi as cs,
+  HiMiniClock as ct,
+  startCancelableDiscoveryJob as cu,
+  waitForMcpDiscoveryJob as cv,
+  isLocalCliId as cw,
+  localCliHref as cx,
+  filterCodexHostApps as cy,
+  connectorWorkspaceItems as cz,
   HiMiniArrowPath as d,
-  fetchMcpPolicyRequest as d$,
-  appSetupTarget as d0,
-  guardActionPresentation as d1,
-  DEFAULT_FILTER_STATE as d2,
-  filterEvidence as d3,
-  sortEvidence as d4,
-  computeMetrics as d5,
-  CommandActivityWorkspace as d6,
-  EvidenceFilterBar as d7,
-  EvidenceInsightStrip as d8,
-  EvidenceActionList as d9,
-  activatePackageFirewallRuntime as dA,
-  EntitlementNotice as dB,
-  chooseSupplyChainAuditFolder as dC,
-  fetchReceipts as dD,
-  lazyWorkspace as dE,
-  __vitePreload as dF,
-  scopeLabel as dG,
-  HiMiniCloudArrowUp as dH,
-  HiMiniCodeBracket as dI,
-  HiMiniClipboardDocument as dJ,
-  HiMiniUsers as dK,
-  HiMiniFolder as dL,
-  HiMiniIdentification as dM,
-  StyledSelect as dN,
-  policyActionLabel as dO,
-  createCloudExceptionRequest as dP,
-  HiMiniPuzzlePiece as dQ,
-  fetchCloudExceptions as dR,
-  fetchCloudExceptionRequests as dS,
-  downloadBlob as dT,
-  PaginationControls as dU,
-  PolicyStatField as dV,
-  HiMiniArrowDownTray as dW,
-  HiMiniInbox as dX,
-  HiMiniQueueList as dY,
-  subscribeDashboardLocation as dZ,
-  Surface as d_,
-  EvidenceActionDetail as da,
-  policyIdentityKey as db,
-  clearLabelForScope as dc,
-  HiMiniChartBar as dd,
-  HiMiniCheckBadge as de,
-  isSupplyChainAuditIncomplete as df,
-  isSupplyChainAuditEvidence as dg,
-  readString$1 as dh,
-  IconActionButton as di,
-  HiMiniBeaker as dj,
-  ActivationSummary as dk,
-  ActionResultPanel as dl,
-  HiMiniBugAnt as dm,
-  ConnectFlowCard as dn,
-  ApprovalProofInline as dp,
-  HiMiniCloudArrowDown as dq,
-  fetchPackageFirewallStatus as dr,
-  runPackageAudit as ds,
-  resolveSupplyChainAuditFailure as dt,
-  runPackageSync as du,
-  startPackageFirewallConnect as dv,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as dw,
-  repairSupplyChainProtection as dx,
-  runPackageFirewallAction as dy,
-  parseInterceptProofSnapshot as dz,
+  Surface as d$,
+  HiMiniHome as d0,
+  appSetupTarget as d1,
+  guardActionPresentation as d2,
+  DEFAULT_FILTER_STATE as d3,
+  filterEvidence as d4,
+  sortEvidence as d5,
+  computeMetrics as d6,
+  CommandActivityWorkspace as d7,
+  EvidenceFilterBar as d8,
+  EvidenceInsightStrip as d9,
+  parseInterceptProofSnapshot as dA,
+  activatePackageFirewallRuntime as dB,
+  EntitlementNotice as dC,
+  chooseSupplyChainAuditFolder as dD,
+  fetchReceipts as dE,
+  lazyWorkspace as dF,
+  __vitePreload as dG,
+  scopeLabel as dH,
+  HiMiniCloudArrowUp as dI,
+  HiMiniCodeBracket as dJ,
+  HiMiniClipboardDocument as dK,
+  HiMiniUsers as dL,
+  HiMiniFolder as dM,
+  HiMiniIdentification as dN,
+  StyledSelect as dO,
+  policyActionLabel as dP,
+  createCloudExceptionRequest as dQ,
+  HiMiniPuzzlePiece as dR,
+  fetchCloudExceptions as dS,
+  fetchCloudExceptionRequests as dT,
+  downloadBlob as dU,
+  PaginationControls as dV,
+  PolicyStatField as dW,
+  HiMiniArrowDownTray as dX,
+  HiMiniInbox as dY,
+  HiMiniQueueList as dZ,
+  subscribeDashboardLocation as d_,
+  EvidenceActionList as da,
+  EvidenceActionDetail as db,
+  policyIdentityKey as dc,
+  clearLabelForScope as dd,
+  HiMiniChartBar as de,
+  HiMiniCheckBadge as df,
+  isSupplyChainAuditIncomplete as dg,
+  isSupplyChainAuditEvidence as dh,
+  readString$1 as di,
+  IconActionButton as dj,
+  HiMiniBeaker as dk,
+  ActivationSummary as dl,
+  ActionResultPanel as dm,
+  HiMiniBugAnt as dn,
+  ConnectFlowCard as dp,
+  ApprovalProofInline as dq,
+  HiMiniCloudArrowDown as dr,
+  fetchPackageFirewallStatus as ds,
+  runPackageAudit as dt,
+  resolveSupplyChainAuditFailure as du,
+  runPackageSync as dv,
+  startPackageFirewallConnect as dw,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as dx,
+  repairSupplyChainProtection as dy,
+  runPackageFirewallAction as dz,
   HiMiniCheck as e,
-  resolveMcpPolicyRequest as e0,
-  HiMiniDocumentPlus as e1,
-  HiMiniDocumentMagnifyingGlass as e2,
-  fetchSupplyChainBundle as e3,
-  isSupplyChainScannerEvidence as e4,
-  isBlockedGuardAction as e5,
-  HiMiniShieldExclamation as e6,
-  HiMiniComputerDesktop as e7,
-  HiMiniChevronLeft as e8,
-  HiMiniArrowDown as e9,
-  HiMiniArrowUp as ea,
-  runAuditRemediation as eb,
-  HiMiniSignal as ec,
+  HiMiniEllipsisHorizontal as e0,
+  HiMiniMinus as e1,
+  HiMiniWrench as e2,
+  HiMiniArrowLongRight as e3,
+  HiMiniArrowUpCircle as e4,
+  fetchReleaseFeedApi as e5,
+  fetchMcpPolicyRequest as e6,
+  resolveMcpPolicyRequest as e7,
+  HiMiniDocumentPlus as e8,
+  HiMiniDocumentMagnifyingGlass as e9,
+  fetchSupplyChainBundle as ea,
+  isSupplyChainScannerEvidence as eb,
+  isBlockedGuardAction as ec,
+  HiMiniShieldExclamation as ed,
+  HiMiniComputerDesktop as ee,
+  HiMiniChevronLeft as ef,
+  HiMiniArrowDown as eg,
+  HiMiniArrowUp as eh,
+  runAuditRemediation as ei,
+  HiMiniSignal as ej,
   formatRelativeTime as f,
   HiMiniNoSymbol as g,
   harnessDisplayName as h,

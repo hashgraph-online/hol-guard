@@ -2,7 +2,13 @@
 
 use crate::{assignment_name, executable_basename, CommandSegmentV1, RawSegment};
 
-/// Strips `sudo` wrappers and `timeout`/`command`/`time`/`env` prefixes.
+#[path = "parser_launchers.rs"]
+mod launchers;
+
+pub(crate) use launchers::launcher_program;
+
+/// Strips `sudo` wrappers and `timeout`/`command`/`time`/`env` prefixes, and
+/// the scheduling prefixes `launchers` reads.
 ///
 /// `sudo` changes who runs the program, so it stays in the wrapper chain.
 /// A bare `timeout 30 pytest -q` runs the program this text already names,
@@ -30,6 +36,14 @@ pub(super) fn unwrap_wrappers(
             }
             prefixes += 1;
             environment_names.extend(names);
+            index = next;
+            continue;
+        }
+        if let Some(next) = launchers::launcher_program(tokens, index) {
+            if wrappers.len() + prefixes == 4 {
+                return Err("command_wrapper_limit_exceeded");
+            }
+            prefixes += 1;
             index = next;
             continue;
         }
@@ -185,9 +199,44 @@ pub(super) fn is_file_shell_invocation(executable: Option<&str>, arguments: &[St
     };
     // This represents the interpreter invocation, not the script's contents.
     // It keeps native execution review; shell options and inline code stay opaque.
-    arguments.first().is_some_and(|script| {
-        !script.starts_with('-') && script.ends_with(".sh") && script.len() > 3
-    })
+    arguments
+        .first()
+        .is_some_and(|script| names_a_script_file(script))
+}
+
+/// Whether a first operand names a file this interpreter opens and runs.
+///
+/// A shell runs the file the word names, whatever the name ends in, so the
+/// suffix is not what makes a run readable: `sh ./gradlew test`,
+/// `bash ./mvnw -q test` and `sh ./configure` are the same shape as
+/// `sh ./build.sh`, and a wrapper an ecosystem ships without an extension is
+/// the ordinary way those builds are driven. Requiring `.sh` left every one of
+/// them unmodelled, which is a command no owner can approve rather than a
+/// stricter reading of it.
+///
+/// A word carrying shell syntax is not a file name: what `sh $PLAN`,
+/// `sh "$(pick)"` or `sh build-*` runs is settled by expansion the text does
+/// not fix, so those keep the uncertainty they arrive with, and so does a home
+/// path the shell expands. A directory is not a script either, and a leading
+/// `-` is an option. A space is none of that: the word reaches here already
+/// split, so `sh -- './pre flight.sh'` names one file the shell opens.
+///
+/// Braces and a leading `=` are expansions the word carries inside itself, so
+/// they are refused with the rest of the syntax rather than read as part of a
+/// name. `sh ./build{,}` runs `sh ./build ./build` and `sh =make` runs whatever
+/// `make` resolves to on this `PATH`; reading either as one file would bind an
+/// approval, and the credential scan behind it, to a path that is never opened.
+fn names_a_script_file(script: &str) -> bool {
+    !script.is_empty()
+        && !script.starts_with('-')
+        && !script.starts_with('~')
+        && !script.starts_with('=')
+        && !script.ends_with('/')
+        && script != "."
+        && script != ".."
+        && !script.contains([
+            '$', '*', '?', '[', ']', '{', '}', '`', '"', '\'', '\\', '\n', '\t', '\r', '\0',
+        ])
 }
 
 pub(super) fn is_encoded_stdin_shell(
@@ -292,6 +341,12 @@ mod tests {
             "bash ./preflight.sh fixture",
             "sh -- './pre flight.sh'",
             "zsh ./fixtures/preflight.sh",
+            // The wrappers an ecosystem ships without an extension, which a
+            // suffix test left unmodelled and therefore unapprovable.
+            "sh ./gradlew test",
+            "bash ./mvnw -q test",
+            "sh ./configure --prefix=/tmp/fixture",
+            "zsh scripts/bootstrap",
         ] {
             let model = parse(command);
             assert_eq!(model.confidence, "exact", "{command}");
@@ -302,8 +357,49 @@ mod tests {
                 Some("bash" | "sh" | "zsh")
             ));
         }
-        for command in ["bash -s", "bash -e ./preflight.sh", "sh --", "bash .sh"] {
+        for command in ["bash -s", "bash -e ./preflight.sh", "sh --"] {
             assert_eq!(parse(command).confidence, "uncertain", "{command}");
+        }
+    }
+
+    #[test]
+    fn only_a_plain_file_name_is_read_as_the_script_this_shell_runs() {
+        for script in [
+            "./gradlew",
+            "mvnw",
+            "scripts/bootstrap",
+            "./build.sh",
+            ".sh",
+            "/tmp/fixture/run",
+            "a+b",
+            // Quoting is resolved before this word is read, so a name holding
+            // a space arrives whole.
+            "./pre flight.sh",
+        ] {
+            assert!(super::names_a_script_file(script), "{script}");
+        }
+        // Expansion, quoting and globbing settle what runs after the text is
+        // written, and a directory is not a script.
+        for script in [
+            "",
+            "-c",
+            "$PLAN",
+            "${PLAN}",
+            "\"$(pick)\"",
+            "build-*",
+            "~/run",
+            "scripts/",
+            ".",
+            "..",
+            // Brace expansion rewrites the word into several, so `sh ./build{,}`
+            // runs `./build` twice and never opens the name as written.
+            "build{,}",
+            "./ok{a,b}.sh",
+            "./ok{,.sh}",
+            // zsh resolves a leading `=` against `PATH`.
+            "=make",
+        ] {
+            assert!(!super::names_a_script_file(script), "{script}");
         }
     }
 

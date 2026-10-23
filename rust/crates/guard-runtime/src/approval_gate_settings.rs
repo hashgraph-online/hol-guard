@@ -399,10 +399,7 @@ mod tests {
         let h = std::env::temp_dir().join(format!(
             "gate-set-{tag}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
         std::fs::create_dir_all(&h).unwrap();
         h

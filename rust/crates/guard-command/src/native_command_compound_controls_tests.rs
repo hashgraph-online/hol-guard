@@ -115,10 +115,7 @@ fn explicit_command_permission_settles_only_its_covered_generic_review() {
             .join(format!(
                 "fixture-{}-{}",
                 std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
+                crate::unique_nanos::unique_nanos()
             ));
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("ordinary.txt"), "fixture").unwrap();

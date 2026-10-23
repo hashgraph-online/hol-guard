@@ -94,7 +94,7 @@ def test_refresh_rebinds_the_control_api_to_the_registry_the_authority_was_read_
     monkeypatch.setattr(
         store,
         "read_extension_control_authority_for_registry",
-        lambda registry, *, read_only=False: _protected(registry.catalog_digest),
+        lambda registry, *, read_only=False, **_kwargs: _protected(registry.catalog_digest),
     )
 
     snapshot = _GuardDaemonHttpServer.refresh_extension_control_runtime(server)
@@ -293,7 +293,7 @@ def test_a_read_that_loses_the_race_serves_what_the_writer_installed(
     runtime = ExtensionControlRuntime(_protected(core.catalog_digest))
     api = ExtensionControlApiService(store=store, registry=core, runtime=runtime)
 
-    def read_then_lose_the_race(registry, *, read_only=False):
+    def read_then_lose_the_race(registry, *, read_only=False, **_kwargs):
         # Stands in for an apply committing while this read is in flight.
         runtime.refresh(_protected(registry.catalog_digest, revision=_REVISION + 2))
         return _protected(registry.catalog_digest, revision=_REVISION + 1)
@@ -324,7 +324,7 @@ def test_an_apply_that_reads_a_newer_view_does_not_wait_on_its_own_lock(
     monkeypatch.setattr(
         store,
         "read_extension_control_authority_for_registry",
-        lambda registry, *, read_only=False: _protected(registry.catalog_digest, revision=_REVISION + 1),
+        lambda registry, *, read_only=False, **_kwargs: _protected(registry.catalog_digest, revision=_REVISION + 1),
     )
     result: list[ExtensionControlRuntimeSnapshot] = []
 

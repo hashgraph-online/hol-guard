@@ -21,10 +21,11 @@ from codex_plugin_scanner.guard.catalog_delivery import (
 )
 from codex_plugin_scanner.guard.catalog_delivery.installed_bundle import MANIFEST, descriptor
 from codex_plugin_scanner.guard.catalog_delivery.located_store import LocatedStore
-from codex_plugin_scanner.guard.catalog_delivery.metadata_objects import ObjectStore, encoded, entries
+from codex_plugin_scanner.guard.catalog_delivery.metadata_objects import ObjectStore, encoded
 from codex_plugin_scanner.guard.catalog_delivery.pack_store import PackReader
-from codex_plugin_scanner.guard.catalog_delivery.revocations import RevokedPackError, revocation_key
+from codex_plugin_scanner.guard.catalog_delivery.revocations import RevokedPackError
 from codex_plugin_scanner.guard.extension_builder import native_source_compiler as transport
+from tests.delivery_scripts import script
 from tests.extension_builder_support import use_installed_native_source_compiler
 from tests.guard_extension_control_authority_fixtures import (
     _allow_local_terminal_confirmation as _allow_local_terminal_confirmation,
@@ -33,6 +34,10 @@ from tests.test_extension_delivery_authority import SOURCE, root_value
 from tests.test_native_command_control_binding_publisher import (
     _pinned_integrity_material_and_resident_key as _pinned_integrity_material_and_resident_key,
 )
+
+entries = script("extension_delivery_objects").entries
+revocation_key = script("extension_delivery_revocations").revocation_key
+
 
 BINARY = Path(os.environ.get("NATIVE_PREPARATION_BINARY") or os.environ.get("HOL_GUARD_NATIVE_BINARY", ""))
 
@@ -245,6 +250,7 @@ def test_remote_identity_stability_and_fail_closed(delivery, monkeypatch, tmp_pa
     # An authenticated catalog really grows by one compiler-generated inactive
     # pack, while the earlier native cache representation remains admissible.
     from extension_delivery_assets import AssetPlan
+    from extension_delivery_located_store import LocatedStore as Publisher
     from extension_policy_delivery import policy_transport
 
     located = LocatedStore(tmp_path / "discovery-read", fetch=installed.fetch)
@@ -268,7 +274,7 @@ def test_remote_identity_stability_and_fail_closed(delivery, monkeypatch, tmp_pa
     objects = ObjectStore(tmp_path / "smaller-index")
     index = objects.index(manifests)
     plan = AssetPlan(tmp_path / "smaller-assets", SOURCE)
-    publisher = LocatedStore(tmp_path / "smaller-metadata", publisher=plan)
+    publisher = Publisher(tmp_path / "smaller-metadata", publisher=plan)
     smaller = verified.manifest()
     smaller["publication_id"] = "11.1"
     smaller["directory"]["count"] -= 1
@@ -314,9 +320,10 @@ def test_revocation_and_substituted_metadata(delivery, monkeypatch, tmp_path):
     # Fetch native policy/defaults using the actual package and compiler first.
     base = preparation.prepare(installed, [], cache, engine=engine, now=1500)
     from extension_delivery_assets import AssetPlan
+    from extension_delivery_located_store import LocatedStore as Publisher
 
     plan = AssetPlan(tmp_path / "assets", SOURCE)
-    store = LocatedStore(tmp_path / "metadata", publisher=plan)
+    store = Publisher(tmp_path / "metadata", publisher=plan)
     identity = sorted(base.selected)[0]
     for kind in ("extension", "pack"):
         value = remote(delivery, monkeypatch).manifest()
@@ -370,9 +377,10 @@ def test_missing_corrupt_and_related_metadata_admission(delivery, monkeypatch, t
         preparation.prepare(installed, [], cache, engine=engine, now=1500)
     path.write_bytes(original)
     from extension_delivery_assets import AssetPlan
+    from extension_delivery_located_store import LocatedStore as Publisher
 
     plan = AssetPlan(tmp_path / "mutations", SOURCE)
-    store = LocatedStore(tmp_path / "metadata-mutations", publisher=plan)
+    store = Publisher(tmp_path / "metadata-mutations", publisher=plan)
     located = LocatedStore(tmp_path / "located", fetch=installed.fetch)
     identity = "command.preparation-external"
     records = {}

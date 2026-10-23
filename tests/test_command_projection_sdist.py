@@ -39,6 +39,14 @@ def archive(tmp_path):
         },
         "rust/Cargo.toml": "[workspace]\n",
         "rust/Cargo.lock": "version = 4\n",
+        "rust/build_support/command_identity.rs": "// implementation identity\n",
+        "rust/build_support/command_source_inputs.v2.json": {
+            "schema": "guard.command-source-inputs.v2",
+            "identity_domain": "hol-guard.native-source-implementation.v2",
+            "files": ["build_support/command_identity.rs"],
+            "crates": ["example"],
+        },
+        "rust/crates/example/Cargo.toml": "[package]\n",
         "rust/crates/example/src/lib.rs": "// implementation\n",
     }
     for relative, value in files.items():
@@ -46,7 +54,6 @@ def archive(tmp_path):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(value) if isinstance(value, dict) else value)
     (tmp_path / "contributions/mcp-servers").mkdir()
-    (tmp_path / "rust/build_support").mkdir()
     (tmp_path / "scripts").mkdir()
     for name in ("build_native_command_program.py", "core_command_build_inputs.py"):
         shutil.copyfile(root / "scripts" / name, tmp_path / "scripts" / name)

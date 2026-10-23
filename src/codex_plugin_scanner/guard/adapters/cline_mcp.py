@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 from contextlib import suppress
 from hashlib import sha256
 from pathlib import Path
@@ -14,6 +13,7 @@ from ..launcher import merge_guard_launcher_env
 from ..models import GuardArtifact, HarnessDetection, _redact_arg
 from ..redaction import redact_text
 from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
+from ..stable_guard_cli import guard_cli_launcher
 from .base import HarnessContext
 from .cline_paths import cline_data_dir
 from .mcp_servers import ManagedMcpServer, is_guard_proxy_command, proxy_cli_args, proxy_process_env
@@ -236,7 +236,7 @@ def _proxy_entry(context: HarnessContext, server: ManagedMcpServer) -> dict[str,
         workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
     )
     entry: dict[str, object] = {
-        "command": sys.executable,
+        "command": guard_cli_launcher(),
         "args": args,
         "type": "stdio",
     }

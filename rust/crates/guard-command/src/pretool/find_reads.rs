@@ -60,7 +60,13 @@ pub(super) fn safe_find_listing_arguments(
                             root,
                             context.home_dir,
                             context.cwd,
-                        )))
+                        )
+                        && (!entries_only_bound(expression)
+                            || super::read_paths::home_hidden_walk_clears_stores(
+                                root,
+                                context.home_dir,
+                                context.cwd,
+                            ))))
         })
         && safe_expression(expression)
 }
@@ -90,6 +96,14 @@ fn entries_only(expression: &[String]) -> bool {
     bounded
 }
 
+/// Whether `-type d` is all that bounds the expression, with no `-name`
+/// pattern to decide which paths may be printed.
+fn entries_only_bound(expression: &[String]) -> bool {
+    !expression
+        .iter()
+        .any(|token| matches!(token.as_str(), "-name" | "-iname"))
+}
+
 /// Whether the expression prints only the paths a name pattern selects.
 ///
 /// `find` walks whatever its root holds, but what it prints is what the
@@ -102,10 +116,21 @@ fn entries_only(expression: &[String]) -> bool {
 ///
 /// Alternation and negation both widen the output back to the whole tree
 /// (`-not -name '*.md'` prints everything else), so the expression must be a
-/// plain conjunction, and it must carry at least one pattern: an expression
-/// that only bounds depth or type still enumerates the tree. `-path` and its
+/// plain conjunction, and it must carry at least one pattern. `-path` and its
 /// spellings match the whole path rather than the entry name, so a directory
 /// prefix alone satisfies them and they bound nothing here.
+///
+/// `-type d` bounds the output the same way without naming anything: it
+/// prints directory names and no file, and a secret is a file. The root is
+/// already one tool's own directory rather than a shared one, and
+/// `find ~/.nvm -maxdepth 2 -type d` is the inventory an agent takes of a
+/// toolchain it is about to use. What `-type d` cannot say on its own is
+/// that the tree below holds no store, so a walk bounded by nothing else is
+/// also screened against the root's own entries by
+/// [`super::read_paths::home_hidden_walk_clears_stores`]: a store directly
+/// below the root would otherwise have its own layout printed. A `-name`
+/// pattern in the same expression already decides what may be printed, so a
+/// walk carrying one keeps its existing proof.
 fn match_bounded(expression: &[String]) -> bool {
     let mut bounded = false;
     let mut index = 0;
@@ -130,7 +155,13 @@ fn match_bounded(expression: &[String]) -> bool {
             // pattern after it filters nothing:
             // `find ~/.codex -print -name run.sh` prints the whole tree.
             "-print" | "-print0" if !bounded => return false,
-            "-type" | "-maxdepth" | "-mindepth" => index += 1,
+            "-type" => {
+                if expression.get(index).map(String::as_str) == Some("d") {
+                    bounded = true;
+                }
+                index += 1;
+            }
+            "-maxdepth" | "-mindepth" => index += 1,
             _ => {}
         }
     }

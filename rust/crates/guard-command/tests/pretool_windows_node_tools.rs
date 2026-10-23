@@ -20,12 +20,16 @@ const REVIEW: &str = "native_command_review_required";
 const PACKAGE_REVIEW: &str = "native_package_review";
 /// The read-only tool runs the direct sink stages, in every spelling the
 /// classifier admits.
-const REPORTING: [&str; 7] = [
+const REPORTING: [&str; 11] = [
     "npx eslint src",
     "bunx eslint src",
     "eslint src",
     "npx tsc --noEmit",
     "pnpm exec tsc --noEmit",
+    "npm exec tsc --noEmit",
+    "npm x tsc --noEmit",
+    "npm exec -- tsc --noEmit",
+    "yarn exec eslint src",
     "npx prettier --check src",
     "node node_modules/eslint/bin/eslint.js src",
 ];
@@ -33,10 +37,7 @@ const REPORTING: [&str; 7] = [
 /// A repository with a flat install of each read-only tool, and the declared
 /// home beside it.
 fn project(marker: Option<&str>) -> (PathBuf, PathBuf) {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir().join(format!("guard-win-tool-{}-{nonce}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
     let root = root.canonicalize().unwrap();
@@ -155,7 +156,12 @@ fn an_install_the_runner_cannot_stage_keeps_the_review_prompt() {
 fn a_tool_that_is_not_installed_locally_keeps_the_review_prompt() {
     let (project, home) = project(None);
     std::fs::remove_dir_all(project.join("node_modules/typescript")).unwrap();
-    for command in ["npx tsc --noEmit", "pnpm exec tsc --noEmit"] {
+    for command in [
+        "npx tsc --noEmit",
+        "pnpm exec tsc --noEmit",
+        "npm exec tsc --noEmit",
+        "yarn exec tsc --noEmit",
+    ] {
         assert_eq!(
             weighed(&project, &home, "claude-code", command).1,
             review(command),

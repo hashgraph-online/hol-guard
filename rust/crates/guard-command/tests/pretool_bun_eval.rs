@@ -13,10 +13,7 @@ fn home() -> PathBuf {
         .join(format!(
             "home-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let home = root.join("home");
     std::fs::create_dir_all(home.join("project/sub")).unwrap();
@@ -261,10 +258,7 @@ fn a_repository_that_contains_the_session_home_is_not_proven() {
         .join(format!(
             "contained-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let repo = root.join("workspace");
     let bin = repo.join("node_modules/.bin");

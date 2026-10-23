@@ -178,6 +178,9 @@ def test_windows_refuses_package_scripts_before_planning(windows, tmp_path, comm
         (["./node_modules/.bin/eslint", ".", "--max-warnings", "0"], "eslint", None),
         (["npx", "tsc", "--noEmit"], "tsc", None),
         (["pnpm", "exec", "tsc", "--noEmit", "-p", "tsconfig.json"], "tsc", None),
+        (["npm", "exec", "tsc", "--noEmit"], "tsc", None),
+        (["npm", "x", "--", "eslint", "src"], "eslint", None),
+        (["yarn", "exec", "prettier", "--check", "src"], "prettier", None),
         (["npx", "prettier", "--check", "src"], "prettier", None),
         (["bunx", "prettier", "-l", "."], "prettier", None),
         (

@@ -10,6 +10,7 @@ import { QueueConnectionError } from "./queue-connection-error";
 import { ErrorBoundary } from "./error-boundary";
 import { lazyWorkspace } from "./lazy-workspace";
 import type { BulkGateCredentials } from "./approval-gate-utils";
+import type { QueueGroup } from "./queue-state";
 import type {
   GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
@@ -84,6 +85,7 @@ type LayoutProps = {
   supplyChainHubContent?: ReactNode;
   policyContent?: ReactNode;
   aboutContent?: ReactNode;
+  releasesContent?: ReactNode;
   protectionRepairContent?: ReactNode;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
@@ -102,6 +104,7 @@ type LayoutProps = {
     scope_contract_digest?: string;
   }) => void;
   onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void | Promise<void>;
+  onBulkBlock?: (groups: QueueGroup[]) => Promise<void>;
   onRepair?: () => Promise<void>;
   onClearEvidence?: () => void;
   onRetryResume?: () => void;
@@ -190,6 +193,7 @@ function renderInboxContent(props: LayoutProps): ReactNode {
       onGoHome={props.onGoHome}
       onRetryResume={props.onRetryResume}
       onBulkApprove={props.onBulkApprove}
+      onBulkBlock={props.onBulkBlock}
     />
   );
 }
@@ -225,6 +229,9 @@ function renderViewContent(props: LayoutProps): ReactNode {
   }
   if (props.view === "about") {
     return props.aboutContent ?? null;
+  }
+  if (props.view === "releases") {
+    return props.releasesContent ?? null;
   }
   if (props.view === "policy") {
     return props.policyContent ?? null;

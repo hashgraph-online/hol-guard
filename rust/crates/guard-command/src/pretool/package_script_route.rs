@@ -89,8 +89,8 @@ fn resolved(
     // The same name the build classification reads, so `npm.exe run build`
     // is the package script `npm run build` is and keeps the review prompt.
     let manager = crate::program_basename(segment.executable.as_deref()?);
-    // `pnpm exec <tool>` is a local-bin run, not a script body.
-    let local_run = manager == "pnpm" && arguments.first().is_some_and(|word| word == "exec");
+    // A manager's `exec` spelling runs a local bin, not a script body.
+    let local_run = super::manager_local_bin_arguments(manager, arguments).is_some();
     if matches!(manager, "npm" | "pnpm" | "bun" | "yarn")
         && !local_run
         && (arguments.first().is_some_and(|word| word == "run")
@@ -115,8 +115,8 @@ fn resolved(
 }
 
 /// The entrypoints a read-only tool run stages, for the invocation forms the
-/// classifier admits on Windows: a local bin, `npx`, `bunx`, `pnpm exec`, or
-/// Node started on the tool's own entrypoint.
+/// classifier admits on Windows: a local bin, `npx`, `bunx`, a manager's
+/// `exec` spelling, or Node started on the tool's own entrypoint.
 #[cfg(not(unix))]
 fn staged_tool_entries(program: &str, arguments: &[String]) -> Option<&'static [&'static str]> {
     const ESLINT: &[&str] = &["eslint/bin/eslint.js"];
@@ -125,10 +125,9 @@ fn staged_tool_entries(program: &str, arguments: &[String]) -> Option<&'static [
     const PRETTIER: &[&str] = &super::PRETTIER_ENTRIES;
     let tool = match program {
         "npx" | "bunx" => arguments.first()?.as_str(),
-        // Only the bare `pnpm exec <tool>` spelling is a local-bin run.
-        "pnpm" => arguments
-            .get(1)
-            .filter(|_| arguments.first().is_some_and(|word| word == "exec"))?
+        // Only a manager's bare `exec` spelling is a local-bin run.
+        "npm" | "pnpm" | "yarn" => super::manager_local_bin_arguments(program, arguments)?
+            .first()?
             .as_str(),
         "node" | "nodejs" => {
             let entry = arguments.first()?;

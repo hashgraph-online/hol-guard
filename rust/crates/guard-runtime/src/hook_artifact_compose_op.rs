@@ -186,6 +186,7 @@ fn native_edge_floor(
                 policy_action: edge.policy_action.clone(),
                 minimum_action: edge.minimum_action.clone(),
                 decision: Value::Null,
+                reason_code: edge.reason_code.clone(),
             };
             edge_floor(Some(&explicit), event)
         }
@@ -194,6 +195,7 @@ fn native_edge_floor(
                 policy_action: edge.policy_action.clone(),
                 minimum_action: edge.minimum_action.clone(),
                 decision: edge.decision.clone(),
+                reason_code: edge.reason_code.clone(),
             };
             if default_action == Some("warn") && is_hard(edge_action(&typed)) {
                 // The edge still masks output already priced as warn-tier evidence.

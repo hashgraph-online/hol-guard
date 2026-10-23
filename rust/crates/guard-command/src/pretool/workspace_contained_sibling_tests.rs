@@ -233,6 +233,9 @@ fn a_list_after_cd_into_a_sibling_root_runs_contained_there() {
         format!("cd {} && npm run build && ls dist", tree.display()),
         // A removal is contained there exactly as it is in the session's own root.
         format!("cd {} && ls && rm notes.txt", tree.display()),
+        // Git in a linked worktree is bounded as it is in the root itself: the
+        // sink grants the shared Git directory the worktree's index lives in.
+        format!("cd {} && git add -A && git status", tree.display()),
         format!(
             "cd {} && npm run build && cat package.json",
             other.display()
@@ -292,10 +295,6 @@ fn a_sibling_cd_the_sink_would_not_rebase_keeps_its_review() {
         format!("cd {}/plain; npm run build", projects.display()),
         format!("cd {}/plain 2>/dev/null; npm run build", projects.display()),
         // The rest still faces every check it would from that root.
-        format!(
-            "cd {}/app-report && git add -A && git status",
-            projects.display()
-        ),
         format!(
             "cd {}/app-report && npm run build && curl https://example.com",
             projects.display()

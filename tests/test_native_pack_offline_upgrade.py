@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -26,7 +27,12 @@ from codex_plugin_scanner.guard.daemon import extension_control_prepared as cand
 from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
 from codex_plugin_scanner.guard.extension_builder import native_source_compiler as transport
 from codex_plugin_scanner.guard.native_command_control_authority_store import _key
+from codex_plugin_scanner.guard.native_policy_snapshot_publisher import NativePolicySnapshotPublisher
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityPhase,
+    ExtensionControlAuthorityError,
+)
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.extension_builder_support import use_installed_native_source_compiler
@@ -189,13 +195,101 @@ def test_real_packaged_cross_engine_and_changed_source_offline_api_upgrade(tmp_p
         service.apply({**payload, "proof_id": approved["proof_id"]})
         return activation_store.read(store)
 
-    old = activation_store.read(store)
+    old = None
     old_identity = checkpoint["old_identity"]
-    assert "command.agentbridge" in old.selected
     remote_identity = checkpoint["remote_identity"]
     for version, source in [("3.50.0a1", "a" * 40), ("3.50.0b1", "b" * 40)]:
         authority = install(BINARY, version, source)
+        if old is None:
+            # The upgraded package's runtime opens the record the previous
+            # client left; no record is read without an installed runtime.
+            old = activation_store.read(store)
+            assert "command.agentbridge" in old.selected
+        with store._connect() as connection:
+            saved_decisions = [tuple(row) for row in connection.execute("select * from policy_decisions")]
+        previous_registry = candidates.GeneratedCommandCatalog.from_prepared_packs(activation_store.read(store))
+        controls_before = store.read_extension_control_authority_for_registry(
+            previous_registry, include_managed_controls=False, read_only=True
+        )
+        if old.engine != authority.engine and version == "3.50.0a1":
+            original_anchor = store._write_and_verify_anchor
+            original_migration = store._migrate_extension_control_catalog
+
+            def check_upgrade_boundary(action, _migrate=original_migration, _old=old.engine, **kwargs):
+                changed = copy.deepcopy(action)
+                for layer in changed["layers"]:
+                    layer["controls"] = []
+                with pytest.raises(ExtensionControlAuthorityError, match="changed controls"):
+                    _migrate(changed, **kwargs)
+                for field in ("release", "next_floor"):
+                    evidence = copy.deepcopy(kwargs["installed_upgrade"])
+                    evidence[field] = None
+                    with pytest.raises(ExtensionControlAuthorityError, match="not authorized"):
+                        _migrate(action, **{**kwargs, "installed_upgrade": evidence})
+                # The resident recomputes the managed policy the candidate
+                # was prepared against and refuses evidence that claims another.
+                evidence = copy.deepcopy(kwargs["installed_upgrade"])
+                evidence["managed"] = {"revision": 7, "layers": []}
+                with pytest.raises(ExtensionControlAuthorityError, match="managed policy changed"):
+                    _migrate(action, **{**kwargs, "installed_upgrade": evidence})
+                assert activation_store.read(store).engine == _old
+                return _migrate(action, **kwargs)
+
+            def interrupt_after_anchor(anchor, _write=original_anchor, **kwargs):
+                _write(anchor, **kwargs)
+                if anchor.phase is AuthorityPhase.ANCHORED:
+                    raise RuntimeError("fixture interrupted after anchored upgrade")
+
+            with monkeypatch.context() as interrupted:
+                interrupted.setattr(store, "_write_and_verify_anchor", interrupt_after_anchor)
+                interrupted.setattr(store, "_migrate_extension_control_catalog", check_upgrade_boundary)
+                with pytest.raises(RuntimeError, match="fixture interrupted after anchored upgrade"):
+                    store.migrate_installed_command_pack_authority()
+            assert activation_store.read(store).engine == old.engine
+        with store._connect() as connection:
+            head = connection.execute(
+                "select snapshot_json from extension_control_authority_snapshot where singleton = 1"
+            ).fetchone()
+        # Every upgrade reads a bound head. A catalog migration commits no pack
+        # record of its own, so it carries forward the binding the head already
+        # had; a runtime that dropped it stranded this install on an unbound
+        # head the upgrade refused, and the authority stayed stale with every
+        # hook closed until the next release.
+        assert "command_pack_record_digest" in json.loads(head[0])
         store.migrate_installed_command_pack_authority()
+        recovered = activation_store.read(store)
+        # Startup must recover without asking the user to reapprove unchanged
+        # controls. A successful floor migration alone left the old IR active.
+        assert recovered.engine == authority.engine
+        assert recovered.selected == old.selected
+        recovered_registry = candidates.GeneratedCommandCatalog.from_prepared_packs(recovered)
+        controls_after = store.read_extension_control_authority_for_registry(
+            recovered_registry, include_managed_controls=False, read_only=True
+        )
+        assert [(layer.kind, layer.global_lockdown, layer.controls) for layer in controls_after.layers] == [
+            (layer.kind, layer.global_lockdown, layer.controls) for layer in controls_before.layers
+        ]
+        with store._connect() as connection:
+            assert [tuple(row) for row in connection.execute("select * from policy_decisions")] == saved_decisions
+        lock = store._extension_control_authority_lock
+
+        def shared_only(*args, _lock=lock, **kwargs):
+            assert kwargs.get("shared") is True, "unchanged startup requested an exclusive lease"
+            return _lock(*args, **kwargs)
+
+        with monkeypatch.context() as unchanged:
+            unchanged.setattr(store, "_extension_control_authority_lock", shared_only)
+            store.migrate_installed_command_pack_authority()
+        assert activation_store.read(store).record_digest == recovered.record_digest
+        publisher = NativePolicySnapshotPublisher(store=store)
+        try:
+            publisher._publish_once()
+            assert publisher.is_ready(), publisher.last_error
+        finally:
+            publisher.close()
+        service = ExtensionControlApiService(
+            store=store, registry=recovered_registry, runtime=ExtensionControlRuntime(controls_after)
+        )
         active = apply(version)
         assert active.selected == old.selected
         assert active.engine == authority.engine and active.engine != old.engine

@@ -16,14 +16,23 @@
 mod catalog;
 mod chain;
 mod history;
+mod installed_upgrade;
+#[cfg(test)]
+mod installed_upgrade_tests;
 mod layers;
 mod managed;
+mod managed_seals;
+#[cfg(test)]
+mod managed_seals_tests;
 #[cfg(test)]
 mod managed_tests;
 mod plans;
 #[cfg(test)]
 mod plans_tests;
-mod records;
+pub(crate) mod records;
+mod seals;
+#[cfg(test)]
+mod seals_tests;
 #[cfg(test)]
 mod tests;
 mod view;
@@ -93,8 +102,13 @@ fn evaluate(request: &ExtensionControlAuthorityRequestV1) -> Result<Value, Strin
         "anchor" => anchor_op(request, key),
         "managed_activation" => managed::activation_op(request, key),
         "managed_revision" => managed::revision_op(request, key),
+        "seal_anchor" => seals::seal_anchor_op(request, key),
+        "seal_manifest" => seals::seal_manifest_op(request, key),
+        "seal_managed_revision" => managed_seals::seal_revision_op(request, key),
+        "seal_managed_activation" => managed_seals::seal_activation_op(request, key),
         "read" | "read_composed" | "sync_manifest" | "compose_managed" | "load_manifest"
-        | "validate_chain" | "history" | "commit_plan" | "resume_plan" | "rollback_plan" => {
+        | "validate_chain" | "history" | "commit_plan" | "resume_plan" | "rollback_plan"
+        | "bootstrap_plan" | "migrate_plan" | "restore_plan" => {
             return with_store(request, key);
         }
         _ => return Err(INVALID.to_owned()),
@@ -240,6 +254,9 @@ impl Ctx<'_> {
             "commit_plan" => self.commit_plan(),
             "resume_plan" => self.resume_plan(),
             "rollback_plan" => self.rollback_plan(),
+            "bootstrap_plan" => self.bootstrap_plan(),
+            "migrate_plan" => self.migrate_plan(),
+            "restore_plan" => self.restore_plan(),
             _ => Err(tampered("unsupported extension control authority op")),
         }
     }

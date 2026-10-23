@@ -13,13 +13,20 @@ use std::path::{Component, Path, PathBuf};
 
 /// One `ln` beside read-only peers: `ln -s <a>/node_modules <wt>/node_modules
 /// && ls -la <wt>/ | grep node_module`. The `ln` is still proven on its own,
-/// so a chain only adds peers that print or filter. `cp`, `mv`, `rm`, `cd`,
-/// Git and a second `ln` stay out: nothing may write through, replace or
+/// so a chain only adds peers that print or filter. `cp`, `mv`, `rm`, `cd`
+/// and a second `ln` stay out: nothing may write through, replace or
 /// re-anchor the fresh link before a later step runs. Redirects stay out too,
 /// since a write to `<link>/file` could not be proven before the link exists.
 /// `grep` and `rg` only filter piped output: a file operand could read
 /// through the fresh link, which did not exist when the operand was proven.
-pub(super) fn link_chain(model: &crate::CanonicalCommandV1) -> bool {
+///
+/// Git joins only as `git branch --show-current` (see [`current_branch_read`]).
+/// Branch and tag listings can start a configured pager, and `git status`,
+/// `git diff` and `git grep` read the working tree, so they stay out.
+pub(super) fn link_chain(
+    model: &crate::CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> bool {
     let links = |name: &str| {
         model
             .segments
@@ -30,14 +37,44 @@ pub(super) fn link_chain(model: &crate::CanonicalCommandV1) -> bool {
     model.segments.len() > 1
         && links("ln") == 1
         && links("cp") == 0
-        && super::chain_temporary::plain_chain(model, &["ln"])
+        && super::chain_temporary::plain_chain(model, &["ln", "git"])
         && model.segments.iter().all(|segment| {
             !segment.text.replace("2>&1", "").contains(['>', '<'])
                 && (segment.executable.as_deref() != Some("ln") || segment.pipeline_index == 0)
+                && (segment.executable.as_deref() != Some("git")
+                    || current_branch_read(segment, context))
                 && (!matches!(segment.executable.as_deref(), Some("grep" | "rg"))
                     || (segment.pipeline_index > 0
                         && super::segment_proof::stdin_filter_segment(segment)))
         })
+}
+
+/// `git [-C <dir>] branch --show-current`: Git prints the branch HEAD names
+/// and returns before it sets up a pager, so no configured helper runs
+/// whatever the repository configuration holds, including configuration a
+/// link created earlier in the command makes reachable. The `-C` route must
+/// already hold a repository: a route that does not exist yet could be the
+/// fresh link itself, which the configuration probe never saw.
+pub(super) fn current_branch_read(
+    segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    let Some(inspected) =
+        crate::command_compatibility::git_inspection_arguments(&segment.arguments, context)
+    else {
+        return false;
+    };
+    // The leading options name the route the read runs in; a sensitive one
+    // is refused here as it is for a Git read standing on its own.
+    let leading = &segment.arguments[..segment.arguments.len() - inspected.len()];
+    if leading
+        .iter()
+        .any(|value| value.starts_with(':') || super::sensitive_read_path_argument(value))
+    {
+        return false;
+    }
+    matches!(inspected, [subcommand, flag] if subcommand == "branch" && flag == "--show-current")
+        && !super::git_helper_context::routes_to_no_repository(segment, context)
 }
 
 pub(super) fn safe_symlink_arguments(
@@ -57,9 +94,12 @@ pub(super) fn safe_symlink_arguments(
     let [flag, target, link] = segment.arguments.as_slice() else {
         return false;
     };
-    // Relative targets resolve against the link's directory, which an
-    // agent rarely means; the workspace proof rejects them as well.
-    if flag != "-s" || !target.starts_with('/') || link.starts_with('-') {
+    // A relative target resolves against the directory the link is written
+    // in, which is how a dependency directory is shared between sibling
+    // checkouts (`ln -s ../app-portal/node_modules ../app-portal-fix/node_modules`).
+    // Resolving it that way below leaves every screen on the canonical target,
+    // so the spelling changes nothing a proof depends on.
+    if flag != "-s" || target.is_empty() || target.starts_with('-') || link.starts_with('-') {
         return false;
     }
     let Some(cwd) = context
@@ -86,7 +126,9 @@ pub(super) fn safe_symlink_arguments(
     {
         return false;
     }
-    let Some(target) = fs::canonicalize(parent.join(target))
+    // `written` is the directory holding the new link, which is where the
+    // kernel resolves a relative target from. An absolute target ignores it.
+    let Some(target) = fs::canonicalize(written.join(target))
         .ok()
         .filter(|target| target.is_dir())
     else {

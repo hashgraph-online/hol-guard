@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiError, ExtensionControlApiService
+from codex_plugin_scanner.guard.daemon.extension_control_semantic_preview import build_extension_control_event_targets
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -191,9 +192,12 @@ def test_target_level_event_projection_is_redacted_and_rule_aware(tmp_path: Path
     layer = _layer(
         ExtensionControl(ControlTarget(ControlTargetKind.PERMISSION, permission.permission_id), ControlState.DISABLED)
     )
-    service = _service(tmp_path)
-    semantic = service.preview(_payload((layer,)))["semantic_preview"]
-    targets = service._semantic_event_targets(semantic)
+    targets = build_extension_control_event_targets(
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        (_layer(),),
+        (layer,),
+        guard_home=tmp_path / "guard-home",
+    )
 
     assert len(targets) == 1
     target = targets[0]
@@ -201,10 +205,30 @@ def test_target_level_event_projection_is_redacted_and_rule_aware(tmp_path: Path
     assert len(target["target_ref"]) == 64
     assert target["target_ref"] != permission.permission_id
     assert set(permission.rule_ids).issubset(set(target["affected_rule_ids"]))
+    assert (target["before_explicit"], target["after_explicit"]) == ("inherited", "disabled")
     encoded = json.dumps(targets, sort_keys=True)
     assert permission.permission_id not in encoded
     for secret_marker in ("approval_password", "approval_totp_code", "proof_id", "guard-token", "command_text"):
         assert secret_marker not in encoded
+
+
+def test_unchanged_layers_name_no_event_target(tmp_path: Path) -> None:
+    layer = _layer(
+        ExtensionControl(
+            ControlTarget(ControlTargetKind.PERMISSION, _configurable_permission().permission_id),
+            ControlState.DISABLED,
+        )
+    )
+
+    assert (
+        build_extension_control_event_targets(
+            BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+            (layer,),
+            (layer,),
+            guard_home=tmp_path / "guard-home",
+        )
+        == []
+    )
 
 
 def test_semantic_preview_is_deterministic_and_bounded_json(tmp_path: Path) -> None:

@@ -46,6 +46,22 @@ pub const HOOK_DECISION_ARTIFACT_DIRECTIVE_FEATURE: &str = "hook-decision-artifa
 pub const HOOK_DECISION_ARTIFACT_REVIEW_ROUTE_FEATURE: &str =
     "hook-decision-artifact-review-route-v1";
 
+/// Advertised when a directive carries `json_exit_code`, the status the JSON
+/// document itself exits with. A resident that predates the field omits it,
+/// and the caller decodes a directive by its exact key set, so a reply from
+/// the older resident would be rejected and every hook decision would fail
+/// closed after an upgrade until it is retired. Callers that read a directive
+/// demand this capability so the older resident is replaced instead.
+pub const HOOK_DECISION_JSON_EXIT_CODE_FEATURE: &str = "hook-decision-json-exit-code-v1";
+/// Advertised when `native_edge` carries `reason_code`, the reason the edge
+/// result reached its action. `HookNativeEdgeV1` denies unknown fields, so a
+/// resident that predates the field rejects every composition, settlement and
+/// finalize request that names it, and the hook fails closed as unavailable
+/// until that resident retires. Callers that send an edge demand this
+/// capability so the older resident is replaced instead. It ships with
+/// `hook-decision-json-exit-code-v1`.
+pub const HOOK_DECISION_NATIVE_EDGE_REASON_FEATURE: &str = "hook-decision-native-edge-reason-v1";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct HookDecisionRequestV1 {
@@ -337,6 +353,11 @@ pub struct HookNativeEdgeV1 {
     pub minimum_action: Value,
     #[serde(default)]
     pub decision: Value,
+    /// The edge result's `reason_code`. A network protection review is a match
+    /// against the synced bundle rather than an unproven command, so the floor
+    /// keeps it before execution.
+    #[serde(default)]
+    pub reason_code: Value,
 }
 
 /// What the transport learned after the lookups the composition permitted.
@@ -631,6 +652,11 @@ pub struct HookResponseDirectiveV1 {
     pub emitter: String,
     /// `None` leaves the exit code to the host adapter (grok).
     pub exit_code: Option<i32>,
+    /// The status a JSON-document response carries. A replayed decision
+    /// relaxes `exit_code` to 0 so the fallback envelope acknowledges without
+    /// re-blocking, but the document answers before that branch and keeps the
+    /// harness's own status. `None` leaves it to the host adapter (grok).
+    pub json_exit_code: Option<i32>,
     /// For an exit block: write the stderr explanation only on a non-zero exit.
     pub stderr_only_on_nonzero_exit: bool,
     /// `always`, `with_approval_context`, `never`, or `artifact_codex` (the

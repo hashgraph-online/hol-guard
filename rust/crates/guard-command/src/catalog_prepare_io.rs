@@ -274,9 +274,13 @@ pub(super) fn put_json_with(
         refs = refs
             .chunks(64)
             .map(|parts| {
-                let bytes =
-                    serde_json::to_vec(&json!({"schema":"guard.pack-concat.v1","parts":parts}))
-                        .map_err(|_| "catalog_prepare_json_invalid")?;
+                // A reader admits a concatenation only when its bytes are the
+                // canonical encoding of what they parse to, so sort the keys here
+                // instead of relying on serde_json's selected Map implementation.
+                let bytes = crate::native_command_program::canonical_json_bytes(
+                    &json!({"schema":"guard.pack-concat.v1","parts":parts}),
+                )
+                .map_err(|_| "catalog_prepare_json_invalid")?;
                 put(
                     &bytes,
                     "concat",

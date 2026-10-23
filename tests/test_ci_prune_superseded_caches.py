@@ -168,7 +168,8 @@ def test_runtime_archives_keep_each_distinct_build_environment_and_non_main_ref(
         _entry(8, old_key.replace("-X64-", "-ARM64-"), "2026-10-16T01:00:00Z"),
     ]
     assert superseded(entries) == [1]
-    for malformed in (f"{family}-short", f"{family}-{'b' * 63}", old_key + "\n", old_key.replace("-v2-", "-v3-")):
+    assert cache_family(old_key.replace("-v2-", "-v3-")) == family.replace("-v2-", "-v3-")
+    for malformed in (f"{family}-short", f"{family}-{'b' * 63}", old_key + "\n", old_key.replace("-v2-", "-v4-")):
         assert cache_family(malformed) is None
 
 

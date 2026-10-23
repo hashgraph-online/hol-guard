@@ -13,13 +13,14 @@ from __future__ import annotations
 import logging
 import sqlite3
 from collections.abc import Callable, Mapping
+from pathlib import Path
 from urllib.parse import urlencode
 
 from ..runtime.connector_setup_items import listed_public_items
 from ..runtime.extension_allow_hint import validated_connector_setup_hint
 from ..runtime.extension_control_authority import AuthorityHealth
 from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
-from .approval_extension_recommendation import CAUTION_RISK_CLASSES
+from .approval_extension_recommendation import native_caution_risk_classes
 
 CONNECTOR_RECOMMENDATION_SCHEMA = "guard.approval-connector-recommendation.v1"
 # Pending rows read per page, and the most the group scan reads in total. A
@@ -139,7 +140,12 @@ def build_approval_connector_recommendation(
         _strings(hint["risk_classes"]),
         reader if callable(reader) else (lambda _request_id: None),
     )
-    caution_classes = sorted(risk_classes & CAUTION_RISK_CLASSES)
+    guard_home = getattr(store, "guard_home", None)
+    # The resident decides which classes call for a caution; no answer is an
+    # error here, never "no caution".
+    caution_classes = sorted(
+        native_caution_risk_classes(risk_classes, guard_home=guard_home if isinstance(guard_home, Path) else None)
+    )
     if snapshot.health is not AuthorityHealth.PROTECTED:
         status = "authority_unavailable"
     elif not approval_gate_configured:

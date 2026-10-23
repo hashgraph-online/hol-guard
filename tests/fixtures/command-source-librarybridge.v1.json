@@ -13389,8 +13389,10 @@
       "enabled_extensions": [
         "command.librarybridge"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "fix.exec-wrapper",
       "rule_id": "command.librarybridge.fix"
     },
@@ -13564,8 +13566,10 @@
       "enabled_extensions": [
         "command.librarybridge"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "undo.exec-wrapper",
       "rule_id": "command.librarybridge.undo"
     },
@@ -13739,8 +13743,10 @@
       "enabled_extensions": [
         "command.librarybridge"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "backup.exec-wrapper",
       "rule_id": "command.librarybridge.backup"
     },
@@ -13914,8 +13920,10 @@
       "enabled_extensions": [
         "command.librarybridge"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "lutris-import.exec-wrapper",
       "rule_id": "command.librarybridge.lutris-import"
     },
@@ -14097,8 +14105,10 @@
       "enabled_extensions": [
         "command.librarybridge"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "evidence-record.exec-wrapper",
       "rule_id": "command.librarybridge.evidence-record"
     },
@@ -14272,8 +14282,10 @@
       "enabled_extensions": [
         "command.librarybridge"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "lutris-plan.exec-wrapper",
       "rule_id": "command.librarybridge.lutris-plan"
     },
@@ -14447,8 +14459,10 @@
       "enabled_extensions": [
         "command.librarybridge"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "lutris-forget.exec-wrapper",
       "rule_id": "command.librarybridge.lutris-forget"
     },

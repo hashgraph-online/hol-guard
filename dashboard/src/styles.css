@@ -252,6 +252,22 @@ body {
   animation: guard-tab-enter-reverse 280ms var(--ease-out-quint) both;
 }
 
+/* The release archive is read, selected from and scrolled for minutes at a
+   time, so the surfaces the browser draws for itself are themed too: a
+   selection and a scrollbar in the system's own blue rather than the OS
+   default dropped into the middle of the page. Scoped to the screen that
+   earns it. */
+.guard-releases ::selection {
+  background: color-mix(in srgb, var(--brand-blue) 22%, transparent);
+  color: var(--brand-dark);
+}
+
+.guard-releases {
+  caret-color: var(--brand-blue);
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--brand-dark) 22%, transparent) transparent;
+}
+
 .guard-story-strip {
   background: linear-gradient(135deg, #f8fafc 0%, #ffffff 60%, rgba(85,153,254,0.04) 100%);
 }

@@ -9,10 +9,10 @@ import pytest
 
 from codex_plugin_scanner.guard.catalog_delivery import activation_store, preparation_authority, transport
 from codex_plugin_scanner.guard.catalog_delivery.located_store import LocatedStore
-from codex_plugin_scanner.guard.catalog_delivery.policy_lookup import lookup
 from codex_plugin_scanner.guard.daemon import extension_control_targets as targets
 from codex_plugin_scanner.guard.extension_builder import native_source_compiler
 from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
+from tests.delivery_scripts import script
 from tests.test_native_pack_preparation import (
     BINARY,
     remote,
@@ -32,6 +32,8 @@ from tests.test_native_pack_preparation import (
 from tests.test_native_pack_preparation import (
     test_prepared_dataclass_through_real_daemon_control_commit as existing_enable,
 )
+
+lookup = script("extension_delivery_policy_lookup").lookup
 
 
 def layers(*rows):
@@ -130,16 +132,17 @@ def test_existing_daemon_enable_uses_native_target_operation(delivery, tmp_path,
 @pytest.mark.parametrize("malformed", ["shape", "agreement"])
 def test_authenticated_catalog_shape_and_agreement_errors(delivery, tmp_path, monkeypatch, malformed):
     from extension_delivery_assets import AssetPlan
+    from extension_delivery_containers import member
+    from extension_delivery_located_store import LocatedStore as Publisher
 
     from codex_plugin_scanner.guard.catalog_delivery import authority
-    from codex_plugin_scanner.guard.catalog_delivery.containers import member
     from codex_plugin_scanner.guard.catalog_delivery.metadata_objects import encoded
     from tests.test_extension_delivery_authority import SOURCE
 
     installed, _, _ = delivery
     root = remote(delivery, monkeypatch).manifest()
     plan = AssetPlan(tmp_path / "publication", SOURCE)
-    publisher = LocatedStore(tmp_path / "published", publisher=plan)
+    publisher = Publisher(tmp_path / "published", publisher=plan)
     reader = LocatedStore(tmp_path / "read", fetch=installed.fetch)
     identity = "command.preparation-external"
 

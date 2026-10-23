@@ -15,22 +15,10 @@
 //! `--project` and a `cd` ahead of it, so the environment is looked for where
 //! the command will actually stand.
 //!
-//! `go` joins them for the same reason, with its module cache and toolchain
-//! read-only beside the workspace. A verb only counts as local inside a
-//! module the directory it runs in holds, since outside one go resolves
-//! imports through the proxy. An argument naming a version, and `go list`'s
-//! `-u` and `-versions`, reach that proxy even inside a module, so each
-//! keeps the admission it has.
-//!
-//! Cargo joins them for the verbs that compile what the workspace already
-//! has. Its `build.rs` scripts and proc macros run dependency code like npm
-//! scripts, which is what the sandbox bounds. The crate sources it reads live
-//! in `~/.cargo/registry` and `~/.cargo/git` and its toolchain in `~/.rustup`,
-//! each granted read-only; the run gets its own `CARGO_HOME`, with those two
-//! caches linked in, so cargo takes its locks and writes its own state inside
-//! the private tree. `~/.cargo/config.toml` and `~/.cargo/credentials.toml`
-//! stay out, which keeps registry tokens out of the run, and the fetching
-//! verbs keep the admission they have today.
+//! A Python manager's queries are read by [`super::python`], `go` and `cargo`
+//! by [`super::compiled`], and Composer's and Bundler's project verbs by
+//! [`super::vendored`], each of which this module dispatches to.
+
 use crate::CanonicalCommandV1;
 use std::path::{Path, PathBuf};
 
@@ -44,6 +32,9 @@ pub(super) const NODE_PACKAGE_EXTENSION: &str = "command.package.node";
 const PYTHON_PACKAGE_EXTENSION: &str = "command.package.python";
 const GO_PACKAGE_EXTENSION: &str = "command.package.go";
 const RUST_PACKAGE_EXTENSION: &str = "command.package.rust";
+const PHP_PACKAGE_EXTENSION: &str = "command.package.php";
+const RUBY_PACKAGE_EXTENSION: &str = "command.package.ruby";
+const JVM_PACKAGE_EXTENSION: &str = "command.package.jvm";
 // The package-firewall permissions that mark a manager's use. They record
 // which ecosystem ran, not a risk the run carries, so a local verb below one
 // of them is still ordinary workspace work.
@@ -52,28 +43,18 @@ pub(crate) const PACKAGE_EXTENSIONS: &[&str] = &[
     PYTHON_PACKAGE_EXTENSION,
     GO_PACKAGE_EXTENSION,
     RUST_PACKAGE_EXTENSION,
+    PHP_PACKAGE_EXTENSION,
+    RUBY_PACKAGE_EXTENSION,
+    JVM_PACKAGE_EXTENSION,
 ];
-// The Python managers the package firewall watches. Each installs what it
-// runs, so none of their verbs is local work; `uv` is the exception below.
+// The Python managers the package firewall watches. Each can install what it
+// runs, so only the queries and runner verbs [`super::python`] admits are
+// local work; `uv` is the exception below.
 const PYTHON_MANAGERS: &[&str] = &["pip", "pip3", "pipx", "uvx", "poetry", "pipenv"];
 // uv drives a project environment the workspace holds. Only the verbs that
-// read it are local: `pip`, `add`, `tool` and the rest reach a registry.
-const UV_LOCAL_VERBS: &[&str] = &["run", "tree", "export", "version"];
-// A Go build compiles the sources the module cache already holds and writes
-// its objects to a private build cache. Only the verbs that stay there are
-// local: `get`, `install`, `mod` and `work` reach a registry, and `tool` and
-// `clean` are neither a build nor a read.
-const GO_LOCAL_VERBS: &[&str] = &[
-    "build", "test", "vet", "fmt", "list", "doc", "env", "version", "run", "generate",
-];
-// A cargo build compiles the crate sources the registry cache already holds
-// into a target directory the workspace owns. Only the verbs that stay there
-// are local: `install`, `add`, `update`, `publish` and the rest reach a
-// registry, and `vendor` and `fetch` exist to populate a cache.
-const CARGO_LOCAL_VERBS: &[&str] = &[
-    "build", "b", "test", "t", "check", "c", "clippy", "fmt", "doc", "d", "run", "r", "bench",
-    "tree", "metadata", "version", "nextest",
-];
+// read it are local: `add`, `tool`, `sync` and the rest reach a registry, and
+// `pip` is local for the queries [`super::python`] admits.
+const UV_LOCAL_VERBS: &[&str] = &["run", "tree", "export", "version", "pip"];
 // uv options a local verb may carry: each changes what the verb reads, never
 // what it has to fetch. The list is an allowlist because uv's installing
 // options are many and grow: an option this module does not know keeps the
@@ -211,53 +192,6 @@ const REGISTRY_VERBS: &[&str] = &[
     "doctor",
 ];
 
-/// Whether `go` runs a local verb inside a module that `directory` holds.
-/// Outside a module these verbs read the wider GOPATH, and the sandbox has no
-/// network to resolve a package by import path, so they keep the admission
-/// they have. A version an argument names is one go resolves through the
-/// module proxy, and `go list`'s `-u` and `-versions` ask the proxy what else
-/// a module has, as does `-retracted`, so each of those keeps that admission
-/// too.
-fn local_go_work(arguments: &[&str], directory: &Path) -> bool {
-    let Some((verb, rest)) = arguments.split_first() else {
-        return false;
-    };
-    GO_LOCAL_VERBS.contains(&verb.to_ascii_lowercase().as_str())
-        && !rest
-            .iter()
-            .any(|argument| names_a_go_fetch(argument) || argument.contains('@'))
-        && directory.join("go.mod").is_file()
-}
-
-/// Whether `cargo` runs a local verb against a package that `directory`
-/// holds. A leading `+toolchain` selects a rustup toolchain, which the run
-/// may read. Outside a package cargo has nothing to compile and would search
-/// upward out of the workspace, so those commands keep the admission they
-/// have.
-fn local_cargo_work(arguments: &[&str], directory: &Path) -> bool {
-    arguments
-        .iter()
-        .find(|argument| !argument.starts_with('+'))
-        .is_some_and(|verb| CARGO_LOCAL_VERBS.contains(&verb.to_ascii_lowercase().as_str()))
-        && directory.join("Cargo.toml").is_file()
-}
-
-/// Whether an argument names one of the flags that send a Go verb to a module
-/// proxy. Go's flag package reads one dash or two alike and takes a boolean's
-/// value either as the next argument or behind an `=`, so the name is read
-/// the same way here. A flag turned off by its value still keeps the command
-/// out: a run that names it is one the sandbox has no reason to decide for.
-fn names_a_go_fetch(argument: &str) -> bool {
-    let name = argument.trim_start_matches('-');
-    if !(1..=2).contains(&(argument.len() - name.len())) {
-        return false;
-    }
-    matches!(
-        name.split_once('=').map_or(name, |(name, _)| name),
-        "u" | "versions" | "retracted"
-    )
-}
-
 /// Where a literal `target` below the workspace moves a run that stands in
 /// `directory`, or `None` when the sandbox cannot follow it there.
 fn entered(directory: &Path, target: &str, workspace: &Path) -> Option<PathBuf> {
@@ -380,6 +314,9 @@ fn local_uv_work(arguments: &[&str], directory: &Path, workspace: &Path) -> bool
     if !UV_LOCAL_VERBS.contains(&verb.as_str()) {
         return false;
     }
+    if verb == "pip" {
+        return super::python::local_uv_pip_work(&arguments[uv.verb + 1..], &uv.project);
+    }
     if let Some(operand) = uv.operand.map(|operand| arguments[operand]) {
         // `uv version 2.0.0` writes the version into the project and locks it
         // again, a script named by URL is downloaded before it runs, and a
@@ -394,6 +331,12 @@ fn local_uv_work(arguments: &[&str], directory: &Path, workspace: &Path) -> bool
     uv.project.join(".venv").is_dir()
 }
 
+/// Whether `name` runs Maven, by either spelling the JVM extension claims.
+/// A wrapper is the same build run through the version the project pins.
+fn maven_executable(name: &str) -> bool {
+    matches!(name, "mvn" | "mvnw" | "mvn.cmd" | "mvnw.cmd")
+}
+
 /// Whether any segment runs a manager this module decides a verb for. The
 /// fallback in [`local_package_work`] admits every executable that is not a
 /// package tool, which is right for the other half of a mixed command but is
@@ -405,7 +348,9 @@ pub(super) fn names_a_manager(model: &CanonicalCommandV1) -> bool {
             let name = super::super::executable_basename(executable).to_ascii_lowercase();
             NODE_MANAGERS.contains(&name.as_str())
                 || PYTHON_MANAGERS.contains(&name.as_str())
+                || super::vendored::VENDORED_MANAGERS.contains(&name.as_str())
                 || matches!(name.as_str(), "uv" | "go" | "cargo")
+                || maven_executable(&name)
         })
     })
 }
@@ -449,7 +394,19 @@ pub(super) fn local_package_work(
                 .map(String::as_str)
                 .take_while(|argument| *argument != "--")
                 .collect();
-            return local_go_work(&arguments, directory);
+            return super::compiled::local_go_work(&arguments, directory);
+        }
+        if maven_executable(&name) {
+            let Some(directory) = directory.as_deref() else {
+                return false;
+            };
+            let arguments: Vec<&str> = segment
+                .arguments
+                .iter()
+                .map(String::as_str)
+                .take_while(|argument| *argument != "--")
+                .collect();
+            return super::compiled::local_maven_work(&arguments, directory);
         }
         if name == "cargo" {
             let Some(directory) = directory.as_deref() else {
@@ -461,12 +418,18 @@ pub(super) fn local_package_work(
                 .map(String::as_str)
                 .take_while(|argument| *argument != "--")
                 .collect();
-            return local_cargo_work(&arguments, directory);
+            return super::compiled::local_cargo_work(&arguments, directory);
         }
         if PYTHON_MANAGERS.contains(&name.as_str()) {
-            // Every other Python manager installs what it runs, and `uvx`
-            // fetches the tool it names, so each reaches a registry.
-            return false;
+            let Some(directory) = directory.as_deref() else {
+                return false;
+            };
+            return super::python::local_python_work(
+                &name,
+                executable,
+                &segment.arguments,
+                directory,
+            );
         }
         if name == "uv" {
             let Some(directory) = directory.as_deref() else {
@@ -479,6 +442,18 @@ pub(super) fn local_package_work(
                 .take_while(|argument| *argument != "--")
                 .collect();
             return local_uv_work(&arguments, directory, workspace);
+        }
+        if super::vendored::VENDORED_MANAGERS.contains(&name.as_str()) {
+            let Some(directory) = directory.as_deref() else {
+                return false;
+            };
+            return super::vendored::local_vendored_work(
+                &name,
+                &segment.arguments,
+                &segment.environment_names,
+                directory,
+                workspace,
+            );
         }
         if !NODE_MANAGERS.contains(&name.as_str()) {
             // A runner still here was not proved to start an installed tool,
@@ -531,3 +506,7 @@ mod uv_tests;
 #[cfg(test)]
 #[path = "workspace_contained_go_tests.rs"]
 mod go_tests;
+
+#[cfg(test)]
+#[path = "workspace_contained_maven_tests.rs"]
+mod maven_tests;

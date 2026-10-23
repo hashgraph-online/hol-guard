@@ -307,7 +307,7 @@ def test_feed_discovery_skips_unfinished_and_ambiguous_releases(tmp_path):
 def test_compilation_and_signing_run_beside_packaging_and_registry_verification():
     jobs = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]
     resolvers = ["authorize-release", "resolve-alpha-version", "resolve-canary-version"]
-    assert jobs["precompile-native"]["needs"] == resolvers
+    assert jobs["precompile-native-linux-x64"]["needs"] == resolvers
     assert jobs["resolve-alpha-version"]["needs"] == "authorize-release"
     # Build + Verify adopts the resolved alpha or canary version so it can never differ
     # from the binaries.
@@ -320,13 +320,13 @@ def test_compilation_and_signing_run_beside_packaging_and_registry_verification(
     assert version_step["env"]["RESOLVED_CANARY_VERSION"] == "${{ needs.resolve-canary-version.outputs.version }}"
     assert 'VERSION="$RESOLVED_CANARY_VERSION"' in version_step["run"]
     assert "def pair(" not in version_step["run"]
-    assert jobs["build-native-guard-wheels"]["needs"] == ["build", "precompile-native"]
+    assert jobs["build-native-guard-wheel-linux-x64"]["needs"] == ["build", "precompile-native-linux-x64"]
     assert "publish-main-pypi" not in jobs["publish-main-assets"]["needs"]
     assert jobs["wake-main-core-feeds"]["needs"] == ["build", "publish-main-assets"]
     assert "publish-main-pypi" in jobs["release-main"]["needs"]
     assert "publish-main-assets" in jobs["release-main"]["needs"]
     assert jobs["release-main"]["permissions"]["statuses"] == "write"
-    assert "!cancelled()" in jobs["build-native-guard-wheels"]["if"]
+    assert "!cancelled()" in jobs["build-native-guard-wheel-linux-x64"]["if"]
     receipt = next(
         step for step in jobs["release-main"]["steps"] if step.get("name", "").startswith("Record completed stable")
     )

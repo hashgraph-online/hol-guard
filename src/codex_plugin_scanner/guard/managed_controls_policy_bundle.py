@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from .managed_controls_policy_fields import (
@@ -14,10 +14,10 @@ from .managed_controls_policy_fields import (
     is_mapping,
     parse_managed_controls_policy_fields,
 )
+from .native_extension_control_authority import layers_to_wire
 from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
-    authenticated_record,
     layers_to_json,
 )
 from .runtime.extension_control_contract import ExtensionControlLayer
@@ -26,37 +26,29 @@ MANAGED_CONTROLS_ACTIVE_STATE_KEY = "managed_controls_active"
 MANAGED_CONTROLS_LAST_GOOD_STATE_KEY = "managed_controls_last_good"
 MANAGED_CONTROLS_NEGOTIATED_CAPABILITIES_STATE_KEY = "managed_controls_negotiated_capabilities"
 MANAGED_CONTROLS_REVISION_STATE_KEY = "managed_controls_revision"
-MANAGED_CONTROLS_ACTIVATION_SCHEMA = "guard.managed-controls-activation.v1"
 MANAGED_CONTROLS_ACTIVATION_PURPOSE = "managed-controls.activation"
-MANAGED_CONTROLS_REVISION_PURPOSE = "managed-controls.revision"
 
 
-def build_managed_controls_revision_state(
-    revision: int,
-    *,
-    authority_key: bytes,
-) -> dict[str, object]:
-    """Build an authenticated monotonic epoch for activation and clear publication."""
-
-    if revision < 1:
-        raise ValueError("managed controls revision must be positive")
-    encoded, digest, mac = authenticated_record(
-        {"revision": revision},
-        key=authority_key,
-        purpose=MANAGED_CONTROLS_REVISION_PURPOSE,
-    )
-    return {
-        "revision": revision,
-        "authentication": {"record": encoded, "digest": digest, "mac": mac},
-    }
+def _rule_targets_wire(parsed: ParsedManagedControlsPolicy) -> list[object]:
+    return [
+        {
+            "ruleId": target.rule_id,
+            "extensionIds": list(target.extension_ids),
+            "permissionIds": list(target.permission_ids),
+        }
+        for target in parsed.rule_targets
+    ]
 
 
-def _projection_digest(value: dict[str, object]) -> str:
-    projection = {
-        key: item for key, item in value.items() if key not in {"acknowledgement", "authentication", "complete"}
-    }
-    canonical = json.dumps(projection, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+def _delegated_targets_wire(parsed: ParsedManagedControlsPolicy) -> list[object]:
+    return [
+        {
+            "targetKind": target.target.kind.value,
+            "targetId": target.target.target_id,
+            "enforcementOwner": target.enforcement_owner,
+        }
+        for target in parsed.delegated_targets
+    ]
 
 
 def _observed_projection(parsed, projection: str, *, catalog_digest: str | None) -> str:
@@ -95,22 +87,8 @@ def signed_cloud_extension_projection_json(
         "schemaVersion": "guard.signed-cloud-extension-projection.v1",
         "authorityMode": parsed.authority_mode,
         "signedCloudLayersJson": layers_to_json(signed_layers),
-        "ruleTargets": [
-            {
-                "ruleId": target.rule_id,
-                "extensionIds": list(target.extension_ids),
-                "permissionIds": list(target.permission_ids),
-            }
-            for target in parsed.rule_targets
-        ],
-        "delegatedTargets": [
-            {
-                "targetKind": target.target.kind.value,
-                "targetId": target.target.target_id,
-                "enforcementOwner": target.enforcement_owner,
-            }
-            for target in parsed.delegated_targets
-        ],
+        "ruleTargets": _rule_targets_wire(parsed),
+        "delegatedTargets": _delegated_targets_wire(parsed),
     }
     return json.dumps(projection, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
 
@@ -178,123 +156,44 @@ def parsed_managed_controls_from_validated_policy_bundle(
     )
 
 
-def _activation_metadata(
-    payload: dict[str, object],
-    bundle_version: int,
-) -> tuple[object, str | None, str | None]:
-    metadata = payload.get("metadata")
+_ACTIVATION_BUNDLE_FIELDS = ("bundleHash", "bundleVersion", "workspaceId", "payloadHash", "issuedAt", "expiresAt")
+
+
+def _activation_metadata_wire(metadata: object) -> object:
+    """Only the metadata the resident reads, so unrelated values cannot break the request hash."""
+
     if not is_mapping(metadata):
-        return bundle_version, None, None
-    candidate_revision = metadata.get("revision")
-    revision = (
-        candidate_revision
-        if isinstance(candidate_revision, (str, int)) and not isinstance(candidate_revision, bool)
-        else bundle_version
-    )
-    candidate_id = metadata.get("id")
-    control_set_id = candidate_id.strip()[:160] if isinstance(candidate_id, str) and candidate_id.strip() else None
-    candidate_name = metadata.get("name")
-    control_set_name = (
-        candidate_name.strip()[:160] if isinstance(candidate_name, str) and candidate_name.strip() else None
-    )
-    return revision, control_set_id, control_set_name
+        return None
+    return {name: metadata[name] for name in ("revision", "id", "name") if name in metadata}
 
 
-def build_managed_controls_activation_state(
-    policy_bundle: dict[str, object],
+def managed_controls_activation_input(
+    policy_bundle: Mapping[str, object],
     parsed: ParsedManagedControlsPolicy,
     *,
     base_authority: ExtensionControlAuthorityView,
     managed_revision: int,
     negotiated_capabilities: frozenset[str],
-    authority_key: bytes,
     base_snapshot_digest: str,
 ) -> dict[str, object]:
-    """Build the complete, atomically persisted managed-control projection."""
+    """The verified policy the resident builds, acknowledges and seals into an activation."""
 
-    if managed_revision < 1:
-        raise ValueError("managed_revision must be positive")
-    bundle_hash = policy_bundle.get("bundleHash")
-    bundle_version = policy_bundle.get("bundleVersion")
-    workspace_id = policy_bundle.get("workspaceId")
+    bundle: dict[str, object] = {name: policy_bundle.get(name) for name in _ACTIVATION_BUNDLE_FIELDS}
     payload = policy_bundle.get("payload")
-    if not isinstance(bundle_hash, str) or not bundle_hash:
-        raise ValueError("managed bundle hash is required")
-    if not isinstance(bundle_version, int) or isinstance(bundle_version, bool):
-        raise ValueError("managed bundle version is required")
-    if not isinstance(workspace_id, str) or not workspace_id:
-        raise ValueError("managed workspace binding is required")
-    if not is_mapping(payload):
-        raise ValueError("managed policy payload is required")
-    policy_revision, control_set_id, control_set_name = _activation_metadata(payload, bundle_version)
-
+    bundle["payload"] = (
+        {"metadata": _activation_metadata_wire(payload.get("metadata"))} if is_mapping(payload) else None
+    )
     signed_layers = () if parsed.signed_cloud_layer is None else (parsed.signed_cloud_layer,)
-    rule_targets = [
-        {
-            "ruleId": target.rule_id,
-            "extensionIds": list(target.extension_ids),
-            "permissionIds": list(target.permission_ids),
-        }
-        for target in parsed.rule_targets
-    ]
-    delegated_targets = [
-        {
-            "targetKind": target.target.kind.value,
-            "targetId": target.target.target_id,
-            "enforcementOwner": target.enforcement_owner,
-        }
-        for target in parsed.delegated_targets
-    ]
     activation: dict[str, object] = {
-        "schemaVersion": MANAGED_CONTROLS_ACTIVATION_SCHEMA,
-        "complete": True,
-        "bundleHash": bundle_hash,
-        "bundleVersion": bundle_version,
-        "workspaceId": workspace_id,
-        "catalogDigest": base_authority.catalog_digest,
-        "baseAuthorityRevision": base_authority.revision,
-        "baseAuthoritySnapshotDigest": base_snapshot_digest,
-        "extensionAuthorityRevision": managed_revision,
-        "signedCloudLayersJson": layers_to_json(signed_layers),
-        "ruleTargets": rule_targets,
-        "delegatedTargets": delegated_targets,
-        "provenance": {
-            "bundleHash": bundle_hash,
-            "bundleVersion": bundle_version,
-            "payloadHash": policy_bundle.get("payloadHash"),
-            "policyRevision": policy_revision,
-            "workspaceId": workspace_id,
-        },
-        "negotiatedCapabilities": sorted(negotiated_capabilities),
+        "bundle": bundle,
+        "signed_cloud_layers": layers_to_wire(signed_layers),
+        "rule_targets": _rule_targets_wire(parsed),
+        "delegated_targets": _delegated_targets_wire(parsed),
+        "base_revision": base_authority.revision,
+        "base_snapshot_digest": base_snapshot_digest,
+        "managed_revision": managed_revision,
+        "negotiated_capabilities": sorted(negotiated_capabilities),
     }
     if parsed.authority_mode is not None:
-        activation["authorityMode"] = parsed.authority_mode
-    if control_set_id is not None:
-        activation["controlSetId"] = control_set_id
-    if control_set_name is not None:
-        activation["controlSetName"] = control_set_name
-    for field in ("issuedAt", "expiresAt"):
-        candidate = policy_bundle.get(field)
-        if isinstance(candidate, str) and candidate.strip():
-            activation[field] = candidate.strip()[:80]
-    acknowledgement = {
-        "bundleHash": bundle_hash,
-        "bundleVersion": bundle_version,
-        "policyRevision": policy_revision,
-        "extensionAuthorityRevision": managed_revision,
-        "catalogDigest": base_authority.catalog_digest,
-        "effectiveProjectionDigest": _projection_digest(activation),
-        "status": "applied",
-    }
-    activation["acknowledgement"] = acknowledgement
-    encoded, digest, mac = authenticated_record(
-        {"activation": activation},
-        key=authority_key,
-        purpose=MANAGED_CONTROLS_ACTIVATION_PURPOSE,
-    )
-    activation["authentication"] = {
-        "record": encoded,
-        "digest": digest,
-        "mac": mac,
-    }
+        activation["authority_mode"] = parsed.authority_mode
     return activation

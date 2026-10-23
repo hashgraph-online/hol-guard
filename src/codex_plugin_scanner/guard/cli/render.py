@@ -1517,7 +1517,14 @@ def _render_approvals(console: Console, payload: dict[str, object]) -> None:
         body = Table.grid(padding=(0, 1))
         body.add_row("Status", str(payload["title"]))
         body.add_row("Next step", str(payload["body"]))
-        console.print(Panel(body, title="Approval resolved", border_style="green"))
+        blocked = payload.get("resolution_action") == "block"
+        console.print(
+            Panel(
+                body,
+                title="Approval blocked" if blocked else "Approval resolved",
+                border_style="red" if blocked else "green",
+            )
+        )
         return
     if payload.get("error"):
         console.print(Panel(str(payload.get("error")), title="Approval error", border_style="red"))

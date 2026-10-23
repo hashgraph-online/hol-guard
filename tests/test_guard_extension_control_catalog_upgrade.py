@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard import store_extension_control_authority as auth
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     MANAGED_CONTROLS_ACTIVATION_PURPOSE,
     MANAGED_CONTROLS_ACTIVE_STATE_KEY,
-    _projection_digest,
 )
 from codex_plugin_scanner.guard.native_extension_control import resolve_extension_controls
 from codex_plugin_scanner.guard.runtime import command_extensions
@@ -26,7 +25,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
-    authenticated_record,
     layers_from_json,
     layers_to_json,
 )
@@ -38,6 +36,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ControlTargetKind,
     ResolverFailureCode,
 )
+from tests.extension_control_records import authenticated_record
 from tests.test_guard_extension_control_authority import (
     MemorySecretStore,
     _commit_enabled_permission,
@@ -79,7 +78,7 @@ def _replace_active_managed_control(
     assert isinstance(acknowledgement, dict)
     unsigned["acknowledgement"] = {
         **acknowledgement,
-        "effectiveProjectionDigest": _projection_digest(unsigned),
+        "effectiveProjectionDigest": activation_support.activation_projection_digest(unsigned),
     }
     key = store._authority_key(required=True)  # pyright: ignore[reportPrivateUsage]
     assert key is not None

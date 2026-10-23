@@ -11,7 +11,7 @@ from ..store_extension_control_authority_schema import (
     ensure_extension_control_authority_schema,
     extension_control_schema_marker_is_compatible,
 )
-from . import activation_baseline, lifecycle_store
+from . import activation_baseline, lifecycle, lifecycle_store
 from .activation_record import SCHEMA_V2, admission_is_current, open_record, verify_header
 from .activation_transition import ActivationDraft
 from .state_paths import resolved_guard_home
@@ -48,6 +48,7 @@ def _row(connection):
     return value
 
 
+@lifecycle.one_runtime
 def read(store):
     """Authenticate outside mutation locks; this may read cached metadata pages."""
     with store._connect() as connection:
@@ -75,6 +76,7 @@ def read(store):
     return result
 
 
+@lifecycle.one_runtime
 def header_for_store(store, verifier_key):
     """Small authenticated recheck; never materialize a catalog under a lease."""
     with store._connect() as connection:
@@ -93,6 +95,7 @@ def header_for_store(store, verifier_key):
     return value
 
 
+@lifecycle.one_runtime
 def write_in_transaction(store, connection, draft, *, verifier_key, recorded_at, now=None):
     """Commit with controls after external preparation and lineage checks.
 

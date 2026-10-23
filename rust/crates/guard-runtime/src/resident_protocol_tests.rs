@@ -3,13 +3,9 @@ use guard_contracts::NATIVE_APPROVAL_MAX_BYTES;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 fn policy_store() -> (crate::policy_store::PolicySnapshotStore, PathBuf) {
-    let suffix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let suffix = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir().join(format!(
         "hol-guard-resident-enrollment-test-{}-{suffix}",
         std::process::id()
@@ -176,4 +172,27 @@ fn prompt_capability_is_portable_and_containment_matches_dispatch() {
     assert!(features
         .iter()
         .any(|feature| feature == "cursor-hook-bridge-v1"));
+}
+
+#[test]
+fn command_admission_failures_reach_the_publisher_unchanged() {
+    // A publisher that cannot tell which admission check rejected its binding
+    // has nothing to recover from: every push looks like a malformed request,
+    // so the resident keeps no policy and every prompt fails closed. Each
+    // admission failure must therefore survive the safe-error transport as
+    // itself.
+    // Read the declared vocabulary rather than a hand-picked subset. A list
+    // written out here only ever covers the codes someone remembered to add,
+    // so a newly declared code could be dropped from the transport and no test
+    // would notice.
+    assert!(!guard_contracts::NATIVE_COMMAND_CONTROL_ERROR_CODES.is_empty());
+    for &code in guard_contracts::NATIVE_COMMAND_CONTROL_ERROR_CODES {
+        let response: Value = serde_json::from_slice(&safe_error_response(code, false))
+            .expect("admission error is JSON");
+        assert_eq!(
+            response["error"], code,
+            "{code} was rewritten by the transport"
+        );
+        assert_eq!(response["retryable"], false);
+    }
 }
