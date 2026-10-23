@@ -42,13 +42,113 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  contracts:
+  judge-native:
+    name: Build Native judge artifacts and test plan
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
+    env:
+      # Match ci.yml's test profile. Shipping wheels retain fat LTO; judge
+      # tests need optimized execution without its whole-program link cost.
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: ./.github/actions/ci-job-native-command-build
+      - uses: ./.github/actions/setup-ci-python
+        with:
+          python-version: '3.12.14'
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+      - name: Prepare the same public directory as product CI
+        run: |
+          uv run --no-sync python scripts/prepare_extension_directory.py --compiler rust/target/release/guard-command-source
+          uv run --no-sync python scripts/prepare_extension_directory.py --compiler rust/target/release/guard-command-source --check
+      - name: Upload Native judge evaluators once
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pytest-native-command-evaluators
+          path: |
+            rust/target/release/guard-command-source
+            rust/target/release/hol-guard-runtime
+          if-no-files-found: error
+          retention-days: 1
+      - name: Upload matching Native projections
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pytest-native-command-projections
+          path: |
+            contracts/extensions/
+            docs/guard/extensions/
+            src/codex_plugin_scanner/guard/contracts/data/extensions/
+          if-no-files-found: error
+          retention-days: 1
+      - name: Collect the complete Gauntlet corpus and prove shard coverage
+        env:
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+          HOL_GUARD_NATIVE_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
+          HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
+          HOL_GUARD_NATIVE_REGRESSION: "1"
+        run: |
+          uv run --no-sync pytest --collect-only -q tests/test_guard_gauntlet*.py > gauntlet-judge-collection.txt
+          python - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          import re
+
+          raw = Path('gauntlet-judge-collection.txt').read_text(encoding='utf-8')
+          nodes = sorted(line for line in raw.splitlines() if line.startswith('tests/') and '::' in line)
+          summary = re.search(r'(\d+) tests? collected', raw)
+          if summary is None or len(nodes) != int(summary[1]) or len(set(nodes)) != len(nodes):
+              raise SystemExit('Gauntlet test discovery is incomplete or ambiguous')
+          count = 8
+          shards = [nodes[index::count] for index in range(count)]
+          if any(not shard for shard in shards) or sorted(node for shard in shards for node in shard) != nodes:
+              raise SystemExit('Gauntlet shards do not cover the complete corpus exactly once')
+          root = Path('gauntlet-judge-shards')
+          root.mkdir()
+          pins = []
+          for index, shard in enumerate(shards):
+              value = ('\n'.join(shard) + '\n').encode()
+              (root / f'shard-{index}.txt').write_bytes(value)
+              pins.append({'index': index, 'tests': len(shard), 'sha256': hashlib.sha256(value).hexdigest()})
+          manifest = {'schema': 'gauntlet-judge-shards.v1', 'tests': len(nodes), 'shards': pins}
+          (root / 'manifest.json').write_text(json.dumps(manifest, sort_keys=True) + '\n')
+          print(json.dumps(manifest, sort_keys=True))
+          PY
+      - name: Upload the complete judge test plan
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: gauntlet-judge-shards
+          path: gauntlet-judge-shards/
+          if-no-files-found: error
+          retention-days: 1
+
+  contracts:
+    name: judge (${{ matrix.shard-index }})
+    if: github.event_name == 'pull_request'
+    needs: judge-native
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard-index: [0, 1, 2, 3, 4, 5, 6, 7]
+    env:
+      HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+      HOL_GUARD_NATIVE_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
+      HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
+      HOL_GUARD_NATIVE_REGRESSION: "1"
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: ./.github/actions/setup-ci-python
         with:
@@ -56,9 +156,45 @@ jobs:
           cache-dependency-glob: |
             pyproject.toml
             uv.lock
-      - uses: ./.github/actions/stage-command-projections
-      - name: Test the judge, not the product outcome
-        run: uv run --no-sync pytest -q tests/test_guard_gauntlet*.py
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-native-command-evaluators
+          path: rust/target/release
+      - name: Restore executable modes on the exact build artifacts
+        run: chmod 0755 rust/target/release/guard-command-source rust/target/release/hol-guard-runtime
+      - uses: ./.github/actions/restore-command-projections
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: gauntlet-judge-shards
+          path: gauntlet-judge-shards
+      # Match product CI's verified overlay-capable sandbox. Each worker's
+      # module fixtures and private Guard homes are process-isolated.
+      - uses: ./.github/actions/setup-bubblewrap
+      - name: Run every assigned judge and Native replay test
+        env:
+          SHARD_INDEX: ${{ matrix.shard-index }}
+        run: |
+          shard_file="gauntlet-judge-shards/shard-${SHARD_INDEX}.txt"
+          test -s "$shard_file"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          index = int(os.environ['SHARD_INDEX'])
+          root = Path('gauntlet-judge-shards')
+          manifest = json.loads((root / 'manifest.json').read_bytes())
+          rows = [row for row in manifest['shards'] if row['index'] == index]
+          raw = (root / f'shard-{index}.txt').read_bytes()
+          if (manifest['schema'] != 'gauntlet-judge-shards.v1' or len(rows) != 1
+                  or rows[0]['sha256'] != hashlib.sha256(raw).hexdigest()
+                  or rows[0]['tests'] != len(raw.splitlines())):
+              raise SystemExit('Downloaded Gauntlet shard differs from the producer plan')
+          print(f"Running {rows[0]['tests']} of {manifest['tests']} collected tests in shard {index}")
+          PY
+          uv run --no-sync python scripts/ci/run_projection_shard.py "$shard_file" -- \
+            -q -x -n 2 --dist worksteal --max-worker-restart 0 "@$shard_file"
 
   verify:
     env:

@@ -1,0 +1,437 @@
+{
+  "cases": [
+    {
+      "code": 2,
+      "expected": {
+        "cells": [
+          {
+            "episode_id": "success",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "input-binding",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "injection",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "boundary",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "timeout",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "cancel",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          }
+        ],
+        "errors": [
+          "pipeline-not-started"
+        ],
+        "exit_code": 2,
+        "selected_cases": 6,
+        "status": "invalid-evidence"
+      },
+      "profile": "deterministic",
+      "reason": "pipeline-not-started"
+    },
+    {
+      "code": 130,
+      "expected": {
+        "cells": [
+          {
+            "episode_id": "success",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "input-binding",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "injection",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "boundary",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "timeout",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "cancel",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          }
+        ],
+        "errors": [
+          "pipeline-execution-invalid"
+        ],
+        "exit_code": 130,
+        "selected_cases": 6,
+        "status": "interrupted"
+      },
+      "profile": "deterministic",
+      "reason": "pipeline-execution-invalid"
+    },
+    {
+      "code": 2,
+      "expected": {
+        "cells": [
+          {
+            "episode_id": "episode-4a5e622e82731975dfe5a24aab0b68c7",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-ef5c7100cd4b03e7ab77006dbf2882f6",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-268cfea4db77a374ad61adf61c6eade8",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-588b50bb8c55ad5dc15e966a126ed1b7",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-f0e95df4f66d7712513960603baf4cc9",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-44ddf70edd007ea09a0f3f545f443476",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-4f9d1c2da05d460a1e0dbbf73d9b9a01",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-b8f701fd1468561bbd8699b9cc582fc2",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-a82f7a2e89415f8391c11557c6bebd06",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-55f480945fb89f2700071a2a1ee0f87e",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-5e746ec9a4e4d6dc7f25d6b810740122",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-f8b65231c455a4b4675bf6388e037f6c",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          }
+        ],
+        "errors": [
+          "pipeline-not-started"
+        ],
+        "exit_code": 2,
+        "selected_cases": 12,
+        "status": "invalid-evidence"
+      },
+      "profile": "beta-e2e",
+      "reason": "pipeline-not-started"
+    },
+    {
+      "code": 130,
+      "expected": {
+        "cells": [
+          {
+            "episode_id": "episode-4a5e622e82731975dfe5a24aab0b68c7",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-ef5c7100cd4b03e7ab77006dbf2882f6",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-268cfea4db77a374ad61adf61c6eade8",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-588b50bb8c55ad5dc15e966a126ed1b7",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-f0e95df4f66d7712513960603baf4cc9",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-44ddf70edd007ea09a0f3f545f443476",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-4f9d1c2da05d460a1e0dbbf73d9b9a01",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-b8f701fd1468561bbd8699b9cc582fc2",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-a82f7a2e89415f8391c11557c6bebd06",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-55f480945fb89f2700071a2a1ee0f87e",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-5e746ec9a4e4d6dc7f25d6b810740122",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-f8b65231c455a4b4675bf6388e037f6c",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          }
+        ],
+        "errors": [
+          "pipeline-execution-invalid"
+        ],
+        "exit_code": 130,
+        "selected_cases": 12,
+        "status": "interrupted"
+      },
+      "profile": "beta-e2e",
+      "reason": "pipeline-execution-invalid"
+    },
+    {
+      "code": 2,
+      "expected": {
+        "cells": [
+          {
+            "episode_id": "episode-a9344653386e0c30b3bd63437f283047",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-406531b0394f2bfaba126c5ec3ddfadb",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          }
+        ],
+        "errors": [
+          "pipeline-not-started"
+        ],
+        "exit_code": 2,
+        "selected_cases": 2,
+        "status": "invalid-evidence"
+      },
+      "profile": "feature-ai",
+      "reason": "pipeline-not-started"
+    },
+    {
+      "code": 130,
+      "expected": {
+        "cells": [
+          {
+            "episode_id": "episode-a9344653386e0c30b3bd63437f283047",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-406531b0394f2bfaba126c5ec3ddfadb",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          }
+        ],
+        "errors": [
+          "pipeline-execution-invalid"
+        ],
+        "exit_code": 130,
+        "selected_cases": 2,
+        "status": "interrupted"
+      },
+      "profile": "feature-ai",
+      "reason": "pipeline-execution-invalid"
+    },
+    {
+      "code": 2,
+      "expected": {
+        "cells": [
+          {
+            "episode_id": "episode-a9344653386e0c30b3bd63437f283047",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-406531b0394f2bfaba126c5ec3ddfadb",
+            "reasons": [
+              "pipeline-not-started"
+            ],
+            "status": "failed"
+          }
+        ],
+        "errors": [
+          "pipeline-not-started"
+        ],
+        "exit_code": 2,
+        "selected_cases": 2,
+        "status": "invalid-evidence"
+      },
+      "profile": "feature-ai-protocol",
+      "reason": "pipeline-not-started"
+    },
+    {
+      "code": 130,
+      "expected": {
+        "cells": [
+          {
+            "episode_id": "episode-a9344653386e0c30b3bd63437f283047",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          },
+          {
+            "episode_id": "episode-406531b0394f2bfaba126c5ec3ddfadb",
+            "reasons": [
+              "pipeline-execution-invalid"
+            ],
+            "status": "failed"
+          }
+        ],
+        "errors": [
+          "pipeline-execution-invalid"
+        ],
+        "exit_code": 130,
+        "selected_cases": 2,
+        "status": "interrupted"
+      },
+      "profile": "feature-ai-protocol",
+      "reason": "pipeline-execution-invalid"
+    }
+  ],
+  "source_sha256": {
+    "beta_profile.py": "aee91027c178e5538270dbd57265251ee776458125b9879e44ef083e89c30e9b",
+    "ci_pipeline.py": "ff3ece762f411439385fff86cc9ac017203f93a0ba0e4e63bae16ceceae2529b",
+    "deterministic.py": "e819cf846a62506a3b3523f4b6471d3fb5f85c117578fafc5a1746ef925b06ae"
+  }
+}

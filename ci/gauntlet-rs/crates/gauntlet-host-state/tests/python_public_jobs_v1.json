@@ -1,0 +1,110 @@
+{
+  "limit": {
+    "first_id": "00000000000000cc",
+    "input_count": 205,
+    "last_id": "0000000000000005",
+    "visible_count": 200
+  },
+  "mixed_input": [
+    {
+      "created_at": 10,
+      "id": "0000000000000001",
+      "kind": "release",
+      "local_build": {
+        "error": "compile failed",
+        "log_path": "/var/lib/hol-gauntlet/builds/job/build.log",
+        "source_archive_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "build-failed",
+        "version": "3.48.0"
+      },
+      "private_secret": "do-not-publish",
+      "state": "build-failed",
+      "tag": "v3.48.0"
+    },
+    {
+      "archived_at": 1700000000.0,
+      "created_at": 20,
+      "id": "0000000000000002",
+      "kind": "release",
+      "state": "archived"
+    },
+    {
+      "created_at": 30,
+      "events": [
+        {
+          "at": 25,
+          "message": "Queued",
+          "phase": "admission"
+        }
+      ],
+      "id": "0000000000000003",
+      "kind": "pull-request",
+      "pr": 41,
+      "private_note": "hidden",
+      "sha": "cccccccccccccccccccccccccccccccccccccccc",
+      "state": "queued",
+      "title": "Candidate"
+    },
+    {
+      "archived_at": 0,
+      "created_at": 40,
+      "id": "0000000000000004",
+      "kind": "local-candidate",
+      "phase": "source-fetch",
+      "state": "waiting",
+      "vm_progress": {
+        "phase": "transfer",
+        "status": "running"
+      }
+    }
+  ],
+  "mixed_output": {
+    "archived_jobs": 1,
+    "jobs": [
+      {
+        "created_at": 40,
+        "id": "0000000000000004",
+        "kind": "local-candidate",
+        "phase": "source-fetch",
+        "state": "waiting",
+        "vm_progress": {
+          "phase": "transfer",
+          "status": "running"
+        }
+      },
+      {
+        "created_at": 30,
+        "events": [
+          {
+            "at": 25,
+            "message": "Queued",
+            "phase": "admission"
+          }
+        ],
+        "id": "0000000000000003",
+        "kind": "pull-request",
+        "pr": 41,
+        "sha": "cccccccccccccccccccccccccccccccccccccccc",
+        "state": "queued",
+        "title": "Candidate"
+      },
+      {
+        "created_at": 10,
+        "id": "0000000000000001",
+        "kind": "release",
+        "local_build": {
+          "error": "compile failed",
+          "log_path": "/var/lib/hol-gauntlet/builds/job/build.log",
+          "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "build-failed",
+          "version": "3.48.0"
+        },
+        "state": "build-failed",
+        "tag": "v3.48.0"
+      }
+    ]
+  },
+  "schema": "gauntlet-public-jobs-fixtures.v1",
+  "source_sha256": "04aed1ecf337746caed8fbd011c59926b47b37719add867628ac6b70a5309215"
+}

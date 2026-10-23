@@ -1,0 +1,7 @@
+# OMP transcript ingestion proof
+
+`gauntlet_evidence::parse_omp_transcript` matches the pinned Python `evidence.read_events` acceptance and parsed event values on 15 Python-frozen UTF-8 NDJSON cases. The source is this integration tree's `ci/gauntlet/evidence.py` SHA-256 `b76344cf9700c73abebd5d65a81d34aa28c960b591fc2bc485423afa038efe2f`. The cases include empty/blank input, LF and CRLF records, Unicode line separators and values, missing or nonstring event types, malformed JSON, invalid UTF-8 and a BOM. The Rust parser enforces Python's 16-MiB byte budget and also fails closed on duplicate JSON keys, nonfinite numbers, excessive depth and more than 50,000 events.
+
+`read_omp_transcript` opens one `.jsonl` or `.ndjson` path through canonical no-symlink ancestry, requires an ordinary single-link file, reads bounded bytes from the opened descriptor and verifies an outside SHA-256 pin before parsing. Local tests cover the exact-byte success, wrong/malformed pin, wrong extension, hardlink, symlinked file/parent, changed bytes, parser excess and the 15 Python cases. The Linux ARM64 contracts workflow runs this fixture test.
+
+The outside hash authenticates bytes only to whichever source supplied the pin. A later verifier must bind that pin to a trusted campaign receipt, controller identity, provider accounting, Guard-native observations and effects. This reader does not execute OMP or prove any model-backed result.

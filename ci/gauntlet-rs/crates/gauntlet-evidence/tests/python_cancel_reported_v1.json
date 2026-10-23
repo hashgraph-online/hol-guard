@@ -1,0 +1,1043 @@
+{
+  "ast_function": "_cancel (relative version_options import replaced by a fixed stub)",
+  "base": {
+    "control": {
+      "actual_sdk_bash_success": true,
+      "agent_cgroup_absent": true,
+      "agent_identity": {
+        "pid": 301
+      },
+      "agent_profile_removed": true,
+      "agent_remove_returncode": 0,
+      "canary_initial_sha256": {
+        "agent": "b",
+        "controller": "a",
+        "product": "c"
+      },
+      "canary_terminal_sha256": {
+        "agent": "b",
+        "controller": "a",
+        "product": "c"
+      },
+      "cell_closed_before_explicit_teardown": true,
+      "control_completed": true,
+      "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "detached_child_alive_before_cell_teardown": false,
+      "detached_child_samples": [
+        {
+          "pid": 601
+        }
+      ],
+      "developer_runtime": {
+        "record": {
+          "controller_session_id": "session-001",
+          "errors": [],
+          "native_builtin_audit": {
+            "record": {
+              "contained_transport_observations": [],
+              "product_plane": {
+                "controller_identity": {
+                  "pid": 501
+                },
+                "executions": [],
+                "observations": [
+                  {
+                    "cell_closed": true,
+                    "command": [
+                      "/opt/guard-runtime/bin/python",
+                      "-I",
+                      "-B",
+                      "-m",
+                      "codex_plugin_scanner.cli",
+                      "guard",
+                      "execute-contained-test"
+                    ],
+                    "exception_type": "InterruptedError",
+                    "kernel_process_samples": [
+                      {
+                        "command_sha256": "08f7575d5ad55a558233ea7529f0549821a80bb367c3166a44a92cb8b3996a3e",
+                        "identity": {
+                          "start_time": "42"
+                        },
+                        "pid": 601
+                      }
+                    ],
+                    "kind": "actual-native-capture-failure"
+                  }
+                ],
+                "runtime_prefix": "/opt/guard-runtime",
+                "task_mounts": [
+                  {
+                    "destination": "/runtime/home/project",
+                    "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                  },
+                  {
+                    "destination": "/runtime/home/remote",
+                    "source": "/tmp/gauntlet/session-001/tasks/remote"
+                  },
+                  {
+                    "destination": "/runtime/home/home",
+                    "source": "/tmp/gauntlet/session-001/tasks/home"
+                  }
+                ],
+                "workspace_path": "/runtime/home/project"
+              },
+              "review_summary": {
+                "missing_required_post_call_ids": [
+                  "sdk-contained-control"
+                ],
+                "post_review_counts": {}
+              },
+              "transport_observations": []
+            },
+            "signature": "AYtcx2k0WPRpfDU/3BIcHYA6naqhjQeXPHy/2+07FcBtAz7AhRn0OSWqgw4jsRp6h8uSw4Ex1Zf4H33smxTjDg=="
+          },
+          "native_mcp_audit": {},
+          "prompt_allowed": true,
+          "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schema_version": "5.0",
+          "settings": {
+            "bwrap_sha256": "bwrap",
+            "contained_completion_profile": "guard-contained-completion.v1",
+            "contained_output_binding": "controller-contained-output.v1",
+            "executor_image_id": "executor",
+            "mcp_image_id": "mcp",
+            "package_version": "3.50.0a0",
+            "prefix_digest": "prefix",
+            "private_cell": {
+              "artifact_manifest_sha256": "artifacts",
+              "cpu_profile": "quota-v1",
+              "idmap_runtime": "ubuntu2404-product-v1",
+              "initializer_sha256": "initializer",
+              "native_sha256": "native",
+              "runtime_tree_digest": "runtime"
+            },
+            "source_sha": "source"
+          }
+        },
+        "signature": "gdM8mZeZ8JjoFJjTd1U+eWQPNUs25Qyb6QO0Day/qvi9W2eL3taVR7blRlkFYlpufhCruUMoKMycQKn2kmdgBQ=="
+      },
+      "image_released": true,
+      "kernel_boundary_negatives": {
+        "rows": [
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          },
+          {
+            "denied": true
+          }
+        ]
+      },
+      "late_effect_present": false,
+      "model_exercised": false,
+      "native_contained_boundary_negatives": {
+        "rows": [
+          {
+            "denied": true,
+            "operation": "read",
+            "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+            "surface": "path"
+          },
+          {
+            "denied": true,
+            "operation": "write",
+            "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+            "surface": "path"
+          },
+          {
+            "denied": true,
+            "operation": "read",
+            "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+            "surface": "path"
+          },
+          {
+            "denied": true,
+            "operation": "write",
+            "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+            "surface": "path"
+          },
+          {
+            "denied": true,
+            "operation": "read",
+            "path": "/product/guard/native-boundary-canary.txt",
+            "surface": "path"
+          },
+          {
+            "denied": true,
+            "operation": "write",
+            "path": "/product/guard/native-boundary-canary.txt",
+            "surface": "path"
+          },
+          {
+            "denied": true,
+            "family": 2,
+            "surface": "network"
+          },
+          {
+            "denied": true,
+            "family": 10,
+            "surface": "network"
+          }
+        ]
+      },
+      "native_timeout_seconds": 5,
+      "passed": true,
+      "plane": {
+        "controller_identity": {
+          "pid": 501
+        },
+        "executions": [],
+        "observations": [
+          {
+            "cell_closed": true,
+            "command": [
+              "/opt/guard-runtime/bin/python",
+              "-I",
+              "-B",
+              "-m",
+              "codex_plugin_scanner.cli",
+              "guard",
+              "execute-contained-test"
+            ],
+            "exception_type": "InterruptedError",
+            "kernel_process_samples": [
+              {
+                "command_sha256": "08f7575d5ad55a558233ea7529f0549821a80bb367c3166a44a92cb8b3996a3e",
+                "identity": {
+                  "start_time": "42"
+                },
+                "pid": 601
+              }
+            ],
+            "kind": "actual-native-capture-failure"
+          }
+        ],
+        "runtime_prefix": "/opt/guard-runtime",
+        "task_mounts": [
+          {
+            "destination": "/runtime/home/project",
+            "source": "/tmp/gauntlet/session-001/tasks/checkout"
+          },
+          {
+            "destination": "/runtime/home/remote",
+            "source": "/tmp/gauntlet/session-001/tasks/remote"
+          },
+          {
+            "destination": "/runtime/home/home",
+            "source": "/tmp/gauntlet/session-001/tasks/home"
+          }
+        ],
+        "workspace_path": "/runtime/home/project"
+      },
+      "real_sdk_post_replay_refused": true,
+      "real_sdk_pre_replay_refused": true,
+      "real_sdk_route_replay_refused": true,
+      "request_binding_negatives": [
+        {
+          "case": "duplicate-field",
+          "exit_code": 126,
+          "kernel_process_samples": [
+            {
+              "pid": 701
+            }
+          ],
+          "stderr": "contained_test_authorization_failed: synthetic refusal",
+          "trap_effect_present": false
+        },
+        {
+          "case": "foreign-cwd",
+          "exit_code": 126,
+          "kernel_process_samples": [
+            {
+              "pid": 701
+            }
+          ],
+          "stderr": "contained_test_authorization_failed: synthetic refusal",
+          "trap_effect_present": false
+        },
+        {
+          "case": "foreign-workspace",
+          "exit_code": 126,
+          "kernel_process_samples": [
+            {
+              "pid": 701
+            }
+          ],
+          "stderr": "contained_test_authorization_failed: synthetic refusal",
+          "trap_effect_present": false
+        },
+        {
+          "case": "missing-payload",
+          "exit_code": 126,
+          "kernel_process_samples": [
+            {
+              "pid": 701
+            }
+          ],
+          "stderr": "contained_test_authorization_failed: synthetic refusal",
+          "trap_effect_present": false
+        },
+        {
+          "case": "nonstring-command",
+          "exit_code": 126,
+          "kernel_process_samples": [
+            {
+              "pid": 701
+            }
+          ],
+          "stderr": "contained_test_authorization_failed: synthetic refusal",
+          "trap_effect_present": false
+        },
+        {
+          "case": "wrong-event",
+          "exit_code": 126,
+          "kernel_process_samples": [
+            {
+              "pid": 701
+            }
+          ],
+          "stderr": "contained_test_authorization_failed: synthetic refusal",
+          "trap_effect_present": false
+        },
+        {
+          "case": "wrong-schema",
+          "exit_code": 126,
+          "kernel_process_samples": [
+            {
+              "pid": 701
+            }
+          ],
+          "stderr": "contained_test_authorization_failed: synthetic refusal",
+          "trap_effect_present": false
+        },
+        {
+          "case": "wrong-sha",
+          "exit_code": 126,
+          "kernel_process_samples": [
+            {
+              "pid": 701
+            }
+          ],
+          "stderr": "contained_test_authorization_failed: synthetic refusal",
+          "trap_effect_present": false
+        },
+        {
+          "case": "wrong-tool",
+          "exit_code": 126,
+          "kernel_process_samples": [
+            {
+              "pid": 701
+            }
+          ],
+          "stderr": "contained_test_authorization_failed: synthetic refusal",
+          "trap_effect_present": false
+        }
+      ],
+      "root_imported_product": false,
+      "same_uid_peer_negative": {
+        "denied": true
+      },
+      "sdk_exercised": true,
+      "sdk_gate": {
+        "cleanup_complete": true,
+        "error": null,
+        "observation": {
+          "bound_before_sdk_import": true,
+          "identity": {
+            "pid": 217,
+            "start_time": "42"
+          },
+          "kernel_peer_authenticated": true,
+          "pid": 217
+        }
+      },
+      "sdk_result": {
+        "mcpExercised": true,
+        "modelContextProjection": {
+          "executionTransportRetained": true,
+          "originalCommandVisible": true,
+          "schema": "contained-command-context-control.v1",
+          "scope": "actual SDK synthetic-stream control; no model inference"
+        },
+        "modelExercised": false,
+        "providerRequests": 0,
+        "results": [
+          {},
+          {
+            "content": [
+              {
+                "text": "Exit code: 0\nSTDOUT:\ncaptured synthetic output\n\nSTDERR:\n",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        ],
+        "syntheticStreamCalls": 3
+      }
+    },
+    "expected": {
+      "bwrap_sha256": "bwrap",
+      "executor_image_id": "executor",
+      "mcp_image_id": "mcp",
+      "package_version": "3.50.0a0",
+      "prefix_digest": "prefix",
+      "private_cell": {
+        "artifact_manifest_sha256": "artifacts",
+        "cpu_profile": "quota-v1",
+        "idmap_runtime": "ubuntu2404-product-v1",
+        "initializer_sha256": "initializer",
+        "native_sha256": "native",
+        "runtime_tree_digest": "runtime"
+      },
+      "source_sha": "source"
+    },
+    "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c"
+  },
+  "cases": [
+    {
+      "accepted": true,
+      "control_patch": {},
+      "name": "valid-cancel"
+    },
+    {
+      "accepted": true,
+      "control_patch": {
+        "passed": false
+      },
+      "name": "producer-passed-false-ignored"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "errors": [
+              "error"
+            ]
+          },
+          "signature": "DqsNYhiqhs8yIQ3LZ3AfSJc291pgnjwuMximaaRsa9h3jV9G97Wt4uRNdfR5seBYQjczBLaePU5KtRTstz2oCQ=="
+        }
+      },
+      "error": "cancel setup failed",
+      "name": "setup-errors"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "prompt_allowed": false
+          },
+          "signature": "1CoN3KRDB09CzxkVt3w/1K9idHlPo8BbsnH2xk/fdseMw+P4DDCiKa9Nm8jfHy1uaAry9OvFtjGXGMx3/2liBQ=="
+        }
+      },
+      "error": "cancel setup failed",
+      "name": "prompt-disallowed"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "observations": []
+                }
+              },
+              "signature": "HojPpN26OUOiHJ1j1ua3EwyVfEq0UDK3tesG439H4yf6zb5pS+WvUiZWCQXKv19Ld5zjYs7TkWfzYPBLcR8WAw=="
+            }
+          },
+          "signature": "NvknSYSuM+PS9LVBXGl5YQgQdEjwgfIawazin8SFAbP0k9+VmiXvKfjUv/CiM2LIYjIWzMUttrF3zJ16LColCg=="
+        },
+        "plane": {
+          "observations": []
+        }
+      },
+      "error": "one real interrupted capture required",
+      "name": "missing-interruption"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "observations": [
+                    {
+                      "cell_closed": true,
+                      "command": [
+                        "/opt/guard-runtime/bin/python",
+                        "-I",
+                        "-B",
+                        "-m",
+                        "codex_plugin_scanner.cli",
+                        "guard",
+                        "execute-contained-test"
+                      ],
+                      "exception_type": "TimeoutError",
+                      "kernel_process_samples": [
+                        {
+                          "command_sha256": "08f7575d5ad55a558233ea7529f0549821a80bb367c3166a44a92cb8b3996a3e",
+                          "identity": {
+                            "start_time": "42"
+                          },
+                          "pid": 601
+                        }
+                      ],
+                      "kind": "actual-native-capture-failure"
+                    }
+                  ]
+                }
+              },
+              "signature": "govTAF3FUZLf/vN3ESkjX1uoTZwmJdbLJQ6rCivT3f5y4xTR812letkwOASVLGPeiEoW7+XkSiWXQlHkj0yGBg=="
+            }
+          },
+          "signature": "UW5FQXieEcsUAxhiWvlVsDR31st5+OF63EA8GD9xKVtmKAycUk1y53PPN+bo6ZzHC65CoKbX0fbXVRqdEkDLAg=="
+        },
+        "plane": {
+          "observations": [
+            {
+              "cell_closed": true,
+              "command": [
+                "/opt/guard-runtime/bin/python",
+                "-I",
+                "-B",
+                "-m",
+                "codex_plugin_scanner.cli",
+                "guard",
+                "execute-contained-test"
+              ],
+              "exception_type": "TimeoutError",
+              "kernel_process_samples": [
+                {
+                  "command_sha256": "08f7575d5ad55a558233ea7529f0549821a80bb367c3166a44a92cb8b3996a3e",
+                  "identity": {
+                    "start_time": "42"
+                  },
+                  "pid": 601
+                }
+              ],
+              "kind": "actual-native-capture-failure"
+            }
+          ]
+        }
+      },
+      "error": "one real interrupted capture required",
+      "name": "wrong-exception"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "observations": [
+                    {
+                      "cell_closed": true,
+                      "command": [
+                        "/opt/guard-runtime/bin/python",
+                        "-I",
+                        "-B",
+                        "-m",
+                        "codex_plugin_scanner.cli",
+                        "guard",
+                        "execute-contained-test"
+                      ],
+                      "exception_type": "InterruptedError",
+                      "kernel_process_samples": [],
+                      "kind": "actual-native-capture-failure"
+                    }
+                  ]
+                }
+              },
+              "signature": "OL0N3O6+bWEJ8+ueURe/y8ahK6+9G+K9bUXhdDdtoFC3YxiQBOqDeBourfr+e2yNTOc6ZlJg3xI0NiGg03m/Bw=="
+            }
+          },
+          "signature": "vJc8U7R36ULFimjISnebju7E4qisrWg3ncBGHv3Kv3shon60hZtRvK2pc89r2Yf+HJXP5qVmGsqTSst/PXW0AQ=="
+        },
+        "plane": {
+          "observations": [
+            {
+              "cell_closed": true,
+              "command": [
+                "/opt/guard-runtime/bin/python",
+                "-I",
+                "-B",
+                "-m",
+                "codex_plugin_scanner.cli",
+                "guard",
+                "execute-contained-test"
+              ],
+              "exception_type": "InterruptedError",
+              "kernel_process_samples": [],
+              "kind": "actual-native-capture-failure"
+            }
+          ]
+        }
+      },
+      "error": "interrupted sink requires bounded nonempty outside samples",
+      "name": "empty-kernel-samples"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "observations": [
+                    {
+                      "cell_closed": true,
+                      "command": [
+                        "/opt/guard-runtime/bin/python",
+                        "-I",
+                        "-B",
+                        "-m",
+                        "codex_plugin_scanner.cli",
+                        "guard",
+                        "execute-contained-test"
+                      ],
+                      "exception_type": "InterruptedError",
+                      "kernel_process_samples": [
+                        {
+                          "command_sha256": "08f7575d5ad55a558233ea7529f0549821a80bb367c3166a44a92cb8b3996a3e",
+                          "identity": {
+                            "start_time": "42"
+                          },
+                          "pid": 601
+                        },
+                        {
+                          "command_sha256": "08f7575d5ad55a558233ea7529f0549821a80bb367c3166a44a92cb8b3996a3e",
+                          "identity": {
+                            "start_time": "42"
+                          },
+                          "pid": 601
+                        }
+                      ],
+                      "kind": "actual-native-capture-failure"
+                    }
+                  ]
+                }
+              },
+              "signature": "xwGZlrzy5Tx+owoqgHWjixCHB9g//mvYDLi1dSkJSff5PU/rJiRV11BdoQP5/vCwI9Y1zH0JdfS6hliUXpIrAg=="
+            }
+          },
+          "signature": "xywUF7PM1nWrJotV//wx4Y5D46z40RoeEFt56+FT8tz7HZNl7OT7+07v8CAyUb8+cogPqro1+8hXx5AlvAMyAw=="
+        },
+        "plane": {
+          "observations": [
+            {
+              "cell_closed": true,
+              "command": [
+                "/opt/guard-runtime/bin/python",
+                "-I",
+                "-B",
+                "-m",
+                "codex_plugin_scanner.cli",
+                "guard",
+                "execute-contained-test"
+              ],
+              "exception_type": "InterruptedError",
+              "kernel_process_samples": [
+                {
+                  "command_sha256": "08f7575d5ad55a558233ea7529f0549821a80bb367c3166a44a92cb8b3996a3e",
+                  "identity": {
+                    "start_time": "42"
+                  },
+                  "pid": 601
+                },
+                {
+                  "command_sha256": "08f7575d5ad55a558233ea7529f0549821a80bb367c3166a44a92cb8b3996a3e",
+                  "identity": {
+                    "start_time": "42"
+                  },
+                  "pid": 601
+                }
+              ],
+              "kind": "actual-native-capture-failure"
+            }
+          ]
+        }
+      },
+      "error": "interrupted sink repeats outside process samples",
+      "name": "duplicate-kernel-sample"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "observations": [
+                    {
+                      "cell_closed": true,
+                      "command": [
+                        "/opt/guard-runtime/bin/python",
+                        "-I",
+                        "-B",
+                        "-m",
+                        "codex_plugin_scanner.cli",
+                        "guard",
+                        "other"
+                      ],
+                      "exception_type": "InterruptedError",
+                      "kernel_process_samples": [
+                        {
+                          "command_sha256": "08f7575d5ad55a558233ea7529f0549821a80bb367c3166a44a92cb8b3996a3e",
+                          "identity": {
+                            "start_time": "42"
+                          },
+                          "pid": 601
+                        }
+                      ],
+                      "kind": "actual-native-capture-failure"
+                    }
+                  ]
+                }
+              },
+              "signature": "azhgI+NXJ9HkyhhndnAueZyP3KNBEsn/pnjPorGgCJtnXtEk+VQT/1O78Mo6hcc6R9UrKSmpHpNi7WoY1OihAg=="
+            }
+          },
+          "signature": "xKYeybpxwfC9cKFqJPVrxZw9lyvUNUxaioHWEF45Q5eNll4fdIlgrWR9NQMCQF1DmkPkhledEGdEtTPPVZP7Cg=="
+        },
+        "plane": {
+          "observations": [
+            {
+              "cell_closed": true,
+              "command": [
+                "/opt/guard-runtime/bin/python",
+                "-I",
+                "-B",
+                "-m",
+                "codex_plugin_scanner.cli",
+                "guard",
+                "other"
+              ],
+              "exception_type": "InterruptedError",
+              "kernel_process_samples": [
+                {
+                  "command_sha256": "08f7575d5ad55a558233ea7529f0549821a80bb367c3166a44a92cb8b3996a3e",
+                  "identity": {
+                    "start_time": "42"
+                  },
+                  "pid": 601
+                }
+              ],
+              "kind": "actual-native-capture-failure"
+            }
+          ]
+        }
+      },
+      "error": "interrupted capture must be the actual installed Native contained sink",
+      "name": "wrong-command"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "observations": [
+                    {
+                      "cell_closed": true,
+                      "command": [
+                        "/opt/guard-runtime/bin/python",
+                        "-I",
+                        "-B",
+                        "-m",
+                        "codex_plugin_scanner.cli",
+                        "guard",
+                        "execute-contained-test"
+                      ],
+                      "exception_type": "InterruptedError",
+                      "kernel_process_samples": [
+                        {
+                          "command_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                          "identity": {
+                            "start_time": "42"
+                          },
+                          "pid": 601
+                        }
+                      ],
+                      "kind": "actual-native-capture-failure"
+                    }
+                  ]
+                }
+              },
+              "signature": "zoMzNEZgHoo4oJUTNKZ95CiRl82e60hPHu92KkBr0rchudvh65w5qIZJlX4uTeOAgWdj3JBHkUQWPfM5GeVTBA=="
+            }
+          },
+          "signature": "AnO6mlng0MgCu0tx1QWwTJbM7Wf5iK/3glN3BiQVSX+oAnXybLhFxuEHOgpFWttYzUDi/guUDSTQO4dsohnIBg=="
+        },
+        "plane": {
+          "observations": [
+            {
+              "cell_closed": true,
+              "command": [
+                "/opt/guard-runtime/bin/python",
+                "-I",
+                "-B",
+                "-m",
+                "codex_plugin_scanner.cli",
+                "guard",
+                "execute-contained-test"
+              ],
+              "exception_type": "InterruptedError",
+              "kernel_process_samples": [
+                {
+                  "command_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                  "identity": {
+                    "start_time": "42"
+                  },
+                  "pid": 601
+                }
+              ],
+              "kind": "actual-native-capture-failure"
+            }
+          ]
+        }
+      },
+      "error": "interrupted sink lacks outside command sampling",
+      "name": "wrong-command-hash"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "review_summary": {
+                  "missing_required_post_call_ids": []
+                }
+              },
+              "signature": "XIZKaUVoEaVWvJYI5wSZXA9cJ2KJXgwg1zRlYECibsE85LcbYmhpp9B6ia45ltyYwrYbKORKJCU2e3Cq+cLqAw=="
+            }
+          },
+          "signature": "chiLrnNm+012F16Jyc7MNSr3Rnj1rA/JSbAUFt2yROnfNhDs6DbFN0DNbszMAF+JSArpLr86GohKdtuVcuQ6Cw=="
+        }
+      },
+      "error": "cancelled sink became complete or lost missing Post",
+      "name": "missing-required-post"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "executions": [
+                    {
+                      "exit_code": 0
+                    }
+                  ]
+                }
+              },
+              "signature": "YG5hWbeBBWPsOSQe6G7QOjAXHuuCWw2NjNEDS0+QL94lOTDtQ/qgaz+VTn1aRhxjlz/bMH1/ch+z8xVOX18hDA=="
+            }
+          },
+          "signature": "zZPvv8r9ksDqmBFVG3YIgPuhmmEYA22+nwuEP/McW41uwCNiEmyleZXJJgtycX9MLX050QV8BrvHQoTb6eZZDw=="
+        },
+        "plane": {
+          "executions": [
+            {
+              "exit_code": 0
+            }
+          ]
+        }
+      },
+      "error": "cancelled sink became complete or lost missing Post",
+      "name": "completed-execution"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "observations": [
+                    {
+                      "cell_closed": false,
+                      "command": [
+                        "/opt/guard-runtime/bin/python",
+                        "-I",
+                        "-B",
+                        "-m",
+                        "codex_plugin_scanner.cli",
+                        "guard",
+                        "execute-contained-test"
+                      ],
+                      "exception_type": "InterruptedError",
+                      "kernel_process_samples": [
+                        {
+                          "command_sha256": "08f7575d5ad55a558233ea7529f0549821a80bb367c3166a44a92cb8b3996a3e",
+                          "identity": {
+                            "start_time": "42"
+                          },
+                          "pid": 601
+                        }
+                      ],
+                      "kind": "actual-native-capture-failure"
+                    }
+                  ]
+                }
+              },
+              "signature": "pUvCUsMvgCxBNFseVg7NnT3tEEI0Wsu77C79z5oF7PqVdrT/U0oLwoJZGhUBfiwJzvqqJpbE/jG2f8zuxAupAw=="
+            }
+          },
+          "signature": "1lR4Yd3zQ9iQCDWet5xdJg0OAa0xEEU6X1vtEcoMzBVdHs3ygm1wvIMK+uE833hZsOgCsqK8Wnz0x22LmtnHAw=="
+        },
+        "plane": {
+          "observations": [
+            {
+              "cell_closed": false,
+              "command": [
+                "/opt/guard-runtime/bin/python",
+                "-I",
+                "-B",
+                "-m",
+                "codex_plugin_scanner.cli",
+                "guard",
+                "execute-contained-test"
+              ],
+              "exception_type": "InterruptedError",
+              "kernel_process_samples": [
+                {
+                  "command_sha256": "08f7575d5ad55a558233ea7529f0549821a80bb367c3166a44a92cb8b3996a3e",
+                  "identity": {
+                    "start_time": "42"
+                  },
+                  "pid": 601
+                }
+              ],
+              "kind": "actual-native-capture-failure"
+            }
+          ]
+        }
+      },
+      "error": "active cancellation/descendant/partial evidence incomplete",
+      "name": "cell-still-open"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "cell_closed_before_explicit_teardown": false
+      },
+      "error": "active cancellation/descendant/partial evidence incomplete",
+      "name": "outside-cell-still-open"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "detached_child_alive_before_cell_teardown": true
+      },
+      "error": "active cancellation/descendant/partial evidence incomplete",
+      "name": "detached-child-survived"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "late_effect_present": true
+      },
+      "error": "active cancellation/descendant/partial evidence incomplete",
+      "name": "late-effect"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "detached_child_samples": []
+      },
+      "error": "active cancellation/descendant/partial evidence incomplete",
+      "name": "no-detached-samples"
+    }
+  ],
+  "custody_sha256": "21888997033c9e3629c8490c53e929725ee431b696af9e7bb26f5346cb94864d",
+  "outside_review_summary": {
+    "missing_required_post_call_ids": [
+      "sdk-contained-control"
+    ],
+    "post_review_counts": {}
+  },
+  "schema": "gauntlet-cancel-reported-fixtures.v1",
+  "source_sha256": "22773101b8880d65dd85183a4212ca8efa57897388ad1408ab5d1ad971111427",
+  "stubs": [
+    "verify_product_audit",
+    "verify_private_cell_plane",
+    "_reviews",
+    "_kernel",
+    "review_summary",
+    "version_options"
+  ]
+}

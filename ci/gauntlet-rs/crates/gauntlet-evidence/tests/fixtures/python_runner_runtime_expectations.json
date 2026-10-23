@@ -1,0 +1,385 @@
+{
+  "ci_runner_config_sha256": "90e632c95ee511e048b0803c0a713b11f4ff282aad1c146e1f5ec9e4806e4bc6",
+  "schema": "gauntlet-python-runner-runtime-vectors.v1",
+  "source_commit": "b4efd8171b06d0e13cbe12a077c376ecdc891fd1",
+  "versions": {
+    "1": {
+      "paths": {
+        "bun": "{ASSET_ROOT}/bun",
+        "compiler": "{ASSET_ROOT}/compiler",
+        "guard_prefix": "{ASSET_ROOT}/guard_prefix",
+        "model_manifest": "{ASSET_ROOT}/model_manifest",
+        "native": "{ASSET_ROOT}/native",
+        "node": "{ASSET_ROOT}/node",
+        "policy": "{ASSET_ROOT}/policy",
+        "provider_manifest": "{ASSET_ROOT}/provider_manifest",
+        "sdk": "{ASSET_ROOT}/sdk",
+        "wheel": "{ASSET_ROOT}/wheel"
+      },
+      "runtime": {
+        "artifacts": [
+          "{ASSET_ROOT}/bun",
+          "{ASSET_ROOT}/compiler",
+          "{ASSET_ROOT}/model_manifest",
+          "{ASSET_ROOT}/native",
+          "{ASSET_ROOT}/node",
+          "{ASSET_ROOT}/policy",
+          "{ASSET_ROOT}/provider_manifest",
+          "{ASSET_ROOT}/wheel"
+        ],
+        "base_url": "http://host.lima.internal:8002/v1",
+        "bun": "{ASSET_ROOT}/bun",
+        "guard_bwrap_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "guard_executor_image_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "guard_prefix_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "guard_python": "{ASSET_ROOT}/guard_prefix/bin/python",
+        "guard_source_sha": "1111111111111111111111111111111111111111",
+        "isolated": true,
+        "model_id": "inert-model",
+        "product_isolated": true,
+        "protected_adapter": "hol-guard",
+        "sdk_root": "{ASSET_ROOT}/sdk/@oh-my-pi/pi-coding-agent"
+      }
+    },
+    "2": {
+      "paths": {
+        "bun": "{ASSET_ROOT}/bun",
+        "compiler": "{ASSET_ROOT}/compiler",
+        "guard_prefix": "{ASSET_ROOT}/guard_prefix",
+        "model_manifest": "{ASSET_ROOT}/model_manifest",
+        "native": "{ASSET_ROOT}/native",
+        "node": "{ASSET_ROOT}/node",
+        "policy": "{ASSET_ROOT}/policy",
+        "private_cell": "{ASSET_ROOT}/cell",
+        "provider_manifest": "{ASSET_ROOT}/provider_manifest",
+        "sdk": "{ASSET_ROOT}/sdk",
+        "wheel": "{ASSET_ROOT}/wheel"
+      },
+      "runtime": {
+        "artifacts": [
+          "{ASSET_ROOT}/bun",
+          "{ASSET_ROOT}/compiler",
+          "{ASSET_ROOT}/model_manifest",
+          "{ASSET_ROOT}/native",
+          "{ASSET_ROOT}/node",
+          "{ASSET_ROOT}/policy",
+          "{ASSET_ROOT}/provider_manifest",
+          "{ASSET_ROOT}/wheel"
+        ],
+        "base_url": "http://host.lima.internal:8002/v1",
+        "bun": "{ASSET_ROOT}/bun",
+        "guard_bwrap_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "guard_executor_image_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "guard_prefix_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "guard_private_cell": {
+          "artifact_manifest_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+          "artifacts": "{ASSET_ROOT}/cell",
+          "cpu_profile": "single-core-v1",
+          "idmap_runtime": "ubuntu2404-controller-v1",
+          "initializer_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+          "native_sha256": "cc7ffd8635899405bc188016ec36f38d3575543543184176ef1470268667f188",
+          "runtime_tree_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+          "schema": "developer-private-cell-config.v1"
+        },
+        "guard_python": "{ASSET_ROOT}/guard_prefix/bin/python",
+        "guard_source_sha": "1111111111111111111111111111111111111111",
+        "isolated": true,
+        "model_id": "inert-model",
+        "product_isolated": true,
+        "protected_adapter": "hol-guard",
+        "sdk_root": "{ASSET_ROOT}/sdk/@oh-my-pi/pi-coding-agent"
+      }
+    },
+    "3": {
+      "paths": {
+        "bun": "{ASSET_ROOT}/bun",
+        "compiler": "{ASSET_ROOT}/compiler",
+        "conformance": "{ASSET_ROOT}/conformance.json",
+        "guard_prefix": "{ASSET_ROOT}/guard_prefix",
+        "model_manifest": "{ASSET_ROOT}/model_manifest",
+        "native": "{ASSET_ROOT}/native",
+        "node": "{ASSET_ROOT}/node",
+        "policy": "{ASSET_ROOT}/policy",
+        "private_cell": "{ASSET_ROOT}/cell",
+        "provider_manifest": "{ASSET_ROOT}/provider_manifest",
+        "sdk": "{ASSET_ROOT}/sdk",
+        "wheel": "{ASSET_ROOT}/wheel"
+      },
+      "runtime": {
+        "artifacts": [
+          "{ASSET_ROOT}/bun",
+          "{ASSET_ROOT}/compiler",
+          "{ASSET_ROOT}/model_manifest",
+          "{ASSET_ROOT}/native",
+          "{ASSET_ROOT}/node",
+          "{ASSET_ROOT}/policy",
+          "{ASSET_ROOT}/provider_manifest",
+          "{ASSET_ROOT}/wheel",
+          "{ASSET_ROOT}/conformance.json"
+        ],
+        "base_url": "http://host.lima.internal:8002/v1",
+        "bun": "{ASSET_ROOT}/bun",
+        "guard_bwrap_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "guard_conformance": {
+          "path": "{ASSET_ROOT}/conformance.json",
+          "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        "guard_executor_image_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "guard_prefix_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "guard_private_cell": {
+          "artifact_manifest_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+          "artifacts": "{ASSET_ROOT}/cell",
+          "cpu_profile": "single-core-v1",
+          "idmap_runtime": "ubuntu2404-controller-v1",
+          "initializer_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+          "native_sha256": "cc7ffd8635899405bc188016ec36f38d3575543543184176ef1470268667f188",
+          "runtime_tree_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+          "schema": "developer-private-cell-config.v1"
+        },
+        "guard_python": "{ASSET_ROOT}/guard_prefix/bin/python",
+        "guard_source_sha": "1111111111111111111111111111111111111111",
+        "isolated": true,
+        "model_id": "inert-model",
+        "product_isolated": true,
+        "protected_adapter": "hol-guard",
+        "sdk_root": "{ASSET_ROOT}/sdk/@oh-my-pi/pi-coding-agent"
+      }
+    },
+    "4": {
+      "paths": {
+        "bun": "{ASSET_ROOT}/bun",
+        "compiler": "{ASSET_ROOT}/compiler",
+        "conformance": "{ASSET_ROOT}/conformance.json",
+        "guard_prefix": "{ASSET_ROOT}/guard_prefix",
+        "model_manifest": "{ASSET_ROOT}/model_manifest",
+        "native": "{ASSET_ROOT}/native",
+        "node": "{ASSET_ROOT}/node",
+        "policy": "{ASSET_ROOT}/policy",
+        "private_cell": "{ASSET_ROOT}/cell",
+        "provider_manifest": "{ASSET_ROOT}/provider_manifest",
+        "sdk": "{ASSET_ROOT}/sdk",
+        "wheel": "{ASSET_ROOT}/wheel"
+      },
+      "runtime": {
+        "artifacts": [
+          "{ASSET_ROOT}/bun",
+          "{ASSET_ROOT}/compiler",
+          "{ASSET_ROOT}/model_manifest",
+          "{ASSET_ROOT}/native",
+          "{ASSET_ROOT}/node",
+          "{ASSET_ROOT}/policy",
+          "{ASSET_ROOT}/provider_manifest",
+          "{ASSET_ROOT}/wheel",
+          "{ASSET_ROOT}/conformance.json"
+        ],
+        "base_url": "http://host.lima.internal:8002/v1",
+        "bun": "{ASSET_ROOT}/bun",
+        "guard_bwrap_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "guard_conformance": {
+          "path": "{ASSET_ROOT}/conformance.json",
+          "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        "guard_executor_image_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "guard_prefix_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "guard_private_cell": {
+          "artifact_manifest_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+          "artifacts": "{ASSET_ROOT}/cell",
+          "cpu_profile": "single-core-v1",
+          "idmap_runtime": "ubuntu2404-controller-v1",
+          "initializer_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+          "native_sha256": "cc7ffd8635899405bc188016ec36f38d3575543543184176ef1470268667f188",
+          "runtime_tree_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+          "schema": "developer-private-cell-config.v1"
+        },
+        "guard_python": "{ASSET_ROOT}/guard_prefix/bin/python",
+        "guard_source_sha": "1111111111111111111111111111111111111111",
+        "isolated": true,
+        "model_id": "inert-model",
+        "product_isolated": true,
+        "protected_adapter": "hol-guard",
+        "sdk_root": "{ASSET_ROOT}/sdk/@oh-my-pi/pi-coding-agent"
+      }
+    },
+    "5": {
+      "paths": {
+        "bun": "{ASSET_ROOT}/bun",
+        "compiler": "{ASSET_ROOT}/compiler",
+        "conformance": "{ASSET_ROOT}/conformance.json",
+        "guard_prefix": "{ASSET_ROOT}/guard_prefix",
+        "model_manifest": "{ASSET_ROOT}/model_manifest",
+        "native": "{ASSET_ROOT}/native",
+        "node": "{ASSET_ROOT}/node",
+        "policy": "{ASSET_ROOT}/policy",
+        "private_cell": "{ASSET_ROOT}/cell",
+        "provider_manifest": "{ASSET_ROOT}/provider_manifest",
+        "sdk": "{ASSET_ROOT}/sdk",
+        "wheel": "{ASSET_ROOT}/wheel"
+      },
+      "runtime": {
+        "artifacts": [
+          "{ASSET_ROOT}/bun",
+          "{ASSET_ROOT}/compiler",
+          "{ASSET_ROOT}/model_manifest",
+          "{ASSET_ROOT}/native",
+          "{ASSET_ROOT}/node",
+          "{ASSET_ROOT}/policy",
+          "{ASSET_ROOT}/provider_manifest",
+          "{ASSET_ROOT}/wheel",
+          "{ASSET_ROOT}/conformance.json"
+        ],
+        "base_url": "http://host.lima.internal:8002/v1",
+        "bun": "{ASSET_ROOT}/bun",
+        "guard_bwrap_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "guard_conformance": {
+          "path": "{ASSET_ROOT}/conformance.json",
+          "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        },
+        "guard_executor_image_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "guard_package_version": "3.46.0",
+        "guard_prefix_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "guard_private_cell": {
+          "artifact_manifest_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+          "artifacts": "{ASSET_ROOT}/cell",
+          "cpu_profile": "single-core-v1",
+          "idmap_runtime": "ubuntu2404-controller-v1",
+          "initializer_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+          "native_sha256": "cc7ffd8635899405bc188016ec36f38d3575543543184176ef1470268667f188",
+          "runtime_tree_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+          "schema": "developer-private-cell-config.v1"
+        },
+        "guard_python": "{ASSET_ROOT}/guard_prefix/bin/python",
+        "guard_source_sha": "1111111111111111111111111111111111111111",
+        "isolated": true,
+        "model_id": "inert-model",
+        "product_isolated": true,
+        "protected_adapter": "hol-guard",
+        "sdk_root": "{ASSET_ROOT}/sdk/@oh-my-pi/pi-coding-agent"
+      }
+    },
+    "6": {
+      "paths": {
+        "bun": "{ASSET_ROOT}/bun",
+        "compiler": "{ASSET_ROOT}/compiler",
+        "conformance": "{ASSET_ROOT}/conformance.json",
+        "guard_prefix": "{ASSET_ROOT}/guard_prefix",
+        "model_manifest": "{ASSET_ROOT}/model_manifest",
+        "native": "{ASSET_ROOT}/native",
+        "node": "{ASSET_ROOT}/node",
+        "policy": "{ASSET_ROOT}/policy",
+        "private_cell": "{ASSET_ROOT}/cell",
+        "provider_manifest": "{ASSET_ROOT}/provider_manifest",
+        "sdk": "{ASSET_ROOT}/sdk",
+        "wheel": "{ASSET_ROOT}/wheel"
+      },
+      "runtime": {
+        "artifacts": [
+          "{ASSET_ROOT}/bun",
+          "{ASSET_ROOT}/compiler",
+          "{ASSET_ROOT}/model_manifest",
+          "{ASSET_ROOT}/native",
+          "{ASSET_ROOT}/node",
+          "{ASSET_ROOT}/policy",
+          "{ASSET_ROOT}/provider_manifest",
+          "{ASSET_ROOT}/wheel",
+          "{ASSET_ROOT}/conformance.json"
+        ],
+        "base_url": "http://host.lima.internal:8002/v1",
+        "bun": "{ASSET_ROOT}/bun",
+        "guard_bwrap_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "guard_conformance": {
+          "path": "{ASSET_ROOT}/conformance.json",
+          "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+        },
+        "guard_executor_image_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "guard_package_version": "3.46.0",
+        "guard_prefix_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "guard_private_cell": {
+          "artifact_manifest_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+          "artifacts": "{ASSET_ROOT}/cell",
+          "cpu_profile": "single-core-v1",
+          "idmap_runtime": "ubuntu2404-controller-v1",
+          "initializer_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+          "native_sha256": "cc7ffd8635899405bc188016ec36f38d3575543543184176ef1470268667f188",
+          "runtime_tree_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+          "schema": "developer-private-cell-config.v1"
+        },
+        "guard_python": "{ASSET_ROOT}/guard_prefix/bin/python",
+        "guard_source_sha": "1111111111111111111111111111111111111111",
+        "isolated": true,
+        "mcp_protocol_profiles": {
+          "episode-d6d4f69459bf9df9833bca0e1fb92e63": {
+            "id": "structured-content",
+            "schema": "gauntlet-mcp-protocol-profile.v1"
+          }
+        },
+        "model_id": "inert-model",
+        "product_isolated": true,
+        "protected_adapter": "hol-guard",
+        "sdk_root": "{ASSET_ROOT}/sdk/@oh-my-pi/pi-coding-agent"
+      }
+    },
+    "7": {
+      "paths": {
+        "bun": "{ASSET_ROOT}/bun",
+        "compiler": "{ASSET_ROOT}/compiler",
+        "conformance": "{ASSET_ROOT}/conformance.json",
+        "guard_prefix": "{ASSET_ROOT}/guard_prefix",
+        "model_manifest": "{ASSET_ROOT}/model_manifest",
+        "native": "{ASSET_ROOT}/native",
+        "node": "{ASSET_ROOT}/node",
+        "policy": "{ASSET_ROOT}/policy",
+        "private_cell": "{ASSET_ROOT}/cell",
+        "provider_manifest": "{ASSET_ROOT}/provider_manifest",
+        "sdk": "{ASSET_ROOT}/sdk",
+        "wheel": "{ASSET_ROOT}/wheel"
+      },
+      "runtime": {
+        "artifacts": [
+          "{ASSET_ROOT}/bun",
+          "{ASSET_ROOT}/compiler",
+          "{ASSET_ROOT}/model_manifest",
+          "{ASSET_ROOT}/native",
+          "{ASSET_ROOT}/node",
+          "{ASSET_ROOT}/policy",
+          "{ASSET_ROOT}/provider_manifest",
+          "{ASSET_ROOT}/wheel",
+          "{ASSET_ROOT}/conformance.json"
+        ],
+        "base_url": "http://host.lima.internal:8002/v1",
+        "bun": "{ASSET_ROOT}/bun",
+        "guard_bwrap_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+        "guard_conformance": {
+          "path": "{ASSET_ROOT}/conformance.json",
+          "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+        },
+        "guard_executor_image_id": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "guard_package_version": "3.46.0",
+        "guard_prefix_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "guard_private_cell": {
+          "artifact_manifest_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+          "artifacts": "{ASSET_ROOT}/cell",
+          "cpu_profile": "single-core-v1",
+          "idmap_runtime": "ubuntu2404-controller-v1",
+          "initializer_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+          "native_sha256": "cc7ffd8635899405bc188016ec36f38d3575543543184176ef1470268667f188",
+          "runtime_tree_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+          "schema": "developer-private-cell-config.v1"
+        },
+        "guard_python": "{ASSET_ROOT}/guard_prefix/bin/python",
+        "guard_source_sha": "1111111111111111111111111111111111111111",
+        "isolated": true,
+        "mcp_agent_surfaces": "mcp-agent-surfaces.v1",
+        "mcp_protocol_profiles": {
+          "episode-d6d4f69459bf9df9833bca0e1fb92e63": {
+            "id": "structured-content",
+            "schema": "gauntlet-mcp-protocol-profile.v1"
+          }
+        },
+        "model_id": "inert-model",
+        "product_isolated": true,
+        "protected_adapter": "hol-guard",
+        "sdk_root": "{ASSET_ROOT}/sdk/@oh-my-pi/pi-coding-agent"
+      }
+    }
+  }
+}

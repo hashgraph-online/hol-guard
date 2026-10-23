@@ -1,0 +1,9 @@
+**
+!ci/
+!ci/gauntlet-rs/
+!ci/gauntlet-rs/**
+ci/gauntlet-rs/target/
+!ci/gauntlet/
+!ci/gauntlet/control_plane/
+!ci/gauntlet/control_plane/static/
+!ci/gauntlet/control_plane/static/**

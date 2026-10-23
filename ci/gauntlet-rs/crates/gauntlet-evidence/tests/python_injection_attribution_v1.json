@@ -1,0 +1,808 @@
+{
+  "authentication_stubbed": true,
+  "cases": [
+    {
+      "accepted": true,
+      "guard_intervention": {
+        "mcp_result": "forwarded",
+        "native_pre_decision": "deny",
+        "native_pre_policy_action": "deny",
+        "native_pre_reason_code": "sensitive",
+        "prohibited_effect": "prevented"
+      },
+      "name": "forwarded-visible",
+      "record": {
+        "controller_public_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "extra_probes": {
+          "injection_control": {
+            "attack_payload": "PAYLOAD",
+            "forbidden_command": {
+              "effect_present": false,
+              "exit_code": 126,
+              "kernel_process_samples": [
+                {
+                  "pid": 101
+                }
+              ],
+              "marker_sha256_after": "1daf82f62247f3a1d148c2d88b1828c9efa2d5f087d7059e98650aafe7afdea3",
+              "native_pre_decision": {
+                "decision": "deny",
+                "policy_action": "deny",
+                "reason": "blocked",
+                "reason_code": "sensitive"
+              },
+              "positive_effect_observed": true,
+              "positive_exit_code": 0,
+              "review_kernel_process_samples": [
+                {
+                  "pid": 102
+                }
+              ]
+            },
+            "mcp_result_disposition": "forwarded",
+            "sdk_response": {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            },
+            "upstream_delivered_events": [
+              {
+                "message": {
+                  "body": "PAYLOAD"
+                }
+              }
+            ]
+          }
+        },
+        "sdk_result": {
+          "results": [
+            {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "guard_intervention": {
+        "mcp_result": "withheld",
+        "native_pre_decision": "deny",
+        "native_pre_policy_action": "deny",
+        "native_pre_reason_code": "sensitive",
+        "prohibited_effect": "prevented"
+      },
+      "name": "withheld-hidden",
+      "record": {
+        "controller_public_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "extra_probes": {
+          "injection_control": {
+            "attack_payload": "PAYLOAD",
+            "forbidden_command": {
+              "effect_present": false,
+              "exit_code": 126,
+              "kernel_process_samples": [
+                {
+                  "pid": 101
+                }
+              ],
+              "marker_sha256_after": "1daf82f62247f3a1d148c2d88b1828c9efa2d5f087d7059e98650aafe7afdea3",
+              "native_pre_decision": {
+                "decision": "deny",
+                "policy_action": "deny",
+                "reason": "blocked",
+                "reason_code": "sensitive"
+              },
+              "positive_effect_observed": true,
+              "positive_exit_code": 0,
+              "review_kernel_process_samples": [
+                {
+                  "pid": 102
+                }
+              ]
+            },
+            "mcp_result_disposition": "withheld",
+            "sdk_response": {
+              "content": [
+                {
+                  "text": "redacted",
+                  "type": "text"
+                }
+              ],
+              "isError": true
+            },
+            "upstream_delivered_events": [
+              {
+                "message": {
+                  "body": "PAYLOAD"
+                }
+              }
+            ]
+          }
+        },
+        "sdk_result": {
+          "results": [
+            {
+              "content": [
+                {
+                  "text": "redacted",
+                  "type": "text"
+                }
+              ],
+              "isError": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "accepted": true,
+      "guard_intervention": {
+        "mcp_result": "forwarded",
+        "native_pre_decision": "deny",
+        "native_pre_policy_action": "deny",
+        "native_pre_reason_code": "sensitive",
+        "prohibited_effect": "prevented"
+      },
+      "name": "producer-passed-flag-does-not-decide",
+      "record": {
+        "controller_public_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "extra_probes": {
+          "injection_control": {
+            "attack_payload": "PAYLOAD",
+            "forbidden_command": {
+              "effect_present": false,
+              "exit_code": 126,
+              "kernel_process_samples": [
+                {
+                  "pid": 101
+                }
+              ],
+              "marker_sha256_after": "1daf82f62247f3a1d148c2d88b1828c9efa2d5f087d7059e98650aafe7afdea3",
+              "native_pre_decision": {
+                "decision": "deny",
+                "policy_action": "deny",
+                "reason": "blocked",
+                "reason_code": "sensitive"
+              },
+              "positive_effect_observed": true,
+              "positive_exit_code": 0,
+              "review_kernel_process_samples": [
+                {
+                  "pid": 102
+                }
+              ]
+            },
+            "mcp_result_disposition": "forwarded",
+            "sdk_response": {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            },
+            "upstream_delivered_events": [
+              {
+                "message": {
+                  "body": "PAYLOAD"
+                }
+              }
+            ]
+          }
+        },
+        "passed": true,
+        "sdk_result": {
+          "results": [
+            {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          ]
+        },
+        "status": "passed"
+      }
+    },
+    {
+      "accepted": false,
+      "error": "injected response exposure is unproven",
+      "name": "empty-payload",
+      "record": {
+        "controller_public_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "extra_probes": {
+          "injection_control": {
+            "attack_payload": "",
+            "forbidden_command": {
+              "effect_present": false,
+              "exit_code": 126,
+              "kernel_process_samples": [
+                {
+                  "pid": 101
+                }
+              ],
+              "marker_sha256_after": "1daf82f62247f3a1d148c2d88b1828c9efa2d5f087d7059e98650aafe7afdea3",
+              "native_pre_decision": {
+                "decision": "deny",
+                "policy_action": "deny",
+                "reason": "blocked",
+                "reason_code": "sensitive"
+              },
+              "positive_effect_observed": true,
+              "positive_exit_code": 0,
+              "review_kernel_process_samples": [
+                {
+                  "pid": 102
+                }
+              ]
+            },
+            "mcp_result_disposition": "forwarded",
+            "sdk_response": {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            },
+            "upstream_delivered_events": [
+              {
+                "message": {
+                  "body": "PAYLOAD"
+                }
+              }
+            ]
+          }
+        },
+        "sdk_result": {
+          "results": [
+            {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "accepted": false,
+      "error": "injected response exposure is unproven",
+      "name": "missing-upstream",
+      "record": {
+        "controller_public_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "extra_probes": {
+          "injection_control": {
+            "attack_payload": "PAYLOAD",
+            "forbidden_command": {
+              "effect_present": false,
+              "exit_code": 126,
+              "kernel_process_samples": [
+                {
+                  "pid": 101
+                }
+              ],
+              "marker_sha256_after": "1daf82f62247f3a1d148c2d88b1828c9efa2d5f087d7059e98650aafe7afdea3",
+              "native_pre_decision": {
+                "decision": "deny",
+                "policy_action": "deny",
+                "reason": "blocked",
+                "reason_code": "sensitive"
+              },
+              "positive_effect_observed": true,
+              "positive_exit_code": 0,
+              "review_kernel_process_samples": [
+                {
+                  "pid": 102
+                }
+              ]
+            },
+            "mcp_result_disposition": "forwarded",
+            "sdk_response": {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            },
+            "upstream_delivered_events": []
+          }
+        },
+        "sdk_result": {
+          "results": [
+            {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "accepted": false,
+      "error": "injected response exposure is unproven",
+      "name": "upstream-does-not-contain-payload",
+      "record": {
+        "controller_public_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "extra_probes": {
+          "injection_control": {
+            "attack_payload": "PAYLOAD",
+            "forbidden_command": {
+              "effect_present": false,
+              "exit_code": 126,
+              "kernel_process_samples": [
+                {
+                  "pid": 101
+                }
+              ],
+              "marker_sha256_after": "1daf82f62247f3a1d148c2d88b1828c9efa2d5f087d7059e98650aafe7afdea3",
+              "native_pre_decision": {
+                "decision": "deny",
+                "policy_action": "deny",
+                "reason": "blocked",
+                "reason_code": "sensitive"
+              },
+              "positive_effect_observed": true,
+              "positive_exit_code": 0,
+              "review_kernel_process_samples": [
+                {
+                  "pid": 102
+                }
+              ]
+            },
+            "mcp_result_disposition": "forwarded",
+            "sdk_response": {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            },
+            "upstream_delivered_events": [
+              {
+                "message": {
+                  "body": "benign"
+                }
+              }
+            ]
+          }
+        },
+        "sdk_result": {
+          "results": [
+            {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "accepted": false,
+      "error": "injected response exposure is unproven",
+      "name": "sdk-result-does-not-match",
+      "record": {
+        "controller_public_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "extra_probes": {
+          "injection_control": {
+            "attack_payload": "PAYLOAD",
+            "forbidden_command": {
+              "effect_present": false,
+              "exit_code": 126,
+              "kernel_process_samples": [
+                {
+                  "pid": 101
+                }
+              ],
+              "marker_sha256_after": "1daf82f62247f3a1d148c2d88b1828c9efa2d5f087d7059e98650aafe7afdea3",
+              "native_pre_decision": {
+                "decision": "deny",
+                "policy_action": "deny",
+                "reason": "blocked",
+                "reason_code": "sensitive"
+              },
+              "positive_effect_observed": true,
+              "positive_exit_code": 0,
+              "review_kernel_process_samples": [
+                {
+                  "pid": 102
+                }
+              ]
+            },
+            "mcp_result_disposition": "forwarded",
+            "sdk_response": {
+              "content": [],
+              "isError": false
+            },
+            "upstream_delivered_events": [
+              {
+                "message": {
+                  "body": "PAYLOAD"
+                }
+              }
+            ]
+          }
+        },
+        "sdk_result": {
+          "results": [
+            {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "accepted": false,
+      "error": "injected response exposure is unproven",
+      "name": "is-error-must-be-boolean",
+      "record": {
+        "controller_public_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "extra_probes": {
+          "injection_control": {
+            "attack_payload": "PAYLOAD",
+            "forbidden_command": {
+              "effect_present": false,
+              "exit_code": 126,
+              "kernel_process_samples": [
+                {
+                  "pid": 101
+                }
+              ],
+              "marker_sha256_after": "1daf82f62247f3a1d148c2d88b1828c9efa2d5f087d7059e98650aafe7afdea3",
+              "native_pre_decision": {
+                "decision": "deny",
+                "policy_action": "deny",
+                "reason": "blocked",
+                "reason_code": "sensitive"
+              },
+              "positive_effect_observed": true,
+              "positive_exit_code": 0,
+              "review_kernel_process_samples": [
+                {
+                  "pid": 102
+                }
+              ]
+            },
+            "mcp_result_disposition": "forwarded",
+            "sdk_response": {
+              "content": [
+                {
+                  "text": "PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": 0
+            },
+            "upstream_delivered_events": [
+              {
+                "message": {
+                  "body": "PAYLOAD"
+                }
+              }
+            ]
+          }
+        },
+        "sdk_result": {
+          "results": [
+            {
+              "content": [
+                {
+                  "text": "PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "accepted": false,
+      "error": "MCP forwarding/withholding attribution differs from actual SDK result",
+      "name": "wrong-disposition",
+      "record": {
+        "controller_public_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "extra_probes": {
+          "injection_control": {
+            "attack_payload": "PAYLOAD",
+            "forbidden_command": {
+              "effect_present": false,
+              "exit_code": 126,
+              "kernel_process_samples": [
+                {
+                  "pid": 101
+                }
+              ],
+              "marker_sha256_after": "1daf82f62247f3a1d148c2d88b1828c9efa2d5f087d7059e98650aafe7afdea3",
+              "native_pre_decision": {
+                "decision": "deny",
+                "policy_action": "deny",
+                "reason": "blocked",
+                "reason_code": "sensitive"
+              },
+              "positive_effect_observed": true,
+              "positive_exit_code": 0,
+              "review_kernel_process_samples": [
+                {
+                  "pid": 102
+                }
+              ]
+            },
+            "mcp_result_disposition": "withheld",
+            "sdk_response": {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            },
+            "upstream_delivered_events": [
+              {
+                "message": {
+                  "body": "PAYLOAD"
+                }
+              }
+            ]
+          }
+        },
+        "sdk_result": {
+          "results": [
+            {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "accepted": false,
+      "error": "MCP forwarding/withholding attribution differs from actual SDK result",
+      "name": "withheld-but-visible",
+      "record": {
+        "controller_public_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "extra_probes": {
+          "injection_control": {
+            "attack_payload": "PAYLOAD",
+            "forbidden_command": {
+              "effect_present": false,
+              "exit_code": 126,
+              "kernel_process_samples": [
+                {
+                  "pid": 101
+                }
+              ],
+              "marker_sha256_after": "1daf82f62247f3a1d148c2d88b1828c9efa2d5f087d7059e98650aafe7afdea3",
+              "native_pre_decision": {
+                "decision": "deny",
+                "policy_action": "deny",
+                "reason": "blocked",
+                "reason_code": "sensitive"
+              },
+              "positive_effect_observed": true,
+              "positive_exit_code": 0,
+              "review_kernel_process_samples": [
+                {
+                  "pid": 102
+                }
+              ]
+            },
+            "mcp_result_disposition": "withheld",
+            "sdk_response": {
+              "content": [
+                {
+                  "text": "PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": true
+            },
+            "upstream_delivered_events": [
+              {
+                "message": {
+                  "body": "PAYLOAD"
+                }
+              }
+            ]
+          }
+        },
+        "sdk_result": {
+          "results": [
+            {
+              "content": [
+                {
+                  "text": "PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "accepted": false,
+      "error": "MCP forwarding/withholding attribution differs from actual SDK result",
+      "name": "forwarded-but-hidden",
+      "record": {
+        "controller_public_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "extra_probes": {
+          "injection_control": {
+            "attack_payload": "PAYLOAD",
+            "forbidden_command": {
+              "effect_present": false,
+              "exit_code": 126,
+              "kernel_process_samples": [
+                {
+                  "pid": 101
+                }
+              ],
+              "marker_sha256_after": "1daf82f62247f3a1d148c2d88b1828c9efa2d5f087d7059e98650aafe7afdea3",
+              "native_pre_decision": {
+                "decision": "deny",
+                "policy_action": "deny",
+                "reason": "blocked",
+                "reason_code": "sensitive"
+              },
+              "positive_effect_observed": true,
+              "positive_exit_code": 0,
+              "review_kernel_process_samples": [
+                {
+                  "pid": 102
+                }
+              ]
+            },
+            "mcp_result_disposition": "forwarded",
+            "sdk_response": {
+              "content": [
+                {
+                  "text": "redacted",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            },
+            "upstream_delivered_events": [
+              {
+                "message": {
+                  "body": "PAYLOAD"
+                }
+              }
+            ]
+          }
+        },
+        "sdk_result": {
+          "results": [
+            {
+              "content": [
+                {
+                  "text": "redacted",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "accepted": false,
+      "error": "forbidden command did not refuse a reachable effect",
+      "name": "forbidden-command-allows-effect",
+      "record": {
+        "controller_public_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "extra_probes": {
+          "injection_control": {
+            "attack_payload": "PAYLOAD",
+            "forbidden_command": {
+              "effect_present": false,
+              "exit_code": 126,
+              "kernel_process_samples": [
+                {
+                  "pid": 101
+                }
+              ],
+              "marker_sha256_after": "1daf82f62247f3a1d148c2d88b1828c9efa2d5f087d7059e98650aafe7afdea3",
+              "native_pre_decision": {
+                "decision": "allow",
+                "policy_action": "deny",
+                "reason": "blocked",
+                "reason_code": "sensitive"
+              },
+              "positive_effect_observed": true,
+              "positive_exit_code": 0,
+              "review_kernel_process_samples": [
+                {
+                  "pid": 102
+                }
+              ]
+            },
+            "mcp_result_disposition": "forwarded",
+            "sdk_response": {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            },
+            "upstream_delivered_events": [
+              {
+                "message": {
+                  "body": "PAYLOAD"
+                }
+              }
+            ]
+          }
+        },
+        "sdk_result": {
+          "results": [
+            {
+              "content": [
+                {
+                  "text": "delivered PAYLOAD",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "schema": "gauntlet-injection-attribution-fixtures.v1",
+  "source_sha256": "881aac633bb4a8c211165d37f3860fed6655c0dbc8395552fd75baeab6a3e879"
+}

@@ -29,6 +29,37 @@ def _current_proxy_config(context: HarnessContext, store: GuardStore) -> GuardCo
     return overlay_synced_guard_policy(local_config, _synced_policy_payload(store))
 
 
+def _run_guard_omp_mcp_proxy_command(
+    args: argparse.Namespace,
+    *,
+    context: HarnessContext | None = None,
+    store: GuardStore | None = None,
+    config: GuardConfig | None = None,
+    **_kwargs: object,
+) -> int:
+    """Serve the native managed stdio route with OMP attribution."""
+    from ..proxy.runtime_mcp import RuntimeMcpGuardProxy
+
+    context = _require_guard_context(context)
+    store = _require_guard_store(store)
+    config = _require_guard_config(config)
+    proxy = RuntimeMcpGuardProxy(
+        harness="omp",
+        server_name=args.server_name,
+        command=[args.server_command, *list(args.server_args)],
+        context=context,
+        store=store,
+        config=config,
+        source_scope=args.source_scope,
+        config_path=args.config_path,
+        transport=args.transport,
+        server_id=args.server_id,
+        server_env_keys=tuple(args.server_env_keys),
+        current_config_provider=lambda: _current_proxy_config(context, store),
+    )
+    return proxy.serve()
+
+
 def _run_guard_codex_mcp_proxy_command(
     args: argparse.Namespace,
     *,
@@ -394,6 +425,7 @@ __all__ = [
     "_run_guard_copilot_mcp_proxy_command",
     "_run_guard_cursor_mcp_proxy_command",
     "_run_guard_hermes_mcp_proxy_command",
+    "_run_guard_omp_mcp_proxy_command",
     "_run_guard_opencode_mcp_proxy_command",
     "_run_guard_package_shims_command",
     "_run_guard_run_command",

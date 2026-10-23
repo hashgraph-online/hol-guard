@@ -1,0 +1,146 @@
+{
+  "cases": [
+    {
+      "accepted": true,
+      "error_class": null,
+      "events": [],
+      "name": "empty",
+      "raw_hex": ""
+    },
+    {
+      "accepted": true,
+      "error_class": null,
+      "events": [],
+      "name": "blank-lines",
+      "raw_hex": "200a090d0a"
+    },
+    {
+      "accepted": true,
+      "error_class": null,
+      "events": [
+        {
+          "calls": [],
+          "type": "model_turn"
+        }
+      ],
+      "name": "one-model",
+      "raw_hex": "7b2274797065223a226d6f64656c5f7475726e222c2263616c6c73223a5b5d7d0a"
+    },
+    {
+      "accepted": true,
+      "error_class": null,
+      "events": [
+        {
+          "type": "model_turn"
+        },
+        {
+          "type": "tool_execution_start"
+        }
+      ],
+      "name": "two-events",
+      "raw_hex": "7b2274797065223a226d6f64656c5f7475726e227d0a7b2274797065223a22746f6f6c5f657865637574696f6e5f7374617274227d0a"
+    },
+    {
+      "accepted": true,
+      "error_class": null,
+      "events": [
+        {
+          "type": "a"
+        },
+        {
+          "type": "b"
+        }
+      ],
+      "name": "crlf",
+      "raw_hex": "7b2274797065223a2261227d0d0a7b2274797065223a2262227d0d0a"
+    },
+    {
+      "accepted": true,
+      "error_class": null,
+      "events": [
+        {
+          "type": "a"
+        },
+        {
+          "type": "b"
+        }
+      ],
+      "name": "unicode-separator",
+      "raw_hex": "7b2274797065223a2261227de280a87b2274797065223a2262227d"
+    },
+    {
+      "accepted": true,
+      "error_class": null,
+      "events": [
+        {
+          "name": "caf\u00e9",
+          "type": "model_turn"
+        }
+      ],
+      "name": "unicode-value",
+      "raw_hex": "7b2274797065223a226d6f64656c5f7475726e222c226e616d65223a22636166c3a9227d"
+    },
+    {
+      "accepted": true,
+      "error_class": null,
+      "events": [
+        {
+          "type": ""
+        }
+      ],
+      "name": "empty-type",
+      "raw_hex": "7b2274797065223a22227d0a"
+    },
+    {
+      "accepted": false,
+      "error_class": "ValueError",
+      "events": null,
+      "name": "missing-type",
+      "raw_hex": "7b7d0a"
+    },
+    {
+      "accepted": false,
+      "error_class": "ValueError",
+      "events": null,
+      "name": "numeric-type",
+      "raw_hex": "7b2274797065223a317d0a"
+    },
+    {
+      "accepted": false,
+      "error_class": "ValueError",
+      "events": null,
+      "name": "array",
+      "raw_hex": "5b5d0a"
+    },
+    {
+      "accepted": false,
+      "error_class": "ValueError",
+      "events": null,
+      "name": "null",
+      "raw_hex": "6e756c6c0a"
+    },
+    {
+      "accepted": false,
+      "error_class": "JSONDecodeError",
+      "events": null,
+      "name": "broken-json",
+      "raw_hex": "7b62726f6b656e7d0a"
+    },
+    {
+      "accepted": false,
+      "error_class": "UnicodeDecodeError",
+      "events": null,
+      "name": "invalid-utf8",
+      "raw_hex": "ff0a"
+    },
+    {
+      "accepted": false,
+      "error_class": "JSONDecodeError",
+      "events": null,
+      "name": "bom",
+      "raw_hex": "efbbbf7b2274797065223a2261227d0a"
+    }
+  ],
+  "schema": "gauntlet-omp-transcript-fixtures.v1",
+  "source_sha256": "b76344cf9700c73abebd5d65a81d34aa28c960b591fc2bc485423afa038efe2f"
+}

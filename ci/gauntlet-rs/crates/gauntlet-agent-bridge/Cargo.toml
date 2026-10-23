@@ -1,0 +1,17 @@
+[package]
+name = "gauntlet-agent-bridge"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+description = "Bounded authenticated management transport for the HOL Guard Gauntlet"
+
+[dependencies]
+gauntlet-contracts = { path = "../gauntlet-contracts" }
+gauntlet-evidence = { path = "../gauntlet-evidence" }
+libc = "=0.2.191"
+ring = "=0.17.14"
+serde_json = { version = "=1.0.151", features = ["arbitrary_precision"] }
+uuid = "=1.20.0"
+
+[dev-dependencies]
+tempfile = "=3.27.0"

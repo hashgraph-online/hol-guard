@@ -1,0 +1,227 @@
+{
+  "cases": [
+    {
+      "charged_tokens": 0,
+      "errors": [],
+      "name": "missing-zero",
+      "records": null
+    },
+    {
+      "charged_tokens": 30,
+      "errors": [
+        "provider-witnesses-missing"
+      ],
+      "name": "missing-charged",
+      "records": null
+    },
+    {
+      "charged_tokens": 0,
+      "errors": [],
+      "name": "empty-zero",
+      "records": []
+    },
+    {
+      "charged_tokens": 0,
+      "errors": [
+        "retained-controller-preflight-failure"
+      ],
+      "name": "preflight-failed",
+      "records": [
+        {
+          "files": {
+            "preflight.json": "{\"config_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"passed\":false}\n",
+            "result.json": "{\"status\":\"preflight-failed\"}\n"
+          },
+          "name": "shard-000-synthetic"
+        }
+      ]
+    },
+    {
+      "charged_tokens": 30,
+      "errors": [],
+      "name": "valid-delta",
+      "records": [
+        {
+          "files": {
+            "controller-result.json": "{\"status\":\"completed\"}\n",
+            "preflight.json": "{\"config_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"passed\":true}\n",
+            "provider-after.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":100,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"known_tokens\":100,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":50,\"requests\":2,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "provider-before.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":70,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"known_tokens\":70,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":80,\"requests\":1,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "result.json": "{\"files\":{\"controller-result.json\":\"5bdc4bb3ad85eaa994ae27ea899eaf219ba54b9a9f598282dcc0f2fecc6b7514\",\"preflight.json\":\"b3f8c469c637064ac29cf15dce5985653bb86ffbcf4e21087e9967eacb4e5f51\",\"provider-after.json\":\"89e82b1418edd20aa817bd595b9937c0ddd9f2ecec453f88977d61c96b117ffb\",\"provider-before.json\":\"42199890218aaf99a621298797c3907587dd6a9df0cf83f2259162138e06b9e3\"},\"ledger_charge_after\":100,\"ledger_charge_before\":70,\"manifest_digest\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"provider_tokens_delta\":30,\"runner_config_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"shard\":0,\"status\":\"passed\"}\n"
+          },
+          "name": "shard-000-synthetic"
+        }
+      ]
+    },
+    {
+      "charged_tokens": 29,
+      "errors": [
+        "aggregate-provider-and-ledger-cost-mismatch"
+      ],
+      "name": "aggregate-mismatch",
+      "records": [
+        {
+          "files": {
+            "controller-result.json": "{\"status\":\"completed\"}\n",
+            "preflight.json": "{\"config_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"passed\":true}\n",
+            "provider-after.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":100,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"known_tokens\":100,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":50,\"requests\":2,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "provider-before.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":70,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"known_tokens\":70,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":80,\"requests\":1,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "result.json": "{\"files\":{\"controller-result.json\":\"5bdc4bb3ad85eaa994ae27ea899eaf219ba54b9a9f598282dcc0f2fecc6b7514\",\"preflight.json\":\"b3f8c469c637064ac29cf15dce5985653bb86ffbcf4e21087e9967eacb4e5f51\",\"provider-after.json\":\"89e82b1418edd20aa817bd595b9937c0ddd9f2ecec453f88977d61c96b117ffb\",\"provider-before.json\":\"42199890218aaf99a621298797c3907587dd6a9df0cf83f2259162138e06b9e3\"},\"ledger_charge_after\":100,\"ledger_charge_before\":70,\"manifest_digest\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"provider_tokens_delta\":30,\"runner_config_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"shard\":0,\"status\":\"passed\"}\n"
+          },
+          "name": "shard-000-synthetic"
+        }
+      ]
+    },
+    {
+      "charged_tokens": 30,
+      "name": "wrong-preflight",
+      "python_refusal": "invocation preflight belongs to another runner configuration",
+      "records": [
+        {
+          "files": {
+            "controller-result.json": "{\"status\":\"completed\"}\n",
+            "preflight.json": "{\"config_digest\":\"4444444444444444444444444444444444444444444444444444444444444444\",\"passed\":true}\n",
+            "provider-after.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":100,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"known_tokens\":100,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":50,\"requests\":2,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "provider-before.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":70,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"known_tokens\":70,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":80,\"requests\":1,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "result.json": "{\"files\":{\"controller-result.json\":\"5bdc4bb3ad85eaa994ae27ea899eaf219ba54b9a9f598282dcc0f2fecc6b7514\",\"preflight.json\":\"b3f8c469c637064ac29cf15dce5985653bb86ffbcf4e21087e9967eacb4e5f51\",\"provider-after.json\":\"89e82b1418edd20aa817bd595b9937c0ddd9f2ecec453f88977d61c96b117ffb\",\"provider-before.json\":\"42199890218aaf99a621298797c3907587dd6a9df0cf83f2259162138e06b9e3\"},\"ledger_charge_after\":100,\"ledger_charge_before\":70,\"manifest_digest\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"provider_tokens_delta\":30,\"runner_config_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"shard\":0,\"status\":\"passed\"}\n"
+          },
+          "name": "shard-000-synthetic"
+        }
+      ]
+    },
+    {
+      "charged_tokens": 30,
+      "name": "wrong-manifest",
+      "python_refusal": "invocation inputs or retained provider evidence changed",
+      "records": [
+        {
+          "files": {
+            "controller-result.json": "{\"status\":\"completed\"}\n",
+            "preflight.json": "{\"config_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"passed\":true}\n",
+            "provider-after.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":100,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"known_tokens\":100,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":50,\"requests\":2,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "provider-before.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":70,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"known_tokens\":70,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":80,\"requests\":1,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "result.json": "{\"files\": {\"controller-result.json\": \"5bdc4bb3ad85eaa994ae27ea899eaf219ba54b9a9f598282dcc0f2fecc6b7514\", \"preflight.json\": \"b3f8c469c637064ac29cf15dce5985653bb86ffbcf4e21087e9967eacb4e5f51\", \"provider-after.json\": \"89e82b1418edd20aa817bd595b9937c0ddd9f2ecec453f88977d61c96b117ffb\", \"provider-before.json\": \"42199890218aaf99a621298797c3907587dd6a9df0cf83f2259162138e06b9e3\"}, \"ledger_charge_after\": 100, \"ledger_charge_before\": 70, \"manifest_digest\": \"4444444444444444444444444444444444444444444444444444444444444444\", \"provider_tokens_delta\": 30, \"runner_config_digest\": \"2222222222222222222222222222222222222222222222222222222222222222\", \"shard\": 0, \"status\": \"passed\"}\n"
+          },
+          "name": "shard-000-synthetic"
+        }
+      ]
+    },
+    {
+      "charged_tokens": 30,
+      "name": "altered-provider-file",
+      "python_refusal": "invocation inputs or retained provider evidence changed",
+      "records": [
+        {
+          "files": {
+            "controller-result.json": "{\"status\":\"completed\"}\n",
+            "preflight.json": "{\"config_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"passed\":true}\n",
+            "provider-after.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":100,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"known_tokens\":100,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":50,\"requests\":2,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "provider-before.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":100,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"known_tokens\":100,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":50,\"requests\":2,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "result.json": "{\"files\":{\"controller-result.json\":\"5bdc4bb3ad85eaa994ae27ea899eaf219ba54b9a9f598282dcc0f2fecc6b7514\",\"preflight.json\":\"b3f8c469c637064ac29cf15dce5985653bb86ffbcf4e21087e9967eacb4e5f51\",\"provider-after.json\":\"89e82b1418edd20aa817bd595b9937c0ddd9f2ecec453f88977d61c96b117ffb\",\"provider-before.json\":\"42199890218aaf99a621298797c3907587dd6a9df0cf83f2259162138e06b9e3\"},\"ledger_charge_after\":100,\"ledger_charge_before\":70,\"manifest_digest\":\"3333333333333333333333333333333333333333333333333333333333333333\",\"provider_tokens_delta\":30,\"runner_config_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"shard\":0,\"status\":\"passed\"}\n"
+          },
+          "name": "shard-000-synthetic"
+        }
+      ]
+    },
+    {
+      "charged_tokens": 30,
+      "name": "halted-provider",
+      "python_refusal": "provider budget has changed identity, uncertain usage or inconsistent counts",
+      "records": [
+        {
+          "files": {
+            "controller-result.json": "{\"status\":\"completed\"}\n",
+            "preflight.json": "{\"config_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"passed\":true}\n",
+            "provider-after.json": "{\"status\": {\"adapter\": {\"adapter_sha256\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"batching\": false, \"counting\": \"full prompt including cached input plus every producer-emitted response token\", \"draft\": false, \"producer_mode\": \"serial-original-tokenization-and-generation\", \"qualification_eligible\": false, \"quota_config_digest\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"schema\": \"gauntlet-mlx-quota-adapter.v1\", \"server_sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}, \"binding_sha256\": \"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\", \"qualification\": false, \"quota\": {\"charged_tokens\": 100, \"config_digest\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"halted\": true, \"journal_hash\": \"0000000000000000000000000000000000000000000000000000000000000000\", \"known_tokens\": 100, \"maximum_requests\": 3, \"model_identity_digest\": \"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\", \"pending_requests\": 0, \"qualification_eligible\": false, \"remaining_tokens\": 50, \"requests\": 2, \"reserved_tokens\": 0, \"schema\": \"gauntlet-provider-quota-status.v1\", \"token_cap\": 150}}}\n",
+            "provider-before.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":70,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"known_tokens\":70,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":80,\"requests\":1,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "result.json": "{\"files\": {\"controller-result.json\": \"5bdc4bb3ad85eaa994ae27ea899eaf219ba54b9a9f598282dcc0f2fecc6b7514\", \"preflight.json\": \"b3f8c469c637064ac29cf15dce5985653bb86ffbcf4e21087e9967eacb4e5f51\", \"provider-after.json\": \"cf1a791d1f202af1b31fd2a4471ddd6758efd309a3d2fdc2f4d79d6c7bbc00a1\", \"provider-before.json\": \"42199890218aaf99a621298797c3907587dd6a9df0cf83f2259162138e06b9e3\"}, \"ledger_charge_after\": 100, \"ledger_charge_before\": 70, \"manifest_digest\": \"3333333333333333333333333333333333333333333333333333333333333333\", \"provider_tokens_delta\": 30, \"runner_config_digest\": \"2222222222222222222222222222222222222222222222222222222222222222\", \"shard\": 0, \"status\": \"passed\"}\n"
+          },
+          "name": "shard-000-synthetic"
+        }
+      ]
+    },
+    {
+      "charged_tokens": 30,
+      "name": "decreasing-provider",
+      "python_refusal": "invocation provider counter and ledger charges differ",
+      "records": [
+        {
+          "files": {
+            "controller-result.json": "{\"status\":\"completed\"}\n",
+            "preflight.json": "{\"config_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"passed\":true}\n",
+            "provider-after.json": "{\"status\": {\"adapter\": {\"adapter_sha256\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"batching\": false, \"counting\": \"full prompt including cached input plus every producer-emitted response token\", \"draft\": false, \"producer_mode\": \"serial-original-tokenization-and-generation\", \"qualification_eligible\": false, \"quota_config_digest\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"schema\": \"gauntlet-mlx-quota-adapter.v1\", \"server_sha256\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}, \"binding_sha256\": \"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\", \"qualification\": false, \"quota\": {\"charged_tokens\": 60, \"config_digest\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"halted\": false, \"journal_hash\": \"0000000000000000000000000000000000000000000000000000000000000000\", \"known_tokens\": 60, \"maximum_requests\": 3, \"model_identity_digest\": \"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\", \"pending_requests\": 0, \"qualification_eligible\": false, \"remaining_tokens\": 90, \"requests\": 2, \"reserved_tokens\": 0, \"schema\": \"gauntlet-provider-quota-status.v1\", \"token_cap\": 150}}}\n",
+            "provider-before.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":70,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"known_tokens\":70,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":80,\"requests\":1,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "result.json": "{\"files\": {\"controller-result.json\": \"5bdc4bb3ad85eaa994ae27ea899eaf219ba54b9a9f598282dcc0f2fecc6b7514\", \"preflight.json\": \"b3f8c469c637064ac29cf15dce5985653bb86ffbcf4e21087e9967eacb4e5f51\", \"provider-after.json\": \"0e5ee0f7e16b5f7bc7e0a979aca44635cd0bb5c1c8d4198b3dcbd21ff5d5a2a7\", \"provider-before.json\": \"42199890218aaf99a621298797c3907587dd6a9df0cf83f2259162138e06b9e3\"}, \"ledger_charge_after\": 100, \"ledger_charge_before\": 70, \"manifest_digest\": \"3333333333333333333333333333333333333333333333333333333333333333\", \"provider_tokens_delta\": 30, \"runner_config_digest\": \"2222222222222222222222222222222222222222222222222222222222222222\", \"shard\": 0, \"status\": \"passed\"}\n"
+          },
+          "name": "shard-000-synthetic"
+        }
+      ]
+    },
+    {
+      "charged_tokens": 30,
+      "name": "wrong-ledger-delta",
+      "python_refusal": "invocation provider counter and ledger charges differ",
+      "records": [
+        {
+          "files": {
+            "controller-result.json": "{\"status\":\"completed\"}\n",
+            "preflight.json": "{\"config_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"passed\":true}\n",
+            "provider-after.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":100,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"known_tokens\":100,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":50,\"requests\":2,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "provider-before.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":70,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"known_tokens\":70,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":80,\"requests\":1,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "result.json": "{\"files\": {\"controller-result.json\": \"5bdc4bb3ad85eaa994ae27ea899eaf219ba54b9a9f598282dcc0f2fecc6b7514\", \"preflight.json\": \"b3f8c469c637064ac29cf15dce5985653bb86ffbcf4e21087e9967eacb4e5f51\", \"provider-after.json\": \"89e82b1418edd20aa817bd595b9937c0ddd9f2ecec453f88977d61c96b117ffb\", \"provider-before.json\": \"42199890218aaf99a621298797c3907587dd6a9df0cf83f2259162138e06b9e3\"}, \"ledger_charge_after\": 99, \"ledger_charge_before\": 70, \"manifest_digest\": \"3333333333333333333333333333333333333333333333333333333333333333\", \"provider_tokens_delta\": 30, \"runner_config_digest\": \"2222222222222222222222222222222222222222222222222222222222222222\", \"shard\": 0, \"status\": \"passed\"}\n"
+          },
+          "name": "shard-000-synthetic"
+        }
+      ]
+    },
+    {
+      "charged_tokens": 30,
+      "name": "missing-result",
+      "python_refusal": "public input must be a bounded ordinary file",
+      "records": [
+        {
+          "files": {
+            "controller-result.json": "{\"status\":\"completed\"}\n",
+            "preflight.json": "{\"config_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"passed\":true}\n",
+            "provider-after.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":100,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"known_tokens\":100,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":50,\"requests\":2,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n",
+            "provider-before.json": "{\"status\":{\"adapter\":{\"adapter_sha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"batching\":false,\"counting\":\"full prompt including cached input plus every producer-emitted response token\",\"draft\":false,\"producer_mode\":\"serial-original-tokenization-and-generation\",\"qualification_eligible\":false,\"quota_config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"schema\":\"gauntlet-mlx-quota-adapter.v1\",\"server_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"binding_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"qualification\":false,\"quota\":{\"charged_tokens\":70,\"config_digest\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"halted\":false,\"journal_hash\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\",\"known_tokens\":70,\"maximum_requests\":3,\"model_identity_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"pending_requests\":0,\"qualification_eligible\":false,\"remaining_tokens\":80,\"requests\":1,\"reserved_tokens\":0,\"schema\":\"gauntlet-provider-quota-status.v1\",\"token_cap\":150}}}\n"
+          },
+          "name": "shard-000-synthetic"
+        }
+      ]
+    },
+    {
+      "charged_tokens": 0,
+      "name": "false-preflight-failure",
+      "python_refusal": "failed invocation changed its preflight outcome",
+      "records": [
+        {
+          "files": {
+            "preflight.json": "{\"config_digest\":\"2222222222222222222222222222222222222222222222222222222222222222\",\"passed\":true}\n",
+            "result.json": "{\"status\":\"preflight-failed\"}\n"
+          },
+          "name": "shard-000-synthetic"
+        }
+      ]
+    }
+  ],
+  "config_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+  "manifest_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+  "provider_pins": {
+    "adapter_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "binding_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "maximum_requests": 3,
+    "model_identity_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "profile": "owned-mlx-serial.v1",
+    "quota_config_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "server_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "token_cap": 150
+  },
+  "schema": "gauntlet-controller-invocations-fixtures.v1",
+  "shard_count": 1,
+  "source_sha256": {
+    "ci_runner.py": "31f49df403c127986deff9a78eaaa252e4e52c51f6f3cb9018502fe4c5cf4ef5",
+    "ci_runner_config.py": "90e632c95ee511e048b0803c0a713b11f4ff282aad1c146e1f5ec9e4806e4bc6",
+    "ci_runner_preflight.py": "69f5d0368f5c763a047c554b2d9a31a63f169fd2bc8d13a14aa96d8a38a274d7"
+  }
+}

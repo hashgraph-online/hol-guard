@@ -1,0 +1,462 @@
+{
+  "cases": [
+    {
+      "accepted": true,
+      "calls": [
+        {
+          "argv": [
+            "/usr/bin/git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "fetch.fsckObjects=true",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!/opt/homebrew/bin/gh auth git-credential",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            "https://github.com/hashgraph-online/hol-guard.git",
+            "refs/tags/v3.48.0",
+            "refs/tags/v3.48.0^{}"
+          ],
+          "git_terminal_prompt": "0",
+          "text": true,
+          "timeout": 60
+        }
+      ],
+      "name": "direct",
+      "overrides": {},
+      "result": {
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tag": "v3.48.0",
+        "url": "https://github.com/hashgraph-online/hol-guard/releases/tag/v3.48.0"
+      },
+      "stdout": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/v3.48.0\n",
+      "tag": "v3.48.0"
+    },
+    {
+      "accepted": true,
+      "calls": [
+        {
+          "argv": [
+            "/usr/bin/git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "fetch.fsckObjects=true",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!/opt/homebrew/bin/gh auth git-credential",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            "https://github.com/hashgraph-online/hol-guard.git",
+            "refs/tags/v3.48.0",
+            "refs/tags/v3.48.0^{}"
+          ],
+          "git_terminal_prompt": "0",
+          "text": true,
+          "timeout": 60
+        }
+      ],
+      "name": "annotated",
+      "overrides": {},
+      "result": {
+        "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tag": "v3.48.0",
+        "url": "https://github.com/hashgraph-online/hol-guard/releases/tag/v3.48.0"
+      },
+      "stdout": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/v3.48.0\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\trefs/tags/v3.48.0^{}\n",
+      "tag": "v3.48.0"
+    },
+    {
+      "accepted": true,
+      "calls": [
+        {
+          "argv": [
+            "/usr/bin/git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "fetch.fsckObjects=true",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!/opt/homebrew/bin/gh auth git-credential",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            "https://github.com/hashgraph-online/hol-guard.git",
+            "refs/tags/v3.48.0",
+            "refs/tags/v3.48.0^{}"
+          ],
+          "git_terminal_prompt": "0",
+          "text": true,
+          "timeout": 60
+        }
+      ],
+      "name": "peeled_first",
+      "overrides": {},
+      "result": {
+        "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tag": "v3.48.0",
+        "url": "https://github.com/hashgraph-online/hol-guard/releases/tag/v3.48.0"
+      },
+      "stdout": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\trefs/tags/v3.48.0^{}\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/v3.48.0\n",
+      "tag": "v3.48.0"
+    },
+    {
+      "accepted": true,
+      "calls": [
+        {
+          "argv": [
+            "/usr/bin/git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "fetch.fsckObjects=true",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!/opt/homebrew/bin/gh auth git-credential",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            "https://github.com/hashgraph-online/hol-guard.git",
+            "refs/tags/v3.48.0",
+            "refs/tags/v3.48.0^{}"
+          ],
+          "git_terminal_prompt": "0",
+          "text": true,
+          "timeout": 60
+        }
+      ],
+      "name": "crlf",
+      "overrides": {},
+      "result": {
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tag": "v3.48.0",
+        "url": "https://github.com/hashgraph-online/hol-guard/releases/tag/v3.48.0"
+      },
+      "stdout": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/v3.48.0\r\n",
+      "tag": "v3.48.0"
+    },
+    {
+      "accepted": true,
+      "calls": [
+        {
+          "argv": [
+            "/usr/bin/git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "fetch.fsckObjects=true",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!'/opt/homebrew/odd'\"'\"'gh' auth git-credential",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            "https://github.com/hashgraph-online/hol-guard.git",
+            "refs/tags/v3.48.0",
+            "refs/tags/v3.48.0^{}"
+          ],
+          "git_terminal_prompt": "0",
+          "text": true,
+          "timeout": 60
+        }
+      ],
+      "name": "quoted_helper",
+      "overrides": {
+        "gh": "/opt/homebrew/odd'gh"
+      },
+      "result": {
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tag": "v3.48.0",
+        "url": "https://github.com/hashgraph-online/hol-guard/releases/tag/v3.48.0"
+      },
+      "stdout": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/v3.48.0\n",
+      "tag": "v3.48.0"
+    },
+    {
+      "accepted": false,
+      "calls": [],
+      "name": "unlisted_tag",
+      "overrides": {},
+      "reason": "explicit stable tag allowlist required",
+      "refusal": "tag-not-allowed",
+      "stdout": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/v3.50.0\n",
+      "tag": "v3.50.0"
+    },
+    {
+      "accepted": false,
+      "calls": [
+        {
+          "argv": [
+            "/usr/bin/git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "fetch.fsckObjects=true",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!/opt/homebrew/bin/gh auth git-credential",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            "https://github.com/hashgraph-online/hol-guard.git",
+            "refs/tags/v3.48.0",
+            "refs/tags/v3.48.0^{}"
+          ],
+          "git_terminal_prompt": "0",
+          "text": true,
+          "timeout": 60
+        }
+      ],
+      "name": "missing",
+      "overrides": {},
+      "reason": "exact release tag is missing",
+      "refusal": "missing-tag",
+      "stdout": "",
+      "tag": "v3.48.0"
+    },
+    {
+      "accepted": false,
+      "calls": [
+        {
+          "argv": [
+            "/usr/bin/git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "fetch.fsckObjects=true",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!/opt/homebrew/bin/gh auth git-credential",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            "https://github.com/hashgraph-online/hol-guard.git",
+            "refs/tags/v3.48.0",
+            "refs/tags/v3.48.0^{}"
+          ],
+          "git_terminal_prompt": "0",
+          "text": true,
+          "timeout": 60
+        }
+      ],
+      "name": "peeled_without_direct",
+      "overrides": {},
+      "reason": "exact release tag is missing",
+      "refusal": "missing-tag",
+      "stdout": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\trefs/tags/v3.48.0^{}\n",
+      "tag": "v3.48.0"
+    },
+    {
+      "accepted": false,
+      "calls": [
+        {
+          "argv": [
+            "/usr/bin/git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "fetch.fsckObjects=true",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!/opt/homebrew/bin/gh auth git-credential",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            "https://github.com/hashgraph-online/hol-guard.git",
+            "refs/tags/v3.48.0",
+            "refs/tags/v3.48.0^{}"
+          ],
+          "git_terminal_prompt": "0",
+          "text": true,
+          "timeout": 60
+        }
+      ],
+      "name": "duplicate_direct",
+      "overrides": {},
+      "reason": "unexpected or ambiguous Git tag response",
+      "refusal": "invalid-response",
+      "stdout": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/v3.48.0\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\trefs/tags/v3.48.0\n",
+      "tag": "v3.48.0"
+    },
+    {
+      "accepted": false,
+      "calls": [
+        {
+          "argv": [
+            "/usr/bin/git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "fetch.fsckObjects=true",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!/opt/homebrew/bin/gh auth git-credential",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            "https://github.com/hashgraph-online/hol-guard.git",
+            "refs/tags/v3.48.0",
+            "refs/tags/v3.48.0^{}"
+          ],
+          "git_terminal_prompt": "0",
+          "text": true,
+          "timeout": 60
+        }
+      ],
+      "name": "unexpected_ref",
+      "overrides": {},
+      "reason": "unexpected or ambiguous Git tag response",
+      "refusal": "invalid-response",
+      "stdout": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/v3.49.0\n",
+      "tag": "v3.48.0"
+    },
+    {
+      "accepted": false,
+      "calls": [
+        {
+          "argv": [
+            "/usr/bin/git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "fetch.fsckObjects=true",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!/opt/homebrew/bin/gh auth git-credential",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            "https://github.com/hashgraph-online/hol-guard.git",
+            "refs/tags/v3.48.0",
+            "refs/tags/v3.48.0^{}"
+          ],
+          "git_terminal_prompt": "0",
+          "text": true,
+          "timeout": 60
+        }
+      ],
+      "name": "upper_sha",
+      "overrides": {},
+      "reason": "unexpected or ambiguous Git tag response",
+      "refusal": "invalid-response",
+      "stdout": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\trefs/tags/v3.48.0\n",
+      "tag": "v3.48.0"
+    },
+    {
+      "accepted": false,
+      "calls": [
+        {
+          "argv": [
+            "/usr/bin/git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "fetch.fsckObjects=true",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!/opt/homebrew/bin/gh auth git-credential",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            "https://github.com/hashgraph-online/hol-guard.git",
+            "refs/tags/v3.48.0",
+            "refs/tags/v3.48.0^{}"
+          ],
+          "git_terminal_prompt": "0",
+          "text": true,
+          "timeout": 60
+        }
+      ],
+      "name": "short_sha",
+      "overrides": {},
+      "reason": "unexpected or ambiguous Git tag response",
+      "refusal": "invalid-response",
+      "stdout": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/v3.48.0\n",
+      "tag": "v3.48.0"
+    },
+    {
+      "accepted": false,
+      "calls": [
+        {
+          "argv": [
+            "/usr/bin/git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "fetch.fsckObjects=true",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!/opt/homebrew/bin/gh auth git-credential",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            "https://github.com/hashgraph-online/hol-guard.git",
+            "refs/tags/v3.48.0",
+            "refs/tags/v3.48.0^{}"
+          ],
+          "git_terminal_prompt": "0",
+          "text": true,
+          "timeout": 60
+        }
+      ],
+      "name": "extra_column",
+      "overrides": {},
+      "reason": "too many values to unpack (expected 2, got 3)",
+      "refusal": "invalid-response",
+      "stdout": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\trefs/tags/v3.48.0\textra\n",
+      "tag": "v3.48.0"
+    },
+    {
+      "accepted": false,
+      "calls": [
+        {
+          "argv": [
+            "/usr/bin/git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "fetch.fsckObjects=true",
+            "-c",
+            "credential.helper=",
+            "-c",
+            "credential.helper=!/opt/homebrew/bin/gh auth git-credential",
+            "ls-remote",
+            "--exit-code",
+            "--tags",
+            "https://github.com/hashgraph-online/hol-guard.git",
+            "refs/tags/v3.48.0",
+            "refs/tags/v3.48.0^{}"
+          ],
+          "git_terminal_prompt": "0",
+          "text": true,
+          "timeout": 60
+        }
+      ],
+      "name": "missing_tab",
+      "overrides": {},
+      "reason": "not enough values to unpack (expected 2, got 1)",
+      "refusal": "invalid-response",
+      "stdout": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa refs/tags/v3.48.0\n",
+      "tag": "v3.48.0"
+    }
+  ],
+  "schema": "gauntlet-release-source-fixtures.v1",
+  "source_sha256": "b7f4274c4656dba13ec7b3dcc71ad96a71b0cc4dd8fccca2218041fc3db3aa20"
+}

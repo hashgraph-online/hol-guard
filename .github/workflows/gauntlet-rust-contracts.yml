@@ -1,0 +1,140 @@
+name: Gauntlet Rust contracts
+
+on:
+  pull_request:
+    branches: [main, "codex/gauntlet-rust-integration-*"]
+    paths:
+      - "ci/gauntlet/**"
+      - "ci/gauntlet-rs/**"
+      - "rust/crates/guard-runtime/**"
+      - "rust/crates/guard-policy-bundle/**"
+      - "rust/Cargo.toml"
+      - "rust/Cargo.lock"
+      - "docs/gauntlet-rust-*.md"
+      - ".github/workflows/gauntlet-rust-contracts.yml"
+  push:
+    branches: [main, "codex/gauntlet-rust-integration-*"]
+    paths:
+      - "ci/gauntlet/**"
+      - "ci/gauntlet-rs/**"
+      - "rust/crates/guard-runtime/**"
+      - "rust/crates/guard-policy-bundle/**"
+      - "rust/Cargo.toml"
+      - "rust/Cargo.lock"
+      - "docs/gauntlet-rust-*.md"
+      - ".github/workflows/gauntlet-rust-contracts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gauntlet-rust-contracts-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-integration:
+    # Incremental PRs also need to compile the product modules that this
+    # integration branch adds. Product CI keeps its existing main/PR jobs.
+    if: >-
+      startsWith(github.base_ref, 'codex/gauntlet-rust-integration-') ||
+      startsWith(github.ref, 'refs/heads/codex/gauntlet-rust-integration-')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal
+      - name: Compile the merged Native library and CLI
+        run: cargo +1.88.0 check --manifest-path rust/Cargo.toml -p hol-guard-runtime --lib --bins --locked
+
+  macos-host:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal
+      - name: Test Mac host custody and observer shadows
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-host-state --locked
+      - name: Exercise the authenticated Rust/Python bridge on macOS
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-agent-bridge --locked
+
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          # The source inventory pins this PR's exact tree. GitHub's default
+          # pull_request checkout is a synthetic merge with moving main.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+      - name: Format
+        run: cargo +1.88.0 fmt --manifest-path ci/gauntlet-rs/Cargo.toml --all --check
+      - name: Check optional Rust-owned product-cell placement
+        run: python3 -m unittest discover -s ci/gauntlet-rs/proofs -p test_product_cell_job_slice.py
+      - name: Test
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml --all-features --locked
+      - name: Clippy
+        run: cargo +1.88.0 clippy --manifest-path ci/gauntlet-rs/Cargo.toml --all-targets --all-features --locked -- -D warnings
+
+  arm64-binaries:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal
+      - name: Link all Rust Gauntlet executables on Linux ARM64
+        run: cargo +1.88.0 build --manifest-path ci/gauntlet-rs/Cargo.toml --workspace --bins --locked
+      - name: Exercise the authenticated Rust/Python bridge on Linux ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-agent-bridge --locked
+      - name: Compare Python product-cell frame bytes and realm separation on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-evidence --test product_cell_frames_parity --locked
+      - name: Test Linux worker, host, evidence, and provider readers
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-evidence -p gauntlet-host-state -p gauntlet-provider-observer -p gauntlet-worker-state --lib --locked
+      - name: Compare fresh controller install plan with pinned Python on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-evidence --test controller_install_plan --locked
+      - name: Test signed product and contained-effect relations on ARM64
+        run: >-
+          cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml
+          -p gauntlet-evidence --test staging_product_relation
+          --test staging_contained_relation --locked
+      - name: Compare deterministic forbidden-command reducer with Python on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-evidence --test forbidden_command_parity --locked
+      - name: Compare signed control opening, output custody, and reported role checks on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-evidence --test controller_envelope --test injection_attribution_parity --test signed_injection_attribution --test control_opening --test control_session_opening --test control_reported_tail --test cancel_reported --test contained_output_custody --test contained_cli_results --test contained_route_accounting --test private_runtime_prompt --test native_review_summary --test native_transport_relations --test private_cell_mounts --test product_kernel_identity --test private_hook_samples --test private_actor --test private_network --locked
+      - name: Compare OMP host and SDK bridge event reconciliation with Python on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-evidence --test host_calls_parity --locked
+      - name: Compare bounded OMP transcript ingestion with Python on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-evidence --test omp_transcript_parity --locked
+      - name: Compare Python pilot terminal and retry decisions on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-evidence --test pilot_terminal_parity --locked
+      - name: Compare fixed ci-check failure status and exit codes on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-evidence --test ci_check_failure_parity --locked
+      - name: Compare provider round and zero-byte retry classification with Python on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-evidence --test provider_rounds_parity --locked
+      - name: Verify Python-signed model-budget accounting on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-evidence --test model_budget_parity --locked
+      - name: Compare fixed worker and builder plans with pinned Python on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-worker-state --test launch_plan --test builder_run_plan --locked
+      - name: Compare host config, queue, tag source, jobs, source archives, and VM probes on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-host-state --test operations_config --test release_queue --test release_source --test private_jobs --test public_jobs --test source_archive --test source_archive_commit --test telemetry --test vm_progress --test vm_reconcile --locked
+      - name: Compare live-provider admission with pinned Python on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-host-state --test live_provider_preflight --locked
+      - name: Compare fixed local-model launch and manifest claim with Python on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-host-state --test live_provider_start --test live_provider_manifest --locked
+      - name: Check one-use host candidate build pins and terminal binding on ARM64
+        run: cargo +1.88.0 test --manifest-path ci/gauntlet-rs/Cargo.toml -p gauntlet-host-state --test candidate_build_pins --test vm_candidate_build --test vm_candidate_result_hostbound --locked

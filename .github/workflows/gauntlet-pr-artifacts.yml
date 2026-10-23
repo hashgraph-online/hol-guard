@@ -1,0 +1,98 @@
+name: Gauntlet candidate artifacts (passive)
+run-name: Gauntlet ${{ inputs.tag || github.event.pull_request.number }} ${{ inputs.source_sha || github.event.pull_request.head.sha }} ${{ inputs.job_id || github.run_id }}
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Stable release to benchmark
+        type: choice
+        options: [v3.48.0, v3.49.0]
+        required: true
+      source_sha:
+        description: Resolved exact release commit (validated before checkout)
+        type: string
+        required: true
+      job_id:
+        description: Local observer job identity
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: gauntlet-${{ github.event_name }}-${{ inputs.tag || github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  linux-arm-artifact:
+    name: Build benchmark candidate (Linux ARM64)
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      HOL_GUARD_BUILD_SHA: ${{ inputs.source_sha || github.event.pull_request.head.sha }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      GAUNTLET_JOB_ID: ${{ inputs.job_id }}
+      CARGO_INCREMENTAL: '0'
+    steps:
+      - name: Validate exact source request
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          assert re.fullmatch('[0-9a-f]{40}', os.environ['HOL_GUARD_BUILD_SHA'])
+          if os.environ['GITHUB_EVENT_NAME'] == 'pull_request':
+              event = json.load(open(os.environ['GITHUB_EVENT_PATH']))
+              assert event['pull_request']['base']['ref'] == 'main'
+              assert event['pull_request']['head']['sha'] == os.environ['HOL_GUARD_BUILD_SHA']
+          else:
+              assert os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch'
+              assert os.environ['RELEASE_TAG'] in ('v3.48.0', 'v3.49.0')
+              assert re.fullmatch('[0-9a-f]{16}', os.environ['GAUNTLET_JOB_ID'])
+          PY
+      - name: Checkout exact PR head
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ env.HOL_GUARD_BUILD_SHA }}
+          persist-credentials: false
+      - name: Checkout exact release tag
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+      - name: Verify checkout resolves to the pinned commit
+        run: |
+          test "$(git rev-parse HEAD)" = "$HOL_GUARD_BUILD_SHA"
+      - name: Read trusted build adapter from the workflow commit
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          repository: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name || github.repository }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          path: .gauntlet-build-tools
+          sparse-checkout: ci/gauntlet/control_plane
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+        with:
+          version: '0.9.26'
+          enable-cache: false
+      - name: Install isolated pinned Rust toolchain (no shared CI cache)
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+      - name: Install locked dependencies without the project
+        run: uv sync --frozen --no-dev --group ci-test --no-install-project --python 3.12
+      - name: Compile and package exact release commit (unprivileged)
+        run: .venv/bin/python -B .gauntlet-build-tools/ci/gauntlet/control_plane/build_artifact.py
+      - name: Upload candidate only; no deployment or merge permission
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: hol-gauntlet-linux-arm64-${{ env.HOL_GUARD_BUILD_SHA }}
+          path: gauntlet-artifact/*
+          if-no-files-found: error
+          retention-days: 7

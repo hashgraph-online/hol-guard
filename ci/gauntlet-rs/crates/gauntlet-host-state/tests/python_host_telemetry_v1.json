@@ -1,0 +1,18 @@
+{
+  "python_host": {
+    "checked_at": 1700000000.25,
+    "cpus": 32,
+    "disk_free": 549755813888,
+    "disk_total": 1099511627776,
+    "load": 1.25,
+    "memory_available": 54067200,
+    "memory_note": "Free plus inactive/speculative pages; estimate of reclaimable memory.",
+    "memory_total": 549755813888,
+    "platform": "Darwin",
+    "status": "online"
+  },
+  "schema": "gauntlet-host-telemetry-fixtures.v1",
+  "source_sha256": "bc294a2507ef6adc1a86aa6086142ef4737ef939db8e7ad629c6d89d7d97c503",
+  "sysctl_stdout": "549755813888\n",
+  "vm_stat_stdout": "Mach Virtual Memory Statistics: (page size of 16384 bytes)\nPages free: 1000.\nPages active: 3000.\nPages inactive: 2000.\nPages speculative: 300.\n"
+}

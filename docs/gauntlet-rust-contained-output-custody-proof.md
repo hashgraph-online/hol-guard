@@ -1,0 +1,9 @@
+# Contained output and Native Post relation
+
+The Rust `verify_contained_output_custody` reader checks the pinned Python relation between one contained sink result, its controller output-binding event, the matching SDK Pre call and Native Post response. It recomputes the result's canonical digest, stdout/stderr byte hashes and delivered text through `captured_contained_output`. A binding with the wrong call, payload, result digest, output hash or Post hash fails. The reader returns only the count of matched bindings; it does not make a Guard verdict.
+
+The source oracle is Gauntlet PR #5263 at `b4efd8171b06d0e13cbe12a077c376ecdc891fd1`. The frozen Python `contained_output_custody.py` SHA-256 is `a4a836a0bb44ce3a351168ba8d71bd3cd4b9a08b7afd5e7639ff94197ee0ee20`. The generator executes that file's exact `verify_contained_outputs` AST with the exact pinned `captured_output`, JSON digest and `_require` ASTs. Its 17 inert synthetic cases contain two accepted relations, including the zero-sink case, and 15 refusals. Rust matched every result or exact refusal message locally. The test verifies all four Python file hashes against `parity-manifest.v1.json` and the fixture stores type-sensitive JSON merge deltas against one base record.
+
+These inputs are supplied JSON, not observed SDK traffic, Native process results or kernel effects. The one positive relation does not establish that the signed builtin record came from a reviewed controller or that the product executed. The function is separate from the control reader until the private-cell runtime and outside producer custody are ported. Rust additionally caps each supplied event array at 4096 rows to bound relation work.
+
+Validation on 2026-10-20: the targeted Rust differential test, full workspace `--all-features` tests, formatting and warnings-denied Clippy passed on macOS ARM. The Linux ARM64 CI lane is configured to run the same differential test on the PR head.

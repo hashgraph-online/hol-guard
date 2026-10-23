@@ -1,0 +1,194 @@
+{
+  "finish_cases": [
+    {
+      "finish": {
+        "description": "Gauntlet passed (deterministic, zero inference)",
+        "post_state": "success",
+        "state": "passed"
+      },
+      "name": "passed",
+      "response": {
+        "cells": [],
+        "deployment_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "exit_code": 0,
+        "job_id": "0123456789abcdef",
+        "model_tokens": 0,
+        "report_path": "/var/lib/hol-gauntlet/outputs/0123456789abcdef/report",
+        "report_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "passed"
+      }
+    },
+    {
+      "finish": {
+        "description": "Gauntlet failed (deterministic, zero inference)",
+        "post_state": "failure",
+        "state": "failed"
+      },
+      "name": "failed",
+      "response": {
+        "cells": [],
+        "deployment_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "exit_code": 1,
+        "job_id": "0123456789abcdef",
+        "model_tokens": 0,
+        "report_path": "/var/lib/hol-gauntlet/outputs/0123456789abcdef/report",
+        "report_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "failed"
+      }
+    },
+    {
+      "finish": {
+        "description": "Gauntlet invalid-evidence (deterministic, zero inference)",
+        "post_state": "error",
+        "state": "invalid-evidence"
+      },
+      "name": "invalid",
+      "response": {
+        "cells": [],
+        "deployment_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "exit_code": 2,
+        "job_id": "0123456789abcdef",
+        "model_tokens": 0,
+        "report_path": "/var/lib/hol-gauntlet/outputs/0123456789abcdef/report",
+        "report_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "invalid-evidence"
+      }
+    },
+    {
+      "finish": {
+        "description": "Gauntlet failed (deterministic, zero inference)",
+        "post_state": "failure",
+        "state": "failed"
+      },
+      "name": "failed_code_overrides_pass",
+      "response": {
+        "cells": [],
+        "deployment_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "exit_code": 1,
+        "job_id": "0123456789abcdef",
+        "model_tokens": 0,
+        "report_path": "/var/lib/hol-gauntlet/outputs/0123456789abcdef/report",
+        "report_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "passed"
+      }
+    },
+    {
+      "finish": {
+        "description": "Gauntlet invalid-evidence (deterministic, zero inference)",
+        "post_state": "error",
+        "state": "invalid-evidence"
+      },
+      "name": "missing_report_is_invalid",
+      "response": {
+        "cells": [],
+        "deployment_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "exit_code": 0,
+        "job_id": "0123456789abcdef",
+        "model_tokens": 0,
+        "report_path": "/var/lib/hol-gauntlet/outputs/0123456789abcdef/report",
+        "report_sha256": null,
+        "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "passed"
+      }
+    },
+    {
+      "finish": {
+        "error": "VM result identity mismatch"
+      },
+      "name": "wrong_source",
+      "response": {
+        "cells": [],
+        "deployment_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "exit_code": 0,
+        "job_id": "0123456789abcdef",
+        "model_tokens": 0,
+        "report_path": "/var/lib/hol-gauntlet/outputs/0123456789abcdef/report",
+        "report_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "source_sha": "dddddddddddddddddddddddddddddddddddddddd",
+        "status": "passed"
+      }
+    },
+    {
+      "finish": {
+        "error": "VM result identity mismatch"
+      },
+      "name": "wrong_deployment",
+      "response": {
+        "cells": [],
+        "deployment_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "exit_code": 0,
+        "job_id": "0123456789abcdef",
+        "model_tokens": 0,
+        "report_path": "/var/lib/hol-gauntlet/outputs/0123456789abcdef/report",
+        "report_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "passed"
+      }
+    }
+  ],
+  "schema": "gauntlet-vm-reconcile-fixtures.v1",
+  "source_sha256": {
+    "agent.py": "04aed1ecf337746caed8fbd011c59926b47b37719add867628ac6b70a5309215",
+    "vm_worker.py": "fb95cd33bf04c3e68c641972dc6bd5340a8cd87b1ad2948ba131c4a71c60aa9e"
+  },
+  "with_deployment": {
+    "argv": [
+      "/opt/homebrew/bin/limactl",
+      "shell",
+      "hol-beta-bootstrap-20261016-004",
+      "--",
+      "sudo",
+      "-n",
+      "/opt/hol-benchmark-controller-20261013/.venv/bin/python",
+      "-I",
+      "-B",
+      "/opt/hol-gauntlet/worker.py"
+    ],
+    "request": {
+      "action": "reconcile",
+      "deployment_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "job_id": "0123456789abcdef",
+      "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "response": {
+      "cells": [],
+      "deployment_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "exit_code": 0,
+      "job_id": "0123456789abcdef",
+      "model_tokens": 0,
+      "report_path": "/var/lib/hol-gauntlet/outputs/0123456789abcdef/report",
+      "report_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "passed"
+    },
+    "timeout_seconds": 30
+  },
+  "without_deployment": {
+    "argv": [
+      "/opt/homebrew/bin/limactl",
+      "shell",
+      "hol-beta-bootstrap-20261016-004",
+      "--",
+      "sudo",
+      "-n",
+      "/opt/hol-benchmark-controller-20261013/.venv/bin/python",
+      "-I",
+      "-B",
+      "/opt/hol-gauntlet/worker.py"
+    ],
+    "request": {
+      "action": "reconcile",
+      "job_id": "0123456789abcdef",
+      "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "response": {
+      "error": "No terminal worker receipt; inspect VM before admitting more work",
+      "status": "unknown"
+    },
+    "timeout_seconds": 30
+  }
+}

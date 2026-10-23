@@ -1,0 +1,938 @@
+{
+  "admitted": [
+    {
+      "admitted": true,
+      "job": {
+        "id": "0000000000000001",
+        "kind": "release",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued",
+        "tag": "v3.48.0"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": true,
+      "job": {
+        "id": "0000000000000002",
+        "kind": "release",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "waiting",
+        "tag": "v3.49.0"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "0000000000000003",
+        "kind": "release",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued",
+        "tag": "v3.50.0"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "archived_at": 1792525000.25,
+        "id": "0000000000000004",
+        "kind": "release",
+        "state": "queued",
+        "tag": "v3.48.0"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": true,
+      "job": {
+        "archived_at": 0,
+        "id": "0000000000000005",
+        "kind": "release",
+        "state": "queued",
+        "tag": "v3.48.0"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "0000000000000006",
+        "kind": "pull-request",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "0000000000000007",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": true,
+      "job": {
+        "id": "0000000000000008",
+        "kind": "local-candidate",
+        "operator_queued": true,
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "0000000000000009",
+        "kind": "local-candidate",
+        "operator_queued": false,
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "000000000000000a",
+        "kind": "local-candidate",
+        "operator_queued": true,
+        "sha": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "state": "queued"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "000000000000000b",
+        "kind": "local-candidate",
+        "operator_queued": true,
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "000000000000000c",
+        "kind": "local-candidate",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "000000000000000d",
+        "kind": "local-candidate",
+        "operator_queued": 1,
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "archived_at": 1792525000.25,
+        "id": "000000000000000e",
+        "kind": "local-candidate",
+        "operator_queued": true,
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": true,
+      "job": {
+        "archived_at": "",
+        "id": "000000000000000f",
+        "kind": "release",
+        "state": "queued",
+        "tag": "v3.48.0"
+      },
+      "mode": "release-tags"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "0000000000000001",
+        "kind": "release",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued",
+        "tag": "v3.48.0"
+      },
+      "mode": "pull-requests"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "0000000000000002",
+        "kind": "release",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "waiting",
+        "tag": "v3.49.0"
+      },
+      "mode": "pull-requests"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "0000000000000003",
+        "kind": "release",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued",
+        "tag": "v3.50.0"
+      },
+      "mode": "pull-requests"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "archived_at": 1792525000.25,
+        "id": "0000000000000004",
+        "kind": "release",
+        "state": "queued",
+        "tag": "v3.48.0"
+      },
+      "mode": "pull-requests"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "archived_at": 0,
+        "id": "0000000000000005",
+        "kind": "release",
+        "state": "queued",
+        "tag": "v3.48.0"
+      },
+      "mode": "pull-requests"
+    },
+    {
+      "admitted": true,
+      "job": {
+        "id": "0000000000000006",
+        "kind": "pull-request",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "pull-requests"
+    },
+    {
+      "admitted": true,
+      "job": {
+        "id": "0000000000000007",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "pull-requests"
+    },
+    {
+      "admitted": true,
+      "job": {
+        "id": "0000000000000008",
+        "kind": "local-candidate",
+        "operator_queued": true,
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "pull-requests"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "0000000000000009",
+        "kind": "local-candidate",
+        "operator_queued": false,
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "pull-requests"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "000000000000000a",
+        "kind": "local-candidate",
+        "operator_queued": true,
+        "sha": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "state": "queued"
+      },
+      "mode": "pull-requests"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "000000000000000b",
+        "kind": "local-candidate",
+        "operator_queued": true,
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "pull-requests"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "000000000000000c",
+        "kind": "local-candidate",
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "pull-requests"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "id": "000000000000000d",
+        "kind": "local-candidate",
+        "operator_queued": 1,
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "pull-requests"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "archived_at": 1792525000.25,
+        "id": "000000000000000e",
+        "kind": "local-candidate",
+        "operator_queued": true,
+        "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "queued"
+      },
+      "mode": "pull-requests"
+    },
+    {
+      "admitted": false,
+      "job": {
+        "archived_at": "",
+        "id": "000000000000000f",
+        "kind": "release",
+        "state": "queued",
+        "tag": "v3.48.0"
+      },
+      "mode": "pull-requests"
+    }
+  ],
+  "agent_sha256": "04aed1ecf337746caed8fbd011c59926b47b37719add867628ac6b70a5309215",
+  "archived": [
+    {
+      "after": [
+        {
+          "id": "0000000000000065",
+          "kind": "release",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "queued",
+          "tag": "v3.48.0"
+        },
+        {
+          "archived_at": 1792525000.25,
+          "finished_at": 1792525000.25,
+          "id": "0000000000000066",
+          "kind": "release",
+          "reason": "Removed from active queue by release-only configuration",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "archived",
+          "tag": "v3.50.0"
+        },
+        {
+          "archived_at": 1792525000.25,
+          "finished_at": 1792525000.25,
+          "id": "0000000000000067",
+          "kind": "pull-request",
+          "reason": "Removed from active queue by release-only configuration",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "archived"
+        },
+        {
+          "id": "0000000000000068",
+          "kind": "local-candidate",
+          "operator_queued": true,
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "waiting-candidate"
+        },
+        {
+          "archived_at": 1792525000.25,
+          "finished_at": 1792525000.25,
+          "id": "0000000000000069",
+          "kind": "local-candidate",
+          "operator_queued": false,
+          "reason": "Removed from active queue by release-only configuration",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "archived"
+        },
+        {
+          "archived_at": 1792525000.25,
+          "id": "000000000000006a",
+          "kind": "local-candidate",
+          "operator_queued": true,
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "superseded"
+        },
+        {
+          "id": "000000000000006b",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "preparing"
+        },
+        {
+          "id": "000000000000006c",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "running"
+        },
+        {
+          "id": "000000000000006d",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "unknown"
+        },
+        {
+          "archived_at": 1792525000.25,
+          "finished_at": 1792525000.25,
+          "id": "000000000000006e",
+          "kind": "pull-request",
+          "reason": "Removed from active queue by release-only configuration",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "archived"
+        },
+        {
+          "archived_at": 1792525000.25,
+          "id": "000000000000006f",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "passed"
+        },
+        {
+          "archived_at": 1792524999.25,
+          "id": "0000000000000070",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "failed"
+        },
+        {
+          "archived_at": 1792524999.25,
+          "id": "0000000000000071",
+          "kind": "local-candidate",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "superseded"
+        }
+      ],
+      "before": [
+        {
+          "id": "0000000000000065",
+          "kind": "release",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "queued",
+          "tag": "v3.48.0"
+        },
+        {
+          "id": "0000000000000066",
+          "kind": "release",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "waiting",
+          "tag": "v3.50.0"
+        },
+        {
+          "id": "0000000000000067",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "queued"
+        },
+        {
+          "id": "0000000000000068",
+          "kind": "local-candidate",
+          "operator_queued": true,
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "waiting-candidate"
+        },
+        {
+          "id": "0000000000000069",
+          "kind": "local-candidate",
+          "operator_queued": false,
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "queued"
+        },
+        {
+          "id": "000000000000006a",
+          "kind": "local-candidate",
+          "operator_queued": true,
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "superseded"
+        },
+        {
+          "id": "000000000000006b",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "preparing"
+        },
+        {
+          "id": "000000000000006c",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "running"
+        },
+        {
+          "id": "000000000000006d",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "unknown"
+        },
+        {
+          "id": "000000000000006e",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "waiting-candidate"
+        },
+        {
+          "id": "000000000000006f",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "passed"
+        },
+        {
+          "archived_at": 1792524999.25,
+          "id": "0000000000000070",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "failed"
+        },
+        {
+          "archived_at": 1792524999.25,
+          "id": "0000000000000071",
+          "kind": "local-candidate",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "superseded"
+        }
+      ],
+      "mode": "release-tags",
+      "now": 1792525000.25,
+      "saved": [
+        "0000000000000066",
+        "0000000000000067",
+        "0000000000000069",
+        "000000000000006a",
+        "000000000000006e",
+        "000000000000006f"
+      ]
+    },
+    {
+      "after": [
+        {
+          "archived_at": 1792525000.25,
+          "finished_at": 1792525000.25,
+          "id": "0000000000000065",
+          "kind": "release",
+          "reason": "Removed from active queue by release-only configuration",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "archived",
+          "tag": "v3.48.0"
+        },
+        {
+          "archived_at": 1792525000.25,
+          "finished_at": 1792525000.25,
+          "id": "0000000000000066",
+          "kind": "release",
+          "reason": "Removed from active queue by release-only configuration",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "archived",
+          "tag": "v3.50.0"
+        },
+        {
+          "id": "0000000000000067",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "queued"
+        },
+        {
+          "id": "0000000000000068",
+          "kind": "local-candidate",
+          "operator_queued": true,
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "waiting-candidate"
+        },
+        {
+          "archived_at": 1792525000.25,
+          "finished_at": 1792525000.25,
+          "id": "0000000000000069",
+          "kind": "local-candidate",
+          "operator_queued": false,
+          "reason": "Removed from active queue by release-only configuration",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "archived"
+        },
+        {
+          "archived_at": 1792525000.25,
+          "id": "000000000000006a",
+          "kind": "local-candidate",
+          "operator_queued": true,
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "superseded"
+        },
+        {
+          "id": "000000000000006b",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "preparing"
+        },
+        {
+          "id": "000000000000006c",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "running"
+        },
+        {
+          "id": "000000000000006d",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "unknown"
+        },
+        {
+          "id": "000000000000006e",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "waiting-candidate"
+        },
+        {
+          "id": "000000000000006f",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "passed"
+        },
+        {
+          "archived_at": 1792524999.25,
+          "id": "0000000000000070",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "failed"
+        },
+        {
+          "archived_at": 1792524999.25,
+          "id": "0000000000000071",
+          "kind": "local-candidate",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "superseded"
+        }
+      ],
+      "before": [
+        {
+          "id": "0000000000000065",
+          "kind": "release",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "queued",
+          "tag": "v3.48.0"
+        },
+        {
+          "id": "0000000000000066",
+          "kind": "release",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "waiting",
+          "tag": "v3.50.0"
+        },
+        {
+          "id": "0000000000000067",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "queued"
+        },
+        {
+          "id": "0000000000000068",
+          "kind": "local-candidate",
+          "operator_queued": true,
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "waiting-candidate"
+        },
+        {
+          "id": "0000000000000069",
+          "kind": "local-candidate",
+          "operator_queued": false,
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "queued"
+        },
+        {
+          "id": "000000000000006a",
+          "kind": "local-candidate",
+          "operator_queued": true,
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "superseded"
+        },
+        {
+          "id": "000000000000006b",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "preparing"
+        },
+        {
+          "id": "000000000000006c",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "running"
+        },
+        {
+          "id": "000000000000006d",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "unknown"
+        },
+        {
+          "id": "000000000000006e",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "waiting-candidate"
+        },
+        {
+          "id": "000000000000006f",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "passed"
+        },
+        {
+          "archived_at": 1792524999.25,
+          "id": "0000000000000070",
+          "kind": "pull-request",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "failed"
+        },
+        {
+          "archived_at": 1792524999.25,
+          "id": "0000000000000071",
+          "kind": "local-candidate",
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "superseded"
+        }
+      ],
+      "mode": "pull-requests",
+      "now": 1792525000.25,
+      "saved": [
+        "0000000000000065",
+        "0000000000000066",
+        "0000000000000069",
+        "000000000000006a"
+      ]
+    }
+  ],
+  "configs": {
+    "pull-requests": {
+      "discovery_mode": "pull-requests",
+      "release_tags": [
+        "v3.48.0",
+        "v3.49.0"
+      ]
+    },
+    "release-tags": {
+      "discovery_mode": "release-tags",
+      "release_tags": [
+        "v3.48.0",
+        "v3.49.0"
+      ]
+    }
+  },
+  "releases_sha256": "de558acc1946900d587d2624bfa4128468d649d6bf158f71b628e44dac4598e6",
+  "schema": "gauntlet-release-queue-fixtures.v1",
+  "selected": [
+    {
+      "active": false,
+      "admission_reasons": false,
+      "held": false,
+      "jobs": [
+        {
+          "id": "00000000000000c9",
+          "kind": "pull-request",
+          "state": "queued"
+        },
+        {
+          "id": "00000000000000ca",
+          "kind": "release",
+          "state": "queued",
+          "tag": "v3.48.0"
+        }
+      ],
+      "mode": "release-tags",
+      "selected": "00000000000000ca"
+    },
+    {
+      "active": false,
+      "admission_reasons": false,
+      "held": false,
+      "jobs": [
+        {
+          "id": "00000000000000cb",
+          "kind": "release",
+          "state": "queued",
+          "status_error": "publish failed",
+          "tag": "v3.48.0"
+        },
+        {
+          "id": "00000000000000cc",
+          "kind": "release",
+          "state": "waiting",
+          "tag": "v3.49.0"
+        }
+      ],
+      "mode": "release-tags",
+      "selected": "00000000000000cc"
+    },
+    {
+      "active": false,
+      "admission_reasons": false,
+      "held": false,
+      "jobs": [
+        {
+          "id": "00000000000000cd",
+          "kind": "release",
+          "source_error": "moved",
+          "state": "queued",
+          "tag": "v3.48.0"
+        },
+        {
+          "id": "00000000000000ce",
+          "kind": "local-candidate",
+          "operator_queued": true,
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "queued"
+        }
+      ],
+      "mode": "release-tags",
+      "selected": "00000000000000ce"
+    },
+    {
+      "active": false,
+      "admission_reasons": false,
+      "held": false,
+      "jobs": [
+        {
+          "id": "00000000000000cf",
+          "kind": "release",
+          "state": "queued",
+          "tag": "v3.48.0"
+        },
+        {
+          "archived_at": 1792525000.25,
+          "id": "00000000000000d0",
+          "kind": "pull-request",
+          "state": "unknown"
+        }
+      ],
+      "mode": "release-tags",
+      "selected": null
+    },
+    {
+      "active": false,
+      "admission_reasons": false,
+      "held": true,
+      "jobs": [
+        {
+          "id": "00000000000000d1",
+          "kind": "release",
+          "state": "queued",
+          "tag": "v3.48.0"
+        }
+      ],
+      "mode": "release-tags",
+      "selected": null
+    },
+    {
+      "active": true,
+      "admission_reasons": false,
+      "held": false,
+      "jobs": [
+        {
+          "id": "00000000000000d2",
+          "kind": "release",
+          "state": "queued",
+          "tag": "v3.48.0"
+        }
+      ],
+      "mode": "release-tags",
+      "selected": null
+    },
+    {
+      "active": false,
+      "admission_reasons": true,
+      "held": false,
+      "jobs": [
+        {
+          "id": "00000000000000d3",
+          "kind": "release",
+          "state": "queued",
+          "tag": "v3.48.0"
+        }
+      ],
+      "mode": "release-tags",
+      "selected": null
+    },
+    {
+      "active": false,
+      "admission_reasons": false,
+      "held": false,
+      "jobs": [
+        {
+          "id": "00000000000000d4",
+          "kind": "release",
+          "state": "passed",
+          "tag": "v3.48.0"
+        },
+        {
+          "id": "00000000000000d5",
+          "kind": "release",
+          "state": "waiting-candidate",
+          "tag": "v3.49.0"
+        }
+      ],
+      "mode": "release-tags",
+      "selected": "00000000000000d5"
+    },
+    {
+      "active": false,
+      "admission_reasons": false,
+      "held": false,
+      "jobs": [
+        {
+          "id": "00000000000000d6",
+          "kind": "release",
+          "state": "queued",
+          "tag": "v3.48.0"
+        },
+        {
+          "id": "00000000000000d7",
+          "kind": "pull-request",
+          "state": "queued"
+        }
+      ],
+      "mode": "pull-requests",
+      "selected": "00000000000000d7"
+    },
+    {
+      "active": false,
+      "admission_reasons": false,
+      "held": false,
+      "jobs": [
+        {
+          "id": "00000000000000d8",
+          "kind": "local-candidate",
+          "operator_queued": true,
+          "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "queued"
+        },
+        {
+          "id": "00000000000000d9",
+          "kind": "pull-request",
+          "state": "queued"
+        }
+      ],
+      "mode": "pull-requests",
+      "selected": "00000000000000d8"
+    }
+  ]
+}

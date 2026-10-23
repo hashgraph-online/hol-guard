@@ -1,0 +1,119 @@
+{
+  "candidate_source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "cases": [
+    {
+      "plan": {
+        "argv": [
+          "/opt/homebrew/bin/uv",
+          "run",
+          "--no-project",
+          "--with",
+          "cryptography==50.0.0",
+          "python",
+          "-B",
+          "-m",
+          "ci.gauntlet.control_plane.live_provider",
+          "0123456789abcdef",
+          "beta-e2e",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "cwd": "/reviewed/hol/workflow-benchmark-implementation",
+        "execution_eligible": false,
+        "timeout_seconds": 900
+      },
+      "profile": "beta-e2e",
+      "result": {
+        "binding_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "known_tokens_before": 13746906,
+        "maximum_accounted_tokens": 14468885,
+        "model_id": "mlx-community/Qwen3.6-35B-A3B-8bit",
+        "model_manifest": "/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef/model-manifest.json",
+        "model_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "pid": 1234,
+        "provider_manifest": "/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef/provider-manifest.json",
+        "provider_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "root": "/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef"
+      },
+      "stdout": "loading local model\n{\"binding_sha256\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"known_tokens_before\": 13746906, \"maximum_accounted_tokens\": 14468885, \"model_id\": \"mlx-community/Qwen3.6-35B-A3B-8bit\", \"model_manifest\": \"/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef/model-manifest.json\", \"model_sha256\": \"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\", \"pid\": 1234, \"provider_manifest\": \"/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef/provider-manifest.json\", \"provider_sha256\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"root\": \"/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef\"}\n"
+    },
+    {
+      "plan": {
+        "argv": [
+          "/opt/homebrew/bin/uv",
+          "run",
+          "--no-project",
+          "--with",
+          "cryptography==50.0.0",
+          "python",
+          "-B",
+          "-m",
+          "ci.gauntlet.control_plane.live_provider",
+          "0123456789abcdef",
+          "feature-ai",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "cwd": "/reviewed/hol/workflow-benchmark-implementation",
+        "execution_eligible": false,
+        "timeout_seconds": 900
+      },
+      "profile": "feature-ai",
+      "result": {
+        "binding_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "known_tokens_before": 13746906,
+        "maximum_accounted_tokens": 14468885,
+        "model_id": "mlx-community/Qwen3.6-35B-A3B-8bit",
+        "model_manifest": "/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef/model-manifest.json",
+        "model_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "pid": 1234,
+        "provider_manifest": "/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef/provider-manifest.json",
+        "provider_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "root": "/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef"
+      },
+      "stdout": "loading local model\n{\"binding_sha256\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"known_tokens_before\": 13746906, \"maximum_accounted_tokens\": 14468885, \"model_id\": \"mlx-community/Qwen3.6-35B-A3B-8bit\", \"model_manifest\": \"/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef/model-manifest.json\", \"model_sha256\": \"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\", \"pid\": 1234, \"provider_manifest\": \"/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef/provider-manifest.json\", \"provider_sha256\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"root\": \"/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef\"}\n"
+    },
+    {
+      "plan": {
+        "argv": [
+          "/opt/homebrew/bin/uv",
+          "run",
+          "--no-project",
+          "--with",
+          "cryptography==50.0.0",
+          "python",
+          "-B",
+          "-m",
+          "ci.gauntlet.control_plane.live_provider",
+          "0123456789abcdef",
+          "feature-ai-protocol",
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ],
+        "cwd": "/reviewed/hol/workflow-benchmark-implementation",
+        "execution_eligible": false,
+        "timeout_seconds": 900
+      },
+      "profile": "feature-ai-protocol",
+      "result": {
+        "binding_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "known_tokens_before": 13746906,
+        "maximum_accounted_tokens": 14468885,
+        "model_id": "mlx-community/Qwen3.6-35B-A3B-8bit",
+        "model_manifest": "/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef/model-manifest.json",
+        "model_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "pid": 1234,
+        "provider_manifest": "/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef/provider-manifest.json",
+        "provider_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "root": "/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef"
+      },
+      "stdout": "loading local model\n{\"binding_sha256\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"known_tokens_before\": 13746906, \"maximum_accounted_tokens\": 14468885, \"model_id\": \"mlx-community/Qwen3.6-35B-A3B-8bit\", \"model_manifest\": \"/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef/model-manifest.json\", \"model_sha256\": \"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\", \"pid\": 1234, \"provider_manifest\": \"/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef/provider-manifest.json\", \"provider_sha256\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"root\": \"/reviewed/hol/local-model-provider-gauntlet-0123456789abcdef\"}\n"
+    }
+  ],
+  "command_ast_sha256": "cb60a268c9b5d0c7b8bc8265fec6987615826cb103c00af83cfde3e1d74f877f",
+  "job_id": "0123456789abcdef",
+  "known_tokens_before": 13746906,
+  "return_ast_sha256": "b9ad094b3c656d81e416a8a1f4dd02a5068b2baea801de3e9cf563e04633cac1",
+  "schema": "hol-gauntlet-python-live-provider-start-fixtures.v1",
+  "source_sha256": {
+    "live_local": "71c243e73702aef416db1a55108635a755f0a4ba4158c89723ca41d76e56af60",
+    "live_provider": "650b1964a1aba988ccd239f13a933ea0697d9b169656f72a86999d5b015a25db"
+  }
+}

@@ -60,6 +60,7 @@ _COMMON_HANDLERS = {
     "apps": "_run_guard_apps_command",
     "install": "_run_guard_install_command",
     "codex-mcp-proxy": "_run_guard_codex_mcp_proxy_command",
+    "omp-mcp-proxy": "_run_guard_omp_mcp_proxy_command",
     "cursor-mcp-proxy": "_run_guard_cursor_mcp_proxy_command",
     "opencode-mcp-proxy": "_run_guard_opencode_mcp_proxy_command",
     "copilot-mcp-proxy": "_run_guard_copilot_mcp_proxy_command",

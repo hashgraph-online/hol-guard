@@ -1,0 +1,269 @@
+{
+  "base": {
+    "effect_present": false,
+    "exit_code": 126,
+    "kernel_process_samples": [
+      {
+        "pid": 101
+      }
+    ],
+    "marker_sha256_after": "1daf82f62247f3a1d148c2d88b1828c9efa2d5f087d7059e98650aafe7afdea3",
+    "native_pre_decision": {
+      "decision": "deny",
+      "policy_action": "deny",
+      "reason": "blocked",
+      "reason_code": "sensitive"
+    },
+    "positive_effect_observed": true,
+    "positive_exit_code": 0,
+    "review_kernel_process_samples": [
+      {
+        "pid": 102
+      }
+    ]
+  },
+  "cases": [
+    {
+      "accepted": true,
+      "decision_fields": {},
+      "error": null,
+      "fields": {},
+      "name": "accepted-deny",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": true,
+      "decision_fields": {
+        "decision": "block"
+      },
+      "error": null,
+      "fields": {},
+      "name": "accepted-block",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": true,
+      "decision_fields": {},
+      "error": null,
+      "fields": {},
+      "name": "accepted-no-policy",
+      "remove_decision": [
+        "policy_action"
+      ],
+      "remove_fields": []
+    },
+    {
+      "accepted": true,
+      "decision_fields": {
+        "observe_mode": false
+      },
+      "error": null,
+      "fields": {},
+      "name": "accepted-observe-false",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {},
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {
+        "positive_exit_code": 1
+      },
+      "name": "positive-exit",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {},
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {
+        "positive_exit_code": false
+      },
+      "name": "positive-bool",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {},
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {
+        "positive_effect_observed": false
+      },
+      "name": "positive-effect",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {},
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {
+        "exit_code": 0
+      },
+      "name": "negative-exit",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {},
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {
+        "exit_code": true
+      },
+      "name": "negative-bool",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {},
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {
+        "effect_present": true
+      },
+      "name": "effect-present",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {},
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {
+        "kernel_process_samples": []
+      },
+      "name": "missing-kernel",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {},
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {
+        "review_kernel_process_samples": []
+      },
+      "name": "missing-review-kernel",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {
+        "decision": "allow"
+      },
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {},
+      "name": "allowed-pre",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {
+        "reason": "  "
+      },
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {},
+      "name": "blank-reason",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {
+        "reason": 4
+      },
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {},
+      "name": "numeric-reason",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {
+        "policy_action": "allow"
+      },
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {},
+      "name": "policy-allow",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {
+        "policy_action": "warn"
+      },
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {},
+      "name": "policy-warn",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {
+        "policy_action": "sandbox-required"
+      },
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {},
+      "name": "policy-sandbox",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {
+        "policy_action": 1
+      },
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {},
+      "name": "policy-numeric",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {
+        "required_execution_profile": "blocked"
+      },
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {},
+      "name": "execution-profile",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {
+        "observe_mode": true
+      },
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {},
+      "name": "observe-mode",
+      "remove_decision": [],
+      "remove_fields": []
+    },
+    {
+      "accepted": false,
+      "decision_fields": {},
+      "error": "forbidden command did not refuse a reachable effect",
+      "fields": {
+        "marker_sha256_after": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "name": "changed-marker",
+      "remove_decision": [],
+      "remove_fields": []
+    }
+  ],
+  "schema": "gauntlet-forbidden-command-fixtures.v1",
+  "source_sha256": "881aac633bb4a8c211165d37f3860fed6655c0dbc8395552fd75baeab6a3e879"
+}

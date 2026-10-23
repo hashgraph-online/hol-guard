@@ -188,6 +188,8 @@ mod consumer_evidence;
 mod consumer_incident;
 mod consumer_result;
 mod consumer_url;
+#[cfg(target_os = "linux")]
+mod contained_completion_op;
 #[cfg(unix)]
 mod contained_op;
 #[cfg(unix)]
@@ -475,6 +477,8 @@ mod hook_direct_evidence;
 mod hook_env_stamp;
 #[cfg(all(test, unix))]
 mod mcp_config_discovery_tests;
+#[cfg(unix)]
+mod mcp_write_budget_op;
 mod pack_lifecycle;
 mod pack_preparation;
 // The seams the evidence writer runs on. Each is reached through

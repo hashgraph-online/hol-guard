@@ -34,8 +34,8 @@ fn minimum_action_is(value: &Value, expected: &str) -> bool {
     value.get("minimum_action").and_then(Value::as_str) == Some(expected)
 }
 
-/// `_native_classification_factors`: carry native hard blocks, reapproval, and
-/// benign proof into host policy composition.
+/// `_native_classification_factors`: carry native containment, hard blocks,
+/// reapproval, and benign proof into host policy composition.
 pub fn native_classification_factors(
     value: &Value,
     command: &CanonicalCommand,
@@ -45,6 +45,7 @@ pub fn native_classification_factors(
         return Vec::new();
     }
     let blocked = minimum_action_is(value, "block");
+    let sandbox_required = minimum_action_is(value, "sandbox-required");
     let requires_reapproval = minimum_action_is(value, "require-reapproval");
     let reapproval_reason = if value.get("reason_code").and_then(Value::as_str)
         == Some("native_privileged_wrapper_reapproval")
@@ -57,7 +58,7 @@ pub fn native_classification_factors(
         && command.confidence == "exact"
         && minimum_action_is(value, "allow")
         && value.get("explicitly_benign") == Some(&Value::Bool(true));
-    if !(blocked || requires_reapproval || explicitly_benign) {
+    if !(blocked || sandbox_required || requires_reapproval || explicitly_benign) {
         return Vec::new();
     }
     let digest = canonical_digest(&json!({
@@ -66,6 +67,8 @@ pub fn native_classification_factors(
         "command_extensions": value.get("command_extensions").cloned().unwrap_or(Value::Null),
         "minimum_action": if blocked {
             "block"
+        } else if sandbox_required {
+            "sandbox-required"
         } else if requires_reapproval {
             "require-reapproval"
         } else {
@@ -90,6 +93,9 @@ pub fn native_classification_factors(
     if blocked {
         factor.reason_code = "native.classification-block".to_owned();
         factor.basis.action_floor = GuardAction::Block;
+    } else if sandbox_required {
+        factor.reason_code = "native.classification-sandbox-required".to_owned();
+        factor.basis.action_floor = GuardAction::SandboxRequired;
     } else if requires_reapproval {
         factor.reason_code = reapproval_reason.to_owned();
         factor.basis.action_floor = GuardAction::RequireReapproval;

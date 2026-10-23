@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol-guard.example/benchmark/ci-runner-compact-config.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "campaign",
+    "policy",
+    "selection",
+    "shards",
+    "assets",
+    "runtime",
+    "provider",
+    "state_layout"
+  ],
+  "$defs": {
+    "sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "document": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha"
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "kind",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "sdk-tree",
+            "guard-prefix",
+            "cell-artifacts"
+          ]
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema": {
+      "const": "gauntlet-ci-runner.v4"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "campaign": {
+      "$ref": "#/$defs/document"
+    },
+    "policy": {
+      "$ref": "#/$defs/document"
+    },
+    "selection": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10000,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+      }
+    },
+    "shards": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64
+    },
+    "assets": {
+      "type": "object",
+      "minProperties": 12,
+      "maxProperties": 13,
+      "propertyNames": {
+        "enum": [
+          "bun",
+          "node",
+          "wheel",
+          "native",
+          "policy",
+          "compiler",
+          "model_manifest",
+          "provider_manifest",
+          "sdk",
+          "guard_prefix",
+          "zod_cache",
+          "private_cell",
+          "conformance"
+        ]
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/asset"
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_id",
+        "base_url",
+        "guard_source_sha",
+        "guard_bwrap_sha256",
+        "guard_executor_image_id",
+        "private_cell"
+      ],
+      "properties": {
+        "model_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "base_url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "guard_source_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "guard_bwrap_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "guard_executor_image_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "private_cell": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "initializer_sha256",
+            "native_sha256",
+            "runtime_tree_digest",
+            "idmap_runtime",
+            "cpu_profile"
+          ],
+          "properties": {
+            "initializer_sha256": {
+              "$ref": "#/$defs/sha"
+            },
+            "native_sha256": {
+              "$ref": "#/$defs/sha"
+            },
+            "runtime_tree_digest": {
+              "$ref": "#/$defs/sha"
+            },
+            "idmap_runtime": {
+              "enum": [
+                "ubuntu2404-product-v1",
+                "ubuntu2404-controller-v1"
+              ]
+            },
+            "cpu_profile": {
+              "enum": [
+                "quota-v1",
+                "single-core-v1"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "quota_config_digest",
+        "model_identity_digest",
+        "binding_sha256",
+        "adapter_sha256",
+        "server_sha256",
+        "token_cap",
+        "maximum_requests"
+      ],
+      "properties": {
+        "profile": {
+          "const": "owned-mlx-serial.v1"
+        },
+        "quota_config_digest": {
+          "$ref": "#/$defs/sha"
+        },
+        "quota_allowance_digest": {
+          "$ref": "#/$defs/sha"
+        },
+        "model_identity_digest": {
+          "$ref": "#/$defs/sha"
+        },
+        "binding_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "adapter_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "server_sha256": {
+          "$ref": "#/$defs/sha"
+        },
+        "token_cap": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000000
+        },
+        "maximum_requests": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        }
+      }
+    },
+    "state_layout": {
+      "const": "compact-v1"
+    }
+  }
+}

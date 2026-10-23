@@ -1,0 +1,1838 @@
+{
+  "ast_statements": "verify_control body[1:17]",
+  "cases": [
+    {
+      "accepted": true,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "valid-success",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "result": {
+        "builtin": {
+          "product_plane": {
+            "synthetic_plane": 73
+          }
+        },
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "runtime": {
+          "native_builtin_audit": {
+            "record": {
+              "product_plane": {
+                "synthetic_plane": 73
+              }
+            },
+            "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+          },
+          "schema_version": "5.0",
+          "settings": {
+            "bwrap_sha256": "bwrap",
+            "contained_completion_profile": "guard-contained-completion.v1",
+            "contained_output_binding": "controller-contained-output.v1",
+            "executor_image_id": "executor",
+            "mcp_image_id": "mcp",
+            "package_version": "3.50.0a0",
+            "prefix_digest": "prefix",
+            "private_cell": {
+              "artifact_manifest_sha256": "artifacts",
+              "cpu_profile": "quota-v1",
+              "idmap_runtime": "ubuntu2404-product-v1",
+              "initializer_sha256": "initializer",
+              "native_sha256": "native",
+              "runtime_tree_digest": "runtime"
+            },
+            "source_sha": "source"
+          }
+        },
+        "settings": {
+          "bwrap_sha256": "bwrap",
+          "contained_completion_profile": "guard-contained-completion.v1",
+          "contained_output_binding": "controller-contained-output.v1",
+          "executor_image_id": "executor",
+          "mcp_image_id": "mcp",
+          "package_version": "3.50.0a0",
+          "prefix_digest": "prefix",
+          "private_cell": {
+            "artifact_manifest_sha256": "artifacts",
+            "cpu_profile": "quota-v1",
+            "idmap_runtime": "ubuntu2404-product-v1",
+            "initializer_sha256": "initializer",
+            "native_sha256": "native",
+            "runtime_tree_digest": "runtime"
+          },
+          "source_sha": "source"
+        }
+      },
+      "role": "success"
+    },
+    {
+      "accepted": true,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "valid-timeout",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "result": {
+        "builtin": {
+          "product_plane": {
+            "synthetic_plane": 73
+          }
+        },
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "runtime": {
+          "native_builtin_audit": {
+            "record": {
+              "product_plane": {
+                "synthetic_plane": 73
+              }
+            },
+            "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+          },
+          "schema_version": "5.0",
+          "settings": {
+            "bwrap_sha256": "bwrap",
+            "contained_completion_profile": "guard-contained-completion.v1",
+            "contained_output_binding": "controller-contained-output.v1",
+            "executor_image_id": "executor",
+            "mcp_image_id": "mcp",
+            "package_version": "3.50.0a0",
+            "prefix_digest": "prefix",
+            "private_cell": {
+              "artifact_manifest_sha256": "artifacts",
+              "cpu_profile": "quota-v1",
+              "idmap_runtime": "ubuntu2404-product-v1",
+              "initializer_sha256": "initializer",
+              "native_sha256": "native",
+              "runtime_tree_digest": "runtime"
+            },
+            "source_sha": "source"
+          }
+        },
+        "settings": {
+          "bwrap_sha256": "bwrap",
+          "contained_completion_profile": "guard-contained-completion.v1",
+          "contained_output_binding": "controller-contained-output.v1",
+          "executor_image_id": "executor",
+          "mcp_image_id": "mcp",
+          "package_version": "3.50.0a0",
+          "prefix_digest": "prefix",
+          "private_cell": {
+            "artifact_manifest_sha256": "artifacts",
+            "cpu_profile": "quota-v1",
+            "idmap_runtime": "ubuntu2404-product-v1",
+            "initializer_sha256": "initializer",
+            "native_sha256": "native",
+            "runtime_tree_digest": "runtime"
+          },
+          "source_sha": "source"
+        }
+      },
+      "role": "timeout"
+    },
+    {
+      "accepted": true,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "valid-input-binding",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "result": {
+        "builtin": {
+          "product_plane": {
+            "synthetic_plane": 73
+          }
+        },
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "runtime": {
+          "native_builtin_audit": {
+            "record": {
+              "product_plane": {
+                "synthetic_plane": 73
+              }
+            },
+            "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+          },
+          "schema_version": "5.0",
+          "settings": {
+            "bwrap_sha256": "bwrap",
+            "contained_completion_profile": "guard-contained-completion.v1",
+            "contained_output_binding": "controller-contained-output.v1",
+            "executor_image_id": "executor",
+            "mcp_image_id": "mcp",
+            "package_version": "3.50.0a0",
+            "prefix_digest": "prefix",
+            "private_cell": {
+              "artifact_manifest_sha256": "artifacts",
+              "cpu_profile": "quota-v1",
+              "idmap_runtime": "ubuntu2404-product-v1",
+              "initializer_sha256": "initializer",
+              "native_sha256": "native",
+              "runtime_tree_digest": "runtime"
+            },
+            "source_sha": "source"
+          }
+        },
+        "settings": {
+          "bwrap_sha256": "bwrap",
+          "contained_completion_profile": "guard-contained-completion.v1",
+          "contained_output_binding": "controller-contained-output.v1",
+          "executor_image_id": "executor",
+          "mcp_image_id": "mcp",
+          "package_version": "3.50.0a0",
+          "prefix_digest": "prefix",
+          "private_cell": {
+            "artifact_manifest_sha256": "artifacts",
+            "cpu_profile": "quota-v1",
+            "idmap_runtime": "ubuntu2404-product-v1",
+            "initializer_sha256": "initializer",
+            "native_sha256": "native",
+            "runtime_tree_digest": "runtime"
+          },
+          "source_sha": "source"
+        }
+      },
+      "role": "input-binding"
+    },
+    {
+      "accepted": true,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "4.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "BiON6cYUAvVH5xYH0NZcpSbluNsyYNAUIEjS/e678mEre6aD81zyZPPNE9D4ucrgHGkYedXJMW9yarBGb91CBw=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "valid-v4-without-package-version",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "result": {
+        "builtin": {
+          "product_plane": {
+            "synthetic_plane": 73
+          }
+        },
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "runtime": {
+          "native_builtin_audit": {
+            "record": {
+              "product_plane": {
+                "synthetic_plane": 73
+              }
+            },
+            "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+          },
+          "schema_version": "4.0",
+          "settings": {
+            "bwrap_sha256": "bwrap",
+            "contained_completion_profile": "guard-contained-completion.v1",
+            "contained_output_binding": "controller-contained-output.v1",
+            "executor_image_id": "executor",
+            "mcp_image_id": "mcp",
+            "prefix_digest": "prefix",
+            "private_cell": {
+              "artifact_manifest_sha256": "artifacts",
+              "cpu_profile": "quota-v1",
+              "idmap_runtime": "ubuntu2404-product-v1",
+              "initializer_sha256": "initializer",
+              "native_sha256": "native",
+              "runtime_tree_digest": "runtime"
+            },
+            "source_sha": "source"
+          }
+        },
+        "settings": {
+          "bwrap_sha256": "bwrap",
+          "contained_completion_profile": "guard-contained-completion.v1",
+          "contained_output_binding": "controller-contained-output.v1",
+          "executor_image_id": "executor",
+          "mcp_image_id": "mcp",
+          "prefix_digest": "prefix",
+          "private_cell": {
+            "artifact_manifest_sha256": "artifacts",
+            "cpu_profile": "quota-v1",
+            "idmap_runtime": "ubuntu2404-product-v1",
+            "initializer_sha256": "initializer",
+            "native_sha256": "native",
+            "runtime_tree_digest": "runtime"
+          },
+          "source_sha": "source"
+        }
+      },
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "unknown conformance role",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "unknown-role",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "injection"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": false,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "control failed, imported product into Root or exercised inference",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "control-not-complete",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": false
+      },
+      "error": "control failed, imported product into Root or exercised inference",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "sdk-not-exercised",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": true,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "control failed, imported product into Root or exercised inference",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "model-exercised",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": true,
+        "sdk_exercised": true
+      },
+      "error": "control failed, imported product into Root or exercised inference",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "root-imported",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "cleanup_error": "synthetic",
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "control failed, imported product into Root or exercised inference",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "cleanup-error",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": false,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "control resources survived",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "image-not-released",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": false,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "control resources survived",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "agent-cgroup-present",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": false,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "control resources survived",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "profile-present",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 1,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "control resources survived",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "remove-failed",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "control key differs from outside pin",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "key-mismatch",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "other"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "externally pinned controller signature invalid",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "runtime-tampered",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "control runtime differs from conformance tuple",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "other"
+      },
+      "name": "source-pin-mismatch",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "control package version differs from conformance tuple",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "other",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "version-pin-mismatch",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "control backend differs from tuple",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "other",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "backend-pin-mismatch",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 74
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "detached control plane differs from signed observation",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "plane-mismatch",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 74
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "3CkeduMac0r5lCbuBgSPq/sDzR08888IL3socDtlH3rcOGhYdN4LIrSbUYqxuhJxUBzBjBpkjDYkDxYiOKGjBQ=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "externally pinned controller signature invalid",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "builtin-tampered",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "other",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "tGHiwynX2j0OdbsIM5c+LvoJBKQ0oULx+wx+s/f307HsaS5OF6NIiOcQTiG157JzFxz34MJlKXjboAD5IsEqAg=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "current completion/output profiles required",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "profile-mismatch",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "synthetic_plane": 73
+                }
+              },
+              "signature": "8zlmSJYfIOiPk7Vv7cSo6vBBCdgSCHdwVdZHhkirzNzpCPIGpMCb1XXJKX6JtWOTzMfIj3NWqul1Y/sZpAngAQ=="
+            },
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "TLxzkaCimVMS2ZizkAazo5Fxas2xL5yu/risNupGKLWnoMiMX3/yoEbyn0dija8BasUn79ESBsBIXSryrhOuAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "synthetic_plane": 73
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true
+      },
+      "error": "current completion/output profiles required",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "schema-version-mismatch",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    }
+  ],
+  "custody_sha256": "fa347e8cf791c21a4ce6de8d331bfbb80d80f605d0e927f672ed8475e24de21e",
+  "schema": "gauntlet-control-opening-fixtures.v1",
+  "source_sha256": "22773101b8880d65dd85183a4212ca8efa57897388ad1408ab5d1ad971111427"
+}

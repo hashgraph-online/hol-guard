@@ -1,0 +1,689 @@
+{
+  "branch_ast_sha256": "68f8fd0b97bb6c8181bd446fdc1e43dd72a0f21a1bc23cf6725843e7ff187ad8",
+  "cases": [
+    {
+      "expected": {
+        "accepted": true,
+        "known_tokens_before": 13746906,
+        "reservation": 200000
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "feature_ai"
+    },
+    {
+      "expected": {
+        "accepted": true,
+        "known_tokens_before": 13746906,
+        "reservation": 200000
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai-protocol",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "feature_ai_protocol"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "complete selected matrix reservation does not fit settled quota"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "beta-e2e",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "beta_e2e_too_large"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "fixed live job identity required"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "bad",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "job_id_wrong_length"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "fixed live job identity required"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "ABCDEF0123456789",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "job_id_uppercase"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "candidate source identity differs from local model allowance"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "other_requested_candidate"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "reviewed live profile required"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "full",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "unknown_profile"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "reviewed provider template changed"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "name": "changed_template"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "local model allowance authorization changed"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "changed_allowance"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "local model allowance authorization differs from this candidate"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "other",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "wrong_allowance_schema"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "local model allowance authorization differs from this candidate"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 0,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "wrong_previous"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "local model allowance authorization differs from this candidate"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 1,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "wrong_additional"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "local model allowance authorization differs from this candidate"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 0
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "wrong_ceiling"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "local model allowance authorization differs from this candidate"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "wrong_candidate"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "complete selected matrix reservation does not fit settled quota"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746905,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "charged_unknown"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "complete selected matrix reservation does not fit settled quota"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": true,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "halted"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "complete selected matrix reservation does not fit settled quota"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 1,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "pending"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "complete selected matrix reservation does not fit settled quota"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 1,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "reserved"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "complete selected matrix reservation does not fit settled quota"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468884
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "quota_cap"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "complete selected matrix reservation does not fit settled quota"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 9468884,
+          "halted": false,
+          "known_tokens": 9468884,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "below_allowance_start"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "complete selected matrix reservation does not fit settled quota"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": false,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 14300000,
+          "halted": false,
+          "known_tokens": 14300000,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "feature_reservation_too_large"
+    },
+    {
+      "expected": {
+        "accepted": false,
+        "error_type": "ValueError",
+        "reason": "port 8002 already has a service"
+      },
+      "input": {
+        "allowance": {
+          "additional_tokens": 5000000,
+          "candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+          "previous_charged_tokens": 9468885,
+          "schema": "gauntlet-local-allowance-authorization.v1",
+          "total_tokens": 14468885
+        },
+        "allowance_sha": "269508fcb01074d6bb07ef20505e90bc863fc85fca65a3a930ab93a8c23e2b28",
+        "job_id": "0123456789abcdef",
+        "port_busy": true,
+        "profile": "feature-ai",
+        "quota": {
+          "charged_tokens": 13746906,
+          "halted": false,
+          "known_tokens": 13746906,
+          "pending_requests": 0,
+          "reserved_tokens": 0,
+          "token_cap": 14468885
+        },
+        "requested_candidate_source_sha": "c1d18f931eaba02a37a2c9515db769fc2219bee8",
+        "template_sha": "f95dde32317bb5a2c09a2295c51524126c8c81ee4c16618a1b2a27ccfa8c8244"
+      },
+      "name": "port_busy"
+    }
+  ],
+  "schema": "hol-gauntlet-python-live-provider-preflight-fixtures.v1",
+  "source_sha256": "650b1964a1aba988ccd239f13a933ea0697d9b169656f72a86999d5b015a25db"
+}

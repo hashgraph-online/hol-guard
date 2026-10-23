@@ -1,0 +1,11 @@
+# Rust local-model route and advertisement parity
+
+The Python benchmark permits four exact local URL aliases on ports 8001 or 8002, always connecting to the fixed Lima host address `192.168.5.2`. Historical evidence with no endpoint metadata can establish only the original `http://host.lima.internal:8001/v1` route. The provider preflight accepts exactly one advertised model with the frozen model ID. These checks constrain the route and identity; they do not call the model or attest its weights.
+
+The [fixture generator](../ci/gauntlet-rs/proofs/freeze_model_endpoint_v1.py) verifies SHA-256 `82cf4f951340e0c9cc65315b31f042aef235d378a661d4b5246f36db29d3f302` for pinned `model_endpoint.py` and `69f5d0368f5c763a047c554b2d9a31a63f169fd2bc8d13a14aa96d8a38a274d7` for pinned `ci_runner_preflight.py`. It invokes the real Python route and preflight functions. Small import stubs replace unrelated schema and asset modules only; a fake HTTP connection supplies bounded, ordinary JSON bodies to the preflight's model-advertisement condition. No network connection is made.
+
+The committed [fixture](../ci/gauntlet-rs/crates/gauntlet-evidence/tests/fixtures/python_model_endpoint_v1.json) has SHA-256 `91d9ca3e92d571bb09bbe4618f21d6cc7cf05cad611433bdfb0698dd226fa0c6`, reproduced on a second generation. It records 19 route cases, six historical/explicit endpoint observations and eight one-model responses. Rust's `model_endpoint`, `verify_model_endpoint` and `verify_advertised_model` match the Python accepted values and refusal messages. The isolated parity test and complete all-feature Rust workspace tests and Clippy passed locally.
+
+The static ARM64 evidence test binary had SHA-256 `7c524a87bd3fb7b1c762fa2c7d3e0df2ce4076830a9f6172722afc9171143aeb` on both host and the idle 16-GiB VM. All 20 unprivileged evidence unit tests passed there, including this route/advertisement parity case. The VM run used embedded synthetic fixtures; it did not query the live provider.
+
+This is a pure read-only contract. A Rust host/VM observer still needs bounded HTTP reads of the two fixed provider endpoints, independent private quota-journal custody, a reviewed model/provider generation, known token deltas and crash-safe handoff before any Rust-controlled inference or benchmark eligibility.

@@ -1,0 +1,11 @@
+[package]
+name = "gauntlet-provider-observer"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+description = "Read-only fixed-route local model provider metadata observer"
+
+[dependencies]
+gauntlet-contracts = { path = "../gauntlet-contracts" }
+gauntlet-evidence = { path = "../gauntlet-evidence" }
+serde_json = { version = "=1.0.151", features = ["arbitrary_precision"] }

@@ -1,0 +1,7 @@
+# Rust private-cell task and mount relation
+
+`gauntlet-evidence::verify_private_cell_mount_relation` now matches Python's `_tasks` and `_mountinfo` checks over supplied outside observations. It binds the frozen workspace/provider source paths and unchanged device/inode/mode to the declared idmapped product views and observer PID. It also parses bounded mountinfo text, requiring the immutable system/prefix mounts to be read-only, the mutable product/task mounts to retain their declared floor, and refusing duplicate paths, `/sys`, `/oldroot` and control filesystems. It returns `execution_eligible: false`.
+
+`ci/gauntlet-rs/proofs/generate_private_cell_mount_vectors.py` extracts the actual `_sha`, `_one`, `_tasks` and `_mountinfo` functions from `private_cell_custody.py` SHA-256 `2de9c8c27d2b8f883291900ed3fe29f0f9aa7a318b03a195c4f20ba4f5a22cbb`. The synthetic fixture `private_cell_mount_v1.json` SHA-256 `0fd88a0c81f1c1e512ffaff5244ab88bcd47cd7acd356b31a29786ceb9417aba` contains 26 Python cases: four accepted and 22 refused with exact reason messages. It includes CRLF, escaped paths, malformed bare CR/Unicode line separators, missing/unsafe idmaps and unsafe mount floors. Rust also refuses an oversized inventory. Two targeted tests and warnings-denied Clippy passed in the pinned native ARM64 Rust 1.88 image.
+
+These are supplied JSON and text rows; this proof does not authenticate `/proc/*/mountinfo`, task source inodes, a signed private-cell plane or an actual product process. The broader private-cell boundary and deterministic-verdict exits remain open.

@@ -153,9 +153,15 @@ def _run_guard_execute_contained_test_command(
             raise RestrictedPytestError(OUT_OF_SYNC_REASON, superseded.message())
         # The workspace sandbox asks this store for the grant it is widened by.
         with grant_store(store):
-            return run_authorized_contained_test(
-                payload, workspace=workspace, timeout_seconds=int(args.timeout_seconds),
-                home_dir=context.home_dir,
+            from ..runtime.contained_completion import run_with_completion
+
+            return run_with_completion(
+                lambda authorize: run_authorized_contained_test(
+                    payload, workspace=workspace, timeout_seconds=int(args.timeout_seconds),
+                    home_dir=context.home_dir, authorize=authorize,
+                ),
+                payload=payload, harness=str(getattr(args, "harness", "omp")),
+                workspace=workspace, guard_home=guard_home,
                 authorize=lambda original: try_native_hook_authority(
                     # The adapter snapshots the hook payload before stamping it, so
                     # declare the environment this process will launch the command

@@ -1,0 +1,7 @@
+# Rust deterministic forbidden-command reducer proof
+
+The pinned Python `ci/gauntlet/benchmark/deterministic.py` has SHA-256 `881aac633bb4a8c211165d37f3860fed6655c0dbc8395552fd75baeab6a3e879`. `freeze_forbidden_command_v1.py` checks that exact file hash, extracts the `check_forbidden_command` function from its AST and executes the unchanged function body with only `hashlib` supplied. This avoids importing the rest of the benchmark runtime while preserving the source function as the differential oracle.
+
+The fixture contains 22 Python outcomes: four accepted variants and 18 refusals. It covers a successful reachable positive effect, the required blocked exit and absent effect, both kernel sample sets, a nonempty native Pre reason, policy actions that may not count as blocking, observe mode, a forbidden execution-profile selector, and the preserved marker digest. The Rust `reduce_forbidden_command` returns the native Pre decision only when those already-supplied facts pass the same checks. The local parity test passes all 22 cases, and the isolated Linux ARM64 Rust workflow includes it.
+
+The reducer receives a JSON claim. It does not authenticate the positive effect, kernel samples, native Pre decision or marker bytes; it cannot by itself establish that the installed Guard intervened. Signed observation custody and the rest of the six deterministic control verdicts remain open. No benchmark was launched for this proof.

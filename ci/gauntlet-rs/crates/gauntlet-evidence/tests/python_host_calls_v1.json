@@ -1,0 +1,1903 @@
+{
+  "cases": [
+    {
+      "calls": [
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "id": "a",
+          "is_error": false,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "one-complete"
+    },
+    {
+      "calls": [],
+      "errors": [],
+      "events": [],
+      "name": "empty"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "id": "p",
+          "is_error": false,
+          "name": "eval",
+          "result": {
+            "content": "done"
+          }
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "bridge_parent_id": "p",
+          "id": "js-bash-1",
+          "is_error": false,
+          "name": "bash",
+          "result": {
+            "content": [
+              {
+                "text": "ok"
+              }
+            ],
+            "details": null
+          }
+        }
+      ],
+      "errors": [],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "code": "tool()"
+              },
+              "id": "p",
+              "name": "eval"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_start"
+        },
+        {
+          "event": {
+            "input": {
+              "command": "echo ok"
+            },
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_call"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_start"
+        },
+        {
+          "event": {
+            "content": [
+              {
+                "text": "ok"
+              }
+            ],
+            "input": {
+              "command": "echo ok"
+            },
+            "isError": false,
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_result"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_end"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "done"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "one-bridge"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "id": "a",
+          "is_error": false,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "duplicate-or-missing-model-call-id"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            },
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "duplicate-model"
+    },
+    {
+      "calls": [
+        {
+          "args": {},
+          "id": "a",
+          "is_error": false,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "missing-tool-arguments",
+        "model-start-completion-inventory-mismatch",
+        "start-before-model-request",
+        "tool-name-mismatch"
+      ],
+      "events": [
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "missing-model"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "id": "a",
+          "is_error": false,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "duplicate-or-missing-host-call-id"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "duplicate-start"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "id": "a",
+          "is_error": false,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "duplicate-or-missing-host-call-id"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "duplicate-end"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "id": "a",
+          "is_error": false,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "start-before-model-request"
+      ],
+      "events": [
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "start-before-request"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "id": "a",
+          "is_error": false,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "completion-before-start"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        }
+      ],
+      "name": "end-before-start"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "id": "a",
+          "is_error": null,
+          "name": "bash",
+          "result": null
+        }
+      ],
+      "errors": [
+        "missing-tool-completion-status",
+        "model-start-completion-inventory-mismatch"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        }
+      ],
+      "name": "missing-end"
+    },
+    {
+      "calls": [
+        {
+          "args": {},
+          "id": "a",
+          "is_error": false,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "missing-tool-arguments"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "missing-model-args"
+    },
+    {
+      "calls": [
+        {
+          "args": {},
+          "id": "a",
+          "is_error": false,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "missing-tool-arguments"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "missing-host-args"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "id": "a",
+          "is_error": false,
+          "name": "eval",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "tool-name-mismatch"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "eval",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "wrong-host-name"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "id": "a",
+          "is_error": false,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "tool-name-mismatch"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "eval",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "wrong-end-name"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "command": "echo changed"
+          },
+          "id": "a",
+          "is_error": false,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "model-host-arguments-mismatch"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "command": "echo changed"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "changed-arguments"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "id": "a",
+          "is_error": false,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok",
+                "intent": "ignored"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "ignored-intent"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "id": "a",
+          "is_error": null,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "missing-tool-completion-status"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "missing-completion-status"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "id": "a",
+          "is_error": 0,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "missing-tool-completion-status"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": 0,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "numeric-completion-status"
+    },
+    {
+      "calls": [
+        {
+          "args": {},
+          "id": "a",
+          "is_error": false,
+          "name": "bash",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "duplicate-or-missing-model-call-id",
+        "missing-tool-arguments",
+        "model-start-completion-inventory-mismatch",
+        "start-before-model-request",
+        "tool-name-mismatch"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "empty-model-id"
+    },
+    {
+      "calls": [],
+      "errors": [
+        "completion-before-start",
+        "duplicate-or-missing-host-call-id",
+        "model-start-completion-inventory-mismatch"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "command": "echo ok"
+              },
+              "id": "a",
+              "name": "bash"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "command": "echo ok"
+          },
+          "toolCallId": "",
+          "toolName": "bash",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "bash",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "empty-host-id"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "tasks": [
+              {
+                "agent": "task",
+                "description": "x"
+              }
+            ]
+          },
+          "id": "a",
+          "is_error": false,
+          "name": "task",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "tasks": [
+                  {
+                    "description": "x",
+                    "outputSchema": null
+                  }
+                ]
+              },
+              "id": "a",
+              "name": "task"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "tasks": [
+              {
+                "agent": "task",
+                "description": "x"
+              }
+            ]
+          },
+          "toolCallId": "a",
+          "toolName": "task",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "task",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "task-default-agent"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "tasks": [
+              {
+                "agent": "task",
+                "description": "y"
+              }
+            ]
+          },
+          "id": "a",
+          "is_error": false,
+          "name": "task",
+          "result": {
+            "content": "ok"
+          }
+        }
+      ],
+      "errors": [
+        "model-host-arguments-mismatch"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "tasks": [
+                  {
+                    "description": "x",
+                    "outputSchema": null
+                  }
+                ]
+              },
+              "id": "a",
+              "name": "task"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "tasks": [
+              {
+                "agent": "task",
+                "description": "y"
+              }
+            ]
+          },
+          "toolCallId": "a",
+          "toolName": "task",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "ok"
+          },
+          "toolCallId": "a",
+          "toolName": "task",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "task-changed-description"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "id": "p",
+          "is_error": false,
+          "name": "eval",
+          "result": {
+            "content": "done"
+          }
+        }
+      ],
+      "errors": [
+        "invalid-sdk-bridge-evidence"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "code": "tool()"
+              },
+              "id": "p",
+              "name": "eval"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_start"
+        },
+        {
+          "event": {
+            "input": {
+              "command": "echo ok"
+            },
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_call"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p",
+            "q"
+          ],
+          "type": "eval_bridge_start"
+        },
+        {
+          "event": {
+            "content": [
+              {
+                "text": "ok"
+              }
+            ],
+            "input": {
+              "command": "echo ok"
+            },
+            "isError": false,
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_result"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_end"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "done"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "bridge-parent-list"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "id": "p",
+          "is_error": false,
+          "name": "eval",
+          "result": {
+            "content": "done"
+          }
+        }
+      ],
+      "errors": [
+        "invalid-sdk-bridge-evidence"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "code": "tool()"
+              },
+              "id": "p",
+              "name": "eval"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_start"
+        },
+        {
+          "event": {
+            "input": {
+              "command": "echo ok"
+            },
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_call"
+          },
+          "parentToolCallId": "q",
+          "parentToolCallIds": [
+            "q"
+          ],
+          "type": "eval_bridge_start"
+        },
+        {
+          "event": {
+            "content": [
+              {
+                "text": "ok"
+              }
+            ],
+            "input": {
+              "command": "echo ok"
+            },
+            "isError": false,
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_result"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_end"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "done"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "bridge-parent-id"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "id": "p",
+          "is_error": false,
+          "name": "eval",
+          "result": {
+            "content": "done"
+          }
+        }
+      ],
+      "errors": [
+        "invalid-sdk-bridge-evidence"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "code": "tool()"
+              },
+              "id": "p",
+              "name": "eval"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "done"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_end"
+        },
+        {
+          "event": {
+            "input": {
+              "command": "echo ok"
+            },
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_call"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_start"
+        },
+        {
+          "event": {
+            "content": [
+              {
+                "text": "ok"
+              }
+            ],
+            "input": {
+              "command": "echo ok"
+            },
+            "isError": false,
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_result"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_end"
+        }
+      ],
+      "name": "bridge-outside-active"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "id": "p",
+          "is_error": false,
+          "name": "eval",
+          "result": {
+            "content": "done"
+          }
+        }
+      ],
+      "errors": [
+        "invalid-sdk-bridge-evidence"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "code": "tool()"
+              },
+              "id": "p",
+              "name": "eval"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_start"
+        },
+        {
+          "event": {
+            "input": {
+              "command": "echo ok"
+            },
+            "toolCallId": "bash-1",
+            "toolName": "bash",
+            "type": "tool_call"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_start"
+        },
+        {
+          "event": {
+            "content": [
+              {
+                "text": "ok"
+              }
+            ],
+            "input": {
+              "command": "echo ok"
+            },
+            "isError": false,
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_result"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_end"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "done"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "bridge-wrong-id-prefix"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "id": "p",
+          "is_error": false,
+          "name": "eval",
+          "result": {
+            "content": "done"
+          }
+        }
+      ],
+      "errors": [
+        "invalid-sdk-bridge-evidence"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "code": "tool()"
+              },
+              "id": "p",
+              "name": "eval"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_start"
+        },
+        {
+          "event": {
+            "input": {
+              "command": "echo ok"
+            },
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_call"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_start"
+        },
+        {
+          "event": {
+            "input": {
+              "command": "echo ok"
+            },
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_call"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_start"
+        },
+        {
+          "event": {
+            "content": [
+              {
+                "text": "ok"
+              }
+            ],
+            "input": {
+              "command": "echo ok"
+            },
+            "isError": false,
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_result"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_end"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "done"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "bridge-duplicate-start"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "id": "p",
+          "is_error": false,
+          "name": "eval",
+          "result": {
+            "content": "done"
+          }
+        }
+      ],
+      "errors": [
+        "invalid-sdk-bridge-evidence"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "code": "tool()"
+              },
+              "id": "p",
+              "name": "eval"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_start"
+        },
+        {
+          "event": {
+            "input": {
+              "command": "echo ok"
+            },
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_call"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_start"
+        },
+        {
+          "event": {
+            "content": [
+              {
+                "text": "ok"
+              }
+            ],
+            "input": {
+              "command": "echo changed"
+            },
+            "isError": false,
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_result"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_end"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "done"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "bridge-changed-input"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "id": "p",
+          "is_error": false,
+          "name": "eval",
+          "result": {
+            "content": "done"
+          }
+        }
+      ],
+      "errors": [
+        "invalid-sdk-bridge-evidence"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "code": "tool()"
+              },
+              "id": "p",
+              "name": "eval"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_start"
+        },
+        {
+          "event": {
+            "input": {
+              "command": "echo ok"
+            },
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_call"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_start"
+        },
+        {
+          "event": {
+            "content": [
+              {
+                "text": "ok"
+              }
+            ],
+            "input": {
+              "command": "echo ok"
+            },
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_result"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_end"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "done"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "bridge-missing-status"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "id": "p",
+          "is_error": false,
+          "name": "eval",
+          "result": {
+            "content": "done"
+          }
+        }
+      ],
+      "errors": [
+        "invalid-sdk-bridge-evidence"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "code": "tool()"
+              },
+              "id": "p",
+              "name": "eval"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_start"
+        },
+        {
+          "event": {
+            "input": {
+              "command": "echo ok"
+            },
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_call"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "done"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_end"
+        }
+      ],
+      "name": "bridge-unfinished"
+    },
+    {
+      "calls": [
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "id": "p",
+          "is_error": false,
+          "name": "eval",
+          "result": {
+            "content": "done"
+          }
+        }
+      ],
+      "errors": [
+        "invalid-sdk-bridge-evidence"
+      ],
+      "events": [
+        {
+          "calls": [
+            {
+              "arguments": {
+                "code": "tool()"
+              },
+              "id": "p",
+              "name": "eval"
+            }
+          ],
+          "type": "model_turn"
+        },
+        {
+          "args": {
+            "code": "tool()"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_start"
+        },
+        {
+          "event": {
+            "input": {
+              "command": "echo ok"
+            },
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_call"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_start"
+        },
+        {
+          "isError": false,
+          "result": {
+            "content": "done"
+          },
+          "toolCallId": "p",
+          "toolName": "eval",
+          "type": "tool_execution_end"
+        },
+        {
+          "event": {
+            "content": [
+              {
+                "text": "ok"
+              }
+            ],
+            "input": {
+              "command": "echo ok"
+            },
+            "isError": false,
+            "toolCallId": "js-bash-1",
+            "toolName": "bash",
+            "type": "tool_result"
+          },
+          "parentToolCallId": "p",
+          "parentToolCallIds": [
+            "p"
+          ],
+          "type": "eval_bridge_end"
+        }
+      ],
+      "name": "bridge-end-before-child"
+    }
+  ],
+  "schema": "gauntlet-host-call-fixtures.v1",
+  "sources": [
+    {
+      "path": "ci/gauntlet/evidence.py",
+      "sha256": "b76344cf9700c73abebd5d65a81d34aa28c960b591fc2bc485423afa038efe2f"
+    },
+    {
+      "path": "ci/gauntlet/bridge_evidence.py",
+      "sha256": "b1422592828f36e489fc7fdb4217324270c79fdc3d1bf8545006bea7c11a96b7"
+    },
+    {
+      "path": "ci/gauntlet/task_arguments.py",
+      "sha256": "b80adbc07e9462b3ac623237ca51de4c00e121251b1fb3eaf275e93ec569a1af"
+    }
+  ]
+}

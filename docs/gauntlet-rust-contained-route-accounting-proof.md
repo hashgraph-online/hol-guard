@@ -1,0 +1,7 @@
+# Contained-route token and result accounting parity
+
+Source commit `a8e3ca29208176b4fcaabada7d2731cd0cfecfd4` adds `gauntlet-evidence::verify_contained_route_accounting`. The generator extracts the exact prepared/consumed/finished accounting block from Python `ci/gauntlet/benchmark/private_cell_runtime_custody.py` (SHA-256 `a5f6d47ca3e87654247cf8fac1fee1d6b7e99b6e17f2da8a3d883a18b84fee0b`). Its frozen fixture has 13 inert cases: five accepted, including zero routes, two distinct routes and an unused prepared token; eight refused for absent/duplicated or transplanted token, payload, result or execution. Rust compares the same multisets and recomputes every supplied execution's canonical result digest. Its test matches Python's accept/refuse outcome and error message in every case, while verifying the Python source hash.
+
+The targeted macOS parity test and warnings-denied workspace Clippy passed. On this pushed source head, the Linux ARM64 [binaries job](https://github.com/hashgraph-online/hol-guard/actions/runs/39533993633/job/119006252933) and full Rust [contracts job](https://github.com/hashgraph-online/hol-guard/actions/runs/39533993633/job/119006252786) both passed.
+
+This reducer accepts caller-supplied JSON. It has no signed-runtime custody, source-reviewed key, SDK or kernel process authentication, live execution, or model inference. Its `execution_eligible: false` output is a data relation only. Complete `verify_private_cell_runtime` and independent deterministic verdicts remain open.

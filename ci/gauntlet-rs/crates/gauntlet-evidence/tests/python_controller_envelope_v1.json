@@ -1,0 +1,16 @@
+{
+  "canonical_record_sha256": "bfba32cf90657ad6ffba76f3896075ba3de0d71432dbab4d3afef472f799f566",
+  "envelope": {
+    "record": {
+      "kind": "injection-control",
+      "nested": {
+        "path": "/synthetic",
+        "value": 73
+      }
+    },
+    "signature": "HCJGB3jxy+zJp888kIBeN7Ofa7LElEiRH9WkLTzssNtAIvJx5AWWzWCJmjU+iSa4ORkhaRKZYSvPTMomC0dlDA=="
+  },
+  "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+  "schema": "gauntlet-python-controller-envelope-fixture.v1",
+  "source_sha256": "fa347e8cf791c21a4ce6de8d331bfbb80d80f605d0e927f672ed8475e24de21e"
+}

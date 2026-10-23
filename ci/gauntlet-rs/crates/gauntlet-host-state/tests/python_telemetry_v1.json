@@ -1,0 +1,298 @@
+{
+  "admission_cases": [
+    {
+      "name": "healthy",
+      "reasons": [],
+      "snapshot": {
+        "deployment": {
+          "status": "installed"
+        },
+        "host": {
+          "checked_at": 1699999995.0,
+          "disk_free": 42949672960
+        },
+        "vm": {
+          "checked_at": 1699999996.0,
+          "disk_free": 12884901888,
+          "disk_total": 50465865728,
+          "memory_available": 8589934592,
+          "memory_total": 16750372454.4,
+          "status": "running"
+        }
+      }
+    },
+    {
+      "name": "stale_host",
+      "reasons": [
+        "Resource telemetry is stale"
+      ],
+      "snapshot": {
+        "deployment": {
+          "status": "installed"
+        },
+        "host": {
+          "checked_at": 1699999909.0,
+          "disk_free": 42949672960
+        },
+        "vm": {
+          "checked_at": 1699999996.0,
+          "disk_free": 12884901888,
+          "disk_total": 50465865728,
+          "memory_available": 8589934592,
+          "memory_total": 16750372454.4,
+          "status": "running"
+        }
+      }
+    },
+    {
+      "name": "stale_vm",
+      "reasons": [
+        "Resource telemetry is stale"
+      ],
+      "snapshot": {
+        "deployment": {
+          "status": "installed"
+        },
+        "host": {
+          "checked_at": 1699999995.0,
+          "disk_free": 42949672960
+        },
+        "vm": {
+          "checked_at": 1699999909.0,
+          "disk_free": 12884901888,
+          "disk_total": 50465865728,
+          "memory_available": 8589934592,
+          "memory_total": 16750372454.4,
+          "status": "running"
+        }
+      }
+    },
+    {
+      "name": "host_disk_floor",
+      "reasons": [
+        "Host disk headroom below configured floor"
+      ],
+      "snapshot": {
+        "deployment": {
+          "status": "installed"
+        },
+        "host": {
+          "checked_at": 1699999995.0,
+          "disk_free": 11811160064
+        },
+        "vm": {
+          "checked_at": 1699999996.0,
+          "disk_free": 12884901888,
+          "disk_total": 50465865728,
+          "memory_available": 8589934592,
+          "memory_total": 16750372454.4,
+          "status": "running"
+        }
+      }
+    },
+    {
+      "name": "vm_unavailable",
+      "reasons": [
+        "Benchmark VM unavailable"
+      ],
+      "snapshot": {
+        "deployment": {
+          "status": "installed"
+        },
+        "host": {
+          "checked_at": 1699999995.0,
+          "disk_free": 42949672960
+        },
+        "vm": {
+          "checked_at": 1699999996.0,
+          "disk_free": 12884901888,
+          "disk_total": 50465865728,
+          "memory_available": 8589934592,
+          "memory_total": 16750372454.4,
+          "status": "unavailable"
+        }
+      }
+    },
+    {
+      "name": "vm_disk_floor",
+      "reasons": [
+        "VM disk headroom below configured floor"
+      ],
+      "snapshot": {
+        "deployment": {
+          "status": "installed"
+        },
+        "host": {
+          "checked_at": 1699999995.0,
+          "disk_free": 42949672960
+        },
+        "vm": {
+          "checked_at": 1699999996.0,
+          "disk_free": 7516192768,
+          "disk_total": 50465865728,
+          "memory_available": 8589934592,
+          "memory_total": 16750372454.4,
+          "status": "running"
+        }
+      }
+    },
+    {
+      "name": "vm_memory_total",
+      "reasons": [
+        "VM memory is below its configured allocation; run gauntlet repair"
+      ],
+      "snapshot": {
+        "deployment": {
+          "status": "installed"
+        },
+        "host": {
+          "checked_at": 1699999995.0,
+          "disk_free": 42949672960
+        },
+        "vm": {
+          "checked_at": 1699999996.0,
+          "disk_free": 12884901888,
+          "disk_total": 50465865728,
+          "memory_available": 8589934592,
+          "memory_total": 15032385536,
+          "status": "running"
+        }
+      }
+    },
+    {
+      "name": "vm_disk_total",
+      "reasons": [
+        "VM filesystem is below its configured disk allocation; run gauntlet repair"
+      ],
+      "snapshot": {
+        "deployment": {
+          "status": "installed"
+        },
+        "host": {
+          "checked_at": 1699999995.0,
+          "disk_free": 42949672960
+        },
+        "vm": {
+          "checked_at": 1699999996.0,
+          "disk_free": 12884901888,
+          "disk_total": 47244640256,
+          "memory_available": 8589934592,
+          "memory_total": 16750372454.4,
+          "status": "running"
+        }
+      }
+    },
+    {
+      "name": "vm_memory_available",
+      "reasons": [
+        "VM has less than 1 GiB available memory"
+      ],
+      "snapshot": {
+        "deployment": {
+          "status": "installed"
+        },
+        "host": {
+          "checked_at": 1699999995.0,
+          "disk_free": 42949672960
+        },
+        "vm": {
+          "checked_at": 1699999996.0,
+          "disk_free": 12884901888,
+          "disk_total": 50465865728,
+          "memory_available": 1073741823,
+          "memory_total": 16750372454.4,
+          "status": "running"
+        }
+      }
+    },
+    {
+      "name": "deployment_missing",
+      "reasons": [
+        "Reviewed VM controller deployment is not installed"
+      ],
+      "snapshot": {
+        "deployment": {
+          "status": "unknown"
+        },
+        "host": {
+          "checked_at": 1699999995.0,
+          "disk_free": 42949672960
+        },
+        "vm": {
+          "checked_at": 1699999996.0,
+          "disk_free": 12884901888,
+          "disk_total": 50465865728,
+          "memory_available": 8589934592,
+          "memory_total": 16750372454.4,
+          "status": "running"
+        }
+      }
+    },
+    {
+      "name": "all_limits",
+      "reasons": [
+        "Reviewed VM controller deployment is not installed",
+        "Resource telemetry is stale",
+        "Host disk headroom below configured floor",
+        "VM disk headroom below configured floor",
+        "VM memory is below its configured allocation; run gauntlet repair",
+        "VM filesystem is below its configured disk allocation; run gauntlet repair",
+        "VM has less than 1 GiB available memory"
+      ],
+      "snapshot": {
+        "deployment": {
+          "status": "unknown"
+        },
+        "host": {
+          "checked_at": 0,
+          "disk_free": 0
+        },
+        "vm": {
+          "checked_at": 0,
+          "disk_free": 0,
+          "disk_total": 0,
+          "memory_available": 0,
+          "memory_total": 0,
+          "status": "running"
+        }
+      }
+    }
+  ],
+  "now": 1700000000.0,
+  "probe": {
+    "call": {
+      "argv": [
+        "/opt/homebrew/bin/limactl",
+        "shell",
+        "hol-beta-bootstrap-20261016-004",
+        "--",
+        "/usr/bin/python3",
+        "-c",
+        "import json,os,shutil,time\nfrom pathlib import Path\nm={k:int(v.split()[0])*1024 for k,v in (s.split(\":\",1) for s in Path(\"/proc/meminfo\").read_text().splitlines())}\nd=shutil.disk_usage(\"/\")\nprint(json.dumps({\"status\":\"running\",\"checked_at\":time.time(),\"cpus\":os.cpu_count(),\n\"load\":os.getloadavg()[0],\"memory_total\":m[\"MemTotal\"],\"memory_available\":m[\"MemAvailable\"],\n\"disk_total\":d.total,\"disk_free\":d.free}))"
+      ],
+      "capture_output": true,
+      "text": true,
+      "timeout": 12
+    },
+    "positive": {
+      "checked_at": 1699999996.0,
+      "cpus": 2,
+      "disk_free": 12884901888,
+      "disk_total": 50465865728,
+      "load": 0.25,
+      "memory_available": 8589934592,
+      "memory_total": 17179869184,
+      "name": "hol-beta-bootstrap-20261016-004",
+      "status": "running"
+    },
+    "sample_stdout": "{\"status\": \"running\", \"checked_at\": 1699999996.0, \"cpus\": 2, \"load\": 0.25, \"memory_total\": 17179869184, \"memory_available\": 8589934592, \"disk_total\": 50465865728, \"disk_free\": 12884901888}",
+    "unavailable": {
+      "checked_at": 1700000000.0,
+      "error": "VM refused",
+      "name": "hol-beta-bootstrap-20261016-004",
+      "status": "unavailable"
+    }
+  },
+  "schema": "gauntlet-telemetry-fixtures.v1",
+  "source_sha256": "bc294a2507ef6adc1a86aa6086142ef4737ef939db8e7ad629c6d89d7d97c503"
+}

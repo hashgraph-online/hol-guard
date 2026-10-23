@@ -1,0 +1,19 @@
+[package]
+name = "gauntlet-host-state"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+description = "Passive release queue decisions for the future Gauntlet host observer"
+
+[dependencies]
+base64 = "=0.22.1"
+flate2 = "=1.1.10"
+gauntlet-contracts = { path = "../gauntlet-contracts" }
+gauntlet-evidence = { path = "../gauntlet-evidence" }
+libc = "=0.2.191"
+ring = "=0.17.14"
+rustix = { version = "=1.1.5", features = ["fs", "process"] }
+serde_json = { version = "=1.0.151", features = ["arbitrary_precision"] }
+sha2 = "=0.10.9"
+tar = "=0.4.46"
+tempfile = "=3.27.0"

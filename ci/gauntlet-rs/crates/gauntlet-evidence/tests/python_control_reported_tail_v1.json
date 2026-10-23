@@ -1,0 +1,3505 @@
+{
+  "ast_function": "verify_control, request_rejection, _boundary, captured_output",
+  "bases": {
+    "boundary": {
+      "captured_output": {
+        "is_error": false,
+        "output_sha256": "a765bdc439c83bb477d4fa247da6a3cd054a28a0edad397c2fba40d303fbef8d",
+        "result_digest": "134276aa5e0f0c39eee385693b0e11dfac2089f70cb079f1b14327e4a40a27b6",
+        "schema": "controller-contained-output.v1",
+        "tool_response": [
+          {
+            "text": "Exit code: 0\nSTDOUT:\ncaptured synthetic output\n\nSTDERR:\n",
+            "type": "text"
+          }
+        ]
+      },
+      "control": {
+        "actual_sdk_bash_success": true,
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "canary_initial_sha256": {
+          "agent": "b",
+          "controller": "a",
+          "product": "c"
+        },
+        "canary_terminal_sha256": {
+          "agent": "b",
+          "controller": "a",
+          "product": "c"
+        },
+        "cell_closed_before_explicit_teardown": false,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "detached_child_alive_before_cell_teardown": false,
+        "detached_child_samples": [
+          {
+            "pid": 701
+          }
+        ],
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "executions": [
+                    {
+                      "exit_code": 0,
+                      "stderr": "",
+                      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                      "stdout": "captured synthetic output\n",
+                      "stdout_sha256": "374e63ee09e942f345a05cd7e0b2505a3722965c261ea88673c49ce01f92b10e"
+                    }
+                  ],
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                },
+                "review_summary": {
+                  "post_review_counts": {
+                    "sdk-contained-control": 1
+                  }
+                }
+              },
+              "signature": "x/WGS71gamn3tC+EOH4LQEHJRMosxoPuhi6GW5icQ1cKITHHb2G/tt/FLkUnNoFEu4XfryantKrD+b+OBXCmCw=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "3NweSa4tnaUDWYkrrcgaOl2m37+HuuyZCWFHbbo5uLcqQ7cwh/QezvauYQF4pKvz5Eh2XazETSCq5p4pZcRyDA=="
+        },
+        "image_released": true,
+        "kernel_boundary_negatives": {
+          "rows": [
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            }
+          ]
+        },
+        "late_effect_present": false,
+        "model_exercised": false,
+        "native_contained_boundary_negatives": {
+          "rows": [
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "family": 2,
+              "surface": "network"
+            },
+            {
+              "denied": true,
+              "family": 10,
+              "surface": "network"
+            }
+          ]
+        },
+        "native_timeout_seconds": 5,
+        "passed": true,
+        "plane": {
+          "executions": [
+            {
+              "exit_code": 0,
+              "stderr": "",
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout": "captured synthetic output\n",
+              "stdout_sha256": "374e63ee09e942f345a05cd7e0b2505a3722965c261ea88673c49ce01f92b10e"
+            }
+          ],
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "real_sdk_post_replay_refused": true,
+        "real_sdk_pre_replay_refused": true,
+        "real_sdk_route_replay_refused": true,
+        "request_binding_negatives": [
+          {
+            "case": "duplicate-field",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-cwd",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-workspace",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "missing-payload",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "nonstring-command",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-event",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-schema",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-sha",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-tool",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          }
+        ],
+        "root_imported_product": false,
+        "same_uid_peer_negative": {
+          "denied": true
+        },
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        },
+        "sdk_result": {
+          "mcpExercised": true,
+          "modelContextProjection": {
+            "executionTransportRetained": true,
+            "originalCommandVisible": true,
+            "schema": "contained-command-context-control.v1",
+            "scope": "actual SDK synthetic-stream control; no model inference"
+          },
+          "modelExercised": false,
+          "providerRequests": 0,
+          "results": [
+            {},
+            {
+              "content": [
+                {
+                  "text": "Exit code: 0\nSTDOUT:\ncaptured synthetic output\n\nSTDERR:\n",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          ],
+          "syntheticStreamCalls": 3
+        }
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c"
+    },
+    "cancel": {
+      "control": {
+        "actual_sdk_bash_success": true,
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "canary_initial_sha256": {
+          "agent": "b",
+          "controller": "a",
+          "product": "c"
+        },
+        "canary_terminal_sha256": {
+          "agent": "b",
+          "controller": "a",
+          "product": "c"
+        },
+        "cell_closed_before_explicit_teardown": false,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "detached_child_alive_before_cell_teardown": false,
+        "detached_child_samples": [
+          {
+            "pid": 701
+          }
+        ],
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "executions": [],
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                },
+                "review_summary": {
+                  "post_review_counts": {
+                    "sdk-contained-control": 1
+                  }
+                }
+              },
+              "signature": "mtpl0YsVSbHN+G+u244B9WXPbaVS2Zy6H6ZSL0pz1YID3HqEcKW69qKa7QgXdP8LyPV7jMRlpG4cJLK/sRDgBg=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "0CNEUyfaU2L+LPfJqOJhpB8wEOd0oTIpZo+gG2OftciNCwuq/dpjeTpfYv0kvaS0NFppouRijEoA062EqsX+Ag=="
+        },
+        "image_released": true,
+        "kernel_boundary_negatives": {
+          "rows": [
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            }
+          ]
+        },
+        "late_effect_present": false,
+        "model_exercised": false,
+        "native_contained_boundary_negatives": {
+          "rows": [
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "family": 2,
+              "surface": "network"
+            },
+            {
+              "denied": true,
+              "family": 10,
+              "surface": "network"
+            }
+          ]
+        },
+        "native_timeout_seconds": 5,
+        "passed": true,
+        "plane": {
+          "executions": [],
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "real_sdk_post_replay_refused": true,
+        "real_sdk_pre_replay_refused": true,
+        "real_sdk_route_replay_refused": true,
+        "request_binding_negatives": [
+          {
+            "case": "duplicate-field",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-cwd",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-workspace",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "missing-payload",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "nonstring-command",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-event",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-schema",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-sha",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-tool",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          }
+        ],
+        "root_imported_product": false,
+        "same_uid_peer_negative": {
+          "denied": true
+        },
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        },
+        "sdk_result": {
+          "mcpExercised": true,
+          "modelContextProjection": {
+            "executionTransportRetained": true,
+            "originalCommandVisible": true,
+            "schema": "contained-command-context-control.v1",
+            "scope": "actual SDK synthetic-stream control; no model inference"
+          },
+          "modelExercised": false,
+          "providerRequests": 0,
+          "results": [
+            {},
+            {
+              "content": [
+                {
+                  "text": "Exit code: 0\nSTDOUT:\ncaptured synthetic output\n\nSTDERR:\n",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          ],
+          "syntheticStreamCalls": 3
+        }
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c"
+    },
+    "input-binding": {
+      "captured_output": {
+        "is_error": false,
+        "output_sha256": "a765bdc439c83bb477d4fa247da6a3cd054a28a0edad397c2fba40d303fbef8d",
+        "result_digest": "134276aa5e0f0c39eee385693b0e11dfac2089f70cb079f1b14327e4a40a27b6",
+        "schema": "controller-contained-output.v1",
+        "tool_response": [
+          {
+            "text": "Exit code: 0\nSTDOUT:\ncaptured synthetic output\n\nSTDERR:\n",
+            "type": "text"
+          }
+        ]
+      },
+      "control": {
+        "actual_sdk_bash_success": true,
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "canary_initial_sha256": {
+          "agent": "b",
+          "controller": "a",
+          "product": "c"
+        },
+        "canary_terminal_sha256": {
+          "agent": "b",
+          "controller": "a",
+          "product": "c"
+        },
+        "cell_closed_before_explicit_teardown": false,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "detached_child_alive_before_cell_teardown": false,
+        "detached_child_samples": [
+          {
+            "pid": 701
+          }
+        ],
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "executions": [
+                    {
+                      "exit_code": 0,
+                      "stderr": "",
+                      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                      "stdout": "captured synthetic output\n",
+                      "stdout_sha256": "374e63ee09e942f345a05cd7e0b2505a3722965c261ea88673c49ce01f92b10e"
+                    }
+                  ],
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                },
+                "review_summary": {
+                  "post_review_counts": {
+                    "sdk-contained-control": 1
+                  }
+                }
+              },
+              "signature": "x/WGS71gamn3tC+EOH4LQEHJRMosxoPuhi6GW5icQ1cKITHHb2G/tt/FLkUnNoFEu4XfryantKrD+b+OBXCmCw=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "3NweSa4tnaUDWYkrrcgaOl2m37+HuuyZCWFHbbo5uLcqQ7cwh/QezvauYQF4pKvz5Eh2XazETSCq5p4pZcRyDA=="
+        },
+        "image_released": true,
+        "kernel_boundary_negatives": {
+          "rows": [
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            }
+          ]
+        },
+        "late_effect_present": false,
+        "model_exercised": false,
+        "native_contained_boundary_negatives": {
+          "rows": [
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "family": 2,
+              "surface": "network"
+            },
+            {
+              "denied": true,
+              "family": 10,
+              "surface": "network"
+            }
+          ]
+        },
+        "native_timeout_seconds": 5,
+        "passed": true,
+        "plane": {
+          "executions": [
+            {
+              "exit_code": 0,
+              "stderr": "",
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout": "captured synthetic output\n",
+              "stdout_sha256": "374e63ee09e942f345a05cd7e0b2505a3722965c261ea88673c49ce01f92b10e"
+            }
+          ],
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "real_sdk_post_replay_refused": true,
+        "real_sdk_pre_replay_refused": true,
+        "real_sdk_route_replay_refused": true,
+        "request_binding_negatives": [
+          {
+            "case": "duplicate-field",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-cwd",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-workspace",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "missing-payload",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "nonstring-command",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-event",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-schema",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-sha",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-tool",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          }
+        ],
+        "root_imported_product": false,
+        "same_uid_peer_negative": {
+          "denied": true
+        },
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        },
+        "sdk_result": {
+          "mcpExercised": true,
+          "modelContextProjection": {
+            "executionTransportRetained": true,
+            "originalCommandVisible": true,
+            "schema": "contained-command-context-control.v1",
+            "scope": "actual SDK synthetic-stream control; no model inference"
+          },
+          "modelExercised": false,
+          "providerRequests": 0,
+          "results": [
+            {},
+            {
+              "content": [
+                {
+                  "text": "Exit code: 0\nSTDOUT:\ncaptured synthetic output\n\nSTDERR:\n",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          ],
+          "syntheticStreamCalls": 3
+        }
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c"
+    },
+    "success": {
+      "captured_output": {
+        "is_error": false,
+        "output_sha256": "a765bdc439c83bb477d4fa247da6a3cd054a28a0edad397c2fba40d303fbef8d",
+        "result_digest": "134276aa5e0f0c39eee385693b0e11dfac2089f70cb079f1b14327e4a40a27b6",
+        "schema": "controller-contained-output.v1",
+        "tool_response": [
+          {
+            "text": "Exit code: 0\nSTDOUT:\ncaptured synthetic output\n\nSTDERR:\n",
+            "type": "text"
+          }
+        ]
+      },
+      "control": {
+        "actual_sdk_bash_success": true,
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "canary_initial_sha256": {
+          "agent": "b",
+          "controller": "a",
+          "product": "c"
+        },
+        "canary_terminal_sha256": {
+          "agent": "b",
+          "controller": "a",
+          "product": "c"
+        },
+        "cell_closed_before_explicit_teardown": false,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "detached_child_alive_before_cell_teardown": false,
+        "detached_child_samples": [
+          {
+            "pid": 701
+          }
+        ],
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "executions": [
+                    {
+                      "exit_code": 0,
+                      "stderr": "",
+                      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                      "stdout": "captured synthetic output\n",
+                      "stdout_sha256": "374e63ee09e942f345a05cd7e0b2505a3722965c261ea88673c49ce01f92b10e"
+                    }
+                  ],
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                },
+                "review_summary": {
+                  "post_review_counts": {
+                    "sdk-contained-control": 1
+                  }
+                }
+              },
+              "signature": "x/WGS71gamn3tC+EOH4LQEHJRMosxoPuhi6GW5icQ1cKITHHb2G/tt/FLkUnNoFEu4XfryantKrD+b+OBXCmCw=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "3NweSa4tnaUDWYkrrcgaOl2m37+HuuyZCWFHbbo5uLcqQ7cwh/QezvauYQF4pKvz5Eh2XazETSCq5p4pZcRyDA=="
+        },
+        "image_released": true,
+        "kernel_boundary_negatives": {
+          "rows": [
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            }
+          ]
+        },
+        "late_effect_present": false,
+        "model_exercised": false,
+        "native_contained_boundary_negatives": {
+          "rows": [
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "family": 2,
+              "surface": "network"
+            },
+            {
+              "denied": true,
+              "family": 10,
+              "surface": "network"
+            }
+          ]
+        },
+        "native_timeout_seconds": 5,
+        "passed": true,
+        "plane": {
+          "executions": [
+            {
+              "exit_code": 0,
+              "stderr": "",
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout": "captured synthetic output\n",
+              "stdout_sha256": "374e63ee09e942f345a05cd7e0b2505a3722965c261ea88673c49ce01f92b10e"
+            }
+          ],
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "real_sdk_post_replay_refused": true,
+        "real_sdk_pre_replay_refused": true,
+        "real_sdk_route_replay_refused": true,
+        "request_binding_negatives": [
+          {
+            "case": "duplicate-field",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-cwd",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-workspace",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "missing-payload",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "nonstring-command",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-event",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-schema",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-sha",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-tool",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          }
+        ],
+        "root_imported_product": false,
+        "same_uid_peer_negative": {
+          "denied": true
+        },
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        },
+        "sdk_result": {
+          "mcpExercised": true,
+          "modelContextProjection": {
+            "executionTransportRetained": true,
+            "originalCommandVisible": true,
+            "schema": "contained-command-context-control.v1",
+            "scope": "actual SDK synthetic-stream control; no model inference"
+          },
+          "modelExercised": false,
+          "providerRequests": 0,
+          "results": [
+            {},
+            {
+              "content": [
+                {
+                  "text": "Exit code: 0\nSTDOUT:\ncaptured synthetic output\n\nSTDERR:\n",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          ],
+          "syntheticStreamCalls": 3
+        }
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c"
+    },
+    "timeout": {
+      "captured_output": {
+        "is_error": true,
+        "output_sha256": "273669237322501c601310b728896aa24ff53155139bc47fda35a63bef00d023",
+        "result_digest": "da6356795844e3ee961bf527596a81752b137ec63e669d7c3e6b4b3e6da21ed5",
+        "schema": "controller-contained-output.v1",
+        "tool_response": [
+          {
+            "text": "Exit code: 124\nSTDOUT:\ncaptured synthetic output\n\nSTDERR:\n",
+            "type": "text"
+          }
+        ]
+      },
+      "control": {
+        "actual_sdk_bash_success": true,
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "canary_initial_sha256": {
+          "agent": "b",
+          "controller": "a",
+          "product": "c"
+        },
+        "canary_terminal_sha256": {
+          "agent": "b",
+          "controller": "a",
+          "product": "c"
+        },
+        "cell_closed_before_explicit_teardown": false,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "detached_child_alive_before_cell_teardown": false,
+        "detached_child_samples": [
+          {
+            "pid": 701
+          }
+        ],
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "executions": [
+                    {
+                      "exit_code": 124,
+                      "stderr": "",
+                      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                      "stdout": "captured synthetic output\n",
+                      "stdout_sha256": "374e63ee09e942f345a05cd7e0b2505a3722965c261ea88673c49ce01f92b10e"
+                    }
+                  ],
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                },
+                "review_summary": {
+                  "post_review_counts": {
+                    "sdk-contained-control": 1
+                  }
+                }
+              },
+              "signature": "4Kxp4nreI9/FYAhOrXrE5BccfJS8GCnx8N2TEKdbiwLMCV1n+1hatwMxcEN289pE6t9ySlv/4VF3j5ksU9B2Aw=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "jLR7P7XA34xuYygFbR1ZYcXVbTCtyEFjYTgn0jH4H8OLx11KCqhH+gg7m7BjavlcOHKV5082k8nVd+aDFJkvDw=="
+        },
+        "image_released": true,
+        "kernel_boundary_negatives": {
+          "rows": [
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            }
+          ]
+        },
+        "late_effect_present": false,
+        "model_exercised": false,
+        "native_contained_boundary_negatives": {
+          "rows": [
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "family": 2,
+              "surface": "network"
+            },
+            {
+              "denied": true,
+              "family": 10,
+              "surface": "network"
+            }
+          ]
+        },
+        "native_timeout_seconds": 5,
+        "passed": true,
+        "plane": {
+          "executions": [
+            {
+              "exit_code": 124,
+              "stderr": "",
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout": "captured synthetic output\n",
+              "stdout_sha256": "374e63ee09e942f345a05cd7e0b2505a3722965c261ea88673c49ce01f92b10e"
+            }
+          ],
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "real_sdk_post_replay_refused": true,
+        "real_sdk_pre_replay_refused": true,
+        "real_sdk_route_replay_refused": true,
+        "request_binding_negatives": [
+          {
+            "case": "duplicate-field",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-cwd",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-workspace",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "missing-payload",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "nonstring-command",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-event",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-schema",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-sha",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-tool",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          }
+        ],
+        "root_imported_product": false,
+        "same_uid_peer_negative": {
+          "denied": true
+        },
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        },
+        "sdk_result": {
+          "mcpExercised": true,
+          "modelContextProjection": {
+            "executionTransportRetained": true,
+            "originalCommandVisible": true,
+            "schema": "contained-command-context-control.v1",
+            "scope": "actual SDK synthetic-stream control; no model inference"
+          },
+          "modelExercised": false,
+          "providerRequests": 0,
+          "results": [
+            {},
+            {
+              "content": [
+                {
+                  "text": "Exit code: 0\nSTDOUT:\ncaptured synthetic output\n\nSTDERR:\n",
+                  "type": "text"
+                }
+              ],
+              "isError": false
+            }
+          ],
+          "syntheticStreamCalls": 3
+        }
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c"
+    }
+  },
+  "cases": [
+    {
+      "accepted": true,
+      "control_patch": {},
+      "name": "valid-success",
+      "result": {
+        "model_tokens": 0,
+        "role": "success",
+        "session_id": "session-001",
+        "synthetic": true
+      },
+      "role": "success"
+    },
+    {
+      "accepted": true,
+      "control_patch": {},
+      "name": "valid-timeout",
+      "result": {
+        "model_tokens": 0,
+        "role": "timeout",
+        "session_id": "session-001",
+        "synthetic": true
+      },
+      "role": "timeout"
+    },
+    {
+      "accepted": true,
+      "control_patch": {},
+      "name": "valid-cancel",
+      "result": {
+        "model_tokens": 0,
+        "role": "cancel",
+        "session_id": "session-001",
+        "synthetic": true
+      },
+      "role": "cancel"
+    },
+    {
+      "accepted": true,
+      "control_patch": {},
+      "name": "valid-input-binding",
+      "result": {
+        "model_tokens": 0,
+        "role": "input-binding",
+        "session_id": "session-001",
+        "synthetic": true
+      },
+      "role": "input-binding"
+    },
+    {
+      "accepted": true,
+      "control_patch": {},
+      "name": "valid-boundary",
+      "result": {
+        "model_tokens": 0,
+        "role": "boundary",
+        "session_id": "session-001",
+        "synthetic": true
+      },
+      "role": "boundary"
+    },
+    {
+      "accepted": true,
+      "control_patch": {
+        "passed": false
+      },
+      "name": "producer-passed-false-ignored",
+      "result": {
+        "model_tokens": 0,
+        "role": "success",
+        "session_id": "session-001",
+        "synthetic": true
+      },
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "sdk_result": {
+          "modelContextProjection": null
+        }
+      },
+      "error": "SDK provider context projection control missing or execution transcript changed",
+      "name": "projection-missing",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "sdk_result": {
+          "modelContextProjection": {
+            "extra": true
+          }
+        }
+      },
+      "error": "SDK provider context projection control missing or execution transcript changed",
+      "name": "projection-extra-field",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "sdk_result": {
+          "modelContextProjection": {
+            "originalCommandVisible": 1
+          }
+        }
+      },
+      "error": "SDK provider context projection control missing or execution transcript changed",
+      "name": "projection-bool-as-int",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "sdk_result": {
+          "modelContextProjection": {
+            "scope": "model"
+          }
+        }
+      },
+      "error": "SDK provider context projection control missing or execution transcript changed",
+      "name": "projection-wrong-scope",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "sdk_result": {
+          "modelExercised": true
+        }
+      },
+      "error": "synthetic conformance cannot become model evidence",
+      "name": "model-exercised",
+      "role": "cancel"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "sdk_result": {
+          "providerRequests": 1
+        }
+      },
+      "error": "synthetic conformance cannot become model evidence",
+      "name": "provider-request",
+      "role": "cancel"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "sdk_result": {
+          "syntheticStreamCalls": 2
+        }
+      },
+      "error": "synthetic conformance cannot become model evidence",
+      "name": "wrong-stream-count",
+      "role": "cancel"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "sdk_result": {
+          "mcpExercised": false
+        }
+      },
+      "error": "synthetic conformance cannot become model evidence",
+      "name": "mcp-not-exercised",
+      "role": "cancel"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "executions": []
+                }
+              },
+              "signature": "mtpl0YsVSbHN+G+u244B9WXPbaVS2Zy6H6ZSL0pz1YID3HqEcKW69qKa7QgXdP8LyPV7jMRlpG4cJLK/sRDgBg=="
+            }
+          },
+          "signature": "0CNEUyfaU2L+LPfJqOJhpB8wEOd0oTIpZo+gG2OftciNCwuq/dpjeTpfYv0kvaS0NFppouRijEoA062EqsX+Ag=="
+        },
+        "plane": {
+          "executions": []
+        }
+      },
+      "error": "one actual Native contained sink required",
+      "name": "native-execution-missing",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "review_summary": {
+                  "post_review_counts": {
+                    "sdk-contained-control": null
+                  }
+                }
+              },
+              "signature": "M8rIF92ScYh5SplL9Z3r1TuA/wmXStJ1LHPibttOBbDajfZpjKkkpjQfSj2+x7FRAkGLT0S64NPU6Yqe+JYgBQ=="
+            }
+          },
+          "signature": "KF1QHuTgc97/C0Hug2qfAHNNhXb7tPYPgHV3eYmoPUVc9JLKSfF7h8qpB4CzsClfpzIFPwEcyLDVzKMA1fNZBQ=="
+        }
+      },
+      "error": "exactly one actual required Post required",
+      "name": "required-post-missing",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "executions": [
+                    {
+                      "exit_code": 1,
+                      "stderr": "",
+                      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                      "stdout": "captured synthetic output\n",
+                      "stdout_sha256": "374e63ee09e942f345a05cd7e0b2505a3722965c261ea88673c49ce01f92b10e"
+                    }
+                  ]
+                }
+              },
+              "signature": "hs94CvPPsje/uMgXfBW4i5s1M1lM4OomVYnD/PwxX3ZRTFd2Wd1MLOFQ+W6p76QqUab04Qkz3CnvMwsmuEqGAQ=="
+            }
+          },
+          "signature": "5dSGOwWrKsntbfSH9fNnhxJJOOlLtpEIpXM6Yy6n2qneQMhr42en+240cXuakqNmFxlKXIBcxcbHSg4+AFwKBg=="
+        },
+        "plane": {
+          "executions": [
+            {
+              "exit_code": 1,
+              "stderr": "",
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout": "captured synthetic output\n",
+              "stdout_sha256": "374e63ee09e942f345a05cd7e0b2505a3722965c261ea88673c49ce01f92b10e"
+            }
+          ]
+        }
+      },
+      "error": "actual SDK did not receive successful exact captured output",
+      "name": "success-native-exit",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "actual_sdk_bash_success": false
+      },
+      "error": "actual SDK did not receive successful exact captured output",
+      "name": "success-sdk-bash-false",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "sdk_result": {
+          "results": [
+            {},
+            {
+              "content": [
+                {
+                  "text": "Exit code: 0\nSTDOUT:\ncaptured synthetic output\n\nSTDERR:\n",
+                  "type": "text"
+                }
+              ],
+              "isError": true
+            }
+          ]
+        }
+      },
+      "error": "actual SDK did not receive successful exact captured output",
+      "name": "success-sdk-error",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "sdk_result": {
+          "results": [
+            {},
+            {
+              "content": [],
+              "isError": false
+            }
+          ]
+        }
+      },
+      "error": "actual SDK did not receive successful exact captured output",
+      "name": "success-output-mismatch",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "sdk_result": {
+          "results": [
+            {},
+            {
+              "content": [],
+              "isError": false
+            }
+          ]
+        }
+      },
+      "error": "actual SDK did not receive successful exact captured output",
+      "name": "boundary-output-mismatch",
+      "role": "boundary"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "executions": [
+                    {
+                      "exit_code": 0,
+                      "stderr": "",
+                      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                      "stdout": "captured synthetic output\n",
+                      "stdout_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+                    }
+                  ]
+                }
+              },
+              "signature": "9erQvzjGEJP1siw8Ex2ABd5tWo92wOCAGc1IQDYK+0nWLdV+slcwBFkQ3Bszd9rogyS1KyFctxakeA+tX0BuBQ=="
+            }
+          },
+          "signature": "Qm+5L1mAtUfl9LB1Wj0sacx7ecMBdcJ+4huZfuugFgA/cTTpjxmnwZOsuCferUYu/itVdqCxjgihL/CZ4mBBDQ=="
+        },
+        "plane": {
+          "executions": [
+            {
+              "exit_code": 0,
+              "stderr": "",
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout": "captured synthetic output\n",
+              "stdout_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          ]
+        }
+      },
+      "error": "captured contained output differs from its byte digest",
+      "name": "success-stdout-digest-mismatch",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "executions": [
+                    {
+                      "exit_code": 0,
+                      "stderr": "",
+                      "stderr_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+                      "stdout": "captured synthetic output\n",
+                      "stdout_sha256": "374e63ee09e942f345a05cd7e0b2505a3722965c261ea88673c49ce01f92b10e"
+                    }
+                  ]
+                }
+              },
+              "signature": "n/dhZZlK258qg1cRoCKu8JDMrkmAS5uPQ13tV8Wt3CTPw96ifQ18OFNRjSig+EmLzlVZmv3lcs+69s/Vr6hCCw=="
+            }
+          },
+          "signature": "T5qFabMnS/lq08KydQ/aFdCt73IgkV2nYuwER9LzJd6/263lxqCQZK/lNgTI11wXGkOzMcMgdA4FQtMsWfMlCA=="
+        },
+        "plane": {
+          "executions": [
+            {
+              "exit_code": 0,
+              "stderr": "",
+              "stderr_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "stdout": "captured synthetic output\n",
+              "stdout_sha256": "374e63ee09e942f345a05cd7e0b2505a3722965c261ea88673c49ce01f92b10e"
+            }
+          ]
+        }
+      },
+      "error": "captured contained output differs from its byte digest",
+      "name": "boundary-stderr-digest-mismatch",
+      "role": "boundary"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "native_timeout_seconds": 4
+      },
+      "error": "timeout requires Native descendant cleanup before cell backstop",
+      "name": "timeout-duration",
+      "role": "timeout"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "developer_runtime": {
+          "record": {
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "executions": [
+                    {
+                      "exit_code": 0,
+                      "stderr": "",
+                      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                      "stdout": "captured synthetic output\n",
+                      "stdout_sha256": "374e63ee09e942f345a05cd7e0b2505a3722965c261ea88673c49ce01f92b10e"
+                    }
+                  ]
+                }
+              },
+              "signature": "x/WGS71gamn3tC+EOH4LQEHJRMosxoPuhi6GW5icQ1cKITHHb2G/tt/FLkUnNoFEu4XfryantKrD+b+OBXCmCw=="
+            }
+          },
+          "signature": "3NweSa4tnaUDWYkrrcgaOl2m37+HuuyZCWFHbbo5uLcqQ7cwh/QezvauYQF4pKvz5Eh2XazETSCq5p4pZcRyDA=="
+        },
+        "plane": {
+          "executions": [
+            {
+              "exit_code": 0,
+              "stderr": "",
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout": "captured synthetic output\n",
+              "stdout_sha256": "374e63ee09e942f345a05cd7e0b2505a3722965c261ea88673c49ce01f92b10e"
+            }
+          ]
+        }
+      },
+      "error": "timeout requires Native descendant cleanup before cell backstop",
+      "name": "timeout-native-exit",
+      "role": "timeout"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "detached_child_samples": []
+      },
+      "error": "timeout requires Native descendant cleanup before cell backstop",
+      "name": "timeout-no-samples",
+      "role": "timeout"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "detached_child_alive_before_cell_teardown": true
+      },
+      "error": "timeout requires Native descendant cleanup before cell backstop",
+      "name": "timeout-child-survived",
+      "role": "timeout"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "late_effect_present": true
+      },
+      "error": "timeout requires Native descendant cleanup before cell backstop",
+      "name": "timeout-late-effect",
+      "role": "timeout"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "real_sdk_pre_replay_refused": false
+      },
+      "error": "actual SDK replay or same-UID peer refusal missing",
+      "name": "replay-pre-accepted",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "real_sdk_route_replay_refused": false
+      },
+      "error": "actual SDK replay or same-UID peer refusal missing",
+      "name": "replay-route-accepted",
+      "role": "input-binding"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "same_uid_peer_negative": {
+          "denied": false
+        }
+      },
+      "error": "actual SDK replay or same-UID peer refusal missing",
+      "name": "same-uid-peer-accepted",
+      "role": "boundary"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "kernel_boundary_negatives": {
+          "rows": [
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            }
+          ]
+        }
+      },
+      "error": "kernel path/mount floor negatives missing",
+      "name": "kernel-negative-missing",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "kernel_boundary_negatives": {
+          "rows": [
+            {
+              "denied": false
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            },
+            {
+              "denied": true
+            }
+          ]
+        }
+      },
+      "error": "kernel path/mount floor negatives missing",
+      "name": "kernel-negative-allowed",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "request_binding_negatives": [
+          {
+            "case": "wrong-sha",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-cwd",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-workspace",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "missing-payload",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "nonstring-command",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-event",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-schema",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-sha",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-tool",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          }
+        ]
+      },
+      "error": "required installed request negatives did not refuse without effects",
+      "name": "binding-case-duplicate",
+      "role": "input-binding"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "request_binding_negatives": [
+          {
+            "case": "duplicate-field",
+            "exit_code": 0,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-cwd",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-workspace",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "missing-payload",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "nonstring-command",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-event",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-schema",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-sha",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-tool",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          }
+        ]
+      },
+      "error": "required installed request negatives did not refuse without effects",
+      "name": "binding-wrong-exit",
+      "role": "input-binding"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "request_binding_negatives": [
+          {
+            "case": "duplicate-field",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": true
+          },
+          {
+            "case": "foreign-cwd",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-workspace",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "missing-payload",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "nonstring-command",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-event",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-schema",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-sha",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-tool",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          }
+        ]
+      },
+      "error": "required installed request negatives did not refuse without effects",
+      "name": "binding-effect",
+      "role": "input-binding"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "request_binding_negatives": [
+          {
+            "case": "duplicate-field",
+            "exit_code": 126,
+            "kernel_process_samples": [],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-cwd",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-workspace",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "missing-payload",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "nonstring-command",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-event",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-schema",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-sha",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-tool",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          }
+        ]
+      },
+      "error": "required installed request negatives did not refuse without effects",
+      "name": "binding-no-samples",
+      "role": "input-binding"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "request_binding_negatives": [
+          {
+            "case": "duplicate-field",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "denied",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-cwd",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "foreign-workspace",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "missing-payload",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "nonstring-command",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-event",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-schema",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-sha",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          },
+          {
+            "case": "wrong-tool",
+            "exit_code": 126,
+            "kernel_process_samples": [
+              {
+                "pid": 701
+              }
+            ],
+            "stderr": "contained_test_authorization_failed: synthetic refusal",
+            "trap_effect_present": false
+          }
+        ]
+      },
+      "error": "required installed request negatives did not refuse without effects",
+      "name": "binding-wrong-stderr",
+      "role": "input-binding"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "native_contained_boundary_negatives": {
+          "rows": [
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "family": 2,
+              "surface": "network"
+            }
+          ]
+        }
+      },
+      "error": "actual Native path/network negative failed",
+      "name": "boundary-negative-missing",
+      "role": "boundary"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "native_contained_boundary_negatives": {
+          "rows": [
+            {
+              "denied": false,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "family": 2,
+              "surface": "network"
+            },
+            {
+              "denied": true,
+              "family": 10,
+              "surface": "network"
+            }
+          ]
+        }
+      },
+      "error": "actual Native path/network negative failed",
+      "name": "boundary-negative-allowed",
+      "role": "boundary"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "native_contained_boundary_negatives": {
+          "rows": [
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/other",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "family": 2,
+              "surface": "network"
+            },
+            {
+              "denied": true,
+              "family": 10,
+              "surface": "network"
+            }
+          ]
+        }
+      },
+      "error": "actual Native negative surfaces missing",
+      "name": "boundary-wrong-path",
+      "role": "boundary"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "native_contained_boundary_negatives": {
+          "rows": [
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/controller-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/tmp/gauntlet/session-001/agent/agent-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "read",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "operation": "write",
+              "path": "/product/guard/native-boundary-canary.txt",
+              "surface": "path"
+            },
+            {
+              "denied": true,
+              "family": 2,
+              "surface": "network"
+            },
+            {
+              "denied": true,
+              "family": 1,
+              "surface": "network"
+            }
+          ]
+        }
+      },
+      "error": "actual Native negative surfaces missing",
+      "name": "boundary-wrong-family",
+      "role": "boundary"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "canary_terminal_sha256": {
+          "product": "other"
+        }
+      },
+      "error": "synthetic private canary was altered",
+      "name": "boundary-canary-changed",
+      "role": "boundary"
+    },
+    {
+      "accepted": false,
+      "control_patch": {
+        "canary_initial_sha256": {
+          "agent": null
+        }
+      },
+      "error": "synthetic private canary was altered",
+      "name": "boundary-canary-missing",
+      "role": "boundary"
+    }
+  ],
+  "custody_sha256": "fa347e8cf791c21a4ce6de8d331bfbb80d80f605d0e927f672ed8475e24de21e",
+  "json_data_sha256": "5d7a9b3b350ac5a7c318f02af8916101551371459f487cc0e5abd037792f817e",
+  "output_binding_sha256": "921ca0f4fd253a374cb59d82c2b0849c6839fcfb613c7fa4c28ddc3ccfdddd5a",
+  "schema": "gauntlet-control-reported-tail-fixtures.v1",
+  "source_sha256": "22773101b8880d65dd85183a4212ca8efa57897388ad1408ab5d1ad971111427",
+  "stubs": [
+    "verify_private_cell_runtime",
+    "_cancel"
+  ]
+}

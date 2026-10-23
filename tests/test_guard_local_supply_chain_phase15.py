@@ -744,5 +744,3 @@ def test_guard_protect_returns_controlled_execution_error_for_install_subprocess
     assert isinstance(execution, dict)
     assert execution["returncode"] == -1
     assert expected_fragment in str(execution["stderr"]).lower()
-
-

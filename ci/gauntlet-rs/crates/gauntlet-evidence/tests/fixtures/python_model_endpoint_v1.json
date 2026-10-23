@@ -1,0 +1,273 @@
+{
+  "model_endpoint_source_sha256": "82cf4f951340e0c9cc65315b31f042aef235d378a661d4b5246f36db29d3f302",
+  "models": [
+    {
+      "model_id": "Qwen/Qwen3-Gauntlet-Synthetic",
+      "models": {
+        "data": [
+          {
+            "id": "Qwen/Qwen3-Gauntlet-Synthetic"
+          }
+        ]
+      },
+      "name": "exact",
+      "route": {
+        "base_url": "http://host.lima.internal:8001/v1",
+        "host": "192.168.5.2",
+        "port": 8001
+      }
+    },
+    {
+      "model_id": "Qwen/Qwen3-Gauntlet-Synthetic",
+      "models": {
+        "data": [
+          {
+            "id": "Qwen/Qwen3-Gauntlet-Synthetic",
+            "object": "model"
+          }
+        ],
+        "object": "list"
+      },
+      "name": "extra-model-fields",
+      "route": {
+        "base_url": "http://host.lima.internal:8001/v1",
+        "host": "192.168.5.2",
+        "port": 8001
+      }
+    },
+    {
+      "model_id": "Qwen/Qwen3-Gauntlet-Synthetic",
+      "models": {
+        "data": []
+      },
+      "name": "empty",
+      "python_refusal": "actual advertised model differs from exact frozen model"
+    },
+    {
+      "model_id": "Qwen/Qwen3-Gauntlet-Synthetic",
+      "models": {
+        "data": [
+          {
+            "id": "Qwen/Qwen3-Gauntlet-Synthetic"
+          },
+          {
+            "id": "Qwen/Qwen3-Gauntlet-Synthetic"
+          }
+        ]
+      },
+      "name": "duplicate",
+      "python_refusal": "actual advertised model differs from exact frozen model"
+    },
+    {
+      "model_id": "Qwen/Qwen3-Gauntlet-Synthetic",
+      "models": {
+        "data": [
+          {
+            "id": "other"
+          }
+        ]
+      },
+      "name": "wrong-id",
+      "python_refusal": "actual advertised model differs from exact frozen model"
+    },
+    {
+      "model_id": "Qwen/Qwen3-Gauntlet-Synthetic",
+      "models": {
+        "data": [
+          "Qwen/Qwen3-Gauntlet-Synthetic"
+        ]
+      },
+      "name": "nonobject-row",
+      "python_refusal": "actual advertised model differs from exact frozen model"
+    },
+    {
+      "model_id": "Qwen/Qwen3-Gauntlet-Synthetic",
+      "models": {
+        "object": "list"
+      },
+      "name": "missing-data",
+      "python_refusal": "actual advertised model differs from exact frozen model"
+    },
+    {
+      "model_id": "Qwen/Qwen3-Gauntlet-Synthetic",
+      "models": {
+        "data": {
+          "id": "Qwen/Qwen3-Gauntlet-Synthetic"
+        }
+      },
+      "name": "wrong-data-kind",
+      "python_refusal": "actual advertised model differs from exact frozen model"
+    }
+  ],
+  "observed": [
+    {
+      "base_url": "http://host.lima.internal:8001/v1",
+      "name": "legacy-default",
+      "observed": null,
+      "route": {
+        "base_url": "http://host.lima.internal:8001/v1",
+        "host": "192.168.5.2",
+        "port": 8001
+      }
+    },
+    {
+      "base_url": "http://host.lima.internal:8002/v1",
+      "name": "legacy-nondefault",
+      "observed": null,
+      "python_refusal": "legacy model evidence cannot establish the frozen endpoint"
+    },
+    {
+      "base_url": "http://host.lima.internal:8002/v1",
+      "name": "exact",
+      "observed": {
+        "base_url": "http://host.lima.internal:8002/v1",
+        "host": "192.168.5.2",
+        "port": 8002
+      },
+      "route": {
+        "base_url": "http://host.lima.internal:8002/v1",
+        "host": "192.168.5.2",
+        "port": 8002
+      }
+    },
+    {
+      "base_url": "http://host.lima.internal:8002/v1",
+      "name": "wrong-port",
+      "observed": {
+        "base_url": "http://host.lima.internal:8002/v1",
+        "host": "192.168.5.2",
+        "port": 8001
+      },
+      "python_refusal": "observed model endpoint differs from exact frozen controller declaration"
+    },
+    {
+      "base_url": "http://host.lima.internal:8002/v1",
+      "name": "extra-field",
+      "observed": {
+        "base_url": "http://host.lima.internal:8002/v1",
+        "extra": 1,
+        "host": "192.168.5.2",
+        "port": 8002
+      },
+      "python_refusal": "observed model endpoint differs from exact frozen controller declaration"
+    },
+    {
+      "base_url": "http://host.lima.internal:8002/v1",
+      "name": "wrong-kind",
+      "observed": "http://localhost:8002/v1",
+      "python_refusal": "observed model endpoint differs from exact frozen controller declaration"
+    }
+  ],
+  "preflight_source_sha256": "69f5d0368f5c763a047c554b2d9a31a63f169fd2bc8d13a14aa96d8a38a274d7",
+  "routes": [
+    {
+      "base_url": "http://host.lima.internal:8001/v1",
+      "route": {
+        "base_url": "http://host.lima.internal:8001/v1",
+        "host": "192.168.5.2",
+        "port": 8001
+      }
+    },
+    {
+      "base_url": "http://host.lima.internal:8002/v1",
+      "route": {
+        "base_url": "http://host.lima.internal:8002/v1",
+        "host": "192.168.5.2",
+        "port": 8002
+      }
+    },
+    {
+      "base_url": "http://localhost:8001/v1",
+      "route": {
+        "base_url": "http://localhost:8001/v1",
+        "host": "192.168.5.2",
+        "port": 8001
+      }
+    },
+    {
+      "base_url": "http://localhost:8002/v1",
+      "route": {
+        "base_url": "http://localhost:8002/v1",
+        "host": "192.168.5.2",
+        "port": 8002
+      }
+    },
+    {
+      "base_url": "http://127.0.0.1:8001/v1",
+      "route": {
+        "base_url": "http://127.0.0.1:8001/v1",
+        "host": "192.168.5.2",
+        "port": 8001
+      }
+    },
+    {
+      "base_url": "http://127.0.0.1:8002/v1",
+      "route": {
+        "base_url": "http://127.0.0.1:8002/v1",
+        "host": "192.168.5.2",
+        "port": 8002
+      }
+    },
+    {
+      "base_url": "http://192.168.5.2:8001/v1",
+      "route": {
+        "base_url": "http://192.168.5.2:8001/v1",
+        "host": "192.168.5.2",
+        "port": 8001
+      }
+    },
+    {
+      "base_url": "http://192.168.5.2:8002/v1",
+      "route": {
+        "base_url": "http://192.168.5.2:8002/v1",
+        "host": "192.168.5.2",
+        "port": 8002
+      }
+    },
+    {
+      "base_url": "https://host.lima.internal:8001/v1",
+      "python_refusal": "local model endpoints require an explicit HTTP port 8001/8002 and exact /v1 path"
+    },
+    {
+      "base_url": "http://host.lima.internal:8003/v1",
+      "python_refusal": "local model endpoints require an explicit HTTP port 8001/8002 and exact /v1 path"
+    },
+    {
+      "base_url": "http://host.lima.internal.evil:8001/v1",
+      "python_refusal": "local model endpoints require an explicit HTTP port 8001/8002 and exact /v1 path"
+    },
+    {
+      "base_url": "http://HOST.LIMA.INTERNAL:8001/v1",
+      "python_refusal": "local model endpoints require an explicit HTTP port 8001/8002 and exact /v1 path"
+    },
+    {
+      "base_url": "http://localhost:8001/v1/",
+      "python_refusal": "local model endpoints require an explicit HTTP port 8001/8002 and exact /v1 path"
+    },
+    {
+      "base_url": "http://localhost:8001/v1/models",
+      "python_refusal": "local model endpoints require an explicit HTTP port 8001/8002 and exact /v1 path"
+    },
+    {
+      "base_url": "http://localhost:8001/v1?next=/v1",
+      "python_refusal": "local model endpoints require an explicit HTTP port 8001/8002 and exact /v1 path"
+    },
+    {
+      "base_url": "http://user@localhost:8001/v1",
+      "python_refusal": "local model endpoints require an explicit HTTP port 8001/8002 and exact /v1 path"
+    },
+    {
+      "base_url": "http://[::1]:8001/v1",
+      "python_refusal": "local model endpoints require an explicit HTTP port 8001/8002 and exact /v1 path"
+    },
+    {
+      "base_url": "http://localhost/v1",
+      "python_refusal": "local model endpoints require an explicit HTTP port 8001/8002 and exact /v1 path"
+    },
+    {
+      "base_url": "http://localhost:08001/v1",
+      "python_refusal": "local model endpoints require an explicit HTTP port 8001/8002 and exact /v1 path"
+    }
+  ],
+  "schema": "gauntlet-model-endpoint-fixtures.v1"
+}

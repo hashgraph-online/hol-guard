@@ -1,0 +1,7 @@
+# Per-worker profile, loaded/unloaded by the outside collector. No VM sysctl
+# or existing profile changes. DAC, dropped capabilities, readonly mounts,
+# PID/mount/network namespaces and Chromium's sandbox remain independent.
+abi <abi/4.0>,
+profile HOL_WORKER_PROFILE flags=(unconfined) {
+  userns,
+}

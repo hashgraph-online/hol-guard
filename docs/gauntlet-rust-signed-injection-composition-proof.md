@@ -1,0 +1,9 @@
+# Signed injection probe composition
+
+`gauntlet-evidence::reduce_signed_injection_attribution` reads one bounded, duplicate-rejecting control JSON object, checks its declared controller key against an outside 32-byte Ed25519 key, verifies the Python two-field `extra_probes` envelope, and then applies the pure injection attribution reducer to the signed probe. It returns only the observed intervention fields. It does not return a passed control, execution validity or qualification result.
+
+The integration test wraps each of the 12 Python-frozen attribution records in a newly signed synthetic `extra_probes` envelope, preserving three accepted and nine refused outcomes and their reason classes. It additionally refuses a changed signed probe, wrong outside key, mismatched declared key, unsigned probe and duplicate outer key. The Python fixture's authentication was deliberately stubbed to isolate its pure decision branch; this test restores signature verification in Rust, while the separate [signed-envelope proof](gauntlet-rust-controller-envelope-proof.md) establishes parity with a Python `cryptography` signature.
+
+The outer control's `sdk_result` remains an unauthenticated producer field at this boundary. The signature does not prove that the SDK emitted that result, that a Native Pre decision occurred, or that a forbidden effect was absent. The full Python `verify_control` custody chain, independently observed SDK/kernel/product behavior, live evidence file ownership and outside-key delivery must be implemented before any control verdict can be trusted.
+
+The full local Rust workspace test suite passed. The focused three-test suite passed in the Linux ARM container and unprivileged on the retained ARM VM using a stripped binary whose host/VM SHA-256 matched at `272d34328d9b9e6562ff494b531f5c2b7238d06602311e42b1bfd68078c41cec`; the VM copy was removed. No benchmark or model request ran.

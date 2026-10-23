@@ -1,0 +1,482 @@
+{
+  "cases": [
+    {
+      "body": {
+        "operation": "read_docs",
+        "payload": {
+          "path": "/public/spec"
+        },
+        "request_id": "123e4567-e89b-12d3-a456-426614174000"
+      },
+      "expected": {
+        "status": "accepted"
+      },
+      "mode": "request",
+      "name": "ordinary"
+    },
+    {
+      "body": {
+        "operation": "read_docs",
+        "payload": {},
+        "request_id": "123e4567-e89b-12d3-a456-426614174000"
+      },
+      "expected": {
+        "status": "accepted"
+      },
+      "mode": "request",
+      "name": "empty_payload"
+    },
+    {
+      "body": {
+        "operation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "payload": {
+          "path": "/public/spec"
+        },
+        "request_id": "123e4567-e89b-12d3-a456-426614174000"
+      },
+      "expected": {
+        "status": "accepted"
+      },
+      "mode": "request",
+      "name": "max_operation"
+    },
+    {
+      "body": {
+        "operation": "read_docs",
+        "payload": {
+          "rows": [
+            1,
+            {
+              "ok": true
+            }
+          ]
+        },
+        "request_id": "123e4567-e89b-12d3-a456-426614174000"
+      },
+      "expected": {
+        "status": "accepted"
+      },
+      "mode": "request",
+      "name": "nested_payload"
+    },
+    {
+      "body": {
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000"
+      },
+      "expected": {
+        "reason": "invalid bridge operation request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "request",
+      "name": "missing_payload"
+    },
+    {
+      "body": {
+        "command": "unsafe",
+        "operation": "read_docs",
+        "payload": {
+          "path": "/public/spec"
+        },
+        "request_id": "123e4567-e89b-12d3-a456-426614174000"
+      },
+      "expected": {
+        "reason": "invalid bridge operation request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "request",
+      "name": "extra_field"
+    },
+    {
+      "body": {
+        "operation": "ReadDocs",
+        "payload": {
+          "path": "/public/spec"
+        },
+        "request_id": "123e4567-e89b-12d3-a456-426614174000"
+      },
+      "expected": {
+        "reason": "invalid bridge operation request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "request",
+      "name": "uppercase_operation"
+    },
+    {
+      "body": {
+        "operation": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "payload": {
+          "path": "/public/spec"
+        },
+        "request_id": "123e4567-e89b-12d3-a456-426614174000"
+      },
+      "expected": {
+        "reason": "invalid bridge operation request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "request",
+      "name": "long_operation"
+    },
+    {
+      "body": {
+        "operation": "1read",
+        "payload": {
+          "path": "/public/spec"
+        },
+        "request_id": "123e4567-e89b-12d3-a456-426614174000"
+      },
+      "expected": {
+        "reason": "invalid bridge operation request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "request",
+      "name": "digit_operation"
+    },
+    {
+      "body": {
+        "operation": "",
+        "payload": {
+          "path": "/public/spec"
+        },
+        "request_id": "123e4567-e89b-12d3-a456-426614174000"
+      },
+      "expected": {
+        "reason": "invalid bridge operation request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "request",
+      "name": "empty_operation"
+    },
+    {
+      "body": {
+        "operation": "read_docs",
+        "payload": {
+          "path": "/public/spec"
+        },
+        "request_id": "123E4567-E89B-12D3-A456-426614174000"
+      },
+      "expected": {
+        "reason": "invalid bridge operation request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "request",
+      "name": "uppercase_uuid"
+    },
+    {
+      "body": {
+        "operation": "read_docs",
+        "payload": {
+          "path": "/public/spec"
+        },
+        "request_id": "123e4567e89b12d3a456426614174000"
+      },
+      "expected": {
+        "reason": "invalid bridge operation request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "request",
+      "name": "unhyphenated_uuid"
+    },
+    {
+      "body": {
+        "operation": "read_docs",
+        "payload": {
+          "path": "/public/spec"
+        },
+        "request_id": 7
+      },
+      "expected": {
+        "reason": "invalid bridge operation request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "request",
+      "name": "numeric_uuid"
+    },
+    {
+      "body": {
+        "operation": "read_docs",
+        "payload": [],
+        "request_id": "123e4567-e89b-12d3-a456-426614174000"
+      },
+      "expected": {
+        "reason": "invalid bridge operation request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "request",
+      "name": "array_payload"
+    },
+    {
+      "body": {
+        "operation": "read_docs",
+        "payload": null,
+        "request_id": "123e4567-e89b-12d3-a456-426614174000"
+      },
+      "expected": {
+        "reason": "invalid bridge operation request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "request",
+      "name": "null_payload"
+    },
+    {
+      "body": {
+        "error": null,
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000",
+        "result": {
+          "content": "fixed"
+        }
+      },
+      "expected": {
+        "result": {
+          "content": "fixed"
+        },
+        "status": "accepted"
+      },
+      "mode": "response",
+      "name": "success"
+    },
+    {
+      "body": {
+        "error": {
+          "code": "unknown-operation"
+        },
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000",
+        "result": null
+      },
+      "expected": {
+        "poisoned": false,
+        "reason": "bridge operation failed: unknown-operation",
+        "status": "BridgeRemoteError"
+      },
+      "mode": "response",
+      "name": "unknown_operation"
+    },
+    {
+      "body": {
+        "error": {
+          "code": "operation-failed",
+          "kind": "ValueError"
+        },
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000",
+        "result": null
+      },
+      "expected": {
+        "poisoned": false,
+        "reason": "bridge operation failed: operation-failed",
+        "status": "BridgeRemoteError"
+      },
+      "mode": "response",
+      "name": "operation_failed"
+    },
+    {
+      "body": {
+        "error": null,
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174001",
+        "result": {
+          "content": "fixed"
+        }
+      },
+      "expected": {
+        "poisoned": true,
+        "reason": "bridge response does not bind exact request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "response",
+      "name": "wrong_request_id"
+    },
+    {
+      "body": {
+        "error": null,
+        "operation": "read_mail",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000",
+        "result": {
+          "content": "fixed"
+        }
+      },
+      "expected": {
+        "poisoned": true,
+        "reason": "bridge response does not bind exact request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "response",
+      "name": "wrong_operation"
+    },
+    {
+      "body": {
+        "error": null,
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000"
+      },
+      "expected": {
+        "poisoned": true,
+        "reason": "bridge response does not bind exact request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "response",
+      "name": "missing_result"
+    },
+    {
+      "body": {
+        "command": "unsafe",
+        "error": null,
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000",
+        "result": {
+          "content": "fixed"
+        }
+      },
+      "expected": {
+        "poisoned": true,
+        "reason": "bridge response does not bind exact request",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "response",
+      "name": "extra_field"
+    },
+    {
+      "body": {
+        "error": null,
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000",
+        "result": null
+      },
+      "expected": {
+        "poisoned": true,
+        "reason": "invalid bridge operation result",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "response",
+      "name": "null_result"
+    },
+    {
+      "body": {
+        "error": null,
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000",
+        "result": []
+      },
+      "expected": {
+        "poisoned": true,
+        "reason": "invalid bridge operation result",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "response",
+      "name": "array_result"
+    },
+    {
+      "body": {
+        "error": {
+          "code": "unknown-operation"
+        },
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000",
+        "result": {
+          "content": "fixed"
+        }
+      },
+      "expected": {
+        "poisoned": true,
+        "reason": "invalid bridge operation error",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "response",
+      "name": "error_with_result"
+    },
+    {
+      "body": {
+        "error": {
+          "code": "other"
+        },
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000",
+        "result": null
+      },
+      "expected": {
+        "poisoned": true,
+        "reason": "invalid bridge operation error",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "response",
+      "name": "unknown_error_code"
+    },
+    {
+      "body": {
+        "error": {
+          "code": "operation-failed"
+        },
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000",
+        "result": null
+      },
+      "expected": {
+        "poisoned": true,
+        "reason": "invalid bridge operation error fields",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "response",
+      "name": "missing_failure_kind"
+    },
+    {
+      "body": {
+        "error": {
+          "code": "operation-failed",
+          "kind": "bad-kind"
+        },
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000",
+        "result": null
+      },
+      "expected": {
+        "poisoned": true,
+        "reason": "invalid bridge operation error fields",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "response",
+      "name": "bad_failure_kind"
+    },
+    {
+      "body": {
+        "error": {
+          "code": "unknown-operation",
+          "kind": "ValueError"
+        },
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000",
+        "result": null
+      },
+      "expected": {
+        "poisoned": true,
+        "reason": "invalid bridge operation error fields",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "response",
+      "name": "extra_unknown_kind"
+    },
+    {
+      "body": {
+        "error": [],
+        "operation": "read_docs",
+        "request_id": "123e4567-e89b-12d3-a456-426614174000",
+        "result": null
+      },
+      "expected": {
+        "poisoned": true,
+        "reason": "invalid bridge operation error",
+        "status": "BridgeProtocolError"
+      },
+      "mode": "response",
+      "name": "array_error"
+    }
+  ],
+  "operation": "read_docs",
+  "payload": {
+    "path": "/public/spec"
+  },
+  "python_source_sha256": "ae15ffd28a9e5e83a117ec5c558f29c4ee98b4fd6448a45c00219da976ee76e9",
+  "request_id": "123e4567-e89b-12d3-a456-426614174000",
+  "schema": "hol-gauntlet-python-bridge-rpc-fixtures.v1"
+}

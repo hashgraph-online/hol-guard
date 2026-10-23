@@ -1,0 +1,229 @@
+{
+  "cases": [
+    {
+      "allowance_digest": null,
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+      "events": "",
+      "name": "empty",
+      "snapshot": {
+        "charged_tokens": 0,
+        "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+        "halted": false,
+        "journal_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+        "known_tokens": 0,
+        "maximum_requests": 3,
+        "model_identity_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pending_requests": 0,
+        "qualification_eligible": false,
+        "remaining_tokens": 100,
+        "requests": 0,
+        "reserved_tokens": 0,
+        "schema": "gauntlet-provider-quota-status.v1",
+        "token_cap": 100
+      }
+    },
+    {
+      "allowance_digest": null,
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+      "events": "{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":60,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"reserve\"},\"previous_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"sequence\":0}\n",
+      "name": "reserved",
+      "snapshot": {
+        "charged_tokens": 80,
+        "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+        "halted": false,
+        "journal_hash": "4e39a36614c15eb9b1dcf74d18701db84f18e4940201da73ca415e67d426bdbb",
+        "known_tokens": 0,
+        "maximum_requests": 3,
+        "model_identity_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pending_requests": 1,
+        "qualification_eligible": false,
+        "remaining_tokens": 20,
+        "requests": 1,
+        "reserved_tokens": 80,
+        "schema": "gauntlet-provider-quota-status.v1",
+        "token_cap": 100
+      }
+    },
+    {
+      "allowance_digest": null,
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+      "events": "{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":60,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"reserve\"},\"previous_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"sequence\":0}",
+      "name": "interrupted-append",
+      "python_refusal": "interrupted quota append requires explicit reconciliation",
+      "python_refusal_type": "QuotaDeniedError"
+    },
+    {
+      "allowance_digest": null,
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+      "events": "\n",
+      "name": "blank-row",
+      "python_refusal": "invalid JSON: Expecting value: line 1 column 1 (char 0)",
+      "python_refusal_type": "ContractError"
+    },
+    {
+      "allowance_digest": null,
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+      "events": "{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":60,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"reserve\"},\"previous_hash\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"sequence\":0}\n",
+      "name": "wrong-previous",
+      "python_refusal": "provider quota journal chain or configuration changed",
+      "python_refusal_type": "QuotaDeniedError"
+    },
+    {
+      "allowance_digest": null,
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+      "events": "{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":60,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"reserve\"},\"previous_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"sequence\":0,\"sequence\":0}\n",
+      "name": "duplicate-key",
+      "python_refusal": "invalid JSON: duplicate object key: sequence",
+      "python_refusal_type": "ContractError"
+    },
+    {
+      "allowance_digest": null,
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+      "events": "{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":60,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"reserve\"},\"previous_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"sequence\":0}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":1,\"prompt_tokens\":1,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"type\":\"reserve\"},\"previous_hash\":\"4e39a36614c15eb9b1dcf74d18701db84f18e4940201da73ca415e67d426bdbb\",\"sequence\":1}\n",
+      "name": "overlap",
+      "python_refusal": "overlapping, repeated or halted quota admission",
+      "python_refusal_type": "QuotaDeniedError"
+    },
+    {
+      "allowance_digest": null,
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+      "events": "{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":60,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"reserve\"},\"previous_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"sequence\":0}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_tokens\":0,\"prompt_tokens\":59,\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"settle\"},\"previous_hash\":\"4e39a36614c15eb9b1dcf74d18701db84f18e4940201da73ca415e67d426bdbb\",\"sequence\":1}\n",
+      "name": "wrong-settlement",
+      "python_refusal": "actual prompt count differs from its pre-generation reservation",
+      "python_refusal_type": "QuotaDeniedError"
+    },
+    {
+      "allowance_digest": null,
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+      "events": "{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":60,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"reserve\"},\"previous_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"sequence\":0}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"reservation_id\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"type\":\"unknown\"},\"previous_hash\":\"4e39a36614c15eb9b1dcf74d18701db84f18e4940201da73ca415e67d426bdbb\",\"sequence\":1}\n",
+      "name": "unknown-event",
+      "python_refusal": "unknown provider quota journal event",
+      "python_refusal_type": "QuotaDeniedError"
+    },
+    {
+      "allowance_digest": null,
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "events": "{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":60,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"reserve\"},\"previous_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"sequence\":0}\n",
+      "name": "wrong-config-pin",
+      "python_refusal": "provider quota configuration differs from external pin",
+      "python_refusal_type": "QuotaDeniedError"
+    },
+    {
+      "allowance_digest": null,
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+      "events": "{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":60,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"reserve\"},\"previous_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"sequence\":0}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_tokens\":10,\"prompt_tokens\":60,\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"settle\"},\"previous_hash\":\"4e39a36614c15eb9b1dcf74d18701db84f18e4940201da73ca415e67d426bdbb\",\"sequence\":1}\n",
+      "name": "settled",
+      "snapshot": {
+        "charged_tokens": 70,
+        "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+        "halted": false,
+        "journal_hash": "6781e2e4709d35eb00eb410e43512c97ce8d00d0511b3cc035dcae298b9c8bc2",
+        "known_tokens": 70,
+        "maximum_requests": 3,
+        "model_identity_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pending_requests": 0,
+        "qualification_eligible": false,
+        "remaining_tokens": 30,
+        "requests": 1,
+        "reserved_tokens": 0,
+        "schema": "gauntlet-provider-quota-status.v1",
+        "token_cap": 100
+      }
+    },
+    {
+      "allowance_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+      "events": "{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":60,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"reserve\"},\"previous_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"sequence\":0}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_tokens\":10,\"prompt_tokens\":60,\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"settle\"},\"previous_hash\":\"4e39a36614c15eb9b1dcf74d18701db84f18e4940201da73ca415e67d426bdbb\",\"sequence\":1}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"authorization_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"reservation_id\":\"00000000000000000000000000000003\",\"total_tokens\":150,\"type\":\"extend_allowance\"},\"previous_hash\":\"6781e2e4709d35eb00eb410e43512c97ce8d00d0511b3cc035dcae298b9c8bc2\",\"sequence\":2}\n",
+      "name": "extended",
+      "snapshot": {
+        "allowance_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "charged_tokens": 70,
+        "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+        "halted": false,
+        "journal_hash": "7a42097572c9cd8b3869b6a4c1f886d5fb760606127d8c9da393fe5cb4737d6e",
+        "known_tokens": 70,
+        "maximum_requests": 3,
+        "model_identity_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pending_requests": 0,
+        "qualification_eligible": false,
+        "remaining_tokens": 80,
+        "requests": 1,
+        "reserved_tokens": 0,
+        "schema": "gauntlet-provider-quota-status.v1",
+        "token_cap": 150
+      }
+    },
+    {
+      "allowance_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+      "events": "{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":60,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"reserve\"},\"previous_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"sequence\":0}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_tokens\":10,\"prompt_tokens\":60,\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"settle\"},\"previous_hash\":\"4e39a36614c15eb9b1dcf74d18701db84f18e4940201da73ca415e67d426bdbb\",\"sequence\":1}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"authorization_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"reservation_id\":\"00000000000000000000000000000003\",\"total_tokens\":150,\"type\":\"extend_allowance\"},\"previous_hash\":\"6781e2e4709d35eb00eb410e43512c97ce8d00d0511b3cc035dcae298b9c8bc2\",\"sequence\":2}\n",
+      "name": "wrong-allowance-pin",
+      "python_refusal": "provider allowance differs from external authorization pin",
+      "python_refusal_type": "QuotaDeniedError"
+    },
+    {
+      "allowance_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+      "events": "{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":60,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"reserve\"},\"previous_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"sequence\":0}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_tokens\":10,\"prompt_tokens\":60,\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"settle\"},\"previous_hash\":\"4e39a36614c15eb9b1dcf74d18701db84f18e4940201da73ca415e67d426bdbb\",\"sequence\":1}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"authorization_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"reservation_id\":\"00000000000000000000000000000003\",\"total_tokens\":150,\"type\":\"extend_allowance\"},\"previous_hash\":\"6781e2e4709d35eb00eb410e43512c97ce8d00d0511b3cc035dcae298b9c8bc2\",\"sequence\":2}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":40,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000004\",\"type\":\"reserve\"},\"previous_hash\":\"7a42097572c9cd8b3869b6a4c1f886d5fb760606127d8c9da393fe5cb4737d6e\",\"sequence\":3}\n",
+      "name": "extended-reserved",
+      "snapshot": {
+        "allowance_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "charged_tokens": 130,
+        "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+        "halted": false,
+        "journal_hash": "1a02bbed52c05bc94b3c7241f82b971cde287c170436ebc896549d8de7b5750c",
+        "known_tokens": 70,
+        "maximum_requests": 3,
+        "model_identity_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pending_requests": 1,
+        "qualification_eligible": false,
+        "remaining_tokens": 20,
+        "requests": 2,
+        "reserved_tokens": 60,
+        "schema": "gauntlet-provider-quota-status.v1",
+        "token_cap": 150
+      }
+    },
+    {
+      "allowance_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "config": "{\"authorization_id\":\"synthetic-authorization\",\"maximum_inflight\":1,\"maximum_requests\":3,\"model_identity_digest\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"quota_id\":\"00000000000000000000000000000001\",\"schema\":\"gauntlet-provider-quota.v1\",\"total_tokens\":100}\n",
+      "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+      "events": "{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":60,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"reserve\"},\"previous_hash\":\"0000000000000000000000000000000000000000000000000000000000000000\",\"sequence\":0}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_tokens\":10,\"prompt_tokens\":60,\"reservation_id\":\"00000000000000000000000000000002\",\"type\":\"settle\"},\"previous_hash\":\"4e39a36614c15eb9b1dcf74d18701db84f18e4940201da73ca415e67d426bdbb\",\"sequence\":1}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"authorization_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"reservation_id\":\"00000000000000000000000000000003\",\"total_tokens\":150,\"type\":\"extend_allowance\"},\"previous_hash\":\"6781e2e4709d35eb00eb410e43512c97ce8d00d0511b3cc035dcae298b9c8bc2\",\"sequence\":2}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"output_limit\":20,\"prompt_tokens\":40,\"request_digest\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"reservation_id\":\"00000000000000000000000000000004\",\"type\":\"reserve\"},\"previous_hash\":\"7a42097572c9cd8b3869b6a4c1f886d5fb760606127d8c9da393fe5cb4737d6e\",\"sequence\":3}\n{\"config_digest\":\"d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81\",\"event\":{\"reason\":\"synthetic transport loss\",\"reservation_id\":\"00000000000000000000000000000004\",\"type\":\"uncertain\"},\"previous_hash\":\"1a02bbed52c05bc94b3c7241f82b971cde287c170436ebc896549d8de7b5750c\",\"sequence\":4}\n",
+      "name": "uncertain",
+      "snapshot": {
+        "allowance_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "charged_tokens": 130,
+        "config_digest": "d0cb54650be18b2dda5a99d7b15e33e8a6a934efddc7e0883f0fbd0294575f81",
+        "halted": true,
+        "journal_hash": "db361aba7ab0630f477a2a19ee3aa28e4561d72c3bd522a8386d64dce9cedf15",
+        "known_tokens": 70,
+        "maximum_requests": 3,
+        "model_identity_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pending_requests": 1,
+        "qualification_eligible": false,
+        "remaining_tokens": 20,
+        "requests": 2,
+        "reserved_tokens": 60,
+        "schema": "gauntlet-provider-quota-status.v1",
+        "token_cap": 150
+      }
+    }
+  ],
+  "json_data_sha256": "5d7a9b3b350ac5a7c318f02af8916101551371459f487cc0e5abd037792f817e",
+  "schema": "gauntlet-provider-quota-fixtures.v1",
+  "source_sha256": "f9dae71c6caee2a5e2e5727010d247cb5424dbe1b55c7f472a5093e10a72815e"
+}

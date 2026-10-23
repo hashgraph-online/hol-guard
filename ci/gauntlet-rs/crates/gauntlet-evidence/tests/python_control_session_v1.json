@@ -1,0 +1,1858 @@
+{
+  "ast_statements": "verify_control body[1:28]",
+  "cases": [
+    {
+      "accepted": true,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "YPFZv7w+6WPs75ZtZKq1gbPI3H7HEMXDo68OW/NucAat9ol+fY1ytKism0KAbFVSy+S6XGc4tFp96miagvFQDQ=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "cnc3l29cvDN0GuW8yh9XUElFILJeVBKp+DfzB21O0C8fT+sD57RTTbObCjshRQEzcHEQXfr+28MewPuG/faxAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        }
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "valid-success",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "result": {
+        "agent_identity": {
+          "pid": 301
+        },
+        "provider_mounts": [
+          "/tmp/gauntlet/session-001/tasks/remote",
+          "/tmp/gauntlet/session-001/tasks/home"
+        ],
+        "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sdk_observation": {
+          "bound_before_sdk_import": true,
+          "identity": {
+            "pid": 217,
+            "start_time": "42"
+          },
+          "kernel_peer_authenticated": true,
+          "pid": 217
+        },
+        "session_id": "session-001",
+        "workspace_source": "/tmp/gauntlet/session-001/tasks/checkout"
+      },
+      "role": "success"
+    },
+    {
+      "accepted": true,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "YPFZv7w+6WPs75ZtZKq1gbPI3H7HEMXDo68OW/NucAat9ol+fY1ytKism0KAbFVSy+S6XGc4tFp96miagvFQDQ=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "cnc3l29cvDN0GuW8yh9XUElFILJeVBKp+DfzB21O0C8fT+sD57RTTbObCjshRQEzcHEQXfr+28MewPuG/faxAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        }
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "valid-timeout",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "result": {
+        "agent_identity": {
+          "pid": 301
+        },
+        "provider_mounts": [
+          "/tmp/gauntlet/session-001/tasks/remote",
+          "/tmp/gauntlet/session-001/tasks/home"
+        ],
+        "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sdk_observation": {
+          "bound_before_sdk_import": true,
+          "identity": {
+            "pid": 217,
+            "start_time": "42"
+          },
+          "kernel_peer_authenticated": true,
+          "pid": 217
+        },
+        "session_id": "session-001",
+        "workspace_source": "/tmp/gauntlet/session-001/tasks/checkout"
+      },
+      "role": "timeout"
+    },
+    {
+      "accepted": true,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "YPFZv7w+6WPs75ZtZKq1gbPI3H7HEMXDo68OW/NucAat9ol+fY1ytKism0KAbFVSy+S6XGc4tFp96miagvFQDQ=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "cnc3l29cvDN0GuW8yh9XUElFILJeVBKp+DfzB21O0C8fT+sD57RTTbObCjshRQEzcHEQXfr+28MewPuG/faxAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        }
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "valid-cancel",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "result": {
+        "agent_identity": {
+          "pid": 301
+        },
+        "provider_mounts": [
+          "/tmp/gauntlet/session-001/tasks/remote",
+          "/tmp/gauntlet/session-001/tasks/home"
+        ],
+        "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sdk_observation": {
+          "bound_before_sdk_import": true,
+          "identity": {
+            "pid": 217,
+            "start_time": "42"
+          },
+          "kernel_peer_authenticated": true,
+          "pid": 217
+        },
+        "session_id": "session-001",
+        "workspace_source": "/tmp/gauntlet/session-001/tasks/checkout"
+      },
+      "role": "cancel"
+    },
+    {
+      "accepted": true,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "YPFZv7w+6WPs75ZtZKq1gbPI3H7HEMXDo68OW/NucAat9ol+fY1ytKism0KAbFVSy+S6XGc4tFp96miagvFQDQ=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "cnc3l29cvDN0GuW8yh9XUElFILJeVBKp+DfzB21O0C8fT+sD57RTTbObCjshRQEzcHEQXfr+28MewPuG/faxAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        }
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "valid-input-binding",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "result": {
+        "agent_identity": {
+          "pid": 301
+        },
+        "provider_mounts": [
+          "/tmp/gauntlet/session-001/tasks/remote",
+          "/tmp/gauntlet/session-001/tasks/home"
+        ],
+        "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sdk_observation": {
+          "bound_before_sdk_import": true,
+          "identity": {
+            "pid": 217,
+            "start_time": "42"
+          },
+          "kernel_peer_authenticated": true,
+          "pid": 217
+        },
+        "session_id": "session-001",
+        "workspace_source": "/tmp/gauntlet/session-001/tasks/checkout"
+      },
+      "role": "input-binding"
+    },
+    {
+      "accepted": true,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "YPFZv7w+6WPs75ZtZKq1gbPI3H7HEMXDo68OW/NucAat9ol+fY1ytKism0KAbFVSy+S6XGc4tFp96miagvFQDQ=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "cnc3l29cvDN0GuW8yh9XUElFILJeVBKp+DfzB21O0C8fT+sD57RTTbObCjshRQEzcHEQXfr+28MewPuG/faxAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        }
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "valid-boundary",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "result": {
+        "agent_identity": {
+          "pid": 301
+        },
+        "provider_mounts": [
+          "/tmp/gauntlet/session-001/tasks/remote",
+          "/tmp/gauntlet/session-001/tasks/home"
+        ],
+        "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sdk_observation": {
+          "bound_before_sdk_import": true,
+          "identity": {
+            "pid": 217,
+            "start_time": "42"
+          },
+          "kernel_peer_authenticated": true,
+          "pid": 217
+        },
+        "session_id": "session-001",
+        "workspace_source": "/tmp/gauntlet/session-001/tasks/checkout"
+      },
+      "role": "boundary"
+    },
+    {
+      "accepted": true,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "YPFZv7w+6WPs75ZtZKq1gbPI3H7HEMXDo68OW/NucAat9ol+fY1ytKism0KAbFVSy+S6XGc4tFp96miagvFQDQ=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "4.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "eu6fI7USzlD9/nBIxeJ+zRlWXlQw/35NamSsNNfhVsw9IA8ZfJUkaQ/F/AxtHtGyjzawbu/LRglyb6D2emZOBQ=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        }
+      },
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "valid-v4",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "result": {
+        "agent_identity": {
+          "pid": 301
+        },
+        "provider_mounts": [
+          "/tmp/gauntlet/session-001/tasks/remote",
+          "/tmp/gauntlet/session-001/tasks/home"
+        ],
+        "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sdk_observation": {
+          "bound_before_sdk_import": true,
+          "identity": {
+            "pid": 217,
+            "start_time": "42"
+          },
+          "kernel_peer_authenticated": true,
+          "pid": 217
+        },
+        "session_id": "session-001",
+        "workspace_source": "/tmp/gauntlet/session-001/tasks/checkout"
+      },
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "other",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "YPFZv7w+6WPs75ZtZKq1gbPI3H7HEMXDo68OW/NucAat9ol+fY1ytKism0KAbFVSy+S6XGc4tFp96miagvFQDQ=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "+S36/xhqOcedK0Gat7tzvUjaCWIZkfW/ReunWdYnXsGTc6b9mKX6hOLcQLnyXj31vdcqIFlVTLQWgbAvHJrjDA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        }
+      },
+      "error": "control allocation differs from session",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "wrong-session",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/../session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "h0r3NLv9M217cQXYTGaTOkK/MDiw9xB/Phxsibp7ScyNiZYhRzqoRbkpKh/dsn517pwaT1OUUnSPj9Ye1BWADw=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "I9RgIs1vlGEDAsfQ3rR5mSAcTZcu3Q8j43ayHAAjKEGm3IvrMGDRL935UaT7hDTI5kjDZZWWhi2/gKTBpICtDg=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/../session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        }
+      },
+      "error": "control allocation differs from session",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "parent-traversal",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/other"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "tP8shGSb5Zg7lmOaBKitxzQenvo60w4HfwxTY6sBN/GLy4EpOIuTpD40bVZlE/onooUJz9026X1HDkC8SwaMCQ=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "duaC0FaUhlbv3IZUhUHhTpkIh2ZCxlq7+jNkJWDhP4Sh1Wb70O84P7w/E8lIYCNEUIZ3hoJlqjR+wEmkH8j8Cg=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/other"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        }
+      },
+      "error": "control task paths differ from declared allocation",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "wrong-checkout",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/unrelated"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "UfptbCYtZRczZm4WiHbPUlzvj9uYgjlgl6g9ujw/uFkeV8xCPNkhIP1o1jD4pDm/AWNnNn7u/5rgrUps3oGlAw=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "xVEOMOuOIQqzBHPZRPT6hfC/Dz7HPRcSozjrG728d+3hIikmlhv+k/b8hkICjqZXf4IiHphqC1UhIJJYtc21BA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/unrelated"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        }
+      },
+      "error": "control task paths differ from declared allocation",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "wrong-remote",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "afmQq7rzEEji9w/6+t6asc7pqMPsZ8n2tHQnb3P3ugafGGSL31IO0sfMNNxeFbSVOnUConfJZyDNUKdaWgr6Dw=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "qw3AdCH47FxALboqaNs87N3GsEcP9kMDAlAy1pOKqTozandd8ahRAAZ2eHTw1jOb0TYsVDthjgvnQ6Xj1p81DA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        }
+      },
+      "error": "control task paths differ from declared allocation",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "missing-home",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "YPFZv7w+6WPs75ZtZKq1gbPI3H7HEMXDo68OW/NucAat9ol+fY1ytKism0KAbFVSy+S6XGc4tFp96miagvFQDQ=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "cnc3l29cvDN0GuW8yh9XUElFILJeVBKp+DfzB21O0C8fT+sD57RTTbObCjshRQEzcHEQXfr+28MewPuG/faxAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": false,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        }
+      },
+      "error": "control lacks outside pre-import SDK binding",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "sdk-cleanup-incomplete",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "YPFZv7w+6WPs75ZtZKq1gbPI3H7HEMXDo68OW/NucAat9ol+fY1ytKism0KAbFVSy+S6XGc4tFp96miagvFQDQ=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "cnc3l29cvDN0GuW8yh9XUElFILJeVBKp+DfzB21O0C8fT+sD57RTTbObCjshRQEzcHEQXfr+28MewPuG/faxAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": "failure",
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        }
+      },
+      "error": "control lacks outside pre-import SDK binding",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "sdk-error",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "YPFZv7w+6WPs75ZtZKq1gbPI3H7HEMXDo68OW/NucAat9ol+fY1ytKism0KAbFVSy+S6XGc4tFp96miagvFQDQ=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "cnc3l29cvDN0GuW8yh9XUElFILJeVBKp+DfzB21O0C8fT+sD57RTTbObCjshRQEzcHEQXfr+28MewPuG/faxAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": true,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": false,
+            "pid": 217
+          }
+        }
+      },
+      "error": "control lacks outside pre-import SDK binding",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "peer-unauthenticated",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    },
+    {
+      "accepted": false,
+      "control": {
+        "agent_cgroup_absent": true,
+        "agent_identity": {
+          "pid": 301
+        },
+        "agent_profile_removed": true,
+        "agent_remove_returncode": 0,
+        "control_completed": true,
+        "controller_public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+        "developer_runtime": {
+          "record": {
+            "controller_session_id": "session-001",
+            "native_builtin_audit": {
+              "record": {
+                "product_plane": {
+                  "task_mounts": [
+                    {
+                      "destination": "/runtime/home/project",
+                      "source": "/tmp/gauntlet/session-001/tasks/checkout"
+                    },
+                    {
+                      "destination": "/runtime/home/remote",
+                      "source": "/tmp/gauntlet/session-001/tasks/remote"
+                    },
+                    {
+                      "destination": "/runtime/home/home",
+                      "source": "/tmp/gauntlet/session-001/tasks/home"
+                    }
+                  ],
+                  "workspace_path": "/runtime/home/project"
+                }
+              },
+              "signature": "YPFZv7w+6WPs75ZtZKq1gbPI3H7HEMXDo68OW/NucAat9ol+fY1ytKism0KAbFVSy+S6XGc4tFp96miagvFQDQ=="
+            },
+            "public_prompt_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "schema_version": "5.0",
+            "settings": {
+              "bwrap_sha256": "bwrap",
+              "contained_completion_profile": "guard-contained-completion.v1",
+              "contained_output_binding": "controller-contained-output.v1",
+              "executor_image_id": "executor",
+              "mcp_image_id": "mcp",
+              "package_version": "3.50.0a0",
+              "prefix_digest": "prefix",
+              "private_cell": {
+                "artifact_manifest_sha256": "artifacts",
+                "cpu_profile": "quota-v1",
+                "idmap_runtime": "ubuntu2404-product-v1",
+                "initializer_sha256": "initializer",
+                "native_sha256": "native",
+                "runtime_tree_digest": "runtime"
+              },
+              "source_sha": "source"
+            }
+          },
+          "signature": "cnc3l29cvDN0GuW8yh9XUElFILJeVBKp+DfzB21O0C8fT+sD57RTTbObCjshRQEzcHEQXfr+28MewPuG/faxAA=="
+        },
+        "image_released": true,
+        "model_exercised": false,
+        "passed": true,
+        "plane": {
+          "task_mounts": [
+            {
+              "destination": "/runtime/home/project",
+              "source": "/tmp/gauntlet/session-001/tasks/checkout"
+            },
+            {
+              "destination": "/runtime/home/remote",
+              "source": "/tmp/gauntlet/session-001/tasks/remote"
+            },
+            {
+              "destination": "/runtime/home/home",
+              "source": "/tmp/gauntlet/session-001/tasks/home"
+            }
+          ],
+          "workspace_path": "/runtime/home/project"
+        },
+        "root_imported_product": false,
+        "sdk_exercised": true,
+        "sdk_gate": {
+          "cleanup_complete": true,
+          "error": null,
+          "observation": {
+            "bound_before_sdk_import": false,
+            "identity": {
+              "pid": 217,
+              "start_time": "42"
+            },
+            "kernel_peer_authenticated": true,
+            "pid": 217
+          }
+        }
+      },
+      "error": "control lacks outside pre-import SDK binding",
+      "expected": {
+        "bwrap_sha256": "bwrap",
+        "executor_image_id": "executor",
+        "mcp_image_id": "mcp",
+        "package_version": "3.50.0a0",
+        "prefix_digest": "prefix",
+        "private_cell": {
+          "artifact_manifest_sha256": "artifacts",
+          "cpu_profile": "quota-v1",
+          "idmap_runtime": "ubuntu2404-product-v1",
+          "initializer_sha256": "initializer",
+          "native_sha256": "native",
+          "runtime_tree_digest": "runtime"
+        },
+        "source_sha": "source"
+      },
+      "name": "post-import-binding",
+      "public_key_hex": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+      "role": "success"
+    }
+  ],
+  "custody_sha256": "fa347e8cf791c21a4ce6de8d331bfbb80d80f605d0e927f672ed8475e24de21e",
+  "schema": "gauntlet-control-session-fixtures.v1",
+  "source_sha256": "22773101b8880d65dd85183a4212ca8efa57897388ad1408ab5d1ad971111427"
+}

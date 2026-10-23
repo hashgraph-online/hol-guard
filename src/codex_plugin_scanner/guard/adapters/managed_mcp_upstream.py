@@ -42,6 +42,7 @@ PROXY_LAUNCHER_ENV_KEYS = frozenset(
     }
 )
 _PROXY_HARNESSES = {
+    "omp-mcp-proxy": "omp",
     "codex-mcp-proxy": "codex",
     "opencode-mcp-proxy": "opencode",
     "copilot-mcp-proxy": "copilot",

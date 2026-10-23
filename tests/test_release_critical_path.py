@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -210,7 +211,9 @@ def test_precompilation_stamps_a_requested_version_above_the_source_version(tmp_
     source_version = subprocess.check_output(
         [sys.executable, "scripts/sync_repo_version.py", "--check"], cwd=tmp_path, text=True
     ).strip()
-    major, minor, patch = source_version.split(".")
+    source_parts = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:(?:a|b|rc)\d+)?", source_version)
+    assert source_parts is not None
+    major, minor, patch = source_parts.groups()
     # PR canaries embed the resolved PEP 440 dev release of the source version.
     requested = f"{source_version}.dev1234567" if canary else f"{major}.{minor}.{int(patch) + 1}"
     job = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]

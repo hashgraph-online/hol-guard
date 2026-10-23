@@ -1,0 +1,23 @@
+name: hol-gauntlet-rust-shadow
+services:
+  dashboard:
+    build:
+      context: ../..
+      dockerfile: ci/gauntlet-rs/Dashboard.Dockerfile
+    image: ${GAUNTLET_RUST_IMAGE:-hol-gauntlet-rust-dashboard:local}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${GAUNTLET_RUST_PORT:-8793}:8787"
+    volumes:
+      - "${GAUNTLET_PUBLIC_STATE:?Set absolute public snapshot directory}:/state:ro"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.25
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"

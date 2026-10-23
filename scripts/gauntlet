@@ -1,0 +1,13 @@
+#!/usr/bin/env python3
+"""Local operations entrypoint; runs the reviewed checkout from any directory."""
+from pathlib import Path
+import sys
+
+script_dir = Path(__file__).resolve().parent
+# scripts/ci is a different regular package; remove the script directory so it
+# cannot shadow the repository's ci namespace package.
+sys.path = [p for p in sys.path if Path(p or '.').resolve() != script_dir]
+sys.path.insert(0, str(script_dir.parent))
+from ci.gauntlet.control_plane.cli import main
+
+raise SystemExit(main())

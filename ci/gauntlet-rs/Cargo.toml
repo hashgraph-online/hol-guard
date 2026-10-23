@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/gauntlet-agent-bridge", "crates/gauntlet-contracts", "crates/gauntlet-dashboard", "crates/gauntlet-evidence", "crates/gauntlet-host-state", "crates/gauntlet-provider-observer", "crates/gauntlet-worker-state"]
+resolver = "2"

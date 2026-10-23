@@ -1,0 +1,61 @@
+{
+  "schema": "gauntlet-vm-progress-fixtures.v1",
+  "source_sha256": "04aed1ecf337746caed8fbd011c59926b47b37719add867628ac6b70a5309215",
+  "with_deployment": {
+    "argv": [
+      "/opt/homebrew/bin/limactl",
+      "shell",
+      "hol-beta-bootstrap-20261016-004",
+      "--",
+      "sudo",
+      "-n",
+      "/opt/hol-benchmark-controller-20261013/.venv/bin/python",
+      "-I",
+      "-B",
+      "/opt/hol-gauntlet/worker.py"
+    ],
+    "capture_output": true,
+    "request": {
+      "action": "progress",
+      "deployment_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "job_id": "0123456789abcdef",
+      "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "response": {
+      "checked_at": 1700000000.25,
+      "job_id": "0123456789abcdef",
+      "phase": "not-started",
+      "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "text": true,
+    "timeout_seconds": 12
+  },
+  "without_deployment": {
+    "argv": [
+      "/opt/homebrew/bin/limactl",
+      "shell",
+      "hol-beta-bootstrap-20261016-004",
+      "--",
+      "sudo",
+      "-n",
+      "/opt/hol-benchmark-controller-20261013/.venv/bin/python",
+      "-I",
+      "-B",
+      "/opt/hol-gauntlet/worker.py"
+    ],
+    "capture_output": true,
+    "request": {
+      "action": "progress",
+      "job_id": "0123456789abcdef",
+      "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "response": {
+      "checked_at": 1700000000.25,
+      "job_id": "0123456789abcdef",
+      "phase": "not-started",
+      "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "text": true,
+    "timeout_seconds": 12
+  }
+}

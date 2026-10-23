@@ -18,6 +18,7 @@ from ..native_hook_artifact_compose import NativeHookComposeError
 from ..native_hook_decision import _INVALID, NativeHookDecisionError
 from ..native_hook_route import PASSTHROUGH_HANDLER
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from ..runtime.contained_completion import completed_output_artifact
 from ..runtime.extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
     use_extension_control_snapshot,
@@ -205,6 +206,16 @@ def runtime_artifact(run: NativeHookRun) -> int | None:
             guard_home=run.context.guard_home,
             workspace=run.runtime_workspace,
         )
+    run.runtime_artifact = completed_output_artifact(
+        run.runtime_artifact,
+        payload=run.payload,
+        harness=run.args.harness,
+        workspace=run.runtime_workspace,
+        guard_home=run.context.guard_home,
+        native_edge=run.edge_mapping("result"),
+        has_data_flow=bool(signals),
+        config=run.config,
+    )
     run.data_flow_signals = signals
     return None
 

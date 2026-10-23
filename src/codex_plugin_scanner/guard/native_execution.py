@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import sys
 import threading
 import uuid
 from collections.abc import Mapping, Sequence
@@ -236,6 +237,42 @@ def _resident_request(
 # ---------------------------------------------------------------------------
 # Contained execution ops
 # ---------------------------------------------------------------------------
+
+
+def consume_contained_completion_native(
+    *,
+    payload: Mapping[str, object],
+    harness: str,
+    workspace: Path,
+    guard_home: Path,
+    reviewed_output_sha256: str,
+) -> str | None:
+    """Ask native authority to claim and verify one private completion proof."""
+    if sys.platform != "linux":
+        return None
+    response = _resident_request(
+        operation="contained_completion_consume",
+        request={
+            "schema": "guard-contained-completion-consume-request.v1",
+            "request_id": _request_id("contained_completion_consume"),
+            "guard_home": str(guard_home),
+            "workspace": str(workspace),
+            "harness": harness,
+            "payload": dict(payload),
+            "reviewed_output_sha256": reviewed_output_sha256,
+        },
+        guard_home=guard_home,
+        timeout_seconds=5.0,
+        required_feature="contained-completion-consume-v1",
+        response_schema="guard-contained-completion-consume-result.v1",
+        max_request_bytes=2 * 1024 * 1024,
+    )
+    if response is None or set(response) != {"schema", "status", "proof_digest"}:
+        return None
+    digest = response.get("proof_digest")
+    if isinstance(digest, str) and len(digest) == 64 and all(c in "0123456789abcdef" for c in digest):
+        return digest
+    return None
 
 
 def _contained_request(

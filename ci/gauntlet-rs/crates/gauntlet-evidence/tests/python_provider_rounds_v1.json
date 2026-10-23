@@ -1,0 +1,482 @@
+{
+  "cases": [
+    {
+      "name": "empty",
+      "recovered": 0,
+      "rounds": [],
+      "valid": false
+    },
+    {
+      "name": "one-complete",
+      "recovered": 0,
+      "rounds": [
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "two-complete",
+      "recovered": 0,
+      "rounds": [
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        },
+        {
+          "request_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "retry-429",
+      "recovered": 1,
+      "rounds": [
+        {
+          "delivered_bytes": 0,
+          "error_type": "HTTPError",
+          "http_status": 429,
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "provider-error"
+        },
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "retry-500",
+      "recovered": 1,
+      "rounds": [
+        {
+          "delivered_bytes": 0,
+          "error_type": "HTTPError",
+          "http_status": 500,
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "provider-error"
+        },
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "retry-599",
+      "recovered": 1,
+      "rounds": [
+        {
+          "delivered_bytes": 0,
+          "error_type": "HTTPError",
+          "http_status": 599,
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "provider-error"
+        },
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "two-retries",
+      "recovered": 2,
+      "rounds": [
+        {
+          "delivered_bytes": 0,
+          "error_type": "HTTPError",
+          "http_status": 429,
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "provider-error"
+        },
+        {
+          "delivered_bytes": 0,
+          "error_type": "HTTPError",
+          "http_status": 503,
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "provider-error"
+        },
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "independent-retries",
+      "recovered": 2,
+      "rounds": [
+        {
+          "delivered_bytes": 0,
+          "error_type": "HTTPError",
+          "http_status": 429,
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "provider-error"
+        },
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        },
+        {
+          "delivered_bytes": 0,
+          "error_type": "HTTPError",
+          "http_status": 429,
+          "request_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "status": "provider-error"
+        },
+        {
+          "request_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": true
+    },
+    {
+      "name": "retry-400",
+      "recovered": 0,
+      "rounds": [
+        {
+          "delivered_bytes": 0,
+          "error_type": "HTTPError",
+          "http_status": 400,
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "provider-error"
+        },
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "retry-600",
+      "recovered": 0,
+      "rounds": [
+        {
+          "delivered_bytes": 0,
+          "error_type": "HTTPError",
+          "http_status": 600,
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "provider-error"
+        },
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "retry-http-bool",
+      "recovered": 0,
+      "rounds": [
+        {
+          "delivered_bytes": 0,
+          "error_type": "HTTPError",
+          "http_status": true,
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "provider-error"
+        },
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "partial-delivery",
+      "recovered": 0,
+      "rounds": [
+        {
+          "delivered_bytes": 1,
+          "error_type": "HTTPError",
+          "http_status": 429,
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "provider-error"
+        },
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "wrong-error-type",
+      "recovered": 0,
+      "rounds": [
+        {
+          "delivered_bytes": 0,
+          "error_type": "TimeoutError",
+          "http_status": 429,
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "provider-error"
+        },
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "no-retry",
+      "recovered": 0,
+      "rounds": [
+        {
+          "delivered_bytes": 0,
+          "error_type": "HTTPError",
+          "http_status": 429,
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "provider-error"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "changed-request",
+      "recovered": 0,
+      "rounds": [
+        {
+          "delivered_bytes": 0,
+          "error_type": "HTTPError",
+          "http_status": 429,
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "provider-error"
+        },
+        {
+          "request_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "bad-request-digest",
+      "recovered": 0,
+      "rounds": [
+        {
+          "request_sha256": "bad",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "bad-response-digest",
+      "recovered": 0,
+      "rounds": [
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bad",
+          "status": "completed"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "zero-response-bytes",
+      "recovered": 0,
+      "rounds": [
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 0,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "float-response-bytes",
+      "recovered": 0,
+      "rounds": [
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 1.0,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "empty-models",
+      "recovered": 0,
+      "rounds": [
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "missing-models",
+      "recovered": 0,
+      "rounds": [
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "bad-after-recovery",
+      "recovered": 1,
+      "rounds": [
+        {
+          "delivered_bytes": 0,
+          "error_type": "HTTPError",
+          "http_status": 429,
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "provider-error"
+        },
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bad",
+          "status": "completed"
+        }
+      ],
+      "valid": false
+    },
+    {
+      "name": "bad-after-complete",
+      "recovered": 0,
+      "rounds": [
+        {
+          "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "status": "completed"
+        },
+        {
+          "request_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "response_bytes": 128,
+          "response_models": [
+            "qwen"
+          ],
+          "response_sha256": "bad",
+          "status": "completed"
+        }
+      ],
+      "valid": false
+    }
+  ],
+  "schema": "gauntlet-provider-round-fixtures.v1",
+  "source_sha256": "facd2b1ba8b1f41c5054362a95b969abce7ee7f2c217bd69366e5fa1e11aaacb"
+}

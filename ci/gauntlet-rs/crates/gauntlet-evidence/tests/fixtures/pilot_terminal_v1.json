@@ -1,0 +1,727 @@
+{
+  "branch_ast_sha256": "4980ccf63b8c41d4b8894549f3da225b4450e2a76cfde4a7c00641fa639347f8",
+  "cases": [
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {
+          "status": "finished",
+          "type": "episode_end"
+        },
+        "execution_valid": true,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "type": "episode_start"
+          },
+          {
+            "status": "finished",
+            "type": "episode_end"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "finished"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {
+          "status": "finished",
+          "type": "episode_end"
+        },
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "type": "episode_start"
+          },
+          {
+            "status": "finished",
+            "type": "episode_end"
+          }
+        ],
+        "exit_code": null,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "no_process"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {
+          "status": "finished",
+          "type": "episode_end"
+        },
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "type": "episode_start"
+          },
+          {
+            "status": "finished",
+            "type": "episode_end"
+          }
+        ],
+        "exit_code": 1,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "nonzero_exit"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {
+          "status": "finished",
+          "type": "episode_end"
+        },
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "status": "finished",
+            "type": "episode_end"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "missing_start"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {},
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "type": "episode_start"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "missing_end"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {
+          "type": "episode_end"
+        },
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "type": "episode_start"
+          },
+          {
+            "type": "episode_error"
+          },
+          {
+            "type": "episode_end"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "producer_error"
+    },
+    {
+      "expected": {
+        "controller_error": "child failed",
+        "episode_end": {
+          "status": "finished",
+          "type": "episode_end"
+        },
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": "child failed",
+        "events": [
+          {
+            "type": "episode_start"
+          },
+          {
+            "status": "finished",
+            "type": "episode_end"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "controller_error"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {
+          "status": "finished",
+          "type": "episode_end"
+        },
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "type": "episode_start"
+          },
+          {
+            "status": "finished",
+            "type": "episode_end"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": true,
+        "isolation": null
+      },
+      "name": "isolated_no_record"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {
+          "status": "finished",
+          "type": "episode_end"
+        },
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "type": "episode_start"
+          },
+          {
+            "status": "finished",
+            "type": "episode_end"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": true,
+        "isolation": {
+          "record": {
+            "assets_unchanged": true,
+            "cleanup_complete": false,
+            "isolation_observed": true
+          }
+        }
+      },
+      "name": "isolated_incomplete"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {
+          "status": "finished",
+          "type": "episode_end"
+        },
+        "execution_valid": true,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "type": "episode_start"
+          },
+          {
+            "status": "finished",
+            "type": "episode_end"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": true,
+        "isolation": {
+          "record": {
+            "assets_unchanged": true,
+            "cleanup_complete": true,
+            "isolation_observed": true
+          }
+        }
+      },
+      "name": "isolated_complete"
+    },
+    {
+      "expected": {
+        "controller_error": "service cleanup incomplete",
+        "episode_end": {
+          "status": "finished",
+          "type": "episode_end"
+        },
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 1,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "type": "episode_start"
+          },
+          {
+            "status": "finished",
+            "type": "episode_end"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "active_session"
+    },
+    {
+      "expected": {
+        "controller_error": "service cleanup incomplete",
+        "episode_end": {
+          "status": "finished",
+          "type": "episode_end"
+        },
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 1,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "type": "episode_start"
+          },
+          {
+            "status": "finished",
+            "type": "episode_end"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "active_child"
+    },
+    {
+      "expected": {
+        "controller_error": "service cleanup incomplete",
+        "episode_end": {
+          "status": "finished",
+          "type": "episode_end"
+        },
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 1
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "type": "episode_start"
+          },
+          {
+            "status": "finished",
+            "type": "episode_end"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "active_worker"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {},
+        "execution_valid": false,
+        "retryable_startup": true
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "error": "Error: MCP endpoint connection failed",
+            "phase": "startup",
+            "retryableInfrastructure": true,
+            "type": "episode_error"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "startup_connect"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {},
+        "execution_valid": false,
+        "retryable_startup": true
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "error": "Error: declared MCP endpoint did not finish connecting",
+            "phase": "startup",
+            "retryableInfrastructure": true,
+            "type": "episode_error"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "startup_declared"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {},
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "type": "inference_start"
+          },
+          {
+            "error": "Error: MCP endpoint connection failed",
+            "phase": "startup",
+            "retryableInfrastructure": true,
+            "type": "episode_error"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "startup_after_inference"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {},
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "error": "Error: unrelated",
+            "phase": "startup",
+            "retryableInfrastructure": true,
+            "type": "episode_error"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "startup_wrong_error"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {},
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "error": "Error: MCP endpoint connection failed",
+            "phase": "runtime",
+            "retryableInfrastructure": true,
+            "type": "episode_error"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "startup_wrong_phase"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {},
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "error": "Error: MCP endpoint connection failed",
+            "phase": "startup",
+            "retryableInfrastructure": false,
+            "type": "episode_error"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "startup_not_retryable"
+    },
+    {
+      "expected": {
+        "controller_error": "controller failed",
+        "episode_end": {},
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": "controller failed",
+        "events": [
+          {
+            "error": "Error: MCP endpoint connection failed",
+            "phase": "startup",
+            "retryableInfrastructure": true,
+            "type": "episode_error"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "startup_with_controller_error"
+    },
+    {
+      "expected": {
+        "controller_error": "service cleanup incomplete",
+        "episode_end": {},
+        "execution_valid": false,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 1,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "error": "Error: MCP endpoint connection failed",
+            "phase": "startup",
+            "retryableInfrastructure": true,
+            "type": "episode_error"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "startup_with_cleanup_error"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {
+          "status": "budget-exhausted",
+          "type": "episode_end"
+        },
+        "execution_valid": true,
+        "retryable_startup": false
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "type": "episode_start"
+          },
+          {
+            "status": "finished",
+            "type": "episode_end"
+          },
+          {
+            "status": "budget-exhausted",
+            "type": "episode_end"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "last_terminal_wins"
+    },
+    {
+      "expected": {
+        "controller_error": null,
+        "episode_end": {
+          "status": "finished",
+          "type": "episode_end"
+        },
+        "execution_valid": false,
+        "retryable_startup": true
+      },
+      "input": {
+        "active": {
+          "active_children": 0,
+          "active_sessions": 0,
+          "active_workers": 0
+        },
+        "controller_error": null,
+        "events": [
+          {
+            "type": "episode_start"
+          },
+          {
+            "error": "Error: MCP endpoint connection failed",
+            "phase": "startup",
+            "retryableInfrastructure": true,
+            "type": "episode_error"
+          },
+          {
+            "status": "finished",
+            "type": "episode_end"
+          }
+        ],
+        "exit_code": 0,
+        "isolated": false,
+        "isolation": null
+      },
+      "name": "retryable_even_with_end"
+    }
+  ],
+  "python_source_sha256": "f22d91cd79fa4504d717dafb7f953c8a671a177ceee78425a4e8ee96e6fc71b7",
+  "schema": "hol-gauntlet-python-pilot-terminal-fixtures.v1"
+}

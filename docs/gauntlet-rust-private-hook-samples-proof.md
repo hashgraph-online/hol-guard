@@ -1,0 +1,7 @@
+# Rust private-cell Native hook sample relation
+
+`gauntlet-evidence::verify_private_hook_samples` matches the Python private-cell `_hook_samples` relation. It requires a primary zero-capability product CLI sample at an outside command hash in the product user namespace, while allowing separately identified nested sandbox children with only namespace-local capabilities under a narrower UID/group, boot, no-new-privileges, capability-set and namespace floor. It composes the separately ported product kernel-identity rule for zero-capability samples and always returns `execution_eligible: false`.
+
+`ci/gauntlet-rs/proofs/generate_private_hook_samples_vectors.py` extracts `_hook_samples` from `private_cell_custody.py` SHA-256 `2de9c8c27d2b8f883291900ed3fe29f0f9aa7a318b03a195c4f20ba4f5a22cbb` and `_kernel`/`_require` from `product_custody.py` SHA-256 `21888997033c9e3629c8490c53e929725ee431b696af9e7bb26f5346cb94864d`. The synthetic fixture `private_hook_samples_v1.json` SHA-256 `66b378ac7d52af4d098f18a10bfc44e0fb33cffca9435add0f13e5073ac4dee4` has 23 Python cases: four accepted and 19 refused with exact reason messages. The Rust parity test and warnings-denied Clippy passed in the pinned native ARM64 Rust 1.88 image.
+
+The samples are supplied data. Their process IDs, command hashes and namespace observations are not independently collected or bound to a signed live job. This relation cannot establish that a Native hook executed, that a nested process remained contained, or that Guard worked.

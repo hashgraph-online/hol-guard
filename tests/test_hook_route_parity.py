@@ -241,6 +241,55 @@ def test_the_handler_table_is_the_routes_vocabulary() -> None:
     assert set(pipeline._HANDLERS) == route_module.ROUTE_HANDLERS
 
 
+def test_runtime_artifact_preserves_contained_completion_before_review(monkeypatch: pytest.MonkeyPatch) -> None:
+    observed: list[dict[str, object]] = []
+    workspace = Path("/tmp/hook-route-completion-test")
+    raw, completed = object(), object()
+    run = route_run.NativeHookRun(
+        args=SimpleNamespace(harness="codex"),
+        config=SimpleNamespace(),  # type: ignore[arg-type]
+        context=SimpleNamespace(home_dir=workspace, guard_home=workspace),  # type: ignore[arg-type]
+        payload={"hook_event_name": "PostToolUse"},
+        runtime_workspace=workspace,
+        store=SimpleNamespace(read_extension_control_authority_for_registry=lambda _registry: None),  # type: ignore[arg-type]
+        worker=None,  # type: ignore[arg-type]
+        output_stream=None,
+        managed_install=None,
+        workspace_was_explicit=True,
+        action_envelope=None,
+        copilot_runtime_tool_call=None,
+        edge_timing={},
+        claim_saved_approval=False,
+        claimed_saved_allow_hash=None,
+        claimed_trusted_request_override=False,
+        claimed_approval_request_id=None,
+    )
+    run.edge = {"result": {"decision": "allow"}}
+    monkeypatch.setattr(handlers, "_runtime_action_data_flow_signals", lambda *_a, **_k: (("signal",), None))
+    monkeypatch.setattr(handlers, "_runtime_data_flow_naming", lambda **_k: None)
+    monkeypatch.setattr(
+        handlers,
+        "ExtensionControlRuntimeSnapshot",
+        SimpleNamespace(from_authority_view=lambda _view: None),
+    )
+    monkeypatch.setattr(handlers, "use_extension_control_snapshot", lambda _snapshot: contextlib.nullcontext())
+    monkeypatch.setattr(handlers, "_hook_runtime_artifact", lambda **_k: raw)
+
+    def complete(artifact: object, **kwargs: object) -> object:
+        assert artifact is raw
+        observed.append(kwargs)
+        return completed
+
+    monkeypatch.setattr(handlers, "completed_output_artifact", complete)
+    assert handlers.runtime_artifact(run) is None
+    assert run.runtime_artifact is completed
+    assert run.data_flow_signals == ("signal",)
+    assert len(observed) == 1
+    assert observed[0]["native_edge"] == {"decision": "allow"}
+    assert observed[0]["has_data_flow"] is True
+    assert observed[0]["workspace"] == workspace
+
+
 def _a_case(harness: str, event: str) -> Any:
     return next(case for case in CASES if case.harness == harness and case.entry.get("hook_event_name") == event)
 

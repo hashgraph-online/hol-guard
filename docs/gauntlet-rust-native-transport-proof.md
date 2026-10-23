@@ -1,0 +1,7 @@
+# Rust SDK/Native transport and operation relation
+
+`gauntlet-evidence::verify_native_transport_relations` now recomputes two data-only Python relations: `_reviews` binds reported SDK peers, Native Pre/Post transport rows and product-plane hook payload/response pairs, then `_operations` binds admitted Pre requests and forwarded MCP tool calls to the controller's serial operation budget. It also checks Pre/Post input identity and the reported actual/reviewed output hash relation. The result is always `execution_eligible: false`.
+
+`ci/gauntlet-rs/proofs/generate_native_transport_vectors.py` extracts the exact `_reviews`, `_operations` and `_require` AST functions from `developer_product_custody.py` SHA-256 `fa347e8cf791c21a4ce6de8d331bfbb80d80f605d0e927f672ed8475e24de21e`. The generator runs them against inert synthetic rows, without importing candidate code. Fixture `native_transport_v1.json` SHA-256 `aff5770668f2340b5f9140b6d74aa408ecf1adb2b61dc2f9bf1c5f00935f1ba0` contains 27 cases: four accepted and 23 refused with the same Python reason messages. The Rust parity test passed in the pinned native ARM64 Rust 1.88 image; warnings-denied Clippy passed.
+
+The SDK peer, kernel identity, Native hook response and product-plane rows are **supplied JSON**. This proof checks their internal relation only. It does not authenticate the actual peer socket, process, signed controller envelope, kernel observations, product effect or model inference. The private-runtime and deterministic-verdict parent exits remain open.

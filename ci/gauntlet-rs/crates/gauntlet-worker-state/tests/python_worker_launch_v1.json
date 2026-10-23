@@ -1,0 +1,88 @@
+{
+  "cases": [
+    {
+      "argv": [
+        "/opt/hol-benchmark-controller-20261013/.venv/bin/python",
+        "-I",
+        "-B",
+        "-c",
+        "import sys;sys.path.insert(0,sys.argv.pop(1));from ci.gauntlet.benchmark.__main__ import main;raise SystemExit(main())",
+        "/opt/hol-gauntlet/controller-0123456789abcdef",
+        "ci",
+        "check",
+        "--profile",
+        "deterministic",
+        "--config",
+        "/opt/hol-gauntlet/candidates/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/config.json",
+        "--expected-config-digest",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "--expected-guard-source-sha",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "--asset-root",
+        "/opt",
+        "--state-root",
+        "/home/hg-dddddddddddddddd",
+        "--output-dir",
+        "/var/lib/hol-gauntlet/outputs/dddddddddddddddd"
+      ],
+      "config_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "controller_path": "/opt/hol-gauntlet/controller-0123456789abcdef",
+      "cwd": "/opt/hol-gauntlet/controller-0123456789abcdef",
+      "deployment_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "env": {
+        "HOME": "/root",
+        "LANG": "C.UTF-8",
+        "PATH": "/usr/bin:/bin"
+      },
+      "job_id": "dddddddddddddddd",
+      "log_path": "/var/lib/hol-gauntlet/outputs/dddddddddddddddd.log",
+      "output_dir": "/var/lib/hol-gauntlet/outputs/dddddddddddddddd",
+      "python_path": "/opt/hol-benchmark-controller-20261013/.venv/bin/python",
+      "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "state_root": "/home/hg-dddddddddddddddd"
+    },
+    {
+      "argv": [
+        "/opt/hol-benchmark-controller-20261013/.venv/bin/python",
+        "-I",
+        "-B",
+        "-c",
+        "import sys;sys.path.insert(0,sys.argv.pop(1));from ci.gauntlet.benchmark.__main__ import main;raise SystemExit(main())",
+        "/opt/hol-gauntlet/controller-0123456789abcdef",
+        "ci",
+        "check",
+        "--profile",
+        "deterministic",
+        "--config",
+        "/opt/hol-gauntlet/candidates/0123456789abcdef0123456789abcdef01234567/config.json",
+        "--expected-config-digest",
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "--expected-guard-source-sha",
+        "0123456789abcdef0123456789abcdef01234567",
+        "--asset-root",
+        "/opt",
+        "--state-root",
+        "/home/hg-0123456789abcdef",
+        "--output-dir",
+        "/var/lib/hol-gauntlet/outputs/0123456789abcdef"
+      ],
+      "config_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "controller_path": "/opt/hol-gauntlet/controller-0123456789abcdef",
+      "cwd": "/opt/hol-gauntlet/controller-0123456789abcdef",
+      "deployment_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "env": {
+        "HOME": "/root",
+        "LANG": "C.UTF-8",
+        "PATH": "/usr/bin:/bin"
+      },
+      "job_id": "0123456789abcdef",
+      "log_path": "/var/lib/hol-gauntlet/outputs/0123456789abcdef.log",
+      "output_dir": "/var/lib/hol-gauntlet/outputs/0123456789abcdef",
+      "python_path": "/opt/hol-benchmark-controller-20261013/.venv/bin/python",
+      "source_sha": "0123456789abcdef0123456789abcdef01234567",
+      "state_root": "/home/hg-0123456789abcdef"
+    }
+  ],
+  "schema": "gauntlet-worker-launch-fixtures.v1",
+  "source_sha256": "fb95cd33bf04c3e68c641972dc6bd5340a8cd87b1ad2948ba131c4a71c60aa9e"
+}

@@ -623,6 +623,14 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::ContainedExecute(request) => {
                 crate::contained_op::evaluate_contained_execute(&request)
             }
+            #[cfg(target_os = "linux")]
+            ResidentOperationV1::ContainedCompletionConsume(request) => {
+                crate::contained_completion_op::evaluate(&request)
+            }
+            #[cfg(unix)]
+            ResidentOperationV1::McpWriteBudgetClaim(request) => {
+                crate::mcp_write_budget_op::evaluate(&request)
+            }
             #[cfg(unix)]
             ResidentOperationV1::ContainmentHealthProbe(request) => {
                 crate::contained_op::evaluate_containment_health_probe(&request)
@@ -800,6 +808,10 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::ContainedPackageScriptExecute(request) => Some(&request.guard_home),
         ResidentOperationV1::ContainedWorkspaceWriteExecute(request) => Some(&request.guard_home),
         ResidentOperationV1::ContainedExecute(request) => Some(&request.guard_home),
+        #[cfg(target_os = "linux")]
+        ResidentOperationV1::ContainedCompletionConsume(request) => Some(&request.guard_home),
+        #[cfg(unix)]
+        ResidentOperationV1::McpWriteBudgetClaim(request) => Some(&request.guard_home),
         ResidentOperationV1::ContainmentHealthProbe(request) => Some(&request.guard_home),
         ResidentOperationV1::ShimAdmin(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageContextBuild(request) => Some(&request.guard_home),

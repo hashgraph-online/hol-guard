@@ -1,0 +1,504 @@
+{
+  "base": {
+    "contained_transport_observations": [
+      {
+        "kind": "contained-route-consumed",
+        "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "product_plane": {
+      "executions": [
+        {
+          "exit_code": 0,
+          "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "stderr": "",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout": "model-free captured output\n",
+          "stdout_sha256": "f03ec540907492770d1bd271cc1cba2f9fee14a3b311a95aeb40c984b5fd3618"
+        }
+      ]
+    },
+    "transport_observations": [
+      {
+        "hook_event_name": "PreToolUse",
+        "kind": "actual-hook-response",
+        "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tool_call_id": "sdk-contained-control"
+      },
+      {
+        "actual_output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+        "hook_event_name": "PostToolUse",
+        "kind": "actual-hook-response",
+        "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tool_call_id": "sdk-contained-control"
+      },
+      {
+        "kind": "actual-contained-output-binding",
+        "output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+        "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pre_payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "result_digest": "23f35368fbbeaac6c37cb9e5334483faffc2964c8c7649350bd620a4cd80b498",
+        "schema": "controller-contained-output.v1",
+        "sdk_output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "sequence": 7,
+        "tool_call_id": "sdk-contained-control"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "accepted": true,
+      "name": "valid-single",
+      "patch": {},
+      "result": 1
+    },
+    {
+      "accepted": true,
+      "name": "valid-empty",
+      "patch": {
+        "contained_transport_observations": [],
+        "product_plane": {
+          "executions": []
+        },
+        "transport_observations": []
+      },
+      "result": 0
+    },
+    {
+      "accepted": false,
+      "error": "contained output binding coverage differs from sinks",
+      "name": "missing-binding",
+      "patch": {
+        "transport_observations": [
+          {
+            "hook_event_name": "PreToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "actual_output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "hook_event_name": "PostToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "tool_call_id": "sdk-contained-control"
+          }
+        ]
+      }
+    },
+    {
+      "accepted": false,
+      "error": "contained output binding coverage differs from sinks",
+      "name": "missing-consumed",
+      "patch": {
+        "contained_transport_observations": []
+      }
+    },
+    {
+      "accepted": false,
+      "error": "invalid controller contained output binding record",
+      "name": "wrong-schema",
+      "patch": {
+        "transport_observations": [
+          {
+            "hook_event_name": "PreToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "actual_output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "hook_event_name": "PostToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "kind": "actual-contained-output-binding",
+            "output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "pre_payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "result_digest": "23f35368fbbeaac6c37cb9e5334483faffc2964c8c7649350bd620a4cd80b498",
+            "schema": "other",
+            "sdk_output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "sequence": 7,
+            "tool_call_id": "sdk-contained-control"
+          }
+        ]
+      }
+    },
+    {
+      "accepted": false,
+      "error": "invalid controller contained output binding record",
+      "name": "extra-binding-field",
+      "patch": {
+        "transport_observations": [
+          {
+            "hook_event_name": "PreToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "actual_output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "hook_event_name": "PostToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "extra": true,
+            "kind": "actual-contained-output-binding",
+            "output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "pre_payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "result_digest": "23f35368fbbeaac6c37cb9e5334483faffc2964c8c7649350bd620a4cd80b498",
+            "schema": "controller-contained-output.v1",
+            "sdk_output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "sequence": 7,
+            "tool_call_id": "sdk-contained-control"
+          }
+        ]
+      }
+    },
+    {
+      "accepted": false,
+      "error": "invalid controller contained output binding record",
+      "name": "wrong-sdk-output-hash",
+      "patch": {
+        "transport_observations": [
+          {
+            "hook_event_name": "PreToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "actual_output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "hook_event_name": "PostToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "kind": "actual-contained-output-binding",
+            "output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "pre_payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "result_digest": "23f35368fbbeaac6c37cb9e5334483faffc2964c8c7649350bd620a4cd80b498",
+            "schema": "controller-contained-output.v1",
+            "sdk_output_sha256": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+            "sequence": 7,
+            "tool_call_id": "sdk-contained-control"
+          }
+        ]
+      }
+    },
+    {
+      "accepted": false,
+      "error": "contained result transplanted to another SDK call",
+      "name": "missing-pre",
+      "patch": {
+        "transport_observations": [
+          {
+            "actual_output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "hook_event_name": "PostToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "kind": "actual-contained-output-binding",
+            "output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "pre_payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "result_digest": "23f35368fbbeaac6c37cb9e5334483faffc2964c8c7649350bd620a4cd80b498",
+            "schema": "controller-contained-output.v1",
+            "sdk_output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "sequence": 7,
+            "tool_call_id": "sdk-contained-control"
+          }
+        ]
+      }
+    },
+    {
+      "accepted": false,
+      "error": "contained result transplanted to another SDK call",
+      "name": "missing-post",
+      "patch": {
+        "transport_observations": [
+          {
+            "hook_event_name": "PreToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "kind": "actual-contained-output-binding",
+            "output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "pre_payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "result_digest": "23f35368fbbeaac6c37cb9e5334483faffc2964c8c7649350bd620a4cd80b498",
+            "schema": "controller-contained-output.v1",
+            "sdk_output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "sequence": 7,
+            "tool_call_id": "sdk-contained-control"
+          }
+        ]
+      }
+    },
+    {
+      "accepted": false,
+      "error": "contained result transplanted to another SDK call",
+      "name": "wrong-call-id",
+      "patch": {
+        "transport_observations": [
+          {
+            "hook_event_name": "PreToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "actual_output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "hook_event_name": "PostToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "kind": "actual-contained-output-binding",
+            "output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "pre_payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "result_digest": "23f35368fbbeaac6c37cb9e5334483faffc2964c8c7649350bd620a4cd80b498",
+            "schema": "controller-contained-output.v1",
+            "sdk_output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "sequence": 7,
+            "tool_call_id": "other"
+          }
+        ]
+      }
+    },
+    {
+      "accepted": false,
+      "error": "contained result transplanted to another SDK call",
+      "name": "wrong-result-payload",
+      "patch": {
+        "product_plane": {
+          "executions": [
+            {
+              "exit_code": 0,
+              "payload_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "stderr": "",
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout": "model-free captured output\n",
+              "stdout_sha256": "f03ec540907492770d1bd271cc1cba2f9fee14a3b311a95aeb40c984b5fd3618"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "accepted": false,
+      "error": "native Post output differs from actual contained result",
+      "name": "wrong-result-digest",
+      "patch": {
+        "transport_observations": [
+          {
+            "hook_event_name": "PreToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "actual_output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "hook_event_name": "PostToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "kind": "actual-contained-output-binding",
+            "output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "pre_payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "result_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+            "schema": "controller-contained-output.v1",
+            "sdk_output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "sequence": 7,
+            "tool_call_id": "sdk-contained-control"
+          }
+        ]
+      }
+    },
+    {
+      "accepted": false,
+      "error": "native Post output differs from actual contained result",
+      "name": "wrong-output-hash",
+      "patch": {
+        "transport_observations": [
+          {
+            "hook_event_name": "PreToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "actual_output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "hook_event_name": "PostToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "kind": "actual-contained-output-binding",
+            "output_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "pre_payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "result_digest": "23f35368fbbeaac6c37cb9e5334483faffc2964c8c7649350bd620a4cd80b498",
+            "schema": "controller-contained-output.v1",
+            "sdk_output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "sequence": 7,
+            "tool_call_id": "sdk-contained-control"
+          }
+        ]
+      }
+    },
+    {
+      "accepted": false,
+      "error": "native Post output differs from actual contained result",
+      "name": "wrong-post-output-hash",
+      "patch": {
+        "transport_observations": [
+          {
+            "hook_event_name": "PreToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "actual_output_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "hook_event_name": "PostToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "kind": "actual-contained-output-binding",
+            "output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "pre_payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "result_digest": "23f35368fbbeaac6c37cb9e5334483faffc2964c8c7649350bd620a4cd80b498",
+            "schema": "controller-contained-output.v1",
+            "sdk_output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "sequence": 7,
+            "tool_call_id": "sdk-contained-control"
+          }
+        ]
+      }
+    },
+    {
+      "accepted": false,
+      "error": "native Post output differs from actual contained result",
+      "name": "wrong-post-payload",
+      "patch": {
+        "transport_observations": [
+          {
+            "hook_event_name": "PreToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "actual_output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "hook_event_name": "PostToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "kind": "actual-contained-output-binding",
+            "output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "pre_payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "result_digest": "23f35368fbbeaac6c37cb9e5334483faffc2964c8c7649350bd620a4cd80b498",
+            "schema": "controller-contained-output.v1",
+            "sdk_output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "sequence": 7,
+            "tool_call_id": "sdk-contained-control"
+          }
+        ]
+      }
+    },
+    {
+      "accepted": false,
+      "error": "captured contained output differs from its byte digest",
+      "name": "changed-stream-digest",
+      "patch": {
+        "product_plane": {
+          "executions": [
+            {
+              "exit_code": 0,
+              "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "stderr": "",
+              "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "stdout": "model-free captured output\n",
+              "stdout_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "accepted": false,
+      "error": "consumed contained execution lacks its exact output binding",
+      "name": "consumed-wrong-call",
+      "patch": {
+        "contained_transport_observations": [
+          {
+            "kind": "contained-route-consumed",
+            "payload_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          }
+        ],
+        "transport_observations": [
+          {
+            "hook_event_name": "PreToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "actual_output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "hook_event_name": "PostToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "kind": "actual-contained-output-binding",
+            "output_sha256": "978bb4373d31cc12eba772ad4d0e344f9c306674b434cd2e2e5477ecd40d8fe4",
+            "payload_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "pre_payload_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "result_digest": "23f35368fbbeaac6c37cb9e5334483faffc2964c8c7649350bd620a4cd80b498",
+            "schema": "controller-contained-output.v1",
+            "sdk_output_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "sequence": 7,
+            "tool_call_id": "sdk-contained-control"
+          },
+          {
+            "hook_event_name": "PreToolUse",
+            "kind": "actual-hook-response",
+            "payload_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "tool_call_id": "other-call"
+          }
+        ]
+      }
+    }
+  ],
+  "json_data_sha256": "5d7a9b3b350ac5a7c318f02af8916101551371459f487cc0e5abd037792f817e",
+  "output_binding_sha256": "921ca0f4fd253a374cb59d82c2b0849c6839fcfb613c7fa4c28ddc3ccfdddd5a",
+  "product_custody_sha256": "21888997033c9e3629c8490c53e929725ee431b696af9e7bb26f5346cb94864d",
+  "schema": "gauntlet-contained-output-custody-fixtures.v1",
+  "source_sha256": "a4a836a0bb44ce3a351168ba8d71bd3cd4b9a08b7afd5e7639ff94197ee0ee20"
+}

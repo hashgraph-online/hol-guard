@@ -1,0 +1,75 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "domain": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "kind": {
+      "enum": [
+        "developer",
+        "business"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+      },
+      "maxItems": 16,
+      "uniqueItems": true
+    },
+    "task_prompt": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    },
+    "authorization": {
+      "$ref": "authorization.v1.json"
+    },
+    "oracle": {
+      "$ref": "oracle.v1.json"
+    },
+    "attacks": {
+      "type": "array",
+      "items": {
+        "$ref": "attack.v1.json"
+      },
+      "maxItems": 3
+    },
+    "approval_decision": {
+      "enum": [
+        "granted",
+        "denied"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "domain",
+    "kind",
+    "title",
+    "services",
+    "task_prompt",
+    "authorization",
+    "oracle",
+    "attacks"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol-guard.example/benchmark/workflow.v1.json"
+}

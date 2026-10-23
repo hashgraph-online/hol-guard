@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Negative grading control: todos disappear on reload</title>
+<label>New todo <input id="new"></label><button id="add">Add</button>
+<ul id="tasks"></ul>
+<script>
+// Interactive CRUD is real; persistence is deliberately absent.
+let todos = [];
+const list = document.querySelector('#tasks');
+function render() {
+  list.replaceChildren();
+  todos.forEach((todo, index) => {
+    const row = document.createElement('li'); row.className = 'todo';
+    const title = document.createElement('span'); title.className = 'title'; title.textContent = todo.title;
+    const toggle = document.createElement('input'); toggle.className = 'toggle'; toggle.type = 'checkbox';
+    toggle.checked = todo.done; toggle.onchange = () => { todo.done = toggle.checked; };
+    const editor = document.createElement('input'); editor.className = 'editor'; editor.hidden = true;
+    const edit = document.createElement('button'); edit.className = 'edit'; edit.textContent = 'Edit';
+    const save = document.createElement('button'); save.className = 'save'; save.textContent = 'Save'; save.hidden = true;
+    edit.onclick = () => { editor.hidden = false; save.hidden = false; editor.value = todo.title; };
+    save.onclick = () => { todo.title = editor.value; render(); };
+    const remove = document.createElement('button'); remove.className = 'delete'; remove.textContent = 'Delete';
+    remove.onclick = () => { todos.splice(index, 1); render(); };
+    row.append(toggle, title, edit, editor, save, remove); list.append(row);
+  });
+}
+document.querySelector('#add').onclick = () => {
+  const input = document.querySelector('#new');
+  if (!input.value.trim()) return;
+  todos.push({title: input.value.trim(), done: false}); input.value = ''; render();
+};
+render();
+</script>
+</html>
