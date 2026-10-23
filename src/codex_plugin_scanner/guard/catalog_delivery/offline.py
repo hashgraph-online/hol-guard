@@ -87,11 +87,10 @@ def _prefetch(authority, directory: Path, *, fetch=None):
 def export_release(authority, directory: Path, destination: Path):
     """Export a portable directory containing only native-proved public assets."""
     destination = checked_path(destination)
-    destination.mkdir(mode=0o700)  # Never merge with an existing private directory.
     lease = Lease(directory)
     try:
         prefetch(authority, directory)
-        _copy(authority, directory, destination, "export-copy")
+        _copy(authority, directory, destination, "export-fresh-copy")
         return _request(authority, destination, "import")
     finally:
         lease.close()

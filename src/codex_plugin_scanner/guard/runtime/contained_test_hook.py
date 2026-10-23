@@ -21,7 +21,7 @@ from .contained_command_prefix import (
     _assignments_applied,
     _peel_for_receipt,
     _split_command_prefix,
-    peel_timeout_clock,
+    peel_run_prefixes,
 )
 from .contained_run_directory import as_directory_change, as_run_root
 from .contained_wrapper import anchored_sibling_root, bounded_output, peel_contained_wrapper, sibling_project_root
@@ -431,12 +431,11 @@ def run_authorized_contained_test(
             command, _ = _split_command_prefix(shlex.split(tool_input["command"], posix=True))
         except ValueError as error:
             raise _reject() from error
-        # Native authority reads a system `timeout` through to the program it
-        # bounds, so the planners below are handed that program. The clock
-        # still bounds this run: it only ever shortens the deadline.
-        timed, clock = peel_timeout_clock(command)
-        if timed != command:
-            command, _ = _split_command_prefix(timed)
+        # Native authority reads a system `timeout`, `nice` and `stdbuf`
+        # through to the program they run, so the planners below are handed
+        # that program. A clock still bounds this run: it only ever shortens
+        # the deadline.
+        command, clock = peel_run_prefixes(command)
         if clock is not None:
             timeout_seconds = min(timeout_seconds, clock)
         package_test = is_package_test(command)

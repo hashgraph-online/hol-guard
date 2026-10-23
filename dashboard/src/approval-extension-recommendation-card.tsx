@@ -70,9 +70,24 @@ export function ApprovalExtensionRecommendationCard(props: {
   }, [dialogActive, onDialogActiveChange]);
   useEffect(() => () => onDialogActiveChange?.(false), [onDialogActiveChange]);
 
-  const openPattern = useCallback(() => {
-    if (primary) commitDashboardLocation(extensionPatternHref(primary.extension_id, primary.rule_id));
-  }, [primary]);
+  // A compound command can earn permissions in more than one extension, and the
+  // card has to lead to each of them, not just the first.
+  const configurable = useMemo(() => {
+    const seen = new Map<string, { extensionId: string; extensionName: string; ruleId: string | null }>();
+    for (const permission of recommendation?.permissions ?? []) {
+      if (!seen.has(permission.extension_id)) {
+        seen.set(permission.extension_id, {
+          extensionId: permission.extension_id,
+          extensionName: permission.extension_name,
+          ruleId: permission.rule_id,
+        });
+      }
+    }
+    return [...seen.values()];
+  }, [recommendation]);
+  const openPattern = useCallback((extensionId: string, ruleId: string | null) => {
+    commitDashboardLocation(extensionPatternHref(extensionId, ruleId));
+  }, []);
   const openConfirm = useCallback(() => {
     setError(null);
     setConfirmOpen(true);
@@ -196,14 +211,17 @@ export function ApprovalExtensionRecommendationCard(props: {
                 Set up approval password
               </ActionButton>
             )}
-            <button
-              type="button"
-              onClick={openPattern}
-              className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-medium text-brand-blue underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
-            >
-              {copy.configureLabel}
-              <HiMiniArrowTopRightOnSquare className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
+            {configurable.map((entry) => (
+              <button
+                key={entry.extensionId}
+                type="button"
+                onClick={() => openPattern(entry.extensionId, entry.ruleId)}
+                className="inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-medium text-brand-blue underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              >
+                {configurable.length === 1 ? copy.configureLabel : `Configure in ${entry.extensionName}`}
+                <HiMiniArrowTopRightOnSquare className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            ))}
           </div>
           {gateReady && gateLocked && !authorityUnavailable && (
             <p className="mt-2 text-xs text-slate-500">

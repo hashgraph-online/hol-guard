@@ -1,50 +1,27 @@
-"""Package-request evaluation DTOs hydrated from the resident's answer.
+"""Package-request evaluation DTOs and the evidence rows they imply.
 
-The resident decides every package verdict. This module only holds the typed
-shape Python callers read, hydrates it from the resident's payload and writes
-the evidence rows that payload implies.
+The resident decides every package verdict and reads every stored evaluation
+back into the view a caller shows. This module only holds the typed shape that
+view arrives in and writes the evidence rows it implies.
 """
 
 from __future__ import annotations
 
 import json
-import re
-import urllib.parse
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
-from ..action_lattice import normalize_guard_action_result
 from ..models import GuardAction, GuardArtifact
 from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
 from .restricted_archive_download import RestrictedArchiveDownload
 from .supply_chain_package_identity import PackageIdentityError, canonical_package_identity
-from .supply_chain_support import ecosystem_support_metadata
 
 
 def _optional_string(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
-
-
-_CLOUD_INBOX_URL_RE = re.compile(r"https?://[^\s]+/guard/inbox/?", re.IGNORECASE)
-
-
-_LOCAL_REVIEW_INSTRUCTION = "Review this request in HOL Guard, then retry."
-
-
-_LOCAL_REVIEW_INSTRUCTION_RE = re.compile(re.escape(_LOCAL_REVIEW_INSTRUCTION), re.IGNORECASE)
-
-
-_LOCAL_APPROVAL_INSTRUCTION_RE = re.compile(
-    r"\s*Open HOL Guard to approve or keep this blocked:\s*https?://\S+"
-    r"(?:\s+After you choose,\s+retry the same .*? action\.)?",
-    re.IGNORECASE,
-)
-
-
-_LOCAL_APPROVAL_REQUEST_URL_RE = re.compile(r"https?://[^\s]+/requests(?:/[^\s]*)?", re.IGNORECASE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,97 +103,6 @@ class PackageRequestEvaluation:
             ]
         return payload
 
-    @classmethod
-    def from_cache_dict(
-        cls,
-        payload: dict[str, object],
-        *,
-        package_intent_hash: str,
-        policy_version: str,
-        bundle_version: str | None,
-        workspace_fingerprint: str | None,
-    ) -> PackageRequestEvaluation:
-        user_copy = payload.get("user_copy")
-        user_copy_map = user_copy if isinstance(user_copy, dict) else {}
-        cached_packages = tuple(_with_support_metadata(item) for item in _dict_items(payload.get("packages")))
-        policy_action_normalization = normalize_guard_action_result(
-            payload.get("policy_action"),
-            unknown_action="require-reapproval",
-        )
-        policy_action = policy_action_normalization.action
-        cached_reasons = _dict_items(payload.get("reasons"))
-        if not policy_action_normalization.recognized:
-            normalization_reason: dict[str, object] = {
-                "code": policy_action_normalization.reason_code,
-                "message": "Cached package policy action was missing or unknown; Guard requires review.",
-                "original_action": policy_action_normalization.original_action,
-                "normalized_action": policy_action,
-            }
-            cached_reasons = (
-                *cached_reasons,
-                normalization_reason,
-            )
-        normalized_user_copy = _normalize_package_user_copy(
-            SupplyChainUserCopy(
-                title=str(user_copy_map.get("title") or "Monitoring this package"),
-                summary=str(user_copy_map.get("summary") or "HOL Guard recorded this package request."),
-                next_step=_optional_string(user_copy_map.get("next_step")),
-                dashboard_url=_optional_string(user_copy_map.get("dashboard_url")),
-                harness_message=str(user_copy_map.get("harness_message") or payload.get("risk_summary") or ""),
-            ),
-            policy_action=policy_action,
-        )
-        raw_external_archive_source_hashes = payload.get("external_archive_source_hashes")
-        external_archive_source_hashes = (
-            tuple(
-                item
-                for item in raw_external_archive_source_hashes
-                if isinstance(item, str) and re.fullmatch(r"[0-9a-f]{64}", item)
-            )
-            if isinstance(raw_external_archive_source_hashes, (list, tuple))
-            else ()
-        )
-        return cls(
-            decision=str(payload.get("decision") or "monitor"),
-            policy_action=policy_action,
-            enforcement=str(payload.get("enforcement") or "offline_cached"),
-            entitlement_state=str(payload.get("entitlement_state") or "premium"),
-            cache_status=str(payload.get("cache_status") or "hit"),
-            package_intent_hash=package_intent_hash,
-            policy_version=policy_version,
-            bundle_version=bundle_version,
-            workspace_fingerprint=workspace_fingerprint,
-            reasons=cached_reasons,
-            packages=cached_packages,
-            risk_summary=str(payload.get("risk_summary") or "HOL Guard recorded this package request."),
-            user_copy=normalized_user_copy,
-            matched_rule_id=_optional_string(payload.get("matched_rule_id")),
-            exception_id=_optional_string(payload.get("exception_id")),
-            refresh_required=bool(payload.get("refresh_required")),
-            record_monitor_evidence=bool(payload.get("record_monitor_evidence")),
-            external_archive_source_hashes=external_archive_source_hashes,
-        )
-
-
-def _normalize_package_user_copy(user_copy: SupplyChainUserCopy, *, policy_action: GuardAction) -> SupplyChainUserCopy:
-    dashboard_url = user_copy.dashboard_url
-    if _looks_like_cloud_inbox_url(dashboard_url):
-        dashboard_url = None
-    harness_message = _CLOUD_INBOX_URL_RE.sub("", user_copy.harness_message or "").strip()
-    harness_message = " ".join(harness_message.split())
-    harness_message = strip_review_evidence_tail(harness_message)
-    terminal_action = policy_action in {"sandbox-required", "block"}
-    if terminal_action:
-        dashboard_url = None
-        harness_message = _LOCAL_APPROVAL_INSTRUCTION_RE.sub("", harness_message)
-        harness_message = _LOCAL_APPROVAL_REQUEST_URL_RE.sub("", harness_message)
-        harness_message = _LOCAL_REVIEW_INSTRUCTION_RE.sub("", harness_message)
-        harness_message = " ".join(harness_message.split()).strip()
-    needs_local_review = policy_action in {"review", "require-reapproval"}
-    if needs_local_review and _LOCAL_REVIEW_INSTRUCTION.lower() not in harness_message.lower():
-        harness_message = f"{harness_message} {_LOCAL_REVIEW_INSTRUCTION}".strip()
-    return replace(user_copy, dashboard_url=dashboard_url, harness_message=harness_message)
-
 
 def strip_review_evidence_tail(message: str) -> str:
     stripped = message.strip()
@@ -225,13 +111,6 @@ def strip_review_evidence_tail(message: str) -> str:
         if lower_stripped.endswith(suffix.lower()):
             return stripped[: -len(suffix)].rstrip()
     return stripped
-
-
-def _looks_like_cloud_inbox_url(url: str | None) -> bool:
-    if url is None or not url.strip():
-        return False
-    parsed = urllib.parse.urlparse(url.strip())
-    return parsed.path.rstrip("/") == "/guard/inbox"
 
 
 def _persist_evidence(
@@ -275,20 +154,6 @@ def _persist_evidence(
                 created_at=now,
             )
         )
-
-
-def _with_support_metadata(package: dict[str, object]) -> dict[str, object]:
-    metadata = ecosystem_support_metadata(_optional_string(package.get("ecosystem")) or "unsupported")
-    enriched = dict(package)
-    enriched["supportLevel"] = metadata["support_level"]
-    enriched["supportLabel"] = metadata["support_label"]
-    return enriched
-
-
-def _dict_items(value: object) -> tuple[dict[str, object], ...]:
-    if not isinstance(value, (list, tuple)):
-        return ()
-    return tuple(item for item in value if isinstance(item, dict))
 
 
 def _reason_severity(package: dict[str, object]) -> str:

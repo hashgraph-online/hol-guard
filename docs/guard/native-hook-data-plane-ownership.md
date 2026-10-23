@@ -238,6 +238,203 @@ container IO that surrounds a download. The dead source-ancestry fetch is
 removed; the same descendant rule runs in `transition` and is covered by its
 tests.
 
+An installed command pack upgrade is judged against the managed policy its
+candidate was prepared against, and the resident decides whether that policy
+moved (`migrate_plan`, `extension_control_authority_op/installed_upgrade.rs`).
+It re-reads the authenticated head, refuses anything but a protected view,
+composes the managed layers from the same snapshot and `sync_state` rows the
+authority serves, and compares that revision and those signed-cloud layers with
+the evidence the migration carries. Python sends the anchor and the manifest the
+head is bound to, and carries the revision and layers the candidate recorded as
+evidence; it no longer recomputes the view or compares verdicts. A head the
+resident cannot read, or one whose managed policy has moved, refuses the
+migration with no Python fallback.
+
+The inventory URL redaction now comes from the resident.
+`inventory_url_redaction_op` answers a batch of tasks through
+`inventory_redaction::redact_url`, `redact_headers` and
+`classify_endpoint_host`, the grammar Rust already owned: which query keys and
+header names are credential-bearing, how CPython's `urlsplit` treats a
+half-bracketed netloc or a port it cannot read, and which hosts count as
+loopback or private. Python held a second copy of all of it, which is a second
+place an export could be declared safe. It now sends each endpoint string or
+header name list and returns the answer the reply carries, one per task and in
+order. A reply that is unbound, incomplete or shaped so the caller cannot read
+it fails the redaction closed and records the resident as failing; there is no
+Python fallback redaction. The retired bodies live on only as
+`scripts/ci/inventory_url_reference.py`, the CPython oracle that records the
+parity corpus the port is pinned against — asking the runtime for that corpus
+would pin it against itself.
+
+The same op now also redacts an exported command string and an exported path.
+`redact_command_value` and `redact_known_path` in
+`guard_command::inventory_path_redaction` already carried both, pinned by
+`inventory_path_parity.json`: the four substitutions that take a command's
+URLs, absolute paths, bearer header, `key=value` secrets and `--flag value`
+secrets out of an export, and the home-then-workspace-then-file-name labelling
+a path gets. A task carries the home, workspace and working directories its
+answer depends on, because the resident resolves a relative path against its
+own process directory and not the caller's. One consequence worth stating: a
+command string is now one task rather than one task per URL inside it, so the
+export's prefetch walk no longer pulls URLs out of commands — the pass caches
+the whole command instead.
+
+The contributed MCP grammar now settles in the resident. A configured
+`direct-command` launcher is reduced to its portable executable basename there,
+and a `remote-http` endpoint is normalized, bounded and checked against the
+host, port, path and query rules that decide whether a contribution may launch
+at all (`cli_runtime_support`, `contributed_mcp_url.rs`,
+`contributed_mcp_decision.rs`). Endpoint identity is still the normalized URL
+with its query removed, so a URL whose query the resident rejects has no launch
+identity. Python asks for one answer per configured string and keeps none of
+the character tables, percent-decoding or hostname rules it used to carry; a
+value that is not a string is refused before the call rather than repaired.
+None of this is an approval or an executable authentication; it selects
+which packaged catalog entry a contribution matches.
+
+Which bounded read an admitted argv names is decided in the resident
+(`verified-read-plan-v1`, `guard-command/src/verified_read_plan.rs` behind
+`verified_read_plan_op.rs`). It owns the whole grammar: that the executable is a
+bare name inside the verified-read cohort, which operation each name spells, the
+head and tail line bound and every spelling of it, the quiet-flag and range form
+`sed` is held to, the thousand-line ceiling both carry, and that a target is a
+static relative path with no dynamic shell character in it. The answer is one
+plan — an operation id, an optional target and a selection naming the lines to
+show — so Python reads the argv nowhere. This side opens the target under the
+repository, where the secret-path, symlink and identity checks live, and slices
+the text the plan selected. A refusal names the rule it broke for the
+diagnostics record; the read ends either way. Without a plan there is no read
+and no Python grammar to fall back on: the command returns to ordinary review.
+
+The AIBOM report summaries now come from the resident.
+`aibom_report_summaries_op` counts an inventory report's layers, its trust
+coverage and its drift through `aibom_reporting::summarize_aibom_layers`, the
+grammar Rust already owned: which item kind lands in which layer, when a
+source link counts and when a source of truth counts in its place, which kinds
+are eligible for trust coverage and what makes a score low, and which drift
+states a report totals. Python sent a second copy of all of it. It now sends
+the projection the grammar reads — each item's kind, risk level, drift state
+and the three metadata keys, plus the number of findings and sources and the
+snapshot drift states — and returns the three summaries the reply carries. A
+report whose rows exceed the request budget, or a resident that cannot answer,
+fails the summary closed; there is no Python recount.
+
+An inventory snapshot's content identity is computed in the resident
+(`inventory-snapshot-digest-v1`, in `inventory_snapshot_digest_op.rs`, over
+`inventory_fingerprints::inventory_snapshot_content_hash`). That identity is
+what decides whether an inventory changed, and reaching it is a grammar rather
+than a hash: observation stamps such as `observedAt` and `scanDurationMs` are
+dropped, nested lists are ordered, items, findings and sources are each sorted
+by their own key, and the result is serialized exactly one way before it is
+digested. Python sends only the fields the grammar reads, with an absent
+description travelling as an explicit null so it stays distinct from an empty
+one. The snapshot travels whole: a digest over part of an inventory is not a
+digest of it, so one too large for the request bound fails rather than being
+hashed in Python. A resident that cannot answer leaves the snapshot without an
+identity. The per-item content hashes that feed it are still assembled in
+Python; only the snapshot's own identity moved.
+
+Reading a stored or replayed package evaluation back into the view a harness
+shows is decided in the resident (`package-evaluation-view-v1`, in
+`package_evaluation_view_op.rs`, over the grammar in
+`supply_chain_package_eval/result_models.rs` and `package_copy.rs`). It owns
+every default a written row omits, which policy actions are recognised and what
+an unrecognised one costs, how the user copy reads once the local route has no
+cloud inbox to send anyone to, which evidence and archive hashes survive, and
+the ecosystem support a package row carries. Python sends the payload exactly as
+it holds it together with the four identity fields the stored row does not
+carry, and reads the answer; absent identity travels as an explicit null,
+because the reply is bound by the canonical digest of the request and a key one
+side omits would unbind it. Every outcome other than a well-formed,
+request-bound `ok` reply raises, and both callers already fail closed on that,
+so no view is composed in Python beside the one the resident decided.
+
+Shell execution-context modeling is the resident's
+(`guard-command/src/shell_execution_context_support.rs`): which segment runs a
+`cd`, `pushd` or `popd`, what its operand is once assignments, wrappers and
+redirects are set aside, when an operand is too dynamic to model, and which
+`shell_cwd_*` reason code explains a directory it will not follow. Python kept a
+second copy of that grammar after the port and no longer calls it; the copy is
+removed and the retirement ledger names its symbols so they cannot return. What
+stays on this side is the vocabulary the answer is read with and the filesystem
+identity this process captures for it, which needs the descriptors it holds.
+
+The skill-doc path grammar and the `fd` exec-argument reading now answer from
+the resident over `cli_runtime_support`
+(`guard-command/src/false_positive_rules.rs`): whether a `skill://` name or a
+`~`-rooted path lands inside a known skill-doc root without a symlink escaping
+it, and whether an `fd` argument asks for `--exec` either outright or buried
+in a short-flag cluster that no option-value flag swallows first. Python keeps the
+frozensets other modules import for their own vocabulary, but the two decisions
+are gone from this side and the retirement ledger names the locals they used so
+a second reading cannot grow back. The home directory is resolved here and sent
+as text, so the answer never depends on the resident's own environment.
+
+Classifying one inventory artifact is the resident's too
+(`inventory-item-classification-v1`, in `inventory_item_classification_op.rs`
+over `guard-command/src/inventory_item_metadata.rs`). One call carries the whole
+artifact set and answers, per entry, the item kind its type maps onto, the
+content hash it settles on, the capability set and risk level its metadata
+earns, and the edits that bind a skill's document evidence or drop a directory
+hash nothing proved. The answer is edits — the keys to remove and the pairs to
+write — rather than a rebuilt map, so the caller keeps its own insertion order
+and an exported snapshot does not churn. The kind rides back from
+`inventory-source-evidence-v3`, the first question asked about an artifact,
+because the caller needs it to enrich metadata before it can ask anything else.
+That answer also names the instruction role an overlay's configured path stands
+for, read from the same grammar in `aibom_paths.rs` that the discovery walk
+applies, so the role a snapshot records cannot drift from the role discovery
+assigned. The version marks what the answer carries, not the wire schema: a v3
+resident reads the role, a v2 one derives the kind but leaves the role out, and
+a v1 one refuses an entry that does not spell its own kind. The client asks for
+v3 and treats anything older as unavailable rather than accepting a thinner
+answer. The runtime keeps advertising v2 and v1 as well, because a client built
+before either change still speaks this schema. Python computed all of this; the copies are gone, the ownership
+contract names the symbols so they cannot return, and
+`scripts/ci/inventory_item_metadata_reference.py` keeps the retired CPython only
+to regenerate the parity corpus the port is pinned to.
+
+Choosing what an inventory pass is allowed to open is the resident's as well
+(`inventory-scan-targets-v1`, in `inventory_scan_targets_op.rs`). One call per
+pass carries the detected artifacts along with the harness, the working
+directory, the home directory and the workspace, and answers with the MCP
+configurations worth scanning, the root each one is scanned under, the label a
+finding reports it as, and the skill collections to walk. Resolving a relative
+configuration path against the request's working directory, deciding which
+directory a server's declared roots make the scan root, collapsing a tree of
+skill directories to the collection that contains them, and ordering the answer
+are all settled there. A `skill_root` a detection recorded is used only when
+it stays inside the home or the workspace it was named against, because that
+value comes from metadata the workspace's own files can write and an absolute
+or `..`-rooted one would aim the skill scanner at any directory on the host;
+a root that leaves its base is dropped and the skill's own path decides the
+collection. An MCP configuration is not confined that way: the op opens the
+one a detection recorded wherever it sits, and bounds the reach instead by
+scanning it only under its own directory unless it is inside the workspace.
+Nothing expands `~`, which the Python this replaced did not do either. Python
+no longer picks targets at all: when the resident cannot answer,
+the pass reports each enabled scanner as unavailable rather than reporting a
+clean scan of configurations nothing opened.
+
+A Codex hook's canonical identity is the resident's too
+(`codex-hook-identity-v1`, in `codex_hook_identity_op.rs`). The digest decides
+whether an approval the user already gave still covers the hook in front of us,
+so a second implementation would be a second answer to that question. One call
+carries a batch of entries and answers each with a handler identity, a group
+identity, the conflict keys a group's handler slots must not collapse onto, or
+the argv a command reduces to when its shell tokenization is provably
+uncomplicated. The canonical form is CPython's: mappings sorted by key, floats
+that happen to be whole written as integers, and the payload hashed as
+`json.dumps(..., sort_keys=True, separators=(",", ":"), ensure_ascii=False)`
+writes it. A hook definition is read from TOML and JSON, so it holds scalars a
+JSON request cannot name - datetimes, dates, times, non-finite floats and
+integers wider than the resident's number type. Each travels as a token drawn
+from a per-request random prefix that is verified to match no string in the
+payload, with its meaning in a separate map, so a config file cannot spell a
+token itself and nothing it contains can pass as a substituted scalar.
+`codex_hook_identity.py` now only names what is being identified;
+`native_codex_hook_identity.py` ships it across and fails closed.
+
 ## Harness route inventory
 
 The v2 contract maps all harnesses in `HARNESS_CONTRACTS`, including harnesses

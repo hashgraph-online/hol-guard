@@ -66,6 +66,8 @@ mod script;
 mod settings;
 #[path = "workspace_contained_sibling.rs"]
 mod sibling;
+#[path = "workspace_contained_vendored.rs"]
+mod vendored;
 
 pub(super) use keeps_work::keeping_arguments;
 pub(super) use reach::PRIVATE_TEMP_WITH_FALLBACK;
@@ -229,7 +231,12 @@ pub(crate) fn command_shape(
         let script = script::outside_script(segment, workspace);
         // The sandbox has no network, so a network client would only fail,
         // and it reaches no directory outside the workspace.
-        if NETWORK_CLIENTS.contains(&name)
+        // `rsync -a src/ build/` is a local copy written the way build
+        // scripts write it, not a transfer. Only that shape leaves the
+        // exclusion; `reaches_outside` still holds its operands to the
+        // workspace.
+        if (NETWORK_CLIENTS.contains(&name)
+            && !(name == "rsync" && super::rsync_local::local_copy_segment(segment)))
             || reach::reaches_outside(
                 segment,
                 name,
@@ -259,11 +266,10 @@ pub(crate) fn command_shape(
         {
             return None;
         }
-        // A linked worktree keeps its index, refs and objects in the shared
-        // Git directory outside the workspace, which the sandbox cannot
-        // reach, so Git there would only fail. It keeps its review unless
-        // `git_local_writes` proves the write starts no program.
-        if name == "git" && linked {
+        // A linked worktree's grant covers the index, `HEAD`, merge state and
+        // the shared refs and objects, not the rebase, sequencer or bisect
+        // state, so Git that writes it keeps its review there.
+        if name == "git" && linked && git_metadata::writes_linked_admin_state(&segment.arguments) {
             return None;
         }
         if name == "git" && git_metadata::writes_denied_metadata(&segment.arguments) {
@@ -540,6 +546,7 @@ pub(super) fn convert(
         || command_shape(shaped, &workspace, command_text.filter(|_| rest.is_none())).is_none()
         || removal::destroys_workspace(result, issued, &workspace)
         || removal::loses_work(result, issued, context, execution_environment)
+        || removal::rsync_replaces_work(issued, sent_text, context, execution_environment)
     {
         return;
     }

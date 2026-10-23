@@ -322,13 +322,21 @@ fn a_fast_forward_merge_of_origin_is_a_proven_refresh() {
         assert_allowed(&session, &command, &wt, REFRESH);
     }
     // A Git read after the merge falls to the read floor, which the local
-    // write proof settles; either way it runs without review.
-    assert!(reason(
-        &session,
+    // write proof settles, or the workspace sandbox runs it in the linked
+    // worktree; either way it runs without review.
+    let followed = session.evaluate_at(
         "git merge -q --ff-only origin/main && git log --oneline -1",
-        &wt
-    )
-    .is_some());
+        &wt,
+    );
+    assert!(
+        matches!(
+            followed.minimum_action.as_str(),
+            "allow" | "sandbox-required"
+        ),
+        "{} {}",
+        followed.minimum_action,
+        followed.reason_code
+    );
     // In the main checkout the proven merge runs directly, as the pull does,
     // rather than in the workspace sandbox that would cut the fetch off.
     for command in [merge, split] {

@@ -360,28 +360,6 @@ def build_package_request_artifact(
     )
 
 
-def redacted_command(tokens: tuple[str, ...]) -> str:
-    redacted: list[str] = []
-    skip_hash = False
-    for token in tokens:
-        if skip_hash:
-            redacted.append("<hash>")
-            skip_hash = False
-            continue
-        if token == "--hash":
-            redacted.append(token)
-            skip_hash = True
-            continue
-        if token.startswith("--hash="):
-            redacted.append("--hash=<hash>")
-            continue
-        if _HTTP_SOURCE_IN_TOKEN_RE.search(token) is not None or token.startswith("git+"):
-            redacted.append(_sanitize_url(token))
-            continue
-        redacted.append(token)
-    return shlex.join(redacted)
-
-
 def redact_package_request_token(value: str) -> str:
     """Return a persistence-safe package argv token without URL credentials."""
 

@@ -559,7 +559,7 @@ The default-branch verifier checks the live report as data. Feature-branch verif
 
 The optional qualification job can report “fresh real-agent evidence required.” After the evidence workflow finishes successfully, rerun that optional job to check the new evidence. New enforcement commits invalidate old evidence. The verifier revalidates the verified source against the current PR base, so a stale test-merge report cannot silently qualify a newer integration. Unrelated documentation changes do not require a product run.
 
-Guard Gauntlet is optional and does not block merge. Its qualification job reports failures normally and runs from the trusted base, not candidate Python. The required `ci (3.12)` aggregate has no dependency on Gauntlet. Neither the optional job nor the `Guard Gauntlet` status belongs in required merge checks. No provider secret is automatically exposed to fork PRs. Fork contributions need a repository-writer-attested live run to qualify, not an untrusted uploaded `pass: true`.
+Guard Gauntlet is optional and does not block merge. Its qualification job reports failures normally and runs from the trusted base, not candidate Python. The `hol-guard / required` aggregate has no dependency on Gauntlet. Neither the optional job nor the `Guard Gauntlet` status belongs in required merge checks. No provider secret is automatically exposed to fork PRs. Fork contributions need a repository-writer-attested live run to qualify, not an untrusted uploaded `pass: true`.
 
 ## Initial installation and verifier upgrades
 

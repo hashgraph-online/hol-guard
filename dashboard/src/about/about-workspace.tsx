@@ -20,19 +20,19 @@ export function AboutWorkspace({
 
   return (
     <div className="space-y-20 pb-10">
-      <SectionShell id="hero">
+      <SectionShell id="hero" labelledBy="about-hero-heading">
         <AboutHero runtimeSummary={runtimeSummary ?? null} />
       </SectionShell>
 
-      <SectionShell id="data-boundary">
+      <SectionShell id="data-boundary" labelledBy="about-data-boundary-heading">
         <DataBoundaryPanel />
       </SectionShell>
 
-      <SectionShell id="open-standards">
+      <SectionShell id="open-standards" labelledBy="about-open-standards-heading">
         <OpenStandardsMap />
       </SectionShell>
 
-      <SectionShell id="pathways">
+      <SectionShell id="pathways" labelledBy="about-pathways-heading">
         <PathwayGrid />
       </SectionShell>
 

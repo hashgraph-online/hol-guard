@@ -124,24 +124,51 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # workspace, so the contained run reaches nothing, and the case pins the rejection
         # rather than an approval prompt an in-worktree write would never raise.
         "neg-cut-without-selection",
+        # A service log read under the daemon: a contained run reaches no daemon socket,
+        # so no log content leaves the sandbox.
+        "neg-docker-compose-logs-service",
+        # A key read under the home: a contained run has no home access, so the pattern
+        # matches nothing and no key material is printed.
+        "neg-egrep-reads-private-key",
         "neg-env-bare-set-then-list",
         "neg-env-git-dir-then-list",
         "neg-env-ld-preload-then-list",
         "neg-env-pager-names-program",
+        # A pager option that carries its own shell escape: a contained run gives the
+        # escape nothing outside the workspace to reach.
+        "neg-env-pager-option-escape-export",
         # A `find` that is not limited to regular files hands a link to `grep`, which opens its
         # target; the contained run reaches nothing outside the workspace.
         "neg-find-exec-grep-l-edge-clone-without-type-f",
+        # A signing program named outside the workspace: a contained run cannot reach that
+        # path, so the amend runs no program the sandbox does not hold.
+        "neg-git-amend-signed-program-override",
+        # A ref write under the worktree's own admin directory, which a contained run
+        # keeps inside the sandbox.
+        "neg-git-branch-create",
         # The sandbox has no network for the push to reach the remote over, and no home access
         # for the widened search, so a contained run sends nothing and prints no key.
         "neg-git-push-to-tmp-chain",
+        # `gh config set` changes only the CLI configuration under the home directory, which a
+        # contained run cannot write.
+        "neg-github-config-set",
         # A listing below a hidden home directory: a contained run has no home access, so it
         # names nothing the home keeps there.
         "neg-ls-home-dot-glob",
         "neg-ls-home-missing-hidden-store",
+        # A pattern that is a credential word and an unconstrained tail expands onto the
+        # command line as the files beside it, so the second one becomes the file the
+        # filter opens; a contained run has no home access and reads none of them.
+        "neg-grep-credential-bare-wildcard-pattern",
         "neg-ls-home-missing-key-in-hidden-directory",
         # A file listing of a home service lane or credential store: a contained run has no
         # home access, so it prints no name the home keeps there.
         "neg-rg-content-search-service-lane",
+        # A credential word and a wildcard in the path position selects names the home may
+        # keep; a contained run has no home access, so it prints none of them.
+        "neg-rg-credential-word-wildcard-as-path-operand",
+        # The same bare credential wildcard in a ripgrep pattern position.
+        "neg-rg-secret-bare-wildcard-pattern",
         "neg-rg-files-hidden-service-lane",
         "neg-rg-files-home-credential-store",
         "neg-rg-files-no-ignore-service-lane",

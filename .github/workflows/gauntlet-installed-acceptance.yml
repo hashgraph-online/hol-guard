@@ -188,6 +188,7 @@ jobs:
           uv run --no-sync pyinstaller \
             --clean --noconfirm --onedir --name hol-guard \
             --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
+            --hidden-import sigstore._store --collect-data sigstore \
             --add-data "$RUNNER_TEMP/native-runtime/hol-guard-runtime:codex_plugin_scanner/_native" \
             --add-data "$RUNNER_TEMP/native-runtime/runtime-manifest.json:codex_plugin_scanner/_native" \
             --add-data "$PWD/src/codex_plugin_scanner/version.py:." \

@@ -9,15 +9,12 @@ from codex_plugin_scanner.guard.inventory_contract import (
     GuardAgentInventoryFinding,
     GuardAgentInventoryItem,
     GuardAgentInventorySnapshot,
-    classify_endpoint_host,
     fingerprint_mapping,
     fingerprint_path_tree,
     fingerprint_text,
     inventory_item_id,
     inventory_snapshot_from_detection,
-    redact_headers,
     redact_local_path,
-    redact_url,
     serialize_inventory_snapshot,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
@@ -54,8 +51,11 @@ def test_inventory_snapshot_serialization_redacts_raw_secrets(tmp_path: Path) ->
                 content_hash=fingerprint_text((skill_dir / "SKILL.md").read_text()),
                 capability_categories=("reads_secrets", "network_egress"),
                 metadata={
-                    "headers": redact_headers({"Authorization": "Bearer secret", "X-Trace": "safe"}),
-                    "url": redact_url("https://user:pass@example.com/mcp?token=secret&mode=safe"),
+                    # The redaction itself is pinned by the parity corpus the
+                    # resident is tested against; this snapshot only carries
+                    # its output.
+                    "headers": {"authorization": "present_redacted", "x-trace": "present"},
+                    "url": "https://example.com/mcp?token=redacted&mode=safe",
                     "path": redact_local_path(skill_dir / "SKILL.md", home_dir=tmp_path / "home"),
                 },
             ),
@@ -164,23 +164,6 @@ def test_inventory_helpers_emit_safe_endpoint_and_stable_hashes(tmp_path: Path) 
         "demo",
         path_b.read_text(),
     )
-    assert classify_endpoint_host("https://user:pass@example.com/mcp?token=value") == "remote_public"
-    assert classify_endpoint_host("http://172.20.4.5:8080/mcp") == "local_private"
-    assert classify_endpoint_host("http://[not-an-ip]/mcp") == "remote_public"
-    assert (
-        redact_url("https://user:pass@example.com/mcp?token=value&mode=safe")
-        == "https://example.com/mcp?token=redacted&mode=safe"
-    )
-    assert (
-        redact_url("https://example.com/mcp?auth=value&mode=safe") == "https://example.com/mcp?auth=redacted&mode=safe"
-    )
-    assert (
-        redact_url("https://example.com/mcp?mode=safe;token=value")
-        == "https://example.com/mcp?mode=safe&token=redacted"
-    )
-    assert redact_url("http://localhost:${PORT}/mcp?auth=value") == "http://localhost/mcp?auth=redacted"
-    assert redact_url("http://[2001:db8::1]:8080/mcp?token=value") == "http://[2001:db8::1]:8080/mcp?token=redacted"
-    assert redact_url("http://[not-an-ip]/mcp?token=value") == "malformed_url_redacted"
     assert redact_local_path(path_a, home_dir=tmp_path) == "{home}/skill-a/SKILL.md"
 
 

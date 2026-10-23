@@ -189,8 +189,13 @@ jobs:
         with:
           cache-key: ci-workspace-${{ matrix.check }}
           cache-fallback-key: ${{ matrix.check != 'clippy' && 'ci-workspace-test' || '' }}
-          components: clippy
+          components: ${{ matrix.check == 'clippy' && 'clippy rustfmt' || 'clippy' }}
           normalize-toolchains: "true"
+      - name: Check native formatting in the required Clippy job
+        if: matrix.check == 'clippy'
+        run: |
+          toolchain="$(python3 -c 'import tomllib; print(tomllib.load(open("rust/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')"
+          cargo +"$toolchain" fmt --manifest-path rust/Cargo.toml --all --check
       - name: Install content-addressed compiler cache
         if: matrix.check != 'clippy' && steps.runtime-archive.outputs.cache-hit != 'true'
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
@@ -234,7 +239,6 @@ jobs:
       - name: Archive the complete runtime test build
         if: >-
           matrix.check != 'clippy' &&
-          matrix.check != 'test-runtime-2' &&
           steps.runtime-archive.outputs.cache-hit != 'true' &&
           github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
@@ -290,7 +294,6 @@ jobs:
       - name: Save successful runtime test compilation
         if: >-
           matrix.check != 'clippy' &&
-          matrix.check != 'test-runtime-2' &&
           steps.runtime-archive.outputs.cache-hit != 'true' &&
           github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -336,9 +339,11 @@ jobs:
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
           save-cache: "true"
       - name: Prepare current public directory before pytest collection
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
         run: |
-          uv run --no-sync python scripts/prepare_extension_directory.py --compiler rust/target/release/guard-command-source
-          uv run --no-sync python scripts/prepare_extension_directory.py --compiler rust/target/release/guard-command-source --check
+          uv run --no-sync python scripts/prepare_extension_directory.py --compiler rust/target/release/guard-command-source --write-and-check
       - name: Upload native command evaluators
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -527,7 +532,10 @@ jobs:
     name: native-gates (${{ matrix.shard-index }})
     needs: native-command-evaluators
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Includes checkout/setup plus the shard. Shards ran 195-293s of the old
+    # five-minute cap, and the gate gains cases with each false-positive fix,
+    # so a slower runner cancelled shards whose tests had all passed.
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -859,40 +867,6 @@ jobs:
       - uses: ./.github/actions/ci-job-compatibility
         with:
           python-version: ${{ matrix.python-version }}
-
-  ci-python-312:
-    name: ci (3.12)
-    if: always()
-    needs: [plan, native-workspace, quality, native-command-evaluators, coverage, compatibility, scheduling-sensitive]
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions:
-      actions: read
-      contents: read
-      pull-requests: read
-      statuses: read
-    steps:
-      - name: Verify Python CI dependencies
-        env:
-          NATIVE_WORKSPACE_RESULT: ${{ needs.native-workspace.result }}
-          QUALITY_RESULT: ${{ needs.quality.result }}
-          NATIVE_PRODUCER_RESULT: ${{ needs.native-command-evaluators.result }}
-          COVERAGE_RESULT: ${{ needs.coverage.result }}
-          COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
-          SCHEDULING_SENSITIVE_RESULT: ${{ needs.scheduling-sensitive.result }}
-          PLAN_DATA_ONLY: ${{ needs.plan.outputs.data_only }}
-        run: |
-          # Plan-aware: a lane-eligible job that the planner skipped is acceptable
-          # only on a data-only plan. On a full plan skipped still fails.
-          if [ "$PLAN_DATA_ONLY" = "true" ]; then
-            ok_set='success skipped'
-          else
-            ok_set='success'
-          fi
-          for r in "$NATIVE_WORKSPACE_RESULT" "$QUALITY_RESULT" "$NATIVE_PRODUCER_RESULT" \
-                   "$COVERAGE_RESULT" "$COMPATIBILITY_RESULT" "$SCHEDULING_SENSITIVE_RESULT"; do
-            case " $ok_set " in *" $r "*) : ;; *) echo "dependency result not OK: $r"; exit 1;; esac
-          done
 
   pi-exact-continuation:
     needs: [plan, native-command-evaluators]
@@ -1234,8 +1208,8 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: macos-latest
-    # Bound runner fan-out while retaining the full gate catalog, two workers
-    # per runner and the existing five-minute job budget.
+    # Use the three allocated CPU cores while retaining twelve runners,
+    # the full gate catalog and the existing five-minute job budget.
     timeout-minutes: 5
     strategy:
       fail-fast: false
@@ -1260,7 +1234,7 @@ jobs:
   required:
     name: hol-guard / required
     if: always()
-    needs: [plan, native-workspace, native-command-evaluators, native-offline-previous, native-offline-upgrade, native-gates, quality, coverage, compatibility, scheduling-sensitive, dashboard, dashboard-integration-wheel, dashboard-integration, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
+    needs: [plan, native-workspace, native-command-evaluators, native-offline-previous, native-offline-upgrade, native-gates, quality, coverage, compatibility, scheduling-sensitive, dashboard, dashboard-integration-wheel, dashboard-integration, cisco-full, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -1290,7 +1264,7 @@ jobs:
           # data-only plan coast through on surviving lane-gated residue.
           always_on = ["plan","native-workspace","native-command-evaluators","native-offline-previous",
                        "native-offline-upgrade","native-gates",
-                       "quality","ci-python-312"]
+                       "quality"]
           # Lane-gated required set: skipped is acceptable only on a data-only
           # plan; failure/cancelled always fails.
           required = ["coverage","compatibility","scheduling-sensitive",
@@ -1338,12 +1312,33 @@ jobs:
               print("::error::required jobs skipped on a full-lane plan: "+", ".join(skipped))
               sys.exit(1)
           # Evidence residue is already enforced: `always_on` (plan, quality,
-          # ci-python-312, plus the native providers) must succeed,
+          # plus the native providers) must succeed,
           # so a data-only plan cannot coast with no green evidence. Lane-gated
           # jobs are all skipped on data-only by design — counting them as
           # residue would fail every valid fast lane.
           print("required aggregate: all planned required results green")
           PY
+      - name: Verify Python CI dependencies
+        env:
+          NATIVE_WORKSPACE_RESULT: ${{ needs.native-workspace.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          NATIVE_PRODUCER_RESULT: ${{ needs.native-command-evaluators.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+          COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
+          SCHEDULING_SENSITIVE_RESULT: ${{ needs.scheduling-sensitive.result }}
+          PLAN_DATA_ONLY: ${{ needs.plan.outputs.data_only }}
+        run: |
+          # Plan-aware: a lane-eligible job that the planner skipped is acceptable
+          # only on a data-only plan. On a full plan skipped still fails.
+          if [ "$PLAN_DATA_ONLY" = "true" ]; then
+            ok_set='success skipped'
+          else
+            ok_set='success'
+          fi
+          for r in "$NATIVE_WORKSPACE_RESULT" "$QUALITY_RESULT" "$NATIVE_PRODUCER_RESULT" \
+                   "$COVERAGE_RESULT" "$COMPATIBILITY_RESULT" "$SCHEDULING_SENSITIVE_RESULT"; do
+            case " $ok_set " in *" $r "*) : ;; *) echo "dependency result not OK: $r"; exit 1;; esac
+          done
       # Merge freeze: while the repository variable MERGE_FREEZE is true, this
       # aggregate (a required check in the main-status-checks ruleset) fails for
       # every pull request except MERGE_FREEZE_ALLOW entries, and for a dispatched

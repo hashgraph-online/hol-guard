@@ -5,9 +5,10 @@
 //! or `git cherry-pick` (`git_local_writes_merge`) and a `git rebase` onto a
 //! local ref or `--continue` (`git_local_writes_rebase`), with Git reads the configuration
 //! probe proves helper-free around them.
-//! The workspace sandbox runs them in a main checkout, but a linked worktree
-//! keeps its index, refs and objects in the shared Git directory the sandbox
-//! cannot write, and some hosts have no sandbox, so they would stop at review.
+//! On a host with a workspace sandbox the sandbox runs them contained, in a
+//! main checkout or in a linked worktree whose shared Git directory it grants,
+//! before this proof is asked. Some hosts have no sandbox, and a command the
+//! sandbox does not take would stop at review, so the proof still answers.
 //! Here the session's own Git is proven to start no program: no filter other
 //! than the user's Git LFS install, no fsmonitor, configured signing, diff
 //! program, lazy fetch, submodule recursion or configured hook, and none of

@@ -173,6 +173,7 @@ def record_local_custom_extension_mutation(
     provider_updates: Sequence[tuple[str, str, int]] = (),
     catalog_seed: Sequence[LocalCliCommand] = (),
     capabilities: Mapping[str, str] | None = None,
+    reviewed_catalog_revision: int | None = None,
 ) -> int:
     """Commit a local grant and its continuity tombstone/state/receipt atomically.
 
@@ -217,6 +218,9 @@ def record_local_custom_extension_mutation(
             provider_updates={identity.cli_id: provider_updates} if provider_updates else None,
             catalog_seeds={identity.cli_id: catalog_seed} if catalog_seed else None,
             capability_updates={identity.cli_id: capabilities} if capabilities else None,
+            catalog_reviews=(
+                {identity.cli_id: reviewed_catalog_revision} if reviewed_catalog_revision is not None else None
+            ),
         )
     except ValueError as error:
         if str(error) in {"local_cli_revision_conflict", "provider_action_revision_conflict"}:

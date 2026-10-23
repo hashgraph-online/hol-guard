@@ -48,7 +48,6 @@ def test_runtime_archive_is_exact_input_only_and_saved_by_one_trusted_writer():
     )
     assert save["if"] == (
         "matrix.check != 'clippy' && "
-        "matrix.check != 'test-runtime-2' && "
         "steps.runtime-archive.outputs.cache-hit != 'true' && "
         "github.event_name == 'push' && github.ref == 'refs/heads/main'"
     )

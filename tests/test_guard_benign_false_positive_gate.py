@@ -81,6 +81,12 @@ _RENDERED_SPECIFIC_KEYS = ("permissionDecisionReason", "additionalContext")
 # Pending markers record the Linux CI result. macOS sends some Oh My Pi and Z Code reads
 # through protected read-only execution, so local macOS runs do not judge marker staleness.
 _ENFORCE_STALE_PENDING = bool(os.environ.get("CI")) and sys.platform != "darwin"
+# The workspace sandbox the contained route runs in exists on macOS, and on
+# Linux only where the host offers it. A gate that accepts either a contained
+# route or a plain quiet allow cannot tell the two apart, so the cases that
+# depend on containment assert it where the host has a sandbox and fall back to
+# the quiet allow, never to a review, where it does not.
+_SANDBOX_HOST = sys.platform == "darwin"
 _PENDING_PR: dict[str, str] = _DOCUMENT["pending_pr"]
 _PENDING_ALWAYS: dict[str, str] = _DOCUMENT["pending_always"]
 
@@ -477,6 +483,67 @@ def test_an_environment_dump_is_reviewed_rather_than_refused(
         assert _decision(result) != "allow", f"environment dump was allowed: {description}"
         assert approvals == 1, f"environment dump left no approval to give: {description}"
         assert not always_gap(_ROWS[case.case_id]), f"environment dump offers no Always allow: {description}"
+
+
+def test_jvm_build_goals_run_without_an_approval_prompt(
+    gate_environment: tuple[BenignFixture, HookWorker],
+) -> None:
+    """Compiling or testing a Maven project is ordinary work, not a package fetch.
+
+    The JVM package firewall owns ``mvn`` and ``gradle`` by executable name and
+    carries no rule that tells a dependency operation from a lifecycle goal, so
+    every invocation but a bare ``--version`` queued a review row, ``mvn -q
+    test`` included. A Maven lifecycle goal now routes to the workspace sandbox
+    instead: it runs offline against a local repository of its own, linked to
+    the groups the host already fetched, so it compiles and tests without
+    reaching a registry. The goals that fetch or publish artifacts keep their
+    review, and so does Gradle, whose cache wants a writable home and takes
+    locks inside it, which the read-only link the sandbox grants cannot give.
+    """
+    fixture, worker = gate_environment
+    goals = ("mvn -q test", "mvn clean verify", "./mvnw test-compile", "mvn clean package -DskipTests")
+    for index, command in enumerate(goals):
+        case = GateCase(
+            case_id=f"jvm-build-{index}@claude-code",
+            base_id=f"jvm-build-{index}",
+            fix_area="package",
+            harness="claude-code",
+            tool="shell",
+            tool_input={"command": command},
+            cwd="worktree",
+            expect="allow",
+        )
+        result, approvals = _review(case, fixture, worker)
+        description = _describe(case, result, approvals)
+        assert approvals == 0, f"JVM build goal queued a review: {description}"
+        if _SANDBOX_HOST:
+            assert _contained(result), f"JVM build goal was not routed to the workspace sandbox: {description}"
+        else:
+            assert _quiet_allow(result, approvals), f"JVM build goal was reviewed: {description}"
+    fetches = (
+        "mvn dependency:copy-dependencies",
+        "mvn deploy",
+        "mvn -U test",
+        "gradle build",
+        "./gradlew :app:test",
+        "gradle --refresh-dependencies build",
+    )
+    for index, command in enumerate(fetches):
+        case = GateCase(
+            case_id=f"jvm-fetch-{index}@claude-code",
+            base_id=f"jvm-fetch-{index}",
+            fix_area="package",
+            harness="claude-code",
+            tool="shell",
+            tool_input={"command": command},
+            cwd="worktree",
+            expect="not_allow",
+        )
+        result, approvals = _review(case, fixture, worker)
+        description = _describe(case, result, approvals)
+        assert _decision(result) != "allow", f"package fetch was allowed: {description}"
+        assert approvals == 1, f"package fetch left no approval to give: {description}"
+        assert not always_gap(_ROWS[case.case_id]), f"package fetch offers no Always allow: {description}"
 
 
 @pytest.mark.parametrize("case", mcp_cases(_DOCUMENT), ids=lambda case: case.case_id)

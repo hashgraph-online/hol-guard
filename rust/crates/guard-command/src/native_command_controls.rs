@@ -464,7 +464,8 @@ mod precedence;
 mod unmodeled;
 use floor::{add_authority_repair_hint, rank, rule_floor, strengthen};
 pub(crate) use unmodeled::{
-    bounds_its_owners, python_is_builtin_only, python_stdin, unread_file_interpreter,
+    bounds_its_owners, launcher_body, prefix_reads_a_program_file, python_is_builtin_only,
+    python_stdin, unread_file_interpreter,
 };
 
 #[cfg(test)]

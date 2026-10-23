@@ -111,7 +111,8 @@
   "src/codex_plugin_scanner/guard/runtime/containment_outputs.py",
   "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py",
   "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/read_only_filters.py",
-  "src/codex_plugin_scanner/guard/runtime/extension_control_resolver.py"
+  "src/codex_plugin_scanner/guard/runtime/extension_control_resolver.py",
+  "src/codex_plugin_scanner/guard/inventory_contract_scans.py"
  ],
  "retired_tests": [
   {

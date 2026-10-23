@@ -15,8 +15,9 @@
 //! `--project` and a `cd` ahead of it, so the environment is looked for where
 //! the command will actually stand.
 //!
-//! A Python manager's queries are read by [`super::python`], and `go` and
-//! `cargo` by [`super::compiled`], each of which this module dispatches to.
+//! A Python manager's queries are read by [`super::python`], `go` and `cargo`
+//! by [`super::compiled`], and Composer's and Bundler's project verbs by
+//! [`super::vendored`], each of which this module dispatches to.
 
 use crate::CanonicalCommandV1;
 use std::path::{Path, PathBuf};
@@ -31,6 +32,9 @@ pub(super) const NODE_PACKAGE_EXTENSION: &str = "command.package.node";
 const PYTHON_PACKAGE_EXTENSION: &str = "command.package.python";
 const GO_PACKAGE_EXTENSION: &str = "command.package.go";
 const RUST_PACKAGE_EXTENSION: &str = "command.package.rust";
+const PHP_PACKAGE_EXTENSION: &str = "command.package.php";
+const RUBY_PACKAGE_EXTENSION: &str = "command.package.ruby";
+const JVM_PACKAGE_EXTENSION: &str = "command.package.jvm";
 // The package-firewall permissions that mark a manager's use. They record
 // which ecosystem ran, not a risk the run carries, so a local verb below one
 // of them is still ordinary workspace work.
@@ -39,10 +43,13 @@ pub(crate) const PACKAGE_EXTENSIONS: &[&str] = &[
     PYTHON_PACKAGE_EXTENSION,
     GO_PACKAGE_EXTENSION,
     RUST_PACKAGE_EXTENSION,
+    PHP_PACKAGE_EXTENSION,
+    RUBY_PACKAGE_EXTENSION,
+    JVM_PACKAGE_EXTENSION,
 ];
-// The Python managers the package firewall watches. Each installs what it
-// runs, so only the queries [`super::python`] admits are local work; `uv` is
-// the exception below.
+// The Python managers the package firewall watches. Each can install what it
+// runs, so only the queries and runner verbs [`super::python`] admits are
+// local work; `uv` is the exception below.
 const PYTHON_MANAGERS: &[&str] = &["pip", "pip3", "pipx", "uvx", "poetry", "pipenv"];
 // uv drives a project environment the workspace holds. Only the verbs that
 // read it are local: `add`, `tool`, `sync` and the rest reach a registry, and
@@ -324,6 +331,12 @@ fn local_uv_work(arguments: &[&str], directory: &Path, workspace: &Path) -> bool
     uv.project.join(".venv").is_dir()
 }
 
+/// Whether `name` runs Maven, by either spelling the JVM extension claims.
+/// A wrapper is the same build run through the version the project pins.
+fn maven_executable(name: &str) -> bool {
+    matches!(name, "mvn" | "mvnw" | "mvn.cmd" | "mvnw.cmd")
+}
+
 /// Whether any segment runs a manager this module decides a verb for. The
 /// fallback in [`local_package_work`] admits every executable that is not a
 /// package tool, which is right for the other half of a mixed command but is
@@ -335,7 +348,9 @@ pub(super) fn names_a_manager(model: &CanonicalCommandV1) -> bool {
             let name = super::super::executable_basename(executable).to_ascii_lowercase();
             NODE_MANAGERS.contains(&name.as_str())
                 || PYTHON_MANAGERS.contains(&name.as_str())
+                || super::vendored::VENDORED_MANAGERS.contains(&name.as_str())
                 || matches!(name.as_str(), "uv" | "go" | "cargo")
+                || maven_executable(&name)
         })
     })
 }
@@ -381,6 +396,18 @@ pub(super) fn local_package_work(
                 .collect();
             return super::compiled::local_go_work(&arguments, directory);
         }
+        if maven_executable(&name) {
+            let Some(directory) = directory.as_deref() else {
+                return false;
+            };
+            let arguments: Vec<&str> = segment
+                .arguments
+                .iter()
+                .map(String::as_str)
+                .take_while(|argument| *argument != "--")
+                .collect();
+            return super::compiled::local_maven_work(&arguments, directory);
+        }
         if name == "cargo" {
             let Some(directory) = directory.as_deref() else {
                 return false;
@@ -415,6 +442,18 @@ pub(super) fn local_package_work(
                 .take_while(|argument| *argument != "--")
                 .collect();
             return local_uv_work(&arguments, directory, workspace);
+        }
+        if super::vendored::VENDORED_MANAGERS.contains(&name.as_str()) {
+            let Some(directory) = directory.as_deref() else {
+                return false;
+            };
+            return super::vendored::local_vendored_work(
+                &name,
+                &segment.arguments,
+                &segment.environment_names,
+                directory,
+                workspace,
+            );
         }
         if !NODE_MANAGERS.contains(&name.as_str()) {
             // A runner still here was not proved to start an installed tool,
@@ -467,3 +506,7 @@ mod uv_tests;
 #[cfg(test)]
 #[path = "workspace_contained_go_tests.rs"]
 mod go_tests;
+
+#[cfg(test)]
+#[path = "workspace_contained_maven_tests.rs"]
+mod maven_tests;

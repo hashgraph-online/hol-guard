@@ -41,6 +41,34 @@ export type ReleaseChangeSection = {
   changes: ReleaseChange[];
 };
 
+/**
+ * One tone per change kind, so "security" reads as security wherever it
+ * appears instead of being another bold heading. The classes come from the
+ * dashboard's own palette; nothing here introduces a colour.
+ */
+const CHANGE_TONES: Record<ReleaseChangeKind, string> = {
+  security: "bg-brand-purple/10 text-brand-purple",
+  added: "bg-brand-green-bg text-brand-green-text",
+  changed: "bg-brand-blue/10 text-brand-blue",
+  fixed: "bg-brand-attention-bg text-brand-attention",
+  removed: "bg-brand-dark/[0.07] text-brand-dark/75",
+  other: "bg-brand-dark/[0.07] text-brand-dark/75",
+};
+
+export function changeKindTone(kind: ReleaseChangeKind): string {
+  return CHANGE_TONES[kind];
+}
+
+/** The one-word noun each kind counts in, for the header's tally. */
+const CHANGE_NOUNS: Record<ReleaseChangeKind, string> = {
+  security: "security",
+  added: "added",
+  changed: "changed",
+  fixed: "fixed",
+  removed: "removed",
+  other: "other",
+};
+
 /** Group a release's changes into the sections the detail view renders, in a
  * fixed order so security never lands below a cosmetic fix. */
 export function groupChangesByKind(changes: readonly ReleaseChange[]): ReleaseChangeSection[] {
@@ -49,6 +77,15 @@ export function groupChangesByKind(changes: readonly ReleaseChange[]): ReleaseCh
     label: CHANGE_LABELS[kind],
     changes: changes.filter((change) => change.kind === kind),
   })).filter((section) => section.changes.length > 0);
+}
+
+/** "1 security \u00b7 3 fixed \u00b7 2 added": what this release holds, in the order the
+ * sections themselves run, so the reader can tell at a glance whether it is
+ * worth opening before reading a word of it. */
+export function changeCountLabel(sections: readonly ReleaseChangeSection[]): string {
+  return sections
+    .map((section) => `${section.changes.length} ${CHANGE_NOUNS[section.kind]}`)
+    .join(" \u00b7 ");
 }
 
 /** Strip the `v` an installed version may or may not carry. */
@@ -155,19 +192,86 @@ export function verificationLabel(method: ReleaseVerificationMethod): string {
   return VERIFICATION_LABELS[method];
 }
 
-/** What the screen says about the version this device runs.
+/**
+ * Where this device stands in the published history.
  *
- * The archive is paged and a device can be many releases behind, so the
- * installed release is not always on the page in front of the reader. Saying
- * so beats a page that silently marks nothing as installed. */
-export function installedNote(
-  releases: ReleaseSummary[],
+ * This is the one fact the archive exists to answer and the hardest one to
+ * read off a list of version numbers, so it is computed once, here, and said
+ * outright at the top of the screen.
+ *
+ * The archive is paged, which bounds what can honestly be claimed. A release
+ * the page in hand does not hold is reported as exactly that rather than
+ * silently marking nothing as installed, and the newest published release is
+ * only named from the first page, where it really is the first row.
+ */
+export type InstalledStanding =
+  | { kind: "unknown" }
+  | { kind: "off-page"; label: string }
+  | { kind: "current"; release: ReleaseSummary }
+  | { kind: "behind"; release: ReleaseSummary; behind: number; newest: ReleaseSummary | null };
+
+export function installedStanding(
+  index: ReleaseIndex,
   installedVersion: string | null | undefined,
-): string {
+): InstalledStanding {
   const label = normalizeVersionLabel((installedVersion ?? "").trim());
-  if (!label) return "";
-  if (installedRelease(releases, installedVersion)) return ` This device is running ${label}.`;
-  return ` This device is running ${label}, which is not on this page of the archive.`;
+  if (!label) return { kind: "unknown" };
+  const position = index.releases.findIndex(
+    (release) => normalizeVersionLabel(release.versionLabel) === label,
+  );
+  if (position === -1) return { kind: "off-page", label };
+  const release = index.releases[position];
+  // Everything above this row on this page, plus every page before it. The
+  // daemon echoes the page size hol.org actually served, so this counts
+  // published releases rather than the page size the screen asked for.
+  const behind = (index.page - 1) * index.pageSize + position;
+  if (behind === 0) return { kind: "current", release };
+  // The screen offers to open this release, so it has to be one this device
+  // can actually move to. A device on previews takes either channel; a stable
+  // install is not sent to read a preview's notes. Only page 1 holds the top
+  // of the history, so only page 1 can name the newest release there is; when
+  // nothing above this row is on offer, there is none to name.
+  const onOffer = (candidate: ReleaseSummary): boolean =>
+    release.channel === "preview" || candidate.channel === "stable";
+  const newest =
+    index.page === 1 ? (index.releases.slice(0, position).find(onOffer) ?? null) : null;
+  return { kind: "behind", release, behind, newest };
+}
+
+export type StandingCopy = { title: string; body: string };
+
+/** What the status band says, as prose, so the wording can be read back in a
+ * test without rendering the band. */
+export function standingCopy(standing: InstalledStanding): StandingCopy {
+  if (standing.kind === "unknown") {
+    return {
+      title: "Guard's published releases",
+      body: "Every published version, what it changed, and who is verified to have changed it.",
+    };
+  }
+  if (standing.kind === "off-page") {
+    return {
+      title: standing.label,
+      body: "This device's version is not on this page of the archive.",
+    };
+  }
+  if (standing.kind === "current") {
+    return {
+      title: normalizeVersionLabel(standing.release.versionLabel),
+      body: `Running here, and the newest published release. Released ${formatReleaseDate(standing.release.publishedAt)}.`,
+    };
+  }
+  const count =
+    standing.behind === 1 ? "One newer release has" : `${standing.behind} newer releases have`;
+  // The count covers every channel, because every one of them was published;
+  // the release named is the newest one this device is actually offered.
+  const newest = standing.newest
+    ? ` The newest ${channelLabel(standing.newest.channel).toLowerCase()} release is ${normalizeVersionLabel(standing.newest.versionLabel)}.`
+    : "";
+  return {
+    title: normalizeVersionLabel(standing.release.versionLabel),
+    body: `Running here. ${count} been published since.${newest}`,
+  };
 }
 
 export type ReleaseFailureCopy = { title: string; body: string };

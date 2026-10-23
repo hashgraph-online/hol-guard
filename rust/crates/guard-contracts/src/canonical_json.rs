@@ -123,6 +123,13 @@ pub fn write_json_string(text: &str, out: &mut Vec<u8>) {
     write_json_string_with_ascii::<true>(text, out);
 }
 
+/// Escape a string body the way CPython's encoder does with
+/// `ensure_ascii=False`: the same quoting, control escapes and surrogate rules,
+/// with every other character written as itself in UTF-8.
+pub fn write_json_string_utf8(text: &str, out: &mut Vec<u8>) {
+    write_json_string_with_ascii::<false>(text, out);
+}
+
 fn write_json_string_with_ascii<const ENSURE_ASCII: bool>(text: &str, out: &mut Vec<u8>) {
     out.push(b'"');
     for ch in text.chars() {

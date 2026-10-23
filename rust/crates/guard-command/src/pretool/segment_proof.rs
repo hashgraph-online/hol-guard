@@ -8,6 +8,8 @@ pub(crate) use super::stderr_merge::without_stderr_merge;
 
 #[path = "segment_proof_cwd.rs"]
 mod cwd;
+#[path = "github_metadata_text.rs"]
+mod github_metadata_text;
 pub(super) use cwd::{
     after_read_prefix, cwd_read_executable, exact_safe_cwd_compound, verified_cwd_compound_context,
     verified_cwd_list_context,
@@ -105,6 +107,8 @@ pub(crate) fn benign_command_segments(
                         | "tail"
                         | "rg"
                         | "grep"
+                        | "egrep"
+                        | "fgrep"
                         | "sed"
                         | "wc"
                         | "od"
@@ -187,7 +191,8 @@ pub(super) fn stdin_filter_segment(segment: &crate::CommandSegmentV1) -> bool {
             || (basename == "od" && safe_reads::safe_byte_dump_stdin_arguments(&segment.arguments))
             || (super::digest_reads::digest_program(basename)
                 && super::digest_reads::safe_digest_stdin_arguments(&segment.arguments))
-            || (basename == "grep" && search::safe_grep_stdin_arguments(&segment.arguments))
+            || (matches!(basename, "grep" | "egrep" | "fgrep")
+                && search::safe_grep_stdin_arguments(&segment.arguments))
             || (basename == "rg" && search::safe_rg_stdin_arguments(&segment.arguments))
             || (basename == "sed" && safe_reads::safe_sed_stdin_arguments(&segment.arguments))
             || super::stdin_filters::safe_arguments(basename, &segment.arguments))
@@ -220,7 +225,7 @@ pub(super) fn exact_safe_segment_with_context(
     // The same proof the admission arm runs below, so a search segment that
     // arm refuses cannot shed its sensitive-text screen here.
     let inert_search = match basename {
-        "grep" => search::grep::safe_grep_segment(model, segment, context),
+        "grep" | "egrep" | "fgrep" => search::grep::safe_grep_segment(model, segment, context),
         "rg" => search::safe_rg_segment(model, segment, context),
         "fd" => search::safe_search_arguments_with_context(basename, &segment.arguments, context),
         _ => false,
@@ -230,19 +235,23 @@ pub(super) fn exact_safe_segment_with_context(
     } else {
         Vec::new()
     };
+    let secret_namespace = github_metadata_text::secret_namespace(segment);
+    let sensitive_text =
+        secret_namespace.map(|index| github_metadata_text::without_namespace(segment, index));
     if (!inert_search
         && !super::source_file_read_segment(segment)
         && super::git_search_text::sensitive_beyond_patterns(
-            &segment.text,
+            sensitive_text.as_deref().unwrap_or(&segment.text),
             super::git_search_text::segment_without_patterns(segment),
         ))
-        || (!matches!(basename, "rg" | "grep" | "fd")
+        || (!matches!(basename, "rg" | "grep" | "egrep" | "fgrep" | "fd")
             && segment
                 .arguments
                 .iter()
                 .enumerate()
                 .any(|(index, argument)| {
                     Some(index) != jq_filter
+                        && Some(index) != secret_namespace
                         && !search_text.contains(&index)
                         && sensitive_path_argument(argument)
                 }))
@@ -283,6 +292,7 @@ pub(super) fn exact_safe_segment_with_context(
         "ls" => {
             super::listing_reads::safe_listing_segment(&segment.text, &segment.arguments, context)
         }
+        "tree" => super::tree_reads::safe_tree_segment(&segment.arguments, context),
         "test" => safe_reads::safe_file_predicate_arguments(&segment.arguments, context),
         "[" => segment
             .arguments
@@ -337,6 +347,8 @@ pub(super) fn exact_safe_segment_with_context(
         "mktemp" | "mkdir" | "touch" | "mv" | "ln" | "rm" => {
             let alone = basename != "ln" || model.segments.len() == 1;
             (model.segments.len() == 1
+                || (matches!(basename, "mkdir" | "touch")
+                    && super::chain_temporary::creation_chain(model))
                 || (basename == "mkdir" && super::chain_temporary::mkdir_chain(model))
                 || (basename == "ln" && super::symlink_writes::link_chain(model, context)))
                 && (basename != "ln" && basename != "rm"
@@ -412,9 +424,11 @@ pub(super) fn exact_safe_segment_with_context(
                 && super::stdin_filters::safe_arguments(basename, &segment.arguments))
                 || super::stdin_filters::safe_file_arguments(basename, &segment.arguments, context)
         }
-        "rg" | "grep" | "fd" => {
+        "rg" | "grep" | "egrep" | "fgrep" | "fd" => {
             (match basename {
-                "grep" => search::grep::safe_grep_segment(model, segment, context),
+                "grep" | "egrep" | "fgrep" => {
+                    search::grep::safe_grep_segment(model, segment, context)
+                }
                 "rg" => search::safe_rg_segment(model, segment, context),
                 _ => search::safe_search_arguments_with_context(
                     basename,

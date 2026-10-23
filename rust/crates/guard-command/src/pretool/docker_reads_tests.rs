@@ -34,6 +34,19 @@ fn container_and_image_listings_are_admitted() {
         vec!["compose", "list"],
         vec!["compose", "ls", "-a", "-q"],
         vec!["compose", "ls", "--filter=name=portal", "--format", "json"],
+        vec!["context", "ls"],
+        vec!["context", "list"],
+        vec!["context", "ls", "-q"],
+        vec!["context", "ls", "--quiet"],
+        vec!["context", "ls", "--format", "json"],
+        vec!["context", "ls", "--format={{.Name}}"],
+        vec![
+            "context",
+            "ls",
+            "--format",
+            "table {{.Name}}\t{{.DockerEndpoint}}",
+        ],
+        vec!["context", "show"],
     ] {
         assert!(safe_docker_arguments(&arguments(&words)), "{words:?}");
     }
@@ -198,6 +211,61 @@ fn registry_manifest_changes_and_redirected_queries_stay_reviewed() {
     }
 }
 
+/// Reading back what one container already printed is a read: nothing starts,
+/// nothing is pulled, no project file is resolved.
+#[test]
+fn bounded_container_logs_are_admitted() {
+    for words in [
+        vec!["logs", "web"],
+        vec!["logs", "web", "--tail", "50"],
+        vec!["logs", "--tail=100", "api-1"],
+        vec!["logs", "-n", "200", "web"],
+        vec!["logs", "--tail", "all", "web"],
+        vec!["logs", "--since", "10m", "web"],
+        vec![
+            "logs",
+            "--since=2026-10-22T09:00:00Z",
+            "--until",
+            "1h",
+            "web",
+        ],
+        vec!["logs", "-t", "web"],
+        vec!["logs", "--timestamps", "--tail", "20", "db_1"],
+        vec!["container", "logs", "web"],
+    ] {
+        assert!(safe_docker_arguments(&arguments(&words)), "{words:?}");
+    }
+}
+
+/// A log read that never ends, one that reaches another daemon, one that
+/// prints the driver's own attributes, and a Compose log read, which resolves
+/// the project first, are not that read.
+#[test]
+fn followed_remote_and_project_backed_logs_stay_reviewed() {
+    for words in [
+        vec!["logs"],
+        vec!["logs", "-f", "web"],
+        vec!["logs", "--follow", "web"],
+        vec!["logs", "--details", "web"],
+        vec!["logs", "web", "api"],
+        vec!["logs", "--tail"],
+        vec!["logs", "--tail", "many", "web"],
+        vec!["logs", "--since", "-1h", "web"],
+        vec!["logs", "--tail", "50", "../web"],
+        vec!["-H", "tcp://build.example.com:2376", "logs", "web"],
+        vec!["--context", "production", "logs", "web"],
+        vec!["compose", "logs"],
+        vec!["compose", "logs", "api"],
+        vec!["compose", "logs", "--tail=50", "api", "worker"],
+        vec!["compose", "logs", "--no-color", "--no-log-prefix", "api"],
+        vec!["compose", "-f", "compose.prod.yaml", "logs"],
+        vec!["compose", "logs", "-f"],
+        vec!["compose", "logs", "--follow", "api"],
+    ] {
+        assert!(!safe_docker_arguments(&arguments(&words)), "{words:?}");
+    }
+}
+
 #[test]
 fn remote_daemons_secrets_and_other_subcommands_stay_reviewed() {
     for words in [
@@ -212,7 +280,6 @@ fn remote_daemons_secrets_and_other_subcommands_stay_reviewed() {
         vec!["inspect", "web"],
         vec!["container", "inspect", "web"],
         vec!["compose", "ps"],
-        vec!["logs", "web", "--tail", "50"],
         vec!["exec", "web", "env"],
         vec!["run", "--rm", "alpine", "env"],
         vec!["compose", "up", "-d"],
@@ -262,6 +329,35 @@ fn remote_daemons_secrets_and_other_subcommands_stay_reviewed() {
         vec!["compose", "-f", "compose.yaml", "ls"],
         vec!["compose", "ls", "portal"],
         vec!["-H", "ssh://ops@example.com", "buildx", "ls"],
+        // Switching, creating, copying or removing a context changes the
+        // store, and `inspect` prints each endpoint's full metadata.
+        vec!["context", "use", "staging"],
+        vec![
+            "context",
+            "create",
+            "remote",
+            "--docker",
+            "host=ssh://ops@example.com",
+        ],
+        vec!["context", "update", "remote", "--description", "ops"],
+        vec!["context", "rm", "remote"],
+        vec!["context", "export", "prod"],
+        vec!["context", "import", "prod", "prod.dockercontext"],
+        vec!["context", "inspect"],
+        vec!["context", "inspect", "default"],
+        vec!["context", "ls", "staging"],
+        vec!["context", "ls", "--format"],
+        vec!["context", "ls", "--format", "{{.Name}} $HOME"],
+        vec!["context", "ls", "-f", "name=prod"],
+        vec!["context", "ls", "-a"],
+        vec!["context", "ls", "--all"],
+        vec!["context", "ls", "--no-trunc"],
+        vec!["context", "ls", "-aq"],
+        vec!["context", "show", "--format", "{{.Name}}"],
+        vec!["context", "show", "staging"],
+        vec!["--context", "production", "context", "ls"],
+        vec!["-H", "ssh://ops@example.com", "context", "ls"],
+        vec!["context"],
     ] {
         assert!(!safe_docker_arguments(&arguments(&words)), "{words:?}");
     }

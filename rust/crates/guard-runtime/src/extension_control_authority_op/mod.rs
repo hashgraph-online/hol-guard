@@ -17,6 +17,8 @@ mod catalog;
 mod chain;
 mod history;
 mod installed_upgrade;
+#[cfg(test)]
+mod installed_upgrade_tests;
 mod layers;
 mod managed;
 mod managed_seals;

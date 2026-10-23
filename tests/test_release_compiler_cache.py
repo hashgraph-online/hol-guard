@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.release_workflow_helpers import load_workflow
+from tests.release_workflow_helpers import load_workflow, native_target_matrix, native_wheel_job
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -87,7 +87,7 @@ def test_release_compilation_is_content_addressed_and_feature_unified():
         assert step["env"]["RUSTC_WORKSPACE_WRAPPER"] == "sccache"
         assert "RUSTC_WRAPPER" not in step["env"]
     (prepare_steps, prepare), (publish_steps, _) = _release_compile_steps()
-    wheel_steps = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]["build-native-guard-wheels"]["steps"]
+    wheel_steps = native_wheel_job()["steps"]
     for steps in (prepare_steps, publish_steps, wheel_steps):
         cache = next(item for item in steps if "rust-cache@" in item.get("uses", ""))
         # The prepare workflow adds "-fast" only for alpha fast-codegen builds; wheel jobs and
@@ -117,7 +117,7 @@ def test_determinism_gate_compares_cached_and_cold_binaries_without_writing_cach
     assert workflow["permissions"] == {"contents": "read"}
     job = workflow["jobs"]["compare"]
     prepare = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]
-    assert job["strategy"]["matrix"]["include"] == prepare["strategy"]["matrix"]["include"]
+    assert job["strategy"]["matrix"]["include"] == native_target_matrix(prepare)[""]
     steps = {step.get("name"): step for step in job["steps"]}
     assert steps["Restore trusted release dependencies"]["with"]["save-if"] == "false"
     cached = steps["Compile with the release compiler cache"]
@@ -158,7 +158,7 @@ def prepare_steps(job):
 
 def test_cross_compiled_binaries_are_executed_only_on_native_hardware():
     prepare = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]
-    legs = {leg["target"]: leg for leg in prepare["strategy"]["matrix"]["include"]}
+    legs = {leg["target"]: leg for leg in native_target_matrix(prepare)[""]}
     assert legs["x86_64-apple-darwin"]["runner"] == "macos-15"
     assert legs["x86_64-apple-darwin"]["cross"] is True
     assert legs["aarch64-pc-windows-msvc"]["runner"] == "windows-latest"
@@ -171,7 +171,7 @@ def test_cross_compiled_binaries_are_executed_only_on_native_hardware():
     closed = script.index("fi\n", script.index("self-test"))
     assert guard < script.index("build_native_command_program.py") < script.index("self-test") < closed
     assert closed < script.index("prepared_native.py pack")
-    wheels = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]["build-native-guard-wheels"]
+    wheels = native_wheel_job()
     selector = next(
         step
         for step in load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]["build"]["steps"]
@@ -185,5 +185,5 @@ def test_cross_compiled_binaries_are_executed_only_on_native_hardware():
     self_test = names.index("Self-test prepared runtime on native hardware")
     assert install < self_test < names.index("Verify native command program is current")
     step = wheels["steps"][self_test]
-    assert step["if"] == "needs.precompile-native.result == 'success'"
+    assert step["if"] == "inputs.precompiled"
     assert step["run"] == '"$RUNTIME" self-test --json'

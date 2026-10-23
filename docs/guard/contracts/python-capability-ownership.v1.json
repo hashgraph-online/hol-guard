@@ -1679,6 +1679,25 @@
     "rust/crates/guard-command/src/extension_control.rs",
     "rust/crates/guard-runtime/src/extension_control_op.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/inventory_contract_scans.py",
+   "module": "codex_plugin_scanner.guard.inventory_contract_scans",
+   "source_sha256": "4a1b289d0ecf207a9b6cebaf9f0b9e7afc0c971c14e4d6434a7ed6074d4a8863",
+   "forbidden_symbols": [
+    "_cisco_inventory_findings",
+    "_cisco_inventory_sources",
+    "_cisco_source",
+    "_inventory_severity",
+    "_score_delta_for_severity",
+    "_artifact_id_for_cisco_finding",
+    "_source_status_for_cisco_status",
+    "_symlink_findings_from_items"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/inventory_contract.rs",
+    "rust/crates/guard-runtime/src/inventory_scan_findings_op.rs"
+   ]
   }
  ],
  "retired_test_paths": [
@@ -2092,6 +2111,176 @@
    ],
    "native_replacements": [
     "rust/crates/guard-runtime/src/pack_lifecycle/release_transport/selector.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/verified_read_execution.py",
+   "source_sha256": "6e5394e8e2211428639706ac8d0033cf451d8bdc062f7f529081611963528159",
+   "forbidden_symbols": [
+    "_MAX_COUNT",
+    "_SED_RANGE",
+    "_dynamic",
+    "_head_tail",
+    "_line_count",
+    "_sed"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/verified_read_plan.rs",
+    "rust/crates/guard-contracts/src/verified_read_plan.rs",
+    "rust/crates/guard-runtime/src/verified_read_plan_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/catalog_delivery/installed_upgrade.py",
+   "source_sha256": "bfeae1fcce7bb73d01b18c7a873d1676a6e2eb62896a421b104da97c2036a459",
+   "forbidden_symbols": [
+    "AuthorityHealth",
+    "ControlLayerKind",
+    "ExtensionControlAuthorityError"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/extension_control_authority_op/installed_upgrade.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/inventory_contract_redaction.py",
+   "source_sha256": "175318dfc9a0e747c01fe43db4a153206bddc0e948e1e9cecd482a5738930751",
+   "forbidden_symbols": [
+    "hostname",
+    "ipaddress",
+    "netloc",
+    "parse_qsl",
+    "redacted_pairs",
+    "urlencode",
+    "urlsplit",
+    "urlunsplit"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/inventory_url_redaction_op.rs",
+    "rust/crates/guard-command/src/inventory_redaction.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/mcp_server_contribution.py",
+   "source_sha256": "545d2a53a975c58a54268403e454bb5905ed95e8d626c2d6eeb57a0095b03440",
+   "forbidden_symbols": [
+    "_DIRECT_COMMAND",
+    "_DIRECT_COMMAND_RESERVED",
+    "_DIRECT_COMMAND_VERSIONED_BASES",
+    "_HEX_DIGITS",
+    "_REMOTE_MCP_URL_MAX_LENGTH",
+    "_REMOTE_PATH_CHARS",
+    "_REMOTE_QUERY_CHARS",
+    "_SUB_DELIMITERS",
+    "_UNRESERVED_PATH_CHARS",
+    "_normalized_remote_component",
+    "_normalized_remote_path",
+    "_normalized_remote_query",
+    "_remove_remote_dot_segments",
+    "_reserved_direct_mcp_command",
+    "_valid_dns_hostname"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/contributed_mcp_decision.rs",
+    "rust/crates/guard-command/src/contributed_mcp_url.rs",
+    "rust/crates/guard-runtime/src/cli_runtime_support_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/false_positive_rules.py",
+   "source_sha256": "a4808529aa11428f320b9e37423f566a32700880de3fa815a08827c60fc204bb",
+   "forbidden_symbols": [
+    "_path_has_symlink_component",
+    "candidate_dir",
+    "candidate_file",
+    "cluster",
+    "normalized",
+    "os",
+    "real_candidate",
+    "real_file",
+    "relative_parts",
+    "skill_name"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/false_positive_rules.rs",
+    "rust/crates/guard-runtime/src/cli_runtime_support_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/aibom_reporting.py",
+   "source_sha256": "88d426855b8267a9187850afc9e9a3959e267e720d7ece04cf3285a080759f54",
+   "forbidden_symbols": [
+    "average_score",
+    "coverage_percent",
+    "covered",
+    "eligible",
+    "low_trust",
+    "scores"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/aibom_report_summaries_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/package_request_evaluation.py",
+   "source_sha256": "6040193c6f5222523a4e9cdc95ed7fe0b6c7e7bd04f7ead799f135244d36c42c",
+   "forbidden_symbols": [
+    "from_cache_dict",
+    "_normalize_package_user_copy",
+    "_looks_like_cloud_inbox_url",
+    "_with_support_metadata",
+    "_dict_items",
+    "_CLOUD_INBOX_URL_RE",
+    "_LOCAL_REVIEW_INSTRUCTION",
+    "_LOCAL_REVIEW_INSTRUCTION_RE",
+    "_LOCAL_APPROVAL_INSTRUCTION_RE",
+    "_LOCAL_APPROVAL_REQUEST_URL_RE"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/supply_chain_package_eval/result_models.rs",
+    "rust/crates/guard-command/src/supply_chain_package_eval/package_copy.rs",
+    "rust/crates/guard-runtime/src/package_evaluation_view_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/_shell_execution_context_support.py",
+   "source_sha256": "4a9321dd3c0b42da089ddc14d0ba67869752d5116fef2890985c197e2eaf4bd4",
+   "forbidden_symbols": [
+    "DIRECTORY_COMMANDS",
+    "DirectoryOperation",
+    "_ESCAPED_SEMICOLON_SENTINEL",
+    "_FD_AMPERSAND_SENTINEL",
+    "_FIND_PLACEHOLDER_SENTINEL",
+    "_NEWLINE_SENTINEL",
+    "_NOCLOBBER_PIPE_SENTINEL",
+    "_REDIRECTION_TOKEN",
+    "_SHELL_ASSIGNMENT",
+    "_UNMODELED_SHELL_CONTROL_WORDS",
+    "_directory_arguments",
+    "_operand_is_dynamic",
+    "_path_contains_symlink",
+    "directory_operation"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/shell_execution_context_support.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/inventory_contract_metadata.py",
+   "source_sha256": "33d04296fa0f81e2dfdc261f047aa4bdab6918efeed1ffc09c47340d20594e70",
+   "forbidden_symbols": [
+    "_bind_skill_document_evidence",
+    "_canonical_inventory_content_hash",
+    "_capabilities_for_artifact",
+    "_discard_unverified_skill_directory_hash",
+    "_item_kind",
+    "_resolve_item_content_hash",
+    "_risk_level"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-contracts/src/inventory_item_classification.rs",
+    "rust/crates/guard-command/src/inventory_item_metadata.rs",
+    "rust/crates/guard-runtime/src/inventory_item_classification_op.rs"
    ]
   }
  ]

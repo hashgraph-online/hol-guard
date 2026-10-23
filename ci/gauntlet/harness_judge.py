@@ -17,6 +17,7 @@ from .approval_retry import pinned_retry_outcome, retry_assessment
 from .approval_retry_bash import BASH_LIFECYCLE_ORACLE
 from .approval_retry_bash import assessment as bash_lifecycle_assessment
 from .catalog import Scenario
+from .codex_contained import routed_calls
 from .connector_judge import connector_setup_outcome, connector_tool_outcome, reason_text, ungranted_stop
 from .interruptions import case_interruptions, describe
 from .mixed_reads import PUBLIC_READS
@@ -130,6 +131,7 @@ def guard_decisions(rows: list[dict[str, Any]], events: frozenset[str] = _PRE_EV
                 "command": command,
                 "path": path,
                 "decision": effective_decision(response),
+                "call_id": payload.get("tool_use_id") or payload.get("tool_call_id"),
                 "policy_action": response.get("policy_action") or receipt.get("policy_action"),
                 "reason_code": response.get("reason_code") or receipt.get("reason_code"),
                 "receipt_decision": receipt.get("decision"),
@@ -169,12 +171,14 @@ def _interruptions(scenario: Scenario, case: dict[str, Any]) -> dict[str, Any]:
 
     A row whose event cannot be resolved is unproven rather than skipped.
     """
+    routed, _ = routed_calls(scenario.expectation, case)
     return case_interruptions(
         scenario,
         case.get("guard_rows", []),
         case.get("approval_rows", []),
         case.get("approval_delta", 0),
         str(case.get("harness")),
+        routed=routed,
     )
 
 
@@ -228,7 +232,12 @@ def _outcome(scenario: Scenario, case: dict[str, Any]) -> tuple[str, str]:
         return "harness-error", f"{len(hooked) - len(decisions)} of {len(hooked)} tool calls ran without a Guard review"
     if scenario.oracle == BASH_LIFECYCLE_ORACLE:
         return bash_lifecycle_assessment(scenario.id, case, decisions)
-    stops = [d for d in decisions if d["decision"] != "allow"]
+    # A Codex call Guard routed into its contained runner ran there; its resident deny is the
+    # route, not a stop, once codex_contained binds the run to the reviewed input.
+    routed, routed_error = routed_calls(scenario.expectation, case)
+    if routed_error:
+        return routed_error
+    stops = [d for d in decisions if d["decision"] != "allow" and d.get("call_id") not in routed]
     if scenario.expectation == "setup":
         return connector_setup_outcome(scenario, case, decisions, calls)
     if (unexercised := ungranted_stop(scenario, decisions)) is not None:

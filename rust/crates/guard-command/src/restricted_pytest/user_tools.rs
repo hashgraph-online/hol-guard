@@ -40,6 +40,13 @@ const GO_MODULE_CACHE: &str = "go/pkg/mod";
 const CARGO_CACHES: &[&str] = &[".cargo/registry", ".cargo/git"];
 /// A rustup installation, relative to HOME.
 const RUSTUP_HOME: &str = ".rustup";
+/// Maven's local repository, relative to HOME. It holds the artifacts a build
+/// resolves; the run gets its own local repository with this one linked in.
+const MAVEN_REPOSITORY: &str = ".m2/repository";
+/// Maven's wrapper distributions, relative to HOME. A project's `mvnw` runs
+/// the Maven version the project pins, unpacked here by whoever first ran the
+/// wrapper; the run gets its own Maven user home with these linked in.
+const MAVEN_WRAPPER_DISTS: &str = ".m2/wrapper/dists";
 
 /// `canonical`, the resolved PATH entry, when it is a sealed tool directory
 /// of the caller's that a workspace run may read and execute from.
@@ -286,6 +293,31 @@ pub(super) fn cargo_caches(home: &Path) -> Vec<(&'static str, PathBuf)> {
 /// toolchain a build runs.
 pub(super) fn rustup_home(home: &Path) -> Option<PathBuf> {
     sealed_cache(home, RUSTUP_HOME)
+}
+
+/// Maven's local repository, holding the artifacts a build resolves. It sits
+/// below `~/.m2`, which also holds `settings.xml` and its server credentials;
+/// granting the repository on its own keeps those out of the run.
+pub(super) fn maven_repository(home: &Path) -> Option<PathBuf> {
+    sealed_cache(home, MAVEN_REPOSITORY)
+}
+
+/// [`maven_repository`] for this account's HOME from the password database.
+pub(in crate::restricted_pytest) fn host_maven_repository() -> Option<PathBuf> {
+    maven_repository(&host_home_directory()?)
+}
+
+/// Maven's wrapper distributions, holding the Maven a project's `mvnw` runs.
+/// They sit below `~/.m2` beside `settings.xml`, so they are granted on their
+/// own, as the local repository is. Without them a contained wrapper run would
+/// try to download its distribution and fail, because there is no network.
+pub(super) fn maven_wrapper_dists(home: &Path) -> Option<PathBuf> {
+    sealed_cache(home, MAVEN_WRAPPER_DISTS)
+}
+
+/// [`maven_wrapper_dists`] for this account's HOME from the password database.
+pub(in crate::restricted_pytest) fn host_maven_wrapper_dists() -> Option<PathBuf> {
+    maven_wrapper_dists(&host_home_directory()?)
 }
 
 /// [`go_module_cache`] for this account's HOME from the password database.

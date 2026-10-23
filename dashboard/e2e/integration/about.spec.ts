@@ -10,9 +10,8 @@ const EXTERNAL_LINKS: ReadonlyArray<{ name: string; href: string; count: number 
   { name: "Get started", href: "https://hol.org/guard/install", count: 1 },
   { name: "Guard Cloud", href: "https://hol.org/guard", count: 1 },
   { name: "CI docs", href: "https://hol.org/guard/docs/plugin-scanner/report-formats-and-ci", count: 1 },
-  { name: "Explore partners", href: "https://hol.org", count: 1 },
-  { name: "Learn about affiliates", href: "https://hol.org/guard/affiliates", count: 2 },
   { name: "Explore partner programs", href: "https://hol.org", count: 1 },
+  { name: "Learn about affiliates", href: "https://hol.org/guard/affiliates", count: 1 },
 ];
 
 const FORBIDDEN_PARAMS = ["guard-token", "guardDaemon", "workspace", "device", "install", "user", "referral", "ref"];
@@ -46,12 +45,17 @@ test.describe("About against the live daemon", () => {
     ]) {
       await expect(main.getByRole("heading", { level: 3, name: card, exact: true }), card).toBeVisible();
     }
-    await expect(main.getByText("Where your data goes", { exact: true })).toBeVisible();
-    await expect(main.getByText("Open standards map", { exact: true })).toBeVisible();
-    await expect(main.getByText("Choose your path", { exact: true })).toBeVisible();
-    await expect(main.getByRole("heading", { level: 3, name: "Ecosystem programs" })).toBeVisible();
-    await expect(main.getByRole("heading", { level: 3, name: "Standards partner program" })).toBeVisible();
-    await expect(main.getByRole("heading", { level: 3, name: "Affiliate starter kit" })).toBeVisible();
+    // Each section names itself with a real heading rather than a mono label
+    // above one, so the page can be navigated by its sections.
+    for (const section of [
+      "Where your data goes",
+      "Open standards map",
+      "Choose your path",
+      "Standards partner program",
+      "Affiliate starter kit",
+    ]) {
+      await expect(main.getByRole("heading", { level: 2, name: section, exact: true }), section).toBeVisible();
+    }
     // The page promises no remote calls on first render and shows no controls.
     await expect(main.getByRole("button")).toHaveCount(0);
   });
@@ -121,7 +125,7 @@ test.describe("About against the live daemon", () => {
   test("the affiliate starter kit states its terms", async ({ page }) => {
     await page.goto("/about");
     const main = page.getByRole("main");
-    await expect(main.getByRole("heading", { level: 3, name: "Affiliate starter kit" })).toBeVisible();
+    await expect(main.getByRole("heading", { level: 2, name: "Affiliate starter kit" })).toBeVisible();
     await expect(main.getByText("Commission", { exact: true })).toBeVisible();
     await expect(main.getByText("25%", { exact: true })).toBeVisible();
     await expect(main.getByText("Duration", { exact: true })).toBeVisible();

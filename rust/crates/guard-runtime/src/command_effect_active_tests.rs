@@ -155,3 +155,97 @@ fn optional_command_effect_uses_admitted_catalog_and_rejects_tampering() {
         .all(|observation| observation["extension_id"] != "command.vttforge"));
     std::fs::remove_dir_all(home).unwrap();
 }
+
+/// On an enrolled home a recursive removal used to meet the critical
+/// destructive-filesystem floor, which blocked it outright. Removing work Git
+/// cannot restore now asks for approval, removing only what Git can restore
+/// runs, and removing a root stays blocked.
+#[cfg(unix)]
+#[test]
+fn recursive_removal_asks_unless_git_can_restore_it() {
+    let base = std::env::temp_dir().canonicalize().unwrap().join(format!(
+        "guard-command-effect-removal-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&base);
+    let (guard_home, home) = (base.join("guard"), base.join("home"));
+    let project = home.join("project");
+    std::fs::create_dir_all(&guard_home).unwrap();
+    std::fs::create_dir_all(project.join("docs")).unwrap();
+    std::fs::create_dir_all(project.join("scratch")).unwrap();
+    std::fs::write(project.join("docs/intro.md"), "intro\n").unwrap();
+    std::fs::write(project.join("scratch/notes.md"), "draft\n").unwrap();
+    for arguments in [
+        &["init", "--quiet", "-b", "main"][..],
+        &["add", "docs"],
+        &[
+            "-c",
+            "user.name=Guard Fixture",
+            "-c",
+            "user.email=guard-fixture@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "docs",
+        ],
+    ] {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&project)
+            .env("HOME", &home)
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env_remove("XDG_CONFIG_HOME")
+            .env_remove("GIT_DIR")
+            .env_remove("GIT_WORK_TREE")
+            .env_remove("GIT_INDEX_FILE")
+            .env_remove("GIT_COMMON_DIR")
+            .args(arguments)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {arguments:?}");
+    }
+    let controls =
+        crate::contributed_mcp_catalog_test_support::controls_for(&guard_home, false, &[], &[]);
+    let decide = |command: &str| {
+        let (home, cwd) = (home.to_str().unwrap(), project.to_str().unwrap());
+        let mut request = command_request(&controls, command);
+        // The hook stamps the shell it runs in; Git is asked only then.
+        let shell = guard_contracts::GuardExecutionEnvironmentV1 {
+            path: std::env::var("PATH").unwrap(),
+            environment_names: vec!["GIT_CONFIG_NOSYSTEM".into(), "HOME".into(), "PATH".into()],
+            environment_digest: "0".repeat(64),
+            home: Some(home.into()),
+            git_pager_disabled: false,
+            pager_disabled: false,
+            xdg_config_home: None,
+            git_config_no_system: true,
+            library_search_paths: Default::default(),
+        };
+        let result = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+            "claude-code",
+            "PreToolUse",
+            &json!({"tool_name":"Bash","tool_input":{"command":command}}),
+            Some(&controls),
+            None,
+            guard_command::pretool::PathContext {
+                home_dir: Some(home),
+                cwd: Some(cwd),
+                ..Default::default()
+            },
+            Some(&shell),
+        );
+        let mut evidence = serde_json::to_value(result).unwrap();
+        evidence["command_model"] = serde_json::to_value(&request.canonical_command).unwrap();
+        request.native_extension_evidence = evidence;
+        request.cwd = Some(cwd.into());
+        request.home_dir = Some(home.into());
+        let result = evaluate(&request, Some(&controls)).unwrap();
+        result["minimum_action"].as_str().unwrap().to_owned()
+    };
+    assert_eq!(decide("rm -rf docs"), "allow");
+    assert_eq!(decide("rm -rf scratch"), "review");
+    // A `..` step can climb out of the work tree, so the floor blocks it.
+    assert_eq!(decide("rm -rf ./stale-lab-dir/../scratch"), "block");
+    assert_eq!(decide("rm -rf /"), "block");
+    std::fs::remove_dir_all(&base).unwrap();
+}

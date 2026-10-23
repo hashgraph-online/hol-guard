@@ -7,12 +7,9 @@
 //! start-serve-exit cycle or a failure, and the only place that can keep the
 //! child's stderr.
 
-#[cfg(windows)]
 use std::fs::File;
 use std::path::{Path, PathBuf};
-#[cfg(windows)]
-use std::time::Instant;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use super::resident_failure_log;
 use super::restart_budget;
@@ -26,16 +23,20 @@ use super::restart_budget;
 /// and a stop takes the exclusive lock so that "stopped" means no supervisor
 /// is still inside the scope.
 ///
-/// Only Windows needs this. A Unix scope can be removed while a supervisor
-/// still has files open in it, and making every Unix stop wait out the
-/// supervisor's stderr tail would push it past the bound callers give it.
-#[cfg(windows)]
+/// A Unix scope can be removed while a supervisor still has files open in
+/// it, but not while the supervisor is still creating them, so a Unix stop
+/// waits for the hold as well. It waits only within its own deadline, since
+/// making every Unix stop wait out the supervisor's stderr tail would push it
+/// past the bound callers give it.
 const SUPERVISOR_HOLD_FILE: &str = "supervisor-exit.v1.lock";
 /// A supervisor that has already reaped its child has one bounded record
 /// write and the budget lock left to do, so a stop polls for the hold rather
 /// than sleeping out its whole bound.
-#[cfg(windows)]
 const SUPERVISOR_QUIESCE_RETRY_DELAY: Duration = Duration::from_millis(10);
+/// A stop holds the lock exclusively only for the instant of its probe, so a
+/// supervisor that meets one retries for this long rather than running its
+/// whole child without a hold.
+const SUPERVISOR_HOLD_CLAIM_TIMEOUT: Duration = Duration::from_millis(250);
 /// How long a stop waits for the supervisors inside the scope to finish.
 ///
 /// This must outlast everything a supervisor still does while holding the
@@ -48,12 +49,10 @@ const SUPERVISOR_QUIESCE_RETRY_DELAY: Duration = Duration::from_millis(10);
 #[cfg(windows)]
 const SUPERVISOR_QUIESCE_TIMEOUT: Duration = Duration::from_secs(5);
 
-#[cfg(windows)]
 struct SupervisorHold {
     file: File,
 }
 
-#[cfg(windows)]
 impl Drop for SupervisorHold {
     fn drop(&mut self) {
         let _ = fs2::FileExt::unlock(&self.file);
@@ -69,7 +68,6 @@ pub(super) struct SupervisedScope {
     /// When the scope was claimed, before the child was spawned. A failure
     /// record written after this belongs to a later run.
     started: SystemTime,
-    #[cfg(windows)]
     _hold: Option<SupervisorHold>,
 }
 
@@ -78,27 +76,32 @@ pub(super) struct SupervisedScope {
 pub(super) fn supervised_scope(state_base: &Path, digest: &str) -> Result<SupervisedScope, String> {
     let scope = crate::resident_state::state_scope(state_base, digest)?;
     let started = SystemTime::now();
-    #[cfg(windows)]
-    let supervised = {
-        let hold = hold_scope(&scope);
-        SupervisedScope {
-            scope,
-            started,
-            _hold: hold,
-        }
-    };
-    #[cfg(not(windows))]
-    let supervised = SupervisedScope { scope, started };
-    Ok(supervised)
+    let hold = hold_scope(&scope);
+    Ok(SupervisedScope {
+        scope,
+        started,
+        _hold: hold,
+    })
 }
 
 /// Claiming the scope is best effort: a hold that cannot be taken leaves the
 /// stop path exactly as it was before, and a resident must still start.
-#[cfg(windows)]
 fn hold_scope(scope: &Path) -> Option<SupervisorHold> {
     let file = open_hold_file(scope).ok()?;
-    fs2::FileExt::try_lock_shared(&file).ok()?;
+    let deadline = Instant::now() + SUPERVISOR_HOLD_CLAIM_TIMEOUT;
+    while fs2::FileExt::try_lock_shared(&file).is_err() {
+        if Instant::now() >= deadline {
+            return None;
+        }
+        std::thread::sleep(SUPERVISOR_QUIESCE_RETRY_DELAY);
+    }
     Some(SupervisorHold { file })
+}
+
+#[cfg(not(windows))]
+fn open_hold_file(scope: &Path) -> Result<File, String> {
+    let private_root = crate::resident_state::private_root_for_scope(scope)?;
+    crate::resident_state::private_lock_file(&scope.join(SUPERVISOR_HOLD_FILE), &private_root)
 }
 
 #[cfg(windows)]
@@ -124,22 +127,24 @@ pub(super) fn quiesce_under_startup_lock(
     state_base: &Path,
     digest: &str,
     scope: &Path,
+    _deadline: Instant,
 ) -> Result<Option<crate::resident_state::StartupLock>, String> {
     let startup = hold_startup_for_quiesce(state_base, digest);
     wait_for_supervisor_quiesce(scope)?;
     Ok(startup)
 }
 
-/// A Unix supervisor takes no hold, so there is nothing to wait for: the
-/// scope stays removable while its last writes finish. The startup lock is
-/// still taken for the budget, but only if it is free now, so a start in
-/// progress cannot hold up the stop.
+/// A Unix stop waits for the supervisor's last writes only within its own
+/// deadline. The startup lock is still taken for the budget, but only if it
+/// is free now, so a start in progress cannot hold up the stop.
 #[cfg(not(windows))]
 pub(super) fn quiesce_under_startup_lock(
     state_base: &Path,
     digest: &str,
-    _scope: &Path,
+    scope: &Path,
+    deadline: Instant,
 ) -> Result<Option<crate::resident_state::StartupLock>, String> {
+    settle_supervisor_writes(scope, deadline);
     if let Ok(Some(lock)) = crate::resident_state::acquire_startup_lock(state_base) {
         return Ok(Some(lock));
     }
@@ -189,7 +194,6 @@ pub(super) fn wait_for_supervisor_quiesce(scope: &Path) -> Result<(), String> {
     wait_for_supervisor_quiesce_within(scope, SUPERVISOR_QUIESCE_TIMEOUT)
 }
 
-#[cfg(windows)]
 fn wait_for_supervisor_quiesce_within(scope: &Path, timeout: Duration) -> Result<(), String> {
     let Ok(file) = open_hold_file(scope) else {
         // A hold that cannot be opened cannot have been taken either.
@@ -206,6 +210,30 @@ fn wait_for_supervisor_quiesce_within(scope: &Path, timeout: Duration) -> Result
         }
         std::thread::sleep(SUPERVISOR_QUIESCE_RETRY_DELAY);
     }
+}
+
+/// Wait out any supervisor still inside the scope when a stop finds no
+/// resident to shut down. A resident whose one-shot client is gone exits on
+/// its own, and its supervisor then keeps writing the run record and the
+/// restart budget. A stop that reported "nothing to stop" while those writes
+/// were open would hand back a scope that Windows still cannot remove, and
+/// one that a Unix caller's recursive removal can find refilled.
+///
+/// The wait ends at the stop's own deadline and never changes its answer: a
+/// supervisor still holding the scope then may belong to a resident that is
+/// starting or wedged rather than one that is finishing, and callers bound
+/// the whole stop by that deadline.
+pub(super) fn wait_for_scope_quiesce(scope: &Path, deadline: Instant) {
+    settle_supervisor_writes(scope, deadline);
+}
+
+/// Wait for the supervisors in a scope to finish writing, up to the stop's
+/// own deadline. On Unix an open file does not stop the scope from being
+/// removed, so a supervisor still waiting on a stderr pipe that a grandchild
+/// holds is left to finish on its own rather than reported as a failed stop.
+fn settle_supervisor_writes(scope: &Path, deadline: Instant) {
+    let timeout = deadline.saturating_duration_since(Instant::now());
+    let _ = wait_for_supervisor_quiesce_within(scope, timeout);
 }
 
 /// Read the serving child's stderr on a thread of its own, handing the bytes
@@ -268,7 +296,6 @@ pub(super) fn record_supervised_exit(
     let _ = restart_budget::release_after_exit(&scope, orderly, ran_for);
     // The hold is released last: it is what tells a waiting stop that these
     // writes are over.
-    #[cfg(windows)]
     drop(supervised);
 }
 
@@ -294,6 +321,6 @@ pub(super) fn record_supervised_run(
     );
 }
 
-#[cfg(all(test, windows))]
+#[cfg(test)]
 #[path = "managed_resident_supervisor_hold_tests.rs"]
 mod supervisor_hold_tests;

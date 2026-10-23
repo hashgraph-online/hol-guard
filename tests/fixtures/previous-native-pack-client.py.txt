@@ -151,6 +151,17 @@ def initialize(tmp_path, monkeypatch):
     old = apply("previous-release")
     old_identity = lifecycle.installed_identity(authority)
     assert "command.agentbridge" in old.selected
+    # A catalog migration commits no pack record of its own, so it has to carry
+    # forward the binding the head already had. A runtime that dropped it left
+    # an unbound head above an activation row that was still bound, and the
+    # installed upgrade then refused that head on every startup, leaving the
+    # authority stale and every prompt hook closed. Pin the retention here, at
+    # the client whose catalog moved.
+    with store._connect() as connection:
+        head = connection.execute(
+            "select snapshot_json from extension_control_authority_snapshot where singleton = 1"
+        ).fetchone()
+    assert "command_pack_record_digest" in json.loads(head[0])
     before, _floor = lifecycle_store.inspect(store)
     remote_identity = {**old_identity, "profile": "remote", "version": "100.7"}
     remote_floor = lifecycle.invoke("transition", key=_key(store).hex(), floor=before, candidate=remote_identity)[

@@ -11,7 +11,7 @@
 
 #[path = "chain_directory_copies.rs"]
 mod directory_copies;
-pub(super) use directory_copies::mkdir_chain;
+pub(super) use directory_copies::{creation_chain, mkdir_chain};
 
 use crate::CanonicalCommandV1;
 use std::path::{Component, Path, PathBuf};

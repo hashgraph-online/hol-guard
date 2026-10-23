@@ -33,10 +33,11 @@ pub(crate) fn launches_outside_exec_roots<'a>(
     workspace: &Path,
 ) -> bool {
     // Reachability, not a grant: this asks whether the sandbox could run what
-    // the command launches, so the Go module cache and the Cargo caches stay
-    // in view and such a run is not judged unreachable before the plan
-    // decides whether to grant them.
-    let (roots, sandbox_path) = workspace_exec_roots(search_path, home, workspace, true, true);
+    // the command launches, so the Go module cache, the Cargo caches and the
+    // Maven repository stay in view and such a run is not judged unreachable
+    // before the plan decides whether to grant them.
+    let (roots, sandbox_path) =
+        workspace_exec_roots(search_path, home, workspace, true, true, true);
     let mut executable = executable_roots(workspace, roots);
     executable.extend(linked_checkout(workspace, home));
     let reaches = |path: &Path| path_is_within_any(path, &executable);

@@ -352,6 +352,12 @@ fn rg_arguments_pass(
                 unproven_roots.push(argument);
             }
         } else {
+            // The first positional is the pattern, screened the way a `-e`
+            // pattern is: a word the shell can still expand into a credential
+            // operand is not matching text yet.
+            if unsafe_search_value(SearchValueRole::Pattern, argument, context) {
+                return false;
+            }
             pattern_supplied = true;
         }
     }
@@ -486,7 +492,7 @@ fn inclusion_globs(arguments: &[String]) -> Vec<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::config_option_present;
+    use super::{config_option_present, safe_rg_stdin_arguments};
 
     fn arguments(line: &str) -> Vec<String> {
         line.split_whitespace().map(str::to_owned).collect()
@@ -519,6 +525,33 @@ mod tests {
             "PATTERN -- --no-config",
         ] {
             assert!(!config_option_present(&arguments(line)), "{line}");
+        }
+    }
+
+    /// The pattern a piped `rg` matches is text, but the shell expands the
+    /// word first: `.env{,.local}` leaves a second operand `rg` would open,
+    /// so the stdin proof refuses it while an ordinary pattern keeps it.
+    #[test]
+    fn an_expandable_pattern_is_not_proven_stdin_text() {
+        for line in [
+            "-v .env",
+            "--invert-match secret",
+            "^handler",
+            // A regex joins two words with `.*`, and its text names no
+            // file: only a credential marker standing in the word itself
+            // makes the shell able to reach one.
+            "cookie.*name",
+            "a.*b",
+            "auth_token.*=",
+            "Delegate.*=>",
+            "Auth.*Provider",
+            "token.*expired",
+            "-e auth.*header",
+        ] {
+            assert!(safe_rg_stdin_arguments(&arguments(line)), "{line}");
+        }
+        for line in [".env{,.local}", "-e .env{,.local}", ".env*", ".ssh/*"] {
+            assert!(!safe_rg_stdin_arguments(&arguments(line)), "{line}");
         }
     }
 }

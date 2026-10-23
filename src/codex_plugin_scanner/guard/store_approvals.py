@@ -198,10 +198,10 @@ def get_approval_request(
     if (
         row["status"] == "expired"
         and isinstance(reason, str)
-        and reason.startswith("superseded_by_fresh_review:")
+        and reason.startswith(_SUPERSEDED_PREFIX)
         and {"oauth_source", "queue_group_id"} <= columns
     ):
-        replacement = reason.removeprefix("superseded_by_fresh_review:")
+        replacement = reason.removeprefix(_SUPERSEDED_PREFIX)
         if re.fullmatch(r"[A-Za-z0-9-]{1,64}", replacement):
             candidate = connection.execute(
                 """select policy_action, decision_v2_json, action_envelope_json from approval_requests

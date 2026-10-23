@@ -2,6 +2,12 @@
 
 use super::*;
 
+/// The rules a proven recoverable removal does not match.
+const RECOVERABLE_REMOVAL_RULES: &[&str] = &[
+    "command.filesystem.recursive-delete",
+    "command.shell-mutations.destructive-shell",
+];
+
 impl NativeCommandProgram {
     pub fn observe(
         &self,
@@ -56,12 +62,27 @@ impl NativeCommandProgram {
         environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
         dispatch: Option<&CommandCandidateIndex>,
     ) -> Result<NativeCommandObservationBatchV1, &'static str> {
-        let compatibility = crate::command_compatibility::compatibility_observations_in(
+        let mut compatibility = crate::command_compatibility::compatibility_observations_in(
             command,
             deadline,
             context,
             environment,
         )?;
+        // A recursive removal Git can restore matches neither the recursive
+        // delete rule nor the destructive-shell rule: it loses no work. The
+        // proof reads an exact single `rm`, so it also settles the
+        // destructive-shell rule's uncertain match.
+        let recoverable = crate::pretool::recoverable_removal::exact_safe_command(
+            command,
+            context,
+            deadline,
+            environment,
+        );
+        if recoverable {
+            compatibility
+                .rule_matches
+                .retain(|matched| !RECOVERABLE_REMOVAL_RULES.contains(&matched.rule_id));
+        }
         let candidates = dispatch
             .map(|index| index.candidates(command))
             .unwrap_or_else(|| self.candidate_rule_indices(command));
@@ -72,6 +93,11 @@ impl NativeCommandProgram {
             candidates,
             dispatch.map(|index| Arc::clone(&index.memo_layout)),
         )?;
+        if recoverable {
+            batch.observations.retain(|observation| {
+                !RECOVERABLE_REMOVAL_RULES.contains(&observation.rule_id.as_str())
+            });
+        }
         for mut matched in compatibility.rule_matches {
             // Safe evidence is both capability- and segment-scoped. A preview
             // in one segment cannot suppress its destructive sibling, and a

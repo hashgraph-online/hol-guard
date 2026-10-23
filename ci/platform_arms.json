@@ -320,7 +320,7 @@
    "verdict": "windows-unsupported",
    "note": "Only the Node build and Node tool reasons are filtered here; every other contained reason is passed through for `generic.rs::windows_contained` to decide. That allowlist is where a Windows containment profile is actually admitted.",
    "cfg": "not(unix)",
-   "body": "dbc35dcecda2"
+   "body": "2d8559fe0d22"
   },
   {
    "file": "rust/crates/guard-command/src/pretool/package_script_route.rs",
@@ -328,7 +328,7 @@
    "verdict": "windows-equivalent",
    "note": "Resolves the staged tool entry by name the same way the Unix arm does; the entry names are platform-neutral.",
    "cfg": "not(unix)",
-   "body": "d30aa27146d8"
+   "body": "6621570bd414"
   },
   {
    "file": "rust/crates/guard-command/src/pretool/package_script_route.rs",
@@ -1289,6 +1289,14 @@
    "note": "Paths are UTF-16 on Windows, so the bytes come from a lossy UTF-8 encoding of the path rather than from the raw `OsStr` bytes.",
    "cfg": "not(unix)",
    "body": "d8031d1df298"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/pack_lifecycle/offline/fresh.rs",
+   "item": "fn batch -- non-Unix block",
+   "verdict": "posix-primitive",
+   "note": "Directory fsync and descriptor-relative publication are Unix primitives. Windows keeps the existing generic digest-bound, file-synced, no-clobber publication after native exclusive create_dir; it does not defer directory barriers. fresh/non_unix_tests.rs::fresh_non_unix_export_preserves_native_exclusive_creation proves exported Root/data bytes and rejection of existing or partial destinations on the native-op gate in .github/actions/ci-job-windows-shim-admin/action.yml, reusing its existing hol-guard-runtime --lib test executable.",
+   "cfg": "not(unix)",
+   "body": "d27b2ebbdb53"
   },
   {
    "file": "rust/crates/guard-runtime/src/package_context_build_op.rs",

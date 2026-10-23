@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard.catalog_delivery import discovery
 from codex_plugin_scanner.guard.runtime import (
     extension_catalog_completion,
     extension_catalog_pages,
+    extension_catalog_posture_cache,
     extension_catalog_sync,
     managed_controls_sync,
     runner,
@@ -62,6 +65,81 @@ def completed_catalog(monkeypatch):
         lambda store, key: summary if key == "runtime_session_summary" else read(store, key),
     )
     return state
+
+
+def test_connected_install_advertises_the_catalog_without_a_manual_switch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, completed_catalog
+) -> None:
+    monkeypatch.delenv("GUARD_EXTENSION_CATALOG_SYNC_V1", raising=False)
+    # Stop before the authority read: the flag gate is what this test pins.
+    completed_catalog.completed = False
+    store = GuardStore(tmp_path / "guard-home")
+    posture = runner._managed_controls_runtime_sync_posture(store, generated_at="2026-08-25T00:00:00Z")
+    assert posture["managedControlsCapabilities"] == ["extension-catalog.v2"]
+    assert posture["extensionCatalogDigest"] == "c" * 64
+
+    monkeypatch.setenv("GUARD_EXTENSION_CATALOG_SYNC_V1", "false")
+    assert runner._managed_controls_runtime_sync_posture(store, generated_at="2026-08-25T00:00:00Z") == {}
+
+
+def test_connected_syncs_reuse_one_prepared_catalog_view(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, completed_catalog
+) -> None:
+    monkeypatch.delenv("GUARD_EXTENSION_CATALOG_SYNC_V1", raising=False)
+    monkeypatch.setattr(extension_catalog_posture_cache, "_entries", {})
+    completed_catalog.completed = False
+    store = GuardStore(tmp_path / "guard-home")
+    current = {"handle": SimpleNamespace(root="root-1", authority="authority-1")}
+    monkeypatch.setattr(discovery, "installed_discovery", lambda _home: current["handle"])
+    monkeypatch.setattr(discovery, "require_handle", lambda handle, _home: handle)
+    resident = {"evicted": False}
+
+    def native_call(_home: Path, **request: object) -> dict[str, object]:
+        if request["action"] == "acquire":
+            if resident["evicted"]:
+                raise ValueError("Native complete catalog producer rejected metadata")
+            return {"lease": "lease"}
+        assert request["action"] == "release"
+        return {}
+
+    prepared: list[str] = []
+
+    def prepare(guard_home: Path, **_kwargs: object) -> extension_catalog_pages.PreparedCatalogView:
+        prepared.append(str(guard_home))
+        manifest = {
+            "catalogDigest": "b" * 64,
+            "enforcementCatalogDigest": completed_catalog.registry.catalog_digest,
+            "generatedAt": "2026-08-25T00:00:00Z",
+            "controlSchemaVersion": "guard.extension-controls.v1",
+        }
+        handle = current["handle"]
+        return extension_catalog_pages.PreparedCatalogView(
+            guard_home, f"token-{len(prepared)}", json.dumps(manifest).encode(), handle.root, handle.authority
+        )
+
+    monkeypatch.setattr(extension_catalog_pages, "native_call", native_call)
+    monkeypatch.setattr(extension_catalog_pages, "prepare_installed_catalog_view", prepare)
+
+    def posture() -> dict[str, object]:
+        return runner._managed_controls_runtime_sync_posture(store, generated_at="2026-08-25T00:00:00Z")
+
+    # Repeated syncs advertise the same catalog from one preparation.
+    assert posture()["extensionCatalogDigest"] == "c" * 64
+    assert posture()["extensionCatalogViewDigest"] == "b" * 64
+    assert len(prepared) == 1
+
+    # A view the resident no longer holds is prepared again.
+    resident["evicted"] = True
+    posture()
+    assert len(prepared) == 2
+    resident["evicted"] = False
+
+    # So is one observed under a different discovery handle.
+    current["handle"] = SimpleNamespace(root="root-2", authority="authority-1")
+    posture()
+    assert len(prepared) == 3
+    posture()
+    assert len(prepared) == 3
 
 
 @pytest.mark.parametrize(("local_revision", "managed_revision"), [(0, 0), (0, 1), (7, 1), (7, 2)])

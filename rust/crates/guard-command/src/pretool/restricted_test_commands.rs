@@ -411,6 +411,32 @@ const MANAGER_SUBCOMMANDS: &[&str] = &[
     "workspaces",
 ];
 
+/// The arguments left after a package manager's spelling of a local-bin run:
+/// the workspace's own installed binary, the work `npx` names. `npm x` is
+/// npm's documented alias for `npm exec`, and npm documents a `--` before the
+/// tool, so the separator belongs to the spelling. `bun exec` runs a shell
+/// string rather than a binary, so it is not one of these, and a manager
+/// option before the subcommand (`pnpm -r`, `--filter`) fans the run out past
+/// one package and keeps the review.
+pub(super) fn manager_local_bin_arguments<'a>(
+    manager: &str,
+    arguments: &'a [String],
+) -> Option<&'a [String]> {
+    let rest = match (manager, arguments) {
+        ("npm", [subcommand, rest @ ..]) if subcommand == "exec" || subcommand == "x" => rest,
+        ("pnpm" | "yarn", [subcommand, rest @ ..]) if subcommand == "exec" => rest,
+        _ => return None,
+    };
+    let rest = match rest {
+        [separator, rest @ ..] if separator == "--" => rest,
+        rest => rest,
+    };
+    // The sinks run the project's own tool. A manager option before the tool
+    // is not a local-bin run.
+    rest.first().filter(|tool| !tool.starts_with('-'))?;
+    Some(rest)
+}
+
 pub(super) fn manager_script_task<'a>(manager: &str, arguments: &'a [String]) -> Option<&'a str> {
     match arguments {
         [run, task] if run == "run" => Some(task.as_str()),
@@ -512,25 +538,33 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     }
     // `bun x` is Bun's spelling of `bunx`; the later proofs read it as one.
     // Bun takes `--cwd` only before `x`, so a later one is not unwrapped.
+    // `npm exec`, `npm x`, `yarn exec` and `pnpm exec` are each a manager's
+    // spelling of the same local-bin run `npx` names, so they read as `npx`.
     // Windows hands over the resolved image, `node.exe` for `node`. One name
     // for the program keeps every route below reading the same command.
-    let (executable, arguments) = match arguments {
-        [wrapper, no_install, rest @ ..]
-            if crate::program_basename(executable) == "bun"
-                && wrapper == "x"
-                && no_install == "--no-install"
-                && !rest.first().is_some_and(|word| word.starts_with("--cwd")) =>
-        {
-            ("bunx", rest)
+    let (executable, arguments) = if let Some(rest) =
+        manager_local_bin_arguments(crate::program_basename(executable), arguments)
+    {
+        ("npx", rest)
+    } else {
+        match arguments {
+            [wrapper, no_install, rest @ ..]
+                if crate::program_basename(executable) == "bun"
+                    && wrapper == "x"
+                    && no_install == "--no-install"
+                    && !rest.first().is_some_and(|word| word.starts_with("--cwd")) =>
+            {
+                ("bunx", rest)
+            }
+            [wrapper, rest @ ..]
+                if crate::program_basename(executable) == "bun"
+                    && wrapper == "x"
+                    && !rest.first().is_some_and(|word| word.starts_with("--cwd")) =>
+            {
+                ("bunx", rest)
+            }
+            _ => (crate::program_basename(executable), arguments),
         }
-        [wrapper, rest @ ..]
-            if crate::program_basename(executable) == "bun"
-                && wrapper == "x"
-                && !rest.first().is_some_and(|word| word.starts_with("--cwd")) =>
-        {
-            ("bunx", rest)
-        }
-        _ => (crate::program_basename(executable), arguments),
     };
     let build = match executable {
         "bun" | "npm" | "pnpm" | "yarn" => {
@@ -552,13 +586,7 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         // The script body is what runs, not the name a project chose for it:
         // `format:check` and `ci:lint` are the work `lint` is. The route below
         // reads the manifest and keeps this only for a body the sink runs.
-        "bun" | "npm" | "yarn" => manager_script_task(executable, arguments).is_some(),
-        // `pnpm exec` is pnpm's spelling of a local-bin run; only the bare
-        // form, with no pnpm option before the tool, reads as one.
-        "pnpm" => {
-            manager_script_task(executable, arguments).is_some()
-                || matches!(arguments, [exec, tool, rest @ ..] if exec == "exec" && (tool == "eslint" || (tool == "tsc" && rest.iter().any(|arg| arg == "--noEmit")) || (tool == "prettier" && prettier_checks(rest))))
-        }
+        "bun" | "npm" | "pnpm" | "yarn" => manager_script_task(executable, arguments).is_some(),
         "bunx" | "npx" => {
             matches!(arguments, [tool, rest @ ..] if tool == "eslint" || (tool == "tsc" && rest.iter().any(|arg| arg == "--noEmit")) || (tool == "prettier" && prettier_checks(rest)))
         }
@@ -629,11 +657,6 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
             };
             matches!(arguments, [tool, run, ..] if tool == "vitest" && run == "run")
                 || matches!(arguments, [flag, tool, run, ..] if flag == "--no-install" && tool == "vitest" && run == "run")
-        }
-        // pnpm's spelling of a local-bin run. A pnpm option before the tool
-        // (`-c` runs a shell, `-r`/`--filter` fan out) keeps the review.
-        "pnpm" => {
-            matches!(arguments, [exec, tool, run, ..] if exec == "exec" && tool == "vitest" && run == "run")
         }
         "vitest" => arguments.first().is_some_and(|arg| arg == "run"),
         "node" | "nodejs" => {

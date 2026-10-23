@@ -158,7 +158,7 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
     // Materialize the private runtime scope even without resident state, so
     // stop can initialize it before publishing test or recovery state.
     let digest = runtime_digest()?;
-    let _ = state_scope(state_base, &digest)?;
+    let runtime_scope = state_scope(state_base, &digest)?;
     let request = br#"{"operation":"shutdown","request":{}}"#;
     let deadline = Instant::now() + MANAGED_STOP_TIMEOUT;
     let Some((scope, digest, state)) = discover_home_states_prefer(state_base, Some(&digest))?
@@ -168,6 +168,7 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
         if retire_clients {
             lease::retire_clients_for_update(state_base, &digest, deadline)?;
         }
+        exit_record::wait_for_scope_quiesce(&runtime_scope, deadline);
         return Err("native_resident_stop_unavailable".to_owned());
     };
     if retire_clients {
@@ -193,7 +194,8 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
         containment::wait_for_stop_containment(&scope, &digest, deadline, &process_ids)?;
         // The children are gone; clear the budget only under the startup
         // lock, since a start that got there first has already charged it.
-        let startup = exit_record::quiesce_under_startup_lock(state_base, &digest, &scope)?;
+        let startup =
+            exit_record::quiesce_under_startup_lock(state_base, &digest, &scope, deadline)?;
         if startup.is_some() {
             let _ = restart_budget::clear(&scope);
         }
@@ -202,6 +204,9 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
     // Clean up after a resident that died without a shutdown request, so
     // the next stop reports an empty scope instead of a stale generation.
     containment::retire_exited_states(&scope, &digest)?;
+    // A resident that already exited on its own can leave its supervisor
+    // still writing in the scope; "nothing to stop" must not race it.
+    exit_record::wait_for_scope_quiesce(&scope, deadline);
     Err("native_resident_stop_unavailable".to_owned())
 }
 

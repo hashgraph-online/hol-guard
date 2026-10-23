@@ -147,6 +147,9 @@ fn classify(original: &[String], text: &str) -> Capabilities {
     if matches!(top.as_str(), "search" | "status") {
         return one("read_remote");
     }
+    if let Some(capability) = crate::github_additional_commands::classify(args) {
+        return one(capability.as_str());
+    }
     if top == "secret" {
         return one("secret_remote");
     }

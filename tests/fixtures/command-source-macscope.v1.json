@@ -999,8 +999,10 @@
       "enabled_extensions": [
         "command.macscope"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "exec-blocked",
       "rule_id": "command.macscope.feature-writes"
     },

@@ -7,6 +7,7 @@ import {
   previewLocalCliMutation,
   recognizeLocalCli,
   refreshMcpInventory,
+  unreviewedToolChangeCount,
   type LocalCliCommand,
   type LocalCliCommandState,
   type LocalCliItem,
@@ -19,10 +20,10 @@ import { McpDeclaredSkills } from "./mcp-declared-skills";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError } from "./components/protection-primitives";
 import { customExtensionContinuityView } from "../managed-controls/custom-extension-continuity";
-import { commandPermissionChanges, mcpCatalogCopy, mcpToolCanReceiveDirectAllow, rebaseCommandDraft } from "./mcp-catalog-state";
+import { catalogRevisionChanged, commandPermissionChanges, mcpCatalogCopy, mcpToolCanReceiveDirectAllow, rebaseCommandDraft } from "./mcp-catalog-state";
 import { McpProviderActions, type ProviderActionDraft } from "./mcp-provider-actions";
 import { ProviderWorkflows } from "./provider-workflows";
-import { bulkPolicyCopy, connectorGroupOutcomeCopy, continuityCopy, customExtensionStateLabel, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, FRESH_TOTP_REQUIRED_MESSAGE, isFreshTotpRequired, mcpPermissionStatusLabel, nativePublicationMessage, randomToken, SUGGESTED_RULES_NOTICE } from "./local-cli-panel-copy";
+import { bulkPolicyCopy, connectorGroupOutcomeCopy, continuityCopy, customExtensionStateLabel, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, FRESH_TOTP_REQUIRED_MESSAGE, isFreshTotpRequired, keepChoicesCopy, mcpPermissionStatusLabel, nativePublicationMessage, randomToken, SUGGESTED_RULES_NOTICE } from "./local-cli-panel-copy";
 import { connectorGroupOutcome, connectorSetupMatch, customExtensionDisplayName, hasSuggestedRules, prefillSuggestedStates, type ConnectorSetupLink } from "./custom-extension-profile";
 import { ConnectorSetupBanner } from "./connector-setup-banner";
 import { CustomExtensionReviewModal } from "./local-cli-review-modal";
@@ -54,6 +55,10 @@ export function LocalCliDetail(props: {
 }) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const [pending, setPending] = useState<LocalCliState | null>(null);
+  // The catalog revision the open confirmation was made against; a save reviews only that listing.
+  const reviewedRevision = useRef<number | null>(null);
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
   const [commands, setCommands] = useState(() => prefillSuggestedStates(props.item));
   const [providerDrafts, setProviderDrafts] = useState<Record<string, ProviderActionDraft>>({});
   const previousItem = useRef(props.item);
@@ -67,10 +72,18 @@ export function LocalCliDetail(props: {
   const added = props.item.state !== "unset";
   const commandChanges = commandPermissionChanges(props.item.commands, commands);
   const commandsDirty = commandChanges.length > 0;
+  // Saving the current choices reviews tools the last listing flagged as new or changed.
+  const unreviewedTools = props.item.surface === "mcp" ? unreviewedToolChangeCount(props.item) : 0;
   const [recommended, setRecommended] = useState(false);
   const [setupOutcome, setSetupOutcome] = useState<string | null>(null);
   useEffect(() => {
     const previous = previousItem.current;
+    const catalogChanged = catalogRevisionChanged(previous, props.item);
+    if (catalogChanged && pendingRef.current !== null) {
+      // The confirmation does not show tools listed since it opened, so reopen it for the current catalog.
+      setPending(null);
+      setError("The tool list changed. Review the current tools again.");
+    }
     if (previous.cli_id !== props.item.cli_id || previous.identity_hash !== props.item.identity_hash) {
       setPending(null);
       setSetupOutcome(null);
@@ -82,8 +95,7 @@ export function LocalCliDetail(props: {
       if (previous.cli_id !== props.item.cli_id || previous.identity_hash !== props.item.identity_hash) {
         return prefillSuggestedStates(props.item);
       }
-      const changed = previous.mcp_catalog?.revision !== props.item.mcp_catalog?.revision
-        ? props.item.mcp_catalog?.changes?.changed : [];
+      const changed = catalogChanged ? props.item.mcp_catalog?.changes?.changed : [];
       return rebaseCommandDraft(current, previous.commands, props.item.commands, changed);
     });
     previousItem.current = props.item;
@@ -91,8 +103,15 @@ export function LocalCliDetail(props: {
   const setupMatch = props.setupLink ? connectorSetupMatch(props.item, props.setupLink) : null;
   const openPending = useCallback(async (state: LocalCliState, fromSetupLink = false) => {
     setFreshTotpRequired(false);
+    const started = previousItem.current;
     await refreshApprovalGate();
+    if (catalogRevisionChanged(started, previousItem.current)) {
+      // The tool list changed during the approval check, so the draft was never reviewed against it.
+      setError("The tool list changed. Review the current tools again.");
+      return;
+    }
     setRecommended(fromSetupLink);
+    reviewedRevision.current = started.mcp_catalog?.revision ?? null;
     setPending(state);
   }, [refreshApprovalGate]);
   const requestRecommended = useCallback(() => {
@@ -159,6 +178,9 @@ export function LocalCliDetail(props: {
         previous_revision: props.revision,
         session_nonce: randomToken(),
         commands: commandStatesPayload(recommended ? prefillSuggestedStates(props.item) : commands),
+        // These choices were made against this catalog; saving them reviews its new and changed tools.
+        ...(pending !== "unset" && reviewedRevision.current !== null
+          ? { mcp_catalog_revision: reviewedRevision.current } : {}),
         ...(pending !== "unset" && Object.keys(providerDrafts).length > 0
           ? { provider_actions: Object.values(providerDrafts) } : {}),
         // Same endpoint and proof as any other change; the daemon re-checks the request belongs to this connector.
@@ -407,6 +429,16 @@ export function LocalCliDetail(props: {
               Bulk choices apply to listed tools with direct permissions.
               Execution wrappers and unlisted tools keep their separate review settings.
             </p>
+          ) : null}
+          {added && !commandsDirty && unreviewedTools > 0 ? (
+            <div className="guard-review-bar" data-testid="custom-extension-keep-choices">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-brand-dark">{keepChoicesCopy(unreviewedTools)}</p>
+                <button type="button" disabled={busy} className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white" onClick={requestSaveCommands}>
+                  Keep these choices
+                </button>
+              </div>
+            </div>
           ) : null}
           {commandsDirty ? (
             <div className="guard-review-bar" data-testid="custom-extension-review-bar">

@@ -6,7 +6,7 @@ use serde_json::json;
 const DOCKER_PERMISSION: &str = "command.container-runtime.permission.docker-sensitive";
 const HARD_RESET_PERMISSION: &str = "command.git.permission.hard-reset";
 const DOCKER: &str = "docker version --format '{{.Server.Version}}'";
-const DOCKER_CONTEXT: &str = "docker context ls";
+const DOCKER_CONTEXT: &str = "docker context use staging";
 const HARD_RESET: &str = "git reset --hard HEAD~1";
 
 fn admitted_controls(name: &str) -> CompiledNativeCommandControls {

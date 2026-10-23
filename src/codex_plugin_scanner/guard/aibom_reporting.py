@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from . import native_aibom_summaries
 from .adapters.base import HarnessContext
 from .inventory_contract import (
     GuardAgentInventorySnapshot,
@@ -20,108 +21,19 @@ def summarize_aibom_layers(
     generated_at: str,
 ) -> tuple[dict[str, object], dict[str, object], dict[str, object]]:
     """Count evidence by layer without discarding artifacts from other providers."""
-    from . import aibom_cli as api
-
-    counts = {
-        "instructions": 0,
-        "skills": 0,
-        "mcp": 0,
-        "plugins": 0,
-        "policies": 0,
-        "findings": 0,
-        "trust": 0,
-        "sources": 0,
-        "configSources": 0,
-    }
-    for snapshot in snapshots:
-        counts["findings"] += len(snapshot.findings)
-        counts["configSources"] += len(snapshot.sources)
-        for item in snapshot.items:
-            if item.item_kind in {"overlay", "prompt_pack"}:
-                counts["instructions"] += 1
-            elif item.item_kind == "skill":
-                counts["skills"] += 1
-            elif item.item_kind in {"mcp_server", "mcp_tool"}:
-                counts["mcp"] += 1
-            elif item.item_kind in {"plugin", "daemon_plugin"}:
-                counts["plugins"] += 1
-            elif item.item_kind == "policy":
-                counts["policies"] += 1
-            if isinstance(item.metadata.get("trustResolution"), dict):
-                counts["trust"] += 1
-            source_links = item.metadata.get("sourceLinks")
-            source_of_truth = item.metadata.get("sourceOfTruth")
-            if isinstance(source_links, list) and source_links:
-                counts["sources"] += len(source_links)
-            elif isinstance(source_of_truth, dict):
-                counts["sources"] += 1
-    drift = api.summarize_aibom_drift(snapshots)
-    trust = api.summarize_aibom_trust(snapshots)
-    layer_summary = {
-        **counts,
-        "driftCount": drift.get("total", 0),
-        "highRiskCount": drift.get("high_risk", 0),
-        "lowTrustCount": trust.get("low_trust", 0),
-        "generatedAt": generated_at,
-        "staleSnapshot": False,
-    }
-    return layer_summary, trust, drift
+    return native_aibom_summaries.report_summaries(snapshots, generated_at=generated_at)
 
 
 def summarize_aibom_trust(snapshots: tuple[GuardAgentInventorySnapshot, ...]) -> dict[str, object]:
     """Summarize recorded trust evidence without inventing unavailable assessments."""
-    covered = 0
-    eligible = 0
-    low_trust = 0
-    scores: list[int] = []
-    for snapshot in snapshots:
-        for item in snapshot.items:
-            if item.item_kind not in {"skill", "plugin", "mcp_server"}:
-                continue
-            eligible += 1
-            trust = item.metadata.get("trustResolution")
-            if not isinstance(trust, dict):
-                continue
-            covered += 1
-            score = trust.get("trustScore")
-            if isinstance(score, int):
-                scores.append(score)
-                if score < 70:
-                    low_trust += 1
-    coverage_percent = round((covered / eligible) * 100) if eligible else 100
-    average_score = round(sum(scores) / len(scores)) if scores else None
-    return {
-        "eligible": eligible,
-        "covered": covered,
-        "coverage_percent": coverage_percent,
-        "low_trust": low_trust,
-        "average_score": average_score,
-    }
+    # The trust summary never reads the timestamp, so the report it belongs to
+    # does not have to be known to ask for it.
+    return native_aibom_summaries.report_summaries(snapshots, generated_at="")[1]
 
 
 def summarize_aibom_drift(snapshots: tuple[GuardAgentInventorySnapshot, ...]) -> dict[str, object]:
     """Report changed artifacts from the current stored inventory view."""
-    counts = {"new": 0, "changed": 0, "removed": 0, "unchanged": 0, "high_risk": 0}
-    for snapshot in snapshots:
-        for item in snapshot.items:
-            state = item.drift_state
-            if state in counts:
-                counts[state] += 1
-            if item.risk_level in {"critical", "high"}:
-                counts["high_risk"] += 1
-        for drift in snapshot.drift:
-            state = drift.state
-            if state in counts:
-                counts[state] += 1
-    total = counts["new"] + counts["changed"] + counts["removed"]
-    return {
-        "new": counts["new"],
-        "changed": counts["changed"],
-        "removed": counts["removed"],
-        "unchanged": counts["unchanged"],
-        "high_risk": counts["high_risk"],
-        "total": total,
-    }
+    return native_aibom_summaries.report_summaries(snapshots, generated_at="")[2]
 
 
 def _metadata_lookup_from_snapshots(

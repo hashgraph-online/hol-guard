@@ -118,6 +118,8 @@ mod executable_flag_contract;
 pub mod extension_control;
 #[path = "../../guard-command/src/false_positive_rules.rs"]
 pub mod false_positive_rules;
+#[path = "../../guard-command/src/github_additional_commands.rs"]
+mod github_additional_commands;
 #[path = "../../guard-command/src/github_capability_contract.rs"]
 pub mod github_capability_contract;
 #[path = "../../guard-command/src/github_capability_interaction.rs"]

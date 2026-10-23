@@ -100,6 +100,30 @@ def test_warmer_uses_the_consumer_profile_wrapper_linker_and_cache_namespace():
         assert named(steps, name)["if"] == MISS
 
 
+def test_either_runtime_partition_can_publish_only_a_successful_main_push_miss():
+    steps = workflow("ci.yml")["jobs"]["native-workspace"]["steps"]
+    archive = named(steps, "Archive the complete runtime test build")
+    validate = named(steps, "Validate the locked Rust workspace")
+    save = named(steps, "Save successful runtime test compilation")
+    guard = (
+        "matrix.check != 'clippy' && "
+        "steps.runtime-archive.outputs.cache-hit != 'true' && "
+        "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    )
+    for step in (archive, save):
+        # Implicit success() must remain: neither an archive failure nor a test
+        # failure may publish a cache, and PRs/cache hits stay read-only.
+        assert " ".join(step["if"].split()) == guard
+        assert step.get("continue-on-error", False) is False
+    assert validate.get("continue-on-error", False) is False
+    assert steps.index(archive) < steps.index(validate) < steps.index(save)
+    assert archive["run"] == 'bash scripts/ci/archive_rust_tests.sh "$CARGO_CHECK"'
+    assert save["with"] == {
+        "path": "${{ runner.temp }}/runtime-test-archive.tar.zst",
+        "key": "${{ steps.runtime-archive.outputs.cache-primary-key }}",
+    }
+
+
 def test_each_missed_archive_is_built_then_saved_at_the_consumer_cache_version_path():
     steps = workflow("rust-test-cache-warm.yml")["jobs"]["warm"]["steps"]
     consumer = named(
@@ -167,7 +191,7 @@ def recipe(tmp_path):
         for aliases, selection in (
             (("core", "test-core"), ["--workspace", "--exclude", "guard-command", "--exclude", "hol-guard-runtime"]),
             (("command", "test-command"), ["--package", "guard-command"]),
-            (("runtime", "test-runtime-1"), ["--package", "hol-guard-runtime"]),
+            (("runtime", "test-runtime-1", "test-runtime-2"), ["--package", "hol-guard-runtime"]),
         )
         for part in aliases
     ],
@@ -195,7 +219,7 @@ def test_archive_recipe_builds_all_selected_targets_and_replaces_only_its_stagin
     assert archive.read_text() == "new" and unrelated.read_text() == "keep"
 
 
-@pytest.mark.parametrize("part", ["test-runtime-2", "clippy", "unknown"])
+@pytest.mark.parametrize("part", ["clippy", "unknown"])
 def test_archive_recipe_rejects_unsupported_selections_before_running_tools(recipe, part):
     temporary, run = recipe
     assert run(part).returncode == 64

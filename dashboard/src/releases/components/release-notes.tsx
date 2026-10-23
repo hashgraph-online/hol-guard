@@ -140,7 +140,7 @@ function Block({ block }: { block: ReleaseBlock }) {
       );
     case "quote":
       return (
-        <blockquote className="my-4 border-l border-brand-blue/40 pl-4 text-sm italic leading-6 text-brand-dark/70">
+        <blockquote className="my-4 border-l border-brand-blue/40 pl-4 text-sm italic leading-6 text-brand-dark/75">
           <InlineNodes nodes={block.children} />
         </blockquote>
       );

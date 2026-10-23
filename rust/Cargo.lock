@@ -848,6 +848,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "guard-policy-bundle"
+version = "0.1.0"
+dependencies = [
+ "base64ct",
+ "flate2",
+ "guard-contracts",
+ "guard-policy-snapshot",
+ "hex",
+ "rsa",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "guard-policy-snapshot"
 version = "0.1.0"
 dependencies = [
@@ -990,6 +1004,7 @@ dependencies = [
  "guard-contracts",
  "guard-google-identity",
  "guard-hook-core",
+ "guard-policy-bundle",
  "guard-policy-snapshot",
  "guard-rule-contract",
  "guard-runtime-pyjson",

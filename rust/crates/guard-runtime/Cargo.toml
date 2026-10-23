@@ -16,6 +16,7 @@ guard-contracts = { path = "../guard-contracts" }
 guard-google-identity = { path = "../guard-google-identity" }
 guard-hook-core = { path = "../guard-hook-core" }
 guard-policy-snapshot = { path = "../guard-policy-snapshot" }
+guard-policy-bundle = { path = "../guard-policy-bundle" }
 guard-rule-contract = { path = "../guard-rule-contract" }
 guard-adapter-detection = { path = "../guard-adapter-detection" }
 guard-runtime-pyjson = { path = "../guard-runtime-pyjson" }

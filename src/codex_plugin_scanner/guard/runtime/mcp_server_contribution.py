@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 import json
-import re
 import sys
 from collections.abc import Mapping
 from functools import lru_cache
 from importlib import resources
-from ipaddress import IPv6Address, ip_address
 from pathlib import Path
 from typing import Final, cast
-from urllib.parse import urlsplit, urlunsplit
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
+from ..native_cli_runtime_support import cli_runtime_support
 from .extension_contribution import frozen_package_data
 
 _SCHEMA_VERSION: Final = "guard.mcp-server-contribution.v1"
@@ -30,25 +28,23 @@ _ALLOWED_ICON_NAMES: Final = frozenset(
     }
 )
 _ALLOWED_LAUNCHERS: Final = frozenset({"bunx", "npx", "npm", "pnpm", "uvx", "yarn", "pipx"})
-_DIRECT_COMMAND_RESERVED: Final = _ALLOWED_LAUNCHERS | frozenset(
-    re.findall(
-        r"\S+",
-        "bash busybox bun cargo cmd csh dash deno docker dotnet env fish go java ksh lua node nodejs perl php "
-        "podman powershell pwsh py python python3 pythonw ruby sh sudo tcsh ts-node tsx uv wsl zsh",
-    )
-)
-_DIRECT_COMMAND_VERSIONED_BASES: Final = tuple(
-    re.findall(r"\S+", "java lua node nodejs perl php py python pythonw ruby")
-)
-_DIRECT_COMMAND: Final = re.compile(r"[a-z0-9][a-z0-9_-]*(?:\.[a-z0-9_-]+)*", re.ASCII)
 _TOOL_STATES: Final = frozenset({"inherit", "allow", "review", "block"})
 _REMOTE_TOOL_STATES: Final = frozenset({"inherit", "review", "block"})
-_REMOTE_MCP_URL_MAX_LENGTH: Final = 260
-_HEX_DIGITS: Final = frozenset("0123456789abcdefABCDEF")
-_UNRESERVED_PATH_CHARS: Final = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-_SUB_DELIMITERS: Final = frozenset("!$&'()*+,;=")
-_REMOTE_PATH_CHARS: Final = _UNRESERVED_PATH_CHARS | _SUB_DELIMITERS | frozenset(":@/")
-_REMOTE_QUERY_CHARS: Final = _REMOTE_PATH_CHARS | frozenset("?")
+
+
+def _bound_grammar(operation: str, value: object) -> str | None:
+    """Ask the resident for one contributed-MCP grammar answer.
+
+    The grammar itself lives in the native runtime; a value that is not a
+    string cannot be one of its inputs, so it is rejected here rather than
+    sent. Nothing about the answer is recomputed or repaired locally.
+    """
+    if not isinstance(value, str):
+        return None
+    result = cli_runtime_support(operation, {"value": value})
+    if result is not None and not isinstance(result, str):
+        raise ValueError("native_cli_runtime_support_result_invalid")
+    return result
 
 
 def contributions_dir() -> Path:
@@ -57,16 +53,6 @@ def contributions_dir() -> Path:
 
 def catalog_id_for_mcp_id(mcp_id: str) -> str:
     return f"command.mcp-{mcp_id.removeprefix('mcp.')}"
-
-
-def _reserved_direct_mcp_command(name: str) -> bool:
-    if name in _DIRECT_COMMAND_RESERVED:
-        return True
-    for base in _DIRECT_COMMAND_VERSIONED_BASES:
-        suffix = name.removeprefix(base)
-        if suffix != name and suffix and suffix[0].isdigit() and all(ch.isdigit() or ch == "." for ch in suffix):
-            return True
-    return False
 
 
 def direct_mcp_command_name(value: object) -> str | None:
@@ -78,16 +64,7 @@ def direct_mcp_command_name(value: object) -> str | None:
     filesystem basename semantics. This is catalog selection, never executable
     authentication or saved approval.
     """
-    if not isinstance(value, str) or not value or "://" in value:
-        return None
-    name = value.replace("\\", "/").rsplit("/", 1)[-1].lower()
-    for suffix in (".exe", ".cmd", ".bat"):
-        if name.endswith(suffix):
-            name = name[: -len(suffix)]
-            break
-    if len(name) > 128 or _DIRECT_COMMAND.fullmatch(name) is None or _reserved_direct_mcp_command(name):
-        return None
-    return name
+    return _bound_grammar("direct_command_name", value)
 
 
 def _normalized_tool_name(name: object) -> str:
@@ -95,148 +72,19 @@ def _normalized_tool_name(name: object) -> str:
     return "-".join(part for part in compact.split("-") if part)
 
 
-def _valid_dns_hostname(host: str) -> bool:
-    if len(host) > 253 or not host.isascii():
-        return False
-    labels = host.split(".")
-    return all(
-        1 <= len(label) <= 63
-        and label[0].isalnum()
-        and label[-1].isalnum()
-        and all(ch.isalnum() or ch == "-" for ch in label)
-        for label in labels
-    )
-
-
-def _normalized_remote_component(
-    value: str,
-    *,
-    allowed_chars: frozenset[str],
-    empty_default: str,
-) -> str | None:
-    candidate = value or empty_default
-    output: list[str] = []
-    index = 0
-    while index < len(candidate):
-        character = candidate[index]
-        if character != "%":
-            if character not in allowed_chars:
-                return None
-            output.append(character)
-            index += 1
-            continue
-        if index + 2 >= len(candidate):
-            return None
-        escape = candidate[index + 1 : index + 3]
-        if any(character not in _HEX_DIGITS for character in escape):
-            return None
-        decoded = chr(int(escape, 16))
-        if ord(decoded) < 0x20 or ord(decoded) == 0x7F:
-            return None
-        if decoded in _UNRESERVED_PATH_CHARS:
-            output.append(decoded)
-        else:
-            output.append(f"%{escape.upper()}")
-        index += 3
-    return "".join(output)
-
-
-def _remove_remote_dot_segments(path: str) -> str:
-    segments = path.split("/")
-    resolved: list[str] = []
-    for segment in segments:
-        if segment == "..":
-            if resolved:
-                resolved.pop()
-        elif segment != ".":
-            resolved.append(segment)
-    if segments[-1] in {".", ".."}:
-        resolved.append("")
-    normalized = "/".join(resolved) or "/"
-    if path.startswith("/") and not normalized.startswith("/"):
-        normalized = f"/{normalized}"
-    return normalized
-
-
-def _normalized_remote_path(path: str) -> str | None:
-    normalized = _normalized_remote_component(path, allowed_chars=_REMOTE_PATH_CHARS, empty_default="/")
-    if normalized is None:
-        return None
-    return _remove_remote_dot_segments(normalized)
-
-
-def _normalized_remote_query(query: str) -> str | None:
-    return _normalized_remote_component(query, allowed_chars=_REMOTE_QUERY_CHARS, empty_default="")
-
-
 def normalized_remote_mcp_url(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    if not value or value != value.strip() or not value.isascii():
-        return None
-    if any(ord(character) <= 0x20 or ord(character) == 0x7F for character in value):
-        return None
-    candidate = value
-    try:
-        parsed = urlsplit(candidate)
-    except ValueError:
-        return None
-    if (
-        parsed.scheme.lower() != "https"
-        or not parsed.hostname
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.fragment
-    ):
-        return None
-    try:
-        port = parsed.port
-    except ValueError:
-        return None
-    if port not in {None, 443}:
-        return None
-    raw_host = parsed.hostname.lower()
-    if raw_host.endswith(".."):
-        return None
-    host = raw_host[:-1] if raw_host.endswith(".") else raw_host
-    if not host:
-        return None
-    try:
-        address = ip_address(host)
-    except ValueError:
-        if all(ch.isdigit() or ch == "." for ch in host):
-            return None
-        if host == "localhost" or host.endswith(".localhost") or "." not in host or not _valid_dns_hostname(host):
-            return None
-    else:
-        if isinstance(address, IPv6Address) and address.ipv4_mapped is not None:
-            address = address.ipv4_mapped
-        if not address.is_global:
-            return None
-        host = str(address)
-    netloc = f"[{host}]" if ":" in host else host
-    path = _normalized_remote_path(parsed.path)
-    query = _normalized_remote_query(parsed.query)
-    if path is None or query is None:
-        return None
-    endpoint = urlunsplit(("https", netloc, path, "", ""))
-    if len(endpoint) > _REMOTE_MCP_URL_MAX_LENGTH:
-        return None
-    return urlunsplit(("https", netloc, path, query, ""))
+    """Normalize a configured remote MCP URL, keeping its validated query."""
+    return _bound_grammar("remote_url", value)
 
 
 def remote_mcp_endpoint_identity(value: object) -> str | None:
-    normalized = normalized_remote_mcp_url(value)
-    if normalized is None:
-        return None
-    return normalized.partition("?")[0]
+    """Identify the launch endpoint a configured remote MCP URL points at."""
+    return _bound_grammar("remote_endpoint_identity", value)
 
 
 def normalized_remote_server_name(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    normalized = " ".join(value.strip().casefold().split())
-    return normalized or None
+    """Fold a contributed remote server name to its comparison form."""
+    return _bound_grammar("remote_server_name", value)
 
 
 def load_mcp_contribution_payloads(root: Path | None = None) -> tuple[dict[str, object], ...]:

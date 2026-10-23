@@ -305,17 +305,17 @@ def test_shared_catalog_schema_rejects_empty_permission_capability_values(field:
         Draft202012Validator(schema, format_checker=FormatChecker()).validate(invalid)
 
 
-def test_production_runtime_session_defaults_to_legacy_without_touching_local_authority(
+def test_runtime_session_catalog_opt_out_does_not_touch_local_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for name in (
-        "GUARD_EXTENSION_CATALOG_SYNC_V1",
         "GUARD_POLICY_EXTENSION_TARGETS_V1",
         "GUARD_MANAGED_EXTENSION_CONTROLS_V1",
         "GUARD_MANAGED_CONTROLS_ATOMIC_APPLY_V1",
         "GUARD_EXTENSION_FIRST_CONTROLS_UI",
     ):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("GUARD_EXTENSION_CATALOG_SYNC_V1", "false")
     store = FakePostureStore(ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 7, "a" * 64, ()))
     assert (
         guard_runner_module._managed_controls_runtime_sync_posture(

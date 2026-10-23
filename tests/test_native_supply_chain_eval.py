@@ -12,6 +12,7 @@ from typing import ClassVar
 
 import pytest
 
+from codex_plugin_scanner.guard import native_package_authority as authority
 from codex_plugin_scanner.guard import native_supply_chain_eval as transport
 from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
 from codex_plugin_scanner.guard.native_package_authority import _RESULT_SCHEMA
@@ -38,10 +39,24 @@ def _payload() -> dict[str, object]:
         "cache_status": "miss",
         "package_intent_hash": "sha256:" + "0" * 64,
         "policy_version": "p",
+        "bundle_version": None,
+        "workspace_fingerprint": None,
         "reasons": [],
         "packages": [],
+        "matched_rule_id": None,
+        "exception_id": None,
         "risk_summary": "ok",
-        "user_copy": {"title": "Allowed", "summary": "ok", "harness_message": "ok"},
+        "record_monitor_evidence": False,
+        "refresh_required": False,
+        "evidence_ids": [],
+        "external_archive_source_hashes": [],
+        "user_copy": {
+            "title": "Allowed",
+            "summary": "ok",
+            "next_step": None,
+            "dashboard_url": None,
+            "harness_message": "ok",
+        },
     }
 
 
@@ -320,3 +335,30 @@ def test_well_formed_answer_records_no_failure(monkeypatch, tmp_path: Path) -> N
     assert _evaluate(tmp_path).decision == "allow"
 
     assert failures == []
+
+
+def test_settled_answer_is_read_without_a_second_resident_call(monkeypatch, tmp_path: Path) -> None:
+    _bind(monkeypatch)
+    monkeypatch.setattr(transport, "_persist_evidence", lambda **_kwargs: None)
+
+    def second_call(**_kwargs: object) -> object:
+        raise AssertionError("the settled answer was sent back to be viewed")
+
+    monkeypatch.setattr(authority, "_resident_request", second_call)
+    assert _evaluate(tmp_path).decision == "allow"
+
+
+def test_view_reply_with_a_conflicting_code_is_unavailable(monkeypatch, tmp_path: Path) -> None:
+    def resident(**kwargs: object) -> object:
+        request = kwargs["request"]
+        return {
+            "request_id": request["request_id"],
+            "request_sha256": "sha256:" + _canonical_request_sha256(request),
+            "status": "ok",
+            "code": "native_package_evaluation_view_failed",
+            "payload": _payload(),
+        }
+
+    monkeypatch.setattr(authority, "_resident_request", resident)
+    with pytest.raises(authority.NativePackageEvaluationViewUnavailableError):
+        authority.evaluation_from_native_payload(_payload(), guard_home=tmp_path)

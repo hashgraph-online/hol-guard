@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import threading
 import time
 from collections import deque
+from contextlib import suppress
 from datetime import datetime, timezone
+from itertools import islice
 from pathlib import Path
 
 import pytest
@@ -343,6 +346,38 @@ def _safe_read(path: Path) -> str:
         return f"<{error!r}>"
 
 
+def _assert_cleanup_succeeded(
+    cleanup: subprocess.CompletedProcess[str], env: dict[str, str], sampler: _StateDirSampler
+) -> None:
+    if cleanup.returncode != 0:
+        try:
+            from codex_plugin_scanner.guard.native_resident_stream import _NATIVE_DIAGNOSTIC_LINE
+
+            lines = ["Packaged cleanup resident diagnostics:"]
+            for line in sampler.report().splitlines()[-64:]:
+                event = re.fullmatch(r"([0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}) (add|remove|change) .+", line)
+                if event:
+                    # Entry names may contain private paths; retain only time and event kind.
+                    lines.append(f"resident_state {event[1]} {event[2]}")
+            paths = Path(env["HOL_GUARD_HOME"]).rglob("managed-resident-phases.v1.log")
+            for path in islice(paths, 4):
+                try:
+                    with path.open("rb") as source:
+                        payload = source.read(64 * 1024)
+                except OSError:
+                    lines.append("resident_phases=unavailable")
+                    continue
+                for line in payload.splitlines()[-64:]:
+                    if _NATIVE_DIAGNOSTIC_LINE.fullmatch(line):
+                        lines.append(line.decode("ascii"))
+            print("\n".join(lines)[:4096])
+        except Exception:
+            # Evidence collection must never replace the original cleanup assertion.
+            with suppress(Exception):
+                print("Packaged cleanup resident diagnostics: unavailable")
+    assert cleanup.returncode == 0, f"stdout={cleanup.stdout!r}\nstderr={cleanup.stderr!r}"
+
+
 def _stop_and_assert_process_stopped(
     executable: Path,
     stop_args: list[str],
@@ -445,7 +480,7 @@ def test_packaged_windows_core_bootstrap_retry_and_repair(tmp_path: Path, native
         sampler.__exit__()
         print(f"Packaged daemon start timeline:\n{_start_timeline(env)}")
         cleanup = _run_core(executable, stop_args, env=env)
-        assert cleanup.returncode == 0, f"stdout={cleanup.stdout!r}\nstderr={cleanup.stderr!r}"
+        _assert_cleanup_succeeded(cleanup, env, sampler)
         cleanup_payload = _json_result(cleanup)
         if isinstance(cleanup_payload.get("pid"), int):
             _assert_windows_process_stopped(cleanup_payload["pid"])

@@ -339,14 +339,12 @@ fn a_hook_managers_shim_vouches_for_no_write_that_changes_the_tree() {
     let fetch = format!("git -C {primary} fetch origin main --quiet");
     session.config(&["branch.main.remote", "origin"]);
     session.config(&["branch.main.merge", "refs/heads/main"]);
-    for (command, reason) in [
-        (&add, WRITE),
-        (&commit, WRITE),
-        (&pull, REFRESH),
-        (&fetch, REFRESH),
-    ] {
-        session.assert_allow(command, reason);
-    }
+    // The sandbox may take a write into the worktree's shared Git directory
+    // instead; either way it raises no review.
+    session.assert_quiet(&add, WRITE);
+    session.assert_quiet(&commit, WRITE);
+    session.assert_allow(&pull, REFRESH);
+    session.assert_allow(&fetch, REFRESH);
 
     // Git finds the shim from either tree. A commit, an index write or a
     // pull changes what the shim would run, so none of them rests on it.

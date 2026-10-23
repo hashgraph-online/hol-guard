@@ -58,6 +58,26 @@ pub(super) fn execution_free_paging(
             stdout_piped,
         );
     }
+    // `git notes show` hands the note to `git show`, which pages under
+    // `pager.show` where `pager.notes` left the choice open, so the proof runs
+    // under both keys. A listing runs nothing else.
+    if operation == "notes"
+        && pager_operation.is_none()
+        && super::git_side_record_reads::shows_a_note(&remaining[1..])
+    {
+        let prove = |pager: &str| {
+            execution_free_paging(
+                executable,
+                arguments,
+                Some(pager),
+                context,
+                deadline,
+                execution_environment,
+                stdout_piped,
+            )
+        };
+        return Some(prove("notes")? && prove("show")?);
+    }
     if !matches!(
         operation,
         "status"
@@ -82,6 +102,8 @@ pub(super) fn execution_free_paging(
             | "shortlog"
             | "check-ignore"
             | "apply"
+            | "bisect"
+            | "notes"
     ) {
         return None;
     }
@@ -106,6 +128,11 @@ pub(super) fn execution_free_paging(
     }
     if matches!(operation, "shortlog" | "check-ignore")
         && !super::git_listing_reads::read_form(operation, &remaining[1..])
+    {
+        return None;
+    }
+    if matches!(operation, "bisect" | "notes")
+        && !super::git_side_record_reads::read_form(operation, &remaining[1..])
     {
         return None;
     }
@@ -220,6 +247,16 @@ fn probe(
         stdout_piped,
     } = paging;
     let operation = remaining.first()?.as_str();
+    // `git notes show` execs `git show <note>`. A note is a blob when Git
+    // wrote it, but a notes tree names whatever object it was built with, so a
+    // commit there is rendered with the patch, diff driver and signature
+    // settings of `git show`. A listing prints names and object ids only.
+    let rendering =
+        if operation == "notes" && super::git_side_record_reads::shows_a_note(&remaining[1..]) {
+            "show"
+        } else {
+            operation
+        };
     // Configuration plus root, path and attribute inspection share this budget.
     // The caller's overall deadline remains the upper bound.
     let inspection_deadline = Instant::now() + super::git_probe::PROBE_BUDGET;
@@ -313,7 +350,7 @@ fn probe(
     // claim to prove the complete signature-format/helper option grammar.
     if options.clone().any(|value| {
         value.as_str() == "--show-signature"
-            || (super::git_history_reads::verifies_signatures(operation) && value.contains("%G"))
+            || (super::git_history_reads::verifies_signatures(rendering) && value.contains("%G"))
             || value.starts_with("--remerge-diff")
             || value == "--diff-merges=remerge"
             || value == "--submodule=diff"
@@ -343,11 +380,11 @@ fn probe(
         .map(String::as_str)
         .filter(|value| value.starts_with('-'))
         .collect::<Vec<_>>();
-    let textconv_runs = !no_textconv && textconv::may_run(operation, &option_flags);
+    let textconv_runs = !no_textconv && textconv::may_run(rendering, &option_flags);
     // An external driver renders a diff, so only a read that renders one can
     // start it. A tag listing, a clean preview, a ref listing or an ignore
     // check prints names, and a configured driver leaves all of them alone.
-    let renders_diff = matches!(operation, "diff" | "log" | "show" | "reflog" | "stash");
+    let renders_diff = matches!(rendering, "diff" | "log" | "show" | "reflog" | "stash");
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {
         let (key, value) = record.split_once('\n')?;
@@ -468,13 +505,13 @@ fn probe(
             }
             key if key.starts_with("filter.") => filtered && !value.is_empty() && !filters_unused,
             "format.pretty" => {
-                super::git_history_reads::verifies_signatures(operation) && value.contains("%G")
+                super::git_history_reads::verifies_signatures(rendering) && value.contains("%G")
             }
             key if key.starts_with("pretty.") => {
-                super::git_history_reads::verifies_signatures(operation) && value.contains("%G")
+                super::git_history_reads::verifies_signatures(rendering) && value.contains("%G")
             }
             "log.showsignature" => {
-                super::git_history_reads::verifies_signatures(operation) && !disabled
+                super::git_history_reads::verifies_signatures(rendering) && !disabled
             }
             // Outside a repository grep would search every file under cwd.
             "grep.fallbacktonoindex" => operation == "grep" && !disabled,
@@ -494,6 +531,9 @@ fn probe(
     }
     if operation == "config" {
         return super::git_config_reads::credential_free(&command, &remaining[1..], deadline);
+    }
+    if operation == "bisect" && !super::git_probe::bisect_log_inert(&command, deadline)? {
+        return Some(false);
     }
     if !super::git_probe::repository_inert(&command, operation, remaining, deadline)? {
         return Some(false);

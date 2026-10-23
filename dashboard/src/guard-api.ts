@@ -96,6 +96,7 @@ import {
   demoPresentationSettings,
   isGuardDemoMode
 } from "./guard-demo";
+import { normalizeApprovalExtensionCoverage } from "./approval-extension-coverage";
 import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
 import { observeDashboardBuild } from "./dashboard-build";
 
@@ -131,8 +132,10 @@ type RawGuardApprovalRequest = Omit<
   | "scope_restrictions"
   | "task_capability_eligibility"
   | "extension_recommendation"
+  | "extension_coverage"
 > & {
   extension_recommendation?: unknown;
+  extension_coverage?: unknown;
   action_envelope_json?: unknown;
   decision_v2_json?: unknown;
   policy_action?: unknown;
@@ -1511,9 +1514,11 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
   const {
     decision_contract_error: rawContractError,
     extension_recommendation: rawExtensionRecommendation,
+    extension_coverage: rawExtensionCoverage,
     ...baseItem
   } = item;
   const extensionRecommendation = normalizeApprovalExtensionRecommendation(rawExtensionRecommendation);
+  const extensionCoverage = normalizeApprovalExtensionCoverage(rawExtensionCoverage);
   const policyAction = normalizeGuardAction(item.policy_action);
   const decisionV2 = parseDecisionV2(item.decision_v2_json);
   const actionEnvelope = parseActionEnvelope(item.action_envelope_json);
@@ -1614,6 +1619,7 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
     ...(extensionRecommendation !== null && !hasDecisionContractError
       ? { extension_recommendation: extensionRecommendation }
       : {}),
+    ...(extensionCoverage !== null && !hasDecisionContractError ? { extension_coverage: extensionCoverage } : {}),
     ...(hasDecisionContractError
       ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT }
       : {}),

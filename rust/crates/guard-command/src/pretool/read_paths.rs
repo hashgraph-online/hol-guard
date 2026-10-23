@@ -14,11 +14,11 @@ mod hidden_listing;
 mod omp_json_query;
 #[path = "omp_read_targets.rs"]
 pub(super) mod omp_targets;
-use hidden_listing::resolved_home_hidden_content_read;
 pub(super) use hidden_listing::{
     home_hidden_content_read, home_hidden_directory, home_hidden_tool_directory,
-    repository_hidden_directory,
+    home_hidden_walk_clears_stores, repository_hidden_directory,
 };
+use hidden_listing::{resolved_home_hidden_content_read, resolved_home_hidden_listing};
 #[path = "private_temporary_workspace.rs"]
 mod private_temporary;
 #[path = "workspace_scratch_reads.rs"]
@@ -88,7 +88,7 @@ pub(super) fn bounded_file_read_target(
 ) -> bool {
     // A missing harness note is a shell-read exception. Structured tools come
     // through this helper, and a missing note there stays unproved.
-    bounded_read_target_with_brackets(value, home_dir, cwd, false, false, false)
+    bounded_read_target_with_brackets(value, home_dir, cwd, false, false, false, false)
 }
 
 pub(super) fn existing_regular_read_target(
@@ -118,7 +118,7 @@ pub(super) fn bounded_read_target(
     cwd: Option<&str>,
     allow_directory: bool,
 ) -> bool {
-    bounded_read_target_with_brackets(value, home_dir, cwd, allow_directory, false, true)
+    bounded_read_target_with_brackets(value, home_dir, cwd, allow_directory, false, true, false)
 }
 
 /// A structured read tool opens its path literally, so `[slug]` in a Next.js
@@ -130,7 +130,7 @@ pub(super) fn bounded_structured_file_read_target(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
-    bounded_read_target_with_brackets(value, home_dir, cwd, false, true, false)
+    bounded_read_target_with_brackets(value, home_dir, cwd, false, true, false, true)
 }
 
 /// A shell word whose bracket class matches nothing reaches the program
@@ -151,7 +151,15 @@ pub(super) fn bounded_literal_bracket_target(
     // already its own trimmed form keeps its review rather than borrowing
     // a neighbour's proof.
     value == value.trim()
-        && bounded_read_target_with_brackets(value, home_dir, cwd, allow_directory, true, true)
+        && bounded_read_target_with_brackets(
+            value,
+            home_dir,
+            cwd,
+            allow_directory,
+            true,
+            true,
+            false,
+        )
 }
 
 fn bounded_read_target_with_brackets(
@@ -161,6 +169,7 @@ fn bounded_read_target_with_brackets(
     allow_directory: bool,
     literal_brackets: bool,
     missing_notes: bool,
+    directory_listing: bool,
 ) -> bool {
     let path = value.trim();
     let path = path.strip_prefix(r"\\?\").unwrap_or(path);
@@ -200,8 +209,18 @@ fn bounded_read_target_with_brackets(
         return !parent_component && safe_read_target(path);
     };
     if let Ok(canonical) = std::fs::canonicalize(&candidate) {
-        return (canonical.is_file() || (allow_directory && canonical.is_dir()))
-            && (resolved_read_target_allowed(&candidate, &canonical, home_dir, cwd)
+        // A structured read tool handed a directory lists its entries, or
+        // says it is a directory; either way it returns no file's bytes, so
+        // the question is the listing one. A shell walk keeps its own root
+        // rules, so the listing screen answers only for that tool.
+        let listing = directory_listing
+            && canonical.is_dir()
+            && !guard_secure_fs::contains_symlink_component(&candidate)
+            && resolved_location_allowed(&canonical, home_dir, cwd, false)
+            && resolved_home_hidden_listing(&canonical, home_dir);
+        return (canonical.is_file() || ((allow_directory || listing) && canonical.is_dir()))
+            && (listing
+                || resolved_read_target_allowed(&candidate, &canonical, home_dir, cwd)
                 || package_source::installed_package_source(
                     &candidate, &canonical, home_dir, cwd,
                 ));

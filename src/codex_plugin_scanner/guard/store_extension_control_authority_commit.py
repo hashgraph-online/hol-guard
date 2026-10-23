@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import secrets
 
 from .native_extension_control_authority import view_to_wire
@@ -91,19 +92,53 @@ class ExtensionControlAuthorityCommitMixin:
             if current.health is not AuthorityHealth.UNENROLLED:
                 raise ExtensionControlAuthorityError("extension control authority already enrolled")
             consume_extension_control_enrollment_proof(self.guard_home, proof, enrollment)
-            from .catalog_delivery import lifecycle_store
-            from .catalog_delivery.preparation_authority import load_installed_bundle
+            return self._enroll_unenrolled_authority(catalog_digest)
 
-            installed = load_installed_bundle()
-            if installed is not None and not lifecycle_store.floor_enrolled(self):
-                # Startup migration now enrolls the floor on an install that
-                # carries no legacy controls, so by the time an operator
-                # enrolls the authority the floor is usually already there.
-                # Enrolling it a second time is refused, and that refusal
-                # would fail the enrollment the operator is waiting on. A
-                # floor without its stamp still goes through the refusal.
-                lifecycle_store.enroll_installed(self, installed)
+    def enroll_extension_control_authority_by_default(self, catalog_digest: str) -> ExtensionControlAuthorityView:
+        """Enroll a never-enrolled authority at daemon startup, with no layers.
+
+        Only a home with neither a snapshot nor a vault anchor reads as
+        unenrolled; a home that lost one of them reads as tampered or restores
+        from its export, so this never re-enrolls over existing controls. The
+        authority starts at revision 0 with no layers, which grants nothing the
+        packaged defaults do not already allow; every later control change
+        still needs an approval-gated proof. Any other health is returned as is.
+        """
+
+        with self._extension_control_authority_lock():
+            current = self._read_extension_control_authority_locked(catalog_digest)
+            if current.health is not AuthorityHealth.UNENROLLED:
+                return current
+            return self._enroll_unenrolled_authority(catalog_digest)
+
+    def _enroll_unenrolled_authority(self, catalog_digest: str) -> ExtensionControlAuthorityView:
+        """Enroll the installed floor if it is missing, then bootstrap revision 0.
+
+        The caller holds the authority lease and has read the home as
+        unenrolled. Startup migration usually enrolled the floor already, and
+        enrolling it twice is refused; a floor without its stamp still goes
+        through that refusal. Bootstrap commits the snapshot before its vault
+        anchor, so a failure in between would leave a snapshot the next read
+        calls tampered. Removing the revision-0 row and anchor this call wrote
+        returns the home to unenrolled, and the next attempt starts over.
+        """
+
+        from .catalog_delivery import lifecycle_store
+        from .catalog_delivery.preparation_authority import load_installed_bundle
+
+        installed = load_installed_bundle()
+        if installed is not None and not lifecycle_store.floor_enrolled(self):
+            lifecycle_store.enroll_installed(self, installed)
+        try:
             return self._bootstrap_extension_control_authority(catalog_digest, key=None)
+        except Exception:
+            with contextlib.suppress(Exception), self._connect() as connection:
+                connection.execute(
+                    "delete from extension_control_authority_snapshot where singleton = 1 and revision = 0"
+                )
+            with contextlib.suppress(Exception):
+                self._secret_store().delete_secret(self._anchor_ref())
+            raise
 
     def commit_extension_control_layers(
         self,

@@ -8,7 +8,7 @@ use super::layers::layers_to_json;
 use super::records::{authenticated_record, canonical, sha256_hex};
 use super::tests::{catalog, layer, local, manifest, object, read_request, run, Home, KEY};
 
-fn revision_state(revision: i64) -> Value {
+pub(super) fn revision_state(revision: i64) -> Value {
     let (record, digest, mac) = authenticated_record(
         &object(json!({ "revision": revision })),
         &KEY,
@@ -18,7 +18,7 @@ fn revision_state(revision: i64) -> Value {
     json!({ "revision": revision, "authentication": { "record": record, "digest": digest, "mac": mac } })
 }
 
-fn activation_state(catalog_digest: &str, revision: i64) -> Value {
+pub(super) fn activation_state(catalog_digest: &str, revision: i64) -> Value {
     let layers = layers_to_json(&[layer(
         ControlLayerKind::SignedCloud,
         catalog_digest,

@@ -24,7 +24,11 @@ from .native_context import _resolve_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
 from .native_store_policy import _payload
 
-INVENTORY_SOURCE_EVIDENCE_FEATURE = "inventory-source-evidence-v1"
+# v3 is the resident that reads an overlay's instruction role as well as the
+# item kind. This client derives neither, so an older resident would answer
+# without the role and leave the snapshot short of it: asking for v3 turns
+# that into plain unavailability instead of a silently thinner answer.
+INVENTORY_SOURCE_EVIDENCE_FEATURE = "inventory-source-evidence-v3"
 _REQUEST_SCHEMA = "guard-inventory-source-evidence-request.v1"
 _RESULT_SCHEMA = "guard-inventory-source-evidence-result.v1"
 # The deadline covers a whole batch, and a batch is as large as the contract
@@ -61,7 +65,9 @@ def native_inventory_source_evidence(
 ) -> list[dict[str, object]]:
     """Return one evidence mapping per entry, in order.
 
-    Each answer carries ``source_of_truth`` (the metadata block for a symlinked
+    Each answer carries ``item_kind`` (the snapshot kind the artifact type
+    maps onto), ``instruction_role`` (what an overlay's configured path names,
+    or ``None``), ``source_of_truth`` (the metadata block for a symlinked
     config path, or ``None``) and ``primary_content_hash`` (``sha256:…`` for a
     document the artifact is allowed to hash, or ``None``).
 
@@ -157,16 +163,30 @@ def _batch_timeout_seconds(entry_count: int) -> float:
 
 
 def _entry_wire(entry: Mapping[str, object], cwd: Path) -> dict[str, object]:
-    """Ship an entry's identity, leaving out a config path it does not carry."""
+    """Ship an entry's identity, leaving out a config path it does not carry.
+
+    The item kind is not sent: the resident maps it from the artifact type and
+    answers with it, so the caller holds no copy of that mapping.
+    """
 
     wire: dict[str, object] = {
         "harness": str(entry.get("harness", "")),
-        "item_kind": str(entry.get("item_kind", "")),
         "artifact_type": str(entry.get("artifact_type", "")),
     }
     config_path = entry.get("config_path")
     if isinstance(config_path, str) and config_path:
-        wire["config_path"] = _absolute(config_path, cwd)
+        anchored = _absolute(config_path, cwd)
+        wire["config_path"] = anchored
+        # The instruction role is a reading of the path a harness configured,
+        # so the resident needs that path as well whenever anchoring changed
+        # it: a relative `notes.md` names no role, but the working directory
+        # this scan happens to run in can carry `docs/security` or
+        # `.cursor/rules` and hand the anchored path a role the configured one
+        # never had. An absolute path is already what the harness wrote, so
+        # nothing is sent for it and the request keeps the shape every caller
+        # has today.
+        if anchored != config_path:
+            wire["configured_path"] = config_path
     return wire
 
 

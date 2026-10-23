@@ -241,11 +241,11 @@ def compilation_failure(completed: subprocess.CompletedProcess, paths: list[Path
     return NativeCompilationError(code, f"native source compilation failed (exit {completed.returncode}){detail}")
 
 
-def _pack_descriptors(compiler: Path | None) -> list[dict]:
-    return _build_inputs().pack_descriptors(ROOT, compiler, read_object)
+def _pack_descriptors(compiler: Path | None, *, inventory=None) -> list[dict]:
+    return _build_inputs().pack_descriptors(ROOT, compiler, read_object, inventory=inventory)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, *, inventory=None) -> int:
     """Build or strictly check projections bound to current native implementation and authored sources."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Reject a missing or stale generated artifact.")
@@ -334,7 +334,7 @@ def main(argv: list[str] | None = None) -> int:
                 "source compiler trust map does not match the authored bindings; rebuild it before staging"
             )
     if core_only and not args.core_only and not args.projections_only:
-        compiled["descriptors"] = _pack_descriptors(args.compiler)
+        compiled["descriptors"] = _pack_descriptors(args.compiler, inventory=inventory)
     public_directory = ROOT / "contributions/extensions"
     descriptors = {descriptor["id"]: descriptor for descriptor in compiled["descriptors"]}
     if set(args.publish_descriptor) - descriptors.keys():

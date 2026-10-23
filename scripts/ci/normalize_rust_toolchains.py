@@ -24,7 +24,9 @@ def parse_toolchains(output: str) -> dict[str, set[str]]:
     return installed
 
 
-def removals(toolchain: str, installed_output: str, active_output: str) -> list[str]:
+def removals(
+    toolchain: str, installed_output: str, active_output: str, *, expected_host: str | None = None
+) -> list[str]:
     """Retain the exact host-qualified pinned default and all its components."""
     if PINNED.fullmatch(toolchain) is None:
         raise ValueError("normalization requires an exact Rust version")
@@ -35,6 +37,7 @@ def removals(toolchain: str, installed_output: str, active_output: str) -> list[
     retained = next(iter(active))
     if (
         not retained.startswith(f"{toolchain}-")
+        or (expected_host is not None and retained != f"{toolchain}-{expected_host}")
         or "default" not in active[retained]
         or "default" not in installed.get(retained, set())
         or any("default" in flags for name, flags in installed.items() if name != retained)
@@ -51,9 +54,14 @@ def main() -> None:
     if not (
         os.environ.get("GITHUB_ACTIONS") == "true"
         and os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted"
-        and os.environ.get("RUNNER_OS") == "Linux"
+        and os.environ.get("RUNNER_OS") in {"Linux", "Windows"}
     ):
         return
+    expected_host = None
+    if os.environ["RUNNER_OS"] == "Windows":
+        if os.environ.get("RUNNER_ARCH") != "X64":
+            raise ValueError("Windows normalization requires the hosted X64 runner")
+        expected_host = "x86_64-pc-windows-msvc"
     installed = subprocess.run(
         ["rustup", "toolchain", "list"],
         check=True,
@@ -67,7 +75,7 @@ def main() -> None:
         text=True,
     ).stdout
     # Validate the complete list and default selection before the first mutation.
-    for name in removals(args.toolchain, installed, active):
+    for name in removals(args.toolchain, installed, active, expected_host=expected_host):
         subprocess.run(["rustup", "toolchain", "uninstall", name], check=True)
 
 

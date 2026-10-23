@@ -135,6 +135,7 @@ jobs:
         run: |
           chmod 0755 "$RUNNER_TEMP/delivery-runtime/hol-guard-runtime"
           echo "HOL_GUARD_NATIVE_BINARY=$RUNNER_TEMP/delivery-runtime/hol-guard-runtime" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE=force" >> "$GITHUB_ENV"
       - name: Install the pinned Rust toolchain
         run: rustup toolchain install 1.88.0 --profile minimal
       - name: Cache the data-free native compiler
@@ -233,6 +234,7 @@ jobs:
         run: |
           chmod 0755 "$RUNNER_TEMP/delivery-runtime/hol-guard-runtime"
           echo "HOL_GUARD_NATIVE_BINARY=$RUNNER_TEMP/delivery-runtime/hol-guard-runtime" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE=force" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: extension-artifacts-${{ github.sha }}

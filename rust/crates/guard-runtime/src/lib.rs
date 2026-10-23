@@ -14,6 +14,7 @@ mod aibom_marketplace;
 mod aibom_mcp_metadata;
 mod aibom_op;
 mod aibom_paths;
+mod aibom_report_summaries_op;
 mod aibom_skill_rules;
 mod aibom_skills;
 mod aibom_symlink;
@@ -478,6 +479,7 @@ mod pack_lifecycle;
 mod pack_preparation;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
+mod codex_hook_identity_op;
 mod command_pack_record_op;
 #[allow(dead_code)]
 mod hook_evidence_activity;
@@ -498,7 +500,12 @@ mod hook_path_rules;
 mod hook_policy_config;
 mod hook_process_spawn;
 mod hook_render_op;
+mod inventory_item_classification_op;
+mod inventory_scan_findings_op;
+mod inventory_scan_targets_op;
+mod inventory_snapshot_digest_op;
 mod inventory_source_evidence_op;
+mod inventory_url_redaction_op;
 #[path = "adapters/detection/kimi_detect.rs"]
 mod kimi_detect;
 mod local_cli_grant_op;
@@ -617,6 +624,7 @@ mod package_authority_config;
 mod package_authority_op;
 mod package_context_build_op;
 mod package_evaluation_compose_op;
+mod package_evaluation_view_op;
 mod package_policy_resolve_op;
 mod package_posture_op;
 mod package_protect_finalize_op;
@@ -628,31 +636,15 @@ mod pi_glob;
 mod pi_hook_bridge;
 #[cfg(all(test, unix))]
 mod pi_vectors_tests;
-mod policy_bundle_crypto;
-mod policy_bundle_decisions;
-mod policy_bundle_delivery;
-mod policy_bundle_families;
-mod policy_bundle_json;
-mod policy_bundle_keys;
-mod policy_bundle_keys_ctx;
+#[cfg(test)]
+use guard_policy_bundle::delivery as policy_bundle_delivery;
+use guard_policy_bundle::{
+    families as policy_bundle_families, json as policy_bundle_json, keys as policy_bundle_keys,
+    python as policy_bundle_py, time as policy_bundle_time,
+};
 mod policy_bundle_op;
-mod policy_bundle_op_delivery;
-mod policy_bundle_op_keys;
-mod policy_bundle_op_page;
 #[cfg(test)]
-mod policy_bundle_op_page_tests;
-mod policy_bundle_op_synced;
-#[cfg(test)]
-mod policy_bundle_op_tests;
-mod policy_bundle_op_validate;
-#[cfg(test)]
-mod policy_bundle_op_vectors_tests;
-mod policy_bundle_py;
-mod policy_bundle_time;
-mod policy_bundle_v1;
-mod policy_bundle_v1_rules;
-mod policy_bundle_v2;
-mod policy_bundle_v2_ack;
+mod policy_bundle_transport_tests;
 mod policy_decision_lookup_op;
 mod policy_document_decide_op;
 mod policy_document_op;
@@ -752,6 +744,7 @@ mod totp;
 mod unique_nanos;
 mod verified_npm_op;
 mod verified_read_decision_op;
+mod verified_read_plan_op;
 #[cfg(windows)]
 mod windows_node_build;
 #[cfg(windows)]

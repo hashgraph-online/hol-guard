@@ -60,7 +60,9 @@ class MetadataAPI:
 
 def test_renaming_enforcement_out_of_the_scoped_directory_still_requires_evidence():
     """Include previous filenames when deciding whether a renamed file needs evidence."""
-    api = MetadataAPI([{"filename": "retired.txt", "previous_filename": "rust/crates/guard-command/src/pretool/mod.rs"}], 1)
+    api = MetadataAPI(
+        [{"filename": "retired.txt", "previous_filename": "rust/crates/guard-command/src/pretool/mod.rs"}], 1
+    )
     initialize_gate(api, {"inputs": {"pr_number": "1", "candidate_sha": "a" * 40}})
     assert api.statuses[0][1] == "pending"
 
@@ -462,7 +464,7 @@ def test_gauntlet_qualification_is_optional_and_separate_from_required_ci():
 
     root = Path(__file__).resolve().parents[1]
     ci = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
-    job = ci["jobs"]["ci-python-312"]
+    job = ci["jobs"]["required"]
     for step in job["steps"]:
         assert step.get("with", {}).get("path") != "gauntlet-trusted"
         assert "ci.gauntlet.github_ci require" not in step.get("run", "")

@@ -154,7 +154,10 @@ def test_windows_routes_only_harnesses_with_a_sink_command(
     assert (result is not None) is routed
     if harness == "codex":
         command = result["hookSpecificOutput"]["updatedInput"]["command"]
-        assert command.startswith("& '")
+        # A Windows Python path both shells read as a bare word takes the line both
+        # read the same way; this host's path takes the PowerShell form.
+        either = " '-I' '-c' 'import sys;sys.path.insert(0,sys.argv.pop(1));" in command
+        assert either or command.startswith("& '")
         assert "execute-contained-test" in command
 
 

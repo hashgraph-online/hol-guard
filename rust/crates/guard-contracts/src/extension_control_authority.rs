@@ -43,7 +43,12 @@ pub const EXTENSION_CONTROL_AUTHORITY_RESULT_SCHEMA: &str =
 pub const EXTENSION_CONTROL_AUTHORITY_FEATURE: &str = "extension-control-authority-v1";
 /// Largest canonical request the resident accepts. A request carries at most
 /// two catalog manifests, one fingerprint per catalog target.
-pub const EXTENSION_CONTROL_AUTHORITY_MAX_BYTES: usize = 16 * 1024 * 1024;
+///
+/// Held under [`MAX_NATIVE_REQUEST_BYTES`](crate::MAX_NATIVE_REQUEST_BYTES),
+/// which the transport enforces on the frame before this op ever sees it. A
+/// bound above that would be unreachable: a request between the two would be
+/// refused as a malformed frame instead of being told its own size is why.
+pub const EXTENSION_CONTROL_AUTHORITY_MAX_BYTES: usize = 6 * 1024 * 1024 - 64 * 1024;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]

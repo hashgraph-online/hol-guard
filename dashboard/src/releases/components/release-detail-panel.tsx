@@ -1,14 +1,23 @@
 import { useMemo, useState } from "react";
 import {
   HiMiniArrowDownTray,
+  HiMiniArrowLongRight,
+  HiMiniArrowPath,
   HiMiniArrowTopRightOnSquare,
   HiMiniChevronRight,
+  HiMiniEllipsisHorizontal,
   HiMiniInformationCircle,
+  HiMiniMinus,
+  HiMiniPlus,
   HiMiniShieldCheck,
+  HiMiniWrench,
 } from "react-icons/hi2";
+import type { IconType } from "react-icons";
 
 import { Tag } from "../../approval-center-primitives";
 import {
+  changeCountLabel,
+  changeKindTone,
   channelLabel,
   comparisonLine,
   contributorMonogram,
@@ -24,7 +33,7 @@ import {
   verificationLabel,
 } from "../releases-model";
 import type { MergedContributor } from "../releases-model";
-import type { ReleaseAsset, ReleaseChange, ReleaseDetail } from "../releases-types";
+import type { ReleaseAsset, ReleaseChange, ReleaseChangeKind, ReleaseDetail } from "../releases-types";
 import { ReleaseInlineText, ReleaseNotes } from "./release-notes";
 
 function CoverageNote({ note }: { note: string }) {
@@ -48,11 +57,55 @@ function Disclosure(props: { summary: string; count?: number; children: React.Re
         />
         {props.summary}
         {props.count === undefined ? null : (
-          <span className="tabular-nums text-xs font-medium text-brand-dark/45">{props.count}</span>
+          <span className="tabular-nums text-xs font-medium text-brand-dark/75">{props.count}</span>
         )}
       </summary>
       <div className="px-3 pb-4 pt-1">{props.children}</div>
     </details>
+  );
+}
+
+/** One mark per kind of change, so a security fix is recognisable as one
+ * before a word of it is read. */
+const KIND_ICONS: Record<ReleaseChangeKind, IconType> = {
+  security: HiMiniShieldCheck,
+  added: HiMiniPlus,
+  changed: HiMiniArrowPath,
+  fixed: HiMiniWrench,
+  removed: HiMiniMinus,
+  other: HiMiniEllipsisHorizontal,
+};
+
+function ChangeKindHeading(props: { kind: ReleaseChangeKind; label: string; count: number; id: string }) {
+  const Icon = KIND_ICONS[props.kind];
+  return (
+    <h3 id={props.id} className="flex items-center gap-2 text-sm font-semibold text-brand-dark">
+      <span
+        className={`flex size-6 shrink-0 items-center justify-center rounded-lg ${changeKindTone(props.kind)}`}
+        aria-hidden="true"
+      >
+        <Icon className="size-3.5" />
+      </span>
+      {props.label}
+      <span className="tabular-nums text-xs font-medium text-brand-dark/75">{props.count}</span>
+    </h3>
+  );
+}
+
+/** The two versions this release sits between, as a pair rather than a
+ * sentence. The sentence stays for anyone listening rather than looking. */
+function ComparisonPair({ detail }: { detail: ReleaseDetail }) {
+  const line = comparisonLine(detail.comparison);
+  if (!detail.comparison.available) {
+    return <p className="text-sm text-brand-dark/75">{line}</p>;
+  }
+  return (
+    <p className="inline-flex max-w-full items-center gap-2 rounded-lg border border-brand-dark/10 bg-surface-1 px-2.5 py-1.5 font-mono text-[13px] tabular-nums text-brand-dark/75">
+      <span className="truncate">{detail.comparison.predecessorRawTag}</span>
+      <HiMiniArrowLongRight className="size-4 shrink-0 text-brand-dark/35" aria-hidden="true" />
+      <span className="truncate font-semibold text-brand-dark">{detail.rawTag}</span>
+      <span className="sr-only">{line}</span>
+    </p>
   );
 }
 
@@ -89,7 +142,7 @@ function ContributorChip({ contributor }: { contributor: MergedContributor }) {
         {contributorMonogram(contributor)}
       </span>
       <span className="min-w-0 truncate font-medium text-brand-dark">{name}</span>
-      <span className="shrink-0 text-xs text-brand-dark/50">
+      <span className="shrink-0 text-xs text-brand-dark/75">
         {contributor.roles.join(", ")}
         {contributor.credits > 1 ? ` · ${contributor.credits} changes` : null}
       </span>
@@ -156,14 +209,30 @@ export function ReleaseDetailPanel({
   const assets = useMemo(() => groupReleaseAssets(detail.assets), [detail.assets]);
   const roster = useMemo(() => mergeContributors(detail.roster), [detail.roster]);
   const note = coverageNote(detail.coverage);
+  // What is in this release, counted, before a word of it is read.
+  const countLabel = useMemo(() => changeCountLabel(sections), [sections]);
   const changeList =
     sections.length > 0 ? (
       <div className="space-y-5">
         {sections.map((section) => (
-          <section key={section.kind} aria-labelledby={`release-changes-${section.kind}`} className="space-y-2">
-            <h3 id={`release-changes-${section.kind}`} className="text-sm font-semibold text-brand-dark">
-              {section.label}
-            </h3>
+          <section
+            key={section.kind}
+            aria-labelledby={`release-changes-${section.kind}`}
+            // Security is the one kind a reader must not be able to skim
+            // past, so it gets a surface of its own rather than a louder
+            // heading among equals.
+            className={
+              section.kind === "security"
+                ? "space-y-2.5 rounded-xl border border-brand-purple/20 bg-brand-purple/[0.03] p-3 sm:p-4"
+                : "space-y-2.5"
+            }
+          >
+            <ChangeKindHeading
+              id={`release-changes-${section.kind}`}
+              kind={section.kind}
+              label={section.label}
+              count={section.changes.length}
+            />
             <ul className="list-disc space-y-2 pl-5">
               {section.changes.map((change) => (
                 <ChangeItem key={change.id} change={change} />
@@ -180,28 +249,39 @@ export function ReleaseDetailPanel({
       aria-labelledby="release-detail-heading"
       className="guard-surface-in space-y-6 rounded-xl border border-brand-dark/10 bg-white p-4 sm:p-6"
     >
-      <header className="space-y-2.5">
+      <header className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+          <div className="min-w-0 space-y-1.5">
+            {/* The version is the one thing a reader arrives looking for, so
+                it is the loudest thing on the page rather than a line of
+                heading text the eye has to parse. */}
+            <h2
+              id="release-detail-heading"
+              className="font-mono text-[2rem] font-semibold leading-none tracking-[-0.02em] tabular-nums text-brand-dark"
+            >
+              {normalizeVersionLabel(detail.versionLabel)}
+            </h2>
+            <p className="text-sm text-brand-dark/75">
+              {detail.title && detail.title !== detail.rawTag ? `${detail.title} · ` : ""}
+              Released {formatReleaseDate(detail.publishedAt)}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <Tag tone={detail.channel === "stable" ? "green" : "amber"}>{channelLabel(detail.channel)}</Tag>
+            {isInstalled ? (
+              <Tag tone="blue">
+                <HiMiniShieldCheck className="size-3.5" aria-hidden="true" />
+                Running here
+              </Tag>
+            ) : null}
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <h2
-            id="release-detail-heading"
-            className="text-2xl font-semibold tracking-[-0.02em] text-brand-dark"
-          >
-            Guard {normalizeVersionLabel(detail.versionLabel)}
-          </h2>
-          <Tag tone={detail.channel === "stable" ? "green" : "amber"}>{channelLabel(detail.channel)}</Tag>
-          {isInstalled ? (
-            <Tag tone="blue">
-              <HiMiniShieldCheck className="size-3.5" aria-hidden="true" />
-              Running here
-            </Tag>
+          <ComparisonPair detail={detail} />
+          {countLabel ? (
+            <p className="tabular-nums text-xs text-brand-dark/75">{countLabel}</p>
           ) : null}
         </div>
-        <p className="text-sm text-brand-dark/65">
-          Released {formatReleaseDate(detail.publishedAt)}
-          {detail.title && detail.title !== detail.rawTag ? ` · ${detail.title}` : ""} ·{" "}
-          <span className="font-mono text-[13px]">{detail.rawTag}</span>
-        </p>
-        <p className="text-sm text-brand-dark/55">{comparisonLine(detail.comparison)}</p>
       </header>
 
       {note ? <CoverageNote note={note} /> : null}
@@ -210,12 +290,12 @@ export function ReleaseDetailPanel({
         <section aria-labelledby="release-notes-heading" className="space-y-3">
           <h3
             id="release-notes-heading"
-            className="text-xs font-semibold uppercase tracking-[0.06em] text-brand-dark/45"
+            className="text-xs font-semibold uppercase tracking-[0.06em] text-brand-dark/75"
           >
             {notesLead ? "Published release notes" : `Release notes for the ${detail.train} series`}
           </h3>
           {notesLead ? null : (
-            <p className="text-sm text-brand-dark/60">
+            <p className="text-sm text-brand-dark/75">
               Published for the {detail.train} series rather than this exact release.
             </p>
           )}
@@ -227,7 +307,7 @@ export function ReleaseDetailPanel({
         <section aria-labelledby="release-summary-heading" className="space-y-3">
           <h3
             id="release-summary-heading"
-            className="text-xs font-semibold uppercase tracking-[0.06em] text-brand-dark/45"
+            className="text-xs font-semibold uppercase tracking-[0.06em] text-brand-dark/75"
           >
             {notes === null ? "Release notes" : "Notes for this release"}
           </h3>
@@ -236,7 +316,7 @@ export function ReleaseDetailPanel({
       )}
 
       {changeList === null ? (
-        <p className="text-sm text-brand-dark/70">No itemised changes were published for this release.</p>
+        <p className="text-sm text-brand-dark/75">No itemised changes were published for this release.</p>
       ) : notesLead ? (
         <Disclosure summary="Itemised changes" count={changes.length}>
           {changeList}
@@ -263,7 +343,7 @@ export function ReleaseDetailPanel({
           <div className="space-y-4 pt-2">
             {assets.groups.map((group) => (
               <section key={group.id} className="space-y-2">
-                <h4 className="text-xs font-semibold uppercase tracking-[0.06em] text-brand-dark/50">
+                <h4 className="text-xs font-semibold uppercase tracking-[0.06em] text-brand-dark/75">
                   {group.label}
                 </h4>
                 <ul className="grid gap-2 sm:grid-cols-2">
@@ -275,7 +355,7 @@ export function ReleaseDetailPanel({
             ))}
             {assets.provenance.length > 0 ? (
               <section className="space-y-2">
-                <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-brand-dark/50">
+                <h4 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-brand-dark/75">
                   <HiMiniShieldCheck className="size-3.5" aria-hidden="true" />
                   Provenance
                 </h4>

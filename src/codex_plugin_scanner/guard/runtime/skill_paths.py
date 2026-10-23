@@ -25,8 +25,6 @@ PI_INLINE_RESOURCE_SCHEMES = frozenset(
         "xd",
     }
 )
-_PI_INLINE_RESOURCE_MAX_CHARS = 8192
-_PI_INLINE_RESOURCE_MAX_DECODE_PASSES = 8
 
 
 def resolve_known_skill_doc_path(target: str, *, home_dir: Path | None = None) -> Path | None:

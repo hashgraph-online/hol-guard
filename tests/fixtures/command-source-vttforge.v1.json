@@ -568,6 +568,292 @@
                 "Inspect volume consumers and back up required persistent data before deletion."
               ],
               "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Restarts containers and interrupts their running workloads.",
+              "example_command": "docker restart api",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Container restart",
+              "permission_id": "command.container-runtime.permission.container-restart",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Inspect the container and its dependencies before restarting it."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Suspends or resumes all processes in a container.",
+              "example_command": "docker pause api",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Container pause or unpause",
+              "permission_id": "command.container-runtime.permission.container-pause",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Check the workload and health checks before suspending or resuming it."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Changes an existing container's resource limits, restart policy, or name.",
+              "example_command": "docker update --memory 512m api",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Container configuration change",
+              "permission_id": "command.container-runtime.permission.container-update",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Inspect the current container settings and verify the exact changes."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Creates a container with the requested image, mounts, privileges, and environment.",
+              "example_command": "docker container create --privileged alpine",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Container creation",
+              "permission_id": "command.container-runtime.permission.container-create",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Review the image, host mounts, and privileges before creating the container."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Copies files between a container and the host, which can expose data or overwrite files.",
+              "example_command": "docker cp api:/app/output ./output",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Container file copy",
+              "permission_id": "command.container-runtime.permission.container-copy",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Verify both paths and the direction of the copy before transferring files."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Imports, loads, commits, or retags local container images.",
+              "example_command": "docker image tag app:v1 app:latest",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Container image change",
+              "permission_id": "command.container-runtime.permission.image-state-change",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Inspect the source image and target tag or archive before changing local images."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Publishes image layers or manifests to a registry.",
+              "example_command": "docker image push example/app:v1",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Container image publication",
+              "permission_id": "command.container-runtime.permission.image-publication",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Verify the destination registry and the exact image or manifest before publishing."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Creates a container network or connects or disconnects a container.",
+              "example_command": "docker network disconnect app-net api",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Container network change",
+              "permission_id": "command.container-runtime.permission.network-change",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Inspect the network and the container's dependencies before changing connectivity."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Creates a persistent volume, potentially using a driver with host or network access.",
+              "example_command": "docker volume create app-data",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Container volume creation",
+              "permission_id": "command.container-runtime.permission.volume-create",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Review the volume driver and its options before creating persistent storage."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Changes Swarm membership, service workloads, or stack deployments.",
+              "example_command": "docker service scale api=0",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Swarm workload or membership change",
+              "permission_id": "command.container-runtime.permission.swarm-change",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Inspect the affected services and cluster membership before applying the change."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Removes stored authentication for a container registry.",
+              "example_command": "docker logout registry.example.com",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Container registry logout",
+              "permission_id": "command.container-runtime.permission.logout",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Verify which registry's saved authentication will be removed."
+              ],
+              "typed_capabilities": []
             }
           ],
           "project_markers": [],
@@ -5240,6 +5526,1508 @@
               ],
               "severity": "critical",
               "title": "Swarm resource removal"
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "default_mode": "review",
+              "description": "Restarts containers and interrupts their running workloads.",
+              "family": null,
+              "matcher": {
+                "op": "executable-path-set.v1",
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "docker",
+                    "docker.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--debug",
+                    "--tls",
+                    "--tlsverify",
+                    "-d"
+                  ],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--config",
+                    "--context",
+                    "--host",
+                    "--log-level",
+                    "--tlscacert",
+                    "--tlscert",
+                    "--tlskey",
+                    "-c",
+                    "-h",
+                    "-l"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "paths": [
+                    [
+                      "restart"
+                    ],
+                    [
+                      "container",
+                      "restart"
+                    ]
+                  ]
+                }
+              },
+              "native_capability": null,
+              "permission_id": "command.container-runtime.permission.container-restart",
+              "risk_classes": [
+                "execution",
+                "destructive_shell"
+              ],
+              "rule_id": "command.container-runtime.container-restart",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "docker",
+                        "docker.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--debug",
+                        "--tls",
+                        "--tlsverify",
+                        "-d"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config",
+                        "--context",
+                        "--host",
+                        "--log-level",
+                        "--tlscacert",
+                        "--tlscert",
+                        "--tlskey",
+                        "-c",
+                        "-h",
+                        "-l"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "paths": [
+                        [
+                          "restart",
+                          "--help"
+                        ],
+                        [
+                          "container",
+                          "restart",
+                          "--help"
+                        ]
+                      ]
+                    }
+                  },
+                  "title": "Command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Inspect the container and its dependencies before restarting it."
+              ],
+              "severity": "high",
+              "title": "Container restart"
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "default_mode": "review",
+              "description": "Suspends or resumes all processes in a container.",
+              "family": null,
+              "matcher": {
+                "op": "executable-path-set.v1",
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "docker",
+                    "docker.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--debug",
+                    "--tls",
+                    "--tlsverify",
+                    "-d"
+                  ],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--config",
+                    "--context",
+                    "--host",
+                    "--log-level",
+                    "--tlscacert",
+                    "--tlscert",
+                    "--tlskey",
+                    "-c",
+                    "-h",
+                    "-l"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "paths": [
+                    [
+                      "pause"
+                    ],
+                    [
+                      "unpause"
+                    ],
+                    [
+                      "container",
+                      "pause"
+                    ],
+                    [
+                      "container",
+                      "unpause"
+                    ]
+                  ]
+                }
+              },
+              "native_capability": null,
+              "permission_id": "command.container-runtime.permission.container-pause",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.container-runtime.container-pause",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "docker",
+                        "docker.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--debug",
+                        "--tls",
+                        "--tlsverify",
+                        "-d"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config",
+                        "--context",
+                        "--host",
+                        "--log-level",
+                        "--tlscacert",
+                        "--tlscert",
+                        "--tlskey",
+                        "-c",
+                        "-h",
+                        "-l"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "paths": [
+                        [
+                          "pause",
+                          "--help"
+                        ],
+                        [
+                          "unpause",
+                          "--help"
+                        ],
+                        [
+                          "container",
+                          "pause",
+                          "--help"
+                        ],
+                        [
+                          "container",
+                          "unpause",
+                          "--help"
+                        ]
+                      ]
+                    }
+                  },
+                  "title": "Command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Check the workload and health checks before suspending or resuming it."
+              ],
+              "severity": "high",
+              "title": "Container pause or unpause"
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "default_mode": "review",
+              "description": "Changes an existing container's resource limits, restart policy, or name.",
+              "family": null,
+              "matcher": {
+                "op": "executable-path-set.v1",
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "docker",
+                    "docker.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--debug",
+                    "--tls",
+                    "--tlsverify",
+                    "-d"
+                  ],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--config",
+                    "--context",
+                    "--host",
+                    "--log-level",
+                    "--tlscacert",
+                    "--tlscert",
+                    "--tlskey",
+                    "-c",
+                    "-h",
+                    "-l"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "paths": [
+                    [
+                      "update"
+                    ],
+                    [
+                      "rename"
+                    ],
+                    [
+                      "container",
+                      "update"
+                    ],
+                    [
+                      "container",
+                      "rename"
+                    ]
+                  ]
+                }
+              },
+              "native_capability": null,
+              "permission_id": "command.container-runtime.permission.container-update",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.container-runtime.container-update",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "docker",
+                        "docker.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--debug",
+                        "--tls",
+                        "--tlsverify",
+                        "-d"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config",
+                        "--context",
+                        "--host",
+                        "--log-level",
+                        "--tlscacert",
+                        "--tlscert",
+                        "--tlskey",
+                        "-c",
+                        "-h",
+                        "-l"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "paths": [
+                        [
+                          "update",
+                          "--help"
+                        ],
+                        [
+                          "rename",
+                          "--help"
+                        ],
+                        [
+                          "container",
+                          "update",
+                          "--help"
+                        ],
+                        [
+                          "container",
+                          "rename",
+                          "--help"
+                        ]
+                      ]
+                    }
+                  },
+                  "title": "Command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Inspect the current container settings and verify the exact changes."
+              ],
+              "severity": "high",
+              "title": "Container configuration change"
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "default_mode": "review",
+              "description": "Creates a container with the requested image, mounts, privileges, and environment.",
+              "family": null,
+              "matcher": {
+                "op": "executable-path-set.v1",
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "docker",
+                    "docker.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--debug",
+                    "--tls",
+                    "--tlsverify",
+                    "-d"
+                  ],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--config",
+                    "--context",
+                    "--host",
+                    "--log-level",
+                    "--tlscacert",
+                    "--tlscert",
+                    "--tlskey",
+                    "-c",
+                    "-h",
+                    "-l"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "paths": [
+                    [
+                      "create"
+                    ],
+                    [
+                      "container",
+                      "create"
+                    ],
+                    [
+                      "container",
+                      "run"
+                    ]
+                  ]
+                }
+              },
+              "native_capability": null,
+              "permission_id": "command.container-runtime.permission.container-create",
+              "risk_classes": [
+                "execution",
+                "network_egress"
+              ],
+              "rule_id": "command.container-runtime.container-create",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "docker",
+                        "docker.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--debug",
+                        "--tls",
+                        "--tlsverify",
+                        "-d"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config",
+                        "--context",
+                        "--host",
+                        "--log-level",
+                        "--tlscacert",
+                        "--tlscert",
+                        "--tlskey",
+                        "-c",
+                        "-h",
+                        "-l"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "paths": [
+                        [
+                          "create",
+                          "--help"
+                        ],
+                        [
+                          "container",
+                          "create",
+                          "--help"
+                        ],
+                        [
+                          "container",
+                          "run",
+                          "--help"
+                        ]
+                      ]
+                    }
+                  },
+                  "title": "Command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Review the image, host mounts, and privileges before creating the container."
+              ],
+              "severity": "high",
+              "title": "Container creation"
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "default_mode": "review",
+              "description": "Copies files between a container and the host, which can expose data or overwrite files.",
+              "family": null,
+              "matcher": {
+                "op": "executable-path-set.v1",
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "docker",
+                    "docker.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--debug",
+                    "--tls",
+                    "--tlsverify",
+                    "-d"
+                  ],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--config",
+                    "--context",
+                    "--host",
+                    "--log-level",
+                    "--tlscacert",
+                    "--tlscert",
+                    "--tlskey",
+                    "-c",
+                    "-h",
+                    "-l"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "paths": [
+                    [
+                      "cp"
+                    ],
+                    [
+                      "container",
+                      "cp"
+                    ]
+                  ]
+                }
+              },
+              "native_capability": null,
+              "permission_id": "command.container-runtime.permission.container-copy",
+              "risk_classes": [
+                "network_egress",
+                "local_secret_read",
+                "destructive_shell"
+              ],
+              "rule_id": "command.container-runtime.container-copy",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "docker",
+                        "docker.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--debug",
+                        "--tls",
+                        "--tlsverify",
+                        "-d"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config",
+                        "--context",
+                        "--host",
+                        "--log-level",
+                        "--tlscacert",
+                        "--tlscert",
+                        "--tlskey",
+                        "-c",
+                        "-h",
+                        "-l"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "paths": [
+                        [
+                          "cp",
+                          "--help"
+                        ],
+                        [
+                          "container",
+                          "cp",
+                          "--help"
+                        ]
+                      ]
+                    }
+                  },
+                  "title": "Command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Verify both paths and the direction of the copy before transferring files."
+              ],
+              "severity": "high",
+              "title": "Container file copy"
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "default_mode": "review",
+              "description": "Imports, loads, commits, or retags local container images.",
+              "family": null,
+              "matcher": {
+                "op": "executable-path-set.v1",
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "docker",
+                    "docker.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--debug",
+                    "--tls",
+                    "--tlsverify",
+                    "-d"
+                  ],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--config",
+                    "--context",
+                    "--host",
+                    "--log-level",
+                    "--tlscacert",
+                    "--tlscert",
+                    "--tlskey",
+                    "-c",
+                    "-h",
+                    "-l"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "paths": [
+                    [
+                      "commit"
+                    ],
+                    [
+                      "container",
+                      "commit"
+                    ],
+                    [
+                      "tag"
+                    ],
+                    [
+                      "image",
+                      "tag"
+                    ],
+                    [
+                      "load"
+                    ],
+                    [
+                      "image",
+                      "load"
+                    ],
+                    [
+                      "import"
+                    ],
+                    [
+                      "image",
+                      "import"
+                    ]
+                  ]
+                }
+              },
+              "native_capability": null,
+              "permission_id": "command.container-runtime.permission.image-state-change",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.container-runtime.image-state-change",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "docker",
+                        "docker.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--debug",
+                        "--tls",
+                        "--tlsverify",
+                        "-d"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config",
+                        "--context",
+                        "--host",
+                        "--log-level",
+                        "--tlscacert",
+                        "--tlscert",
+                        "--tlskey",
+                        "-c",
+                        "-h",
+                        "-l"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "paths": [
+                        [
+                          "commit",
+                          "--help"
+                        ],
+                        [
+                          "container",
+                          "commit",
+                          "--help"
+                        ],
+                        [
+                          "tag",
+                          "--help"
+                        ],
+                        [
+                          "image",
+                          "tag",
+                          "--help"
+                        ],
+                        [
+                          "load",
+                          "--help"
+                        ],
+                        [
+                          "image",
+                          "load",
+                          "--help"
+                        ],
+                        [
+                          "import",
+                          "--help"
+                        ],
+                        [
+                          "image",
+                          "import",
+                          "--help"
+                        ]
+                      ]
+                    }
+                  },
+                  "title": "Command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Inspect the source image and target tag or archive before changing local images."
+              ],
+              "severity": "high",
+              "title": "Container image change"
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "default_mode": "review",
+              "description": "Publishes image layers or manifests to a registry.",
+              "family": null,
+              "matcher": {
+                "op": "executable-path-set.v1",
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "docker",
+                    "docker.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--debug",
+                    "--tls",
+                    "--tlsverify",
+                    "-d"
+                  ],
+                  "interspersed_options_with_values": [
+                    "--builder"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--config",
+                    "--context",
+                    "--host",
+                    "--log-level",
+                    "--tlscacert",
+                    "--tlscert",
+                    "--tlskey",
+                    "-c",
+                    "-h",
+                    "-l"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "paths": [
+                    [
+                      "image",
+                      "push"
+                    ],
+                    [
+                      "manifest",
+                      "push"
+                    ],
+                    [
+                      "buildx",
+                      "imagetools",
+                      "create"
+                    ]
+                  ]
+                }
+              },
+              "native_capability": null,
+              "permission_id": "command.container-runtime.permission.image-publication",
+              "risk_classes": [
+                "network_egress"
+              ],
+              "rule_id": "command.container-runtime.image-publication",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "docker",
+                        "docker.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--debug",
+                        "--tls",
+                        "--tlsverify",
+                        "-d"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--builder"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config",
+                        "--context",
+                        "--host",
+                        "--log-level",
+                        "--tlscacert",
+                        "--tlscert",
+                        "--tlskey",
+                        "-c",
+                        "-h",
+                        "-l"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "paths": [
+                        [
+                          "image",
+                          "push",
+                          "--help"
+                        ],
+                        [
+                          "manifest",
+                          "push",
+                          "--help"
+                        ],
+                        [
+                          "buildx",
+                          "imagetools",
+                          "create",
+                          "--help"
+                        ]
+                      ]
+                    }
+                  },
+                  "title": "Command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Verify the destination registry and the exact image or manifest before publishing."
+              ],
+              "severity": "high",
+              "title": "Container image publication"
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "default_mode": "review",
+              "description": "Creates a container network or connects or disconnects a container.",
+              "family": null,
+              "matcher": {
+                "op": "executable-path-set.v1",
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "docker",
+                    "docker.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--debug",
+                    "--tls",
+                    "--tlsverify",
+                    "-d"
+                  ],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--config",
+                    "--context",
+                    "--host",
+                    "--log-level",
+                    "--tlscacert",
+                    "--tlscert",
+                    "--tlskey",
+                    "-c",
+                    "-h",
+                    "-l"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "paths": [
+                    [
+                      "network",
+                      "create"
+                    ],
+                    [
+                      "network",
+                      "connect"
+                    ],
+                    [
+                      "network",
+                      "disconnect"
+                    ]
+                  ]
+                }
+              },
+              "native_capability": null,
+              "permission_id": "command.container-runtime.permission.network-change",
+              "risk_classes": [
+                "network_egress",
+                "destructive_shell"
+              ],
+              "rule_id": "command.container-runtime.network-change",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "docker",
+                        "docker.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--debug",
+                        "--tls",
+                        "--tlsverify",
+                        "-d"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config",
+                        "--context",
+                        "--host",
+                        "--log-level",
+                        "--tlscacert",
+                        "--tlscert",
+                        "--tlskey",
+                        "-c",
+                        "-h",
+                        "-l"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "paths": [
+                        [
+                          "network",
+                          "create",
+                          "--help"
+                        ],
+                        [
+                          "network",
+                          "connect",
+                          "--help"
+                        ],
+                        [
+                          "network",
+                          "disconnect",
+                          "--help"
+                        ]
+                      ]
+                    }
+                  },
+                  "title": "Command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Inspect the network and the container's dependencies before changing connectivity."
+              ],
+              "severity": "high",
+              "title": "Container network change"
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "default_mode": "review",
+              "description": "Creates a persistent volume, potentially using a driver with host or network access.",
+              "family": null,
+              "matcher": {
+                "op": "executable-path-set.v1",
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "docker",
+                    "docker.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--debug",
+                    "--tls",
+                    "--tlsverify",
+                    "-d"
+                  ],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--config",
+                    "--context",
+                    "--host",
+                    "--log-level",
+                    "--tlscacert",
+                    "--tlscert",
+                    "--tlskey",
+                    "-c",
+                    "-h",
+                    "-l"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "paths": [
+                    [
+                      "volume",
+                      "create"
+                    ],
+                    [
+                      "volume",
+                      "update"
+                    ]
+                  ]
+                }
+              },
+              "native_capability": null,
+              "permission_id": "command.container-runtime.permission.volume-create",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.container-runtime.volume-create",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "docker",
+                        "docker.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--debug",
+                        "--tls",
+                        "--tlsverify",
+                        "-d"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config",
+                        "--context",
+                        "--host",
+                        "--log-level",
+                        "--tlscacert",
+                        "--tlscert",
+                        "--tlskey",
+                        "-c",
+                        "-h",
+                        "-l"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "paths": [
+                        [
+                          "volume",
+                          "create",
+                          "--help"
+                        ],
+                        [
+                          "volume",
+                          "update",
+                          "--help"
+                        ]
+                      ]
+                    }
+                  },
+                  "title": "Command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Review the volume driver and its options before creating persistent storage."
+              ],
+              "severity": "high",
+              "title": "Container volume creation"
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "default_mode": "review",
+              "description": "Changes Swarm membership, service workloads, or stack deployments.",
+              "family": null,
+              "matcher": {
+                "op": "executable-path-set.v1",
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "docker",
+                    "docker.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--debug",
+                    "--tls",
+                    "--tlsverify",
+                    "-d"
+                  ],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--config",
+                    "--context",
+                    "--host",
+                    "--log-level",
+                    "--tlscacert",
+                    "--tlscert",
+                    "--tlskey",
+                    "-c",
+                    "-h",
+                    "-l"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "paths": [
+                    [
+                      "swarm",
+                      "init"
+                    ],
+                    [
+                      "swarm",
+                      "join"
+                    ],
+                    [
+                      "swarm",
+                      "leave"
+                    ],
+                    [
+                      "swarm",
+                      "update"
+                    ],
+                    [
+                      "service",
+                      "create"
+                    ],
+                    [
+                      "service",
+                      "update"
+                    ],
+                    [
+                      "service",
+                      "scale"
+                    ],
+                    [
+                      "service",
+                      "rollback"
+                    ],
+                    [
+                      "stack",
+                      "deploy"
+                    ]
+                  ]
+                }
+              },
+              "native_capability": null,
+              "permission_id": "command.container-runtime.permission.swarm-change",
+              "risk_classes": [
+                "execution",
+                "network_egress",
+                "destructive_shell"
+              ],
+              "rule_id": "command.container-runtime.swarm-change",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "docker",
+                        "docker.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--debug",
+                        "--tls",
+                        "--tlsverify",
+                        "-d"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config",
+                        "--context",
+                        "--host",
+                        "--log-level",
+                        "--tlscacert",
+                        "--tlscert",
+                        "--tlskey",
+                        "-c",
+                        "-h",
+                        "-l"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "paths": [
+                        [
+                          "swarm",
+                          "init",
+                          "--help"
+                        ],
+                        [
+                          "swarm",
+                          "join",
+                          "--help"
+                        ],
+                        [
+                          "swarm",
+                          "leave",
+                          "--help"
+                        ],
+                        [
+                          "swarm",
+                          "update",
+                          "--help"
+                        ],
+                        [
+                          "service",
+                          "create",
+                          "--help"
+                        ],
+                        [
+                          "service",
+                          "update",
+                          "--help"
+                        ],
+                        [
+                          "service",
+                          "scale",
+                          "--help"
+                        ],
+                        [
+                          "service",
+                          "rollback",
+                          "--help"
+                        ],
+                        [
+                          "stack",
+                          "deploy",
+                          "--help"
+                        ]
+                      ]
+                    }
+                  },
+                  "title": "Command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Inspect the affected services and cluster membership before applying the change."
+              ],
+              "severity": "high",
+              "title": "Swarm workload or membership change"
+            },
+            {
+              "action_classes": [
+                "docker-sensitive command"
+              ],
+              "default_mode": "review",
+              "description": "Removes stored authentication for a container registry.",
+              "family": null,
+              "matcher": {
+                "op": "executable-path-set.v1",
+                "config": {
+                  "allow_leading_options": true,
+                  "executables": [
+                    "docker",
+                    "docker.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [
+                    "--debug",
+                    "--tls",
+                    "--tlsverify",
+                    "-d"
+                  ],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [
+                    "--config",
+                    "--context",
+                    "--host",
+                    "--log-level",
+                    "--tlscacert",
+                    "--tlscert",
+                    "--tlskey",
+                    "-c",
+                    "-h",
+                    "-l"
+                  ],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "paths": [
+                    [
+                      "logout"
+                    ]
+                  ]
+                }
+              },
+              "native_capability": null,
+              "permission_id": "command.container-runtime.permission.logout",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.container-runtime.logout",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "docker",
+                        "docker.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--debug",
+                        "--tls",
+                        "--tlsverify",
+                        "-d"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--config",
+                        "--context",
+                        "--host",
+                        "--log-level",
+                        "--tlscacert",
+                        "--tlscert",
+                        "--tlskey",
+                        "-c",
+                        "-h",
+                        "-l"
+                      ],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--help"
+                      ],
+                      "required_flags_in_all_arguments": true,
+                      "required_option_values": [],
+                      "paths": [
+                        [
+                          "logout",
+                          "--help"
+                        ]
+                      ]
+                    }
+                  },
+                  "title": "Command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Verify which registry's saved authentication will be removed."
+              ],
+              "severity": "high",
+              "title": "Container registry logout"
             }
           ],
           "safer_alternatives": [

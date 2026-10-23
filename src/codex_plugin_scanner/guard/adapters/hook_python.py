@@ -33,8 +33,6 @@ from .base import HarnessContext
 from .hook_python_probe_code import PROBE_CODE as _PROBE_CODE
 from .hook_python_subprocess import run_probe as _run_probe
 
-_WORKTREE_MARKERS = ("/.worktrees/", "/worktrees/")
-_WORKTREE_SEGMENT_PREFIXES = ("hol-guard-wt-",)
 _PROBE_SCHEMA: Final = 2
 _EXPECTED_ENTRY_POINT: Final = "codex_plugin_scanner.cli:main"
 _PREPARATION_PROBE: ContextVar[tuple[int, Path] | None] = ContextVar("guard_preparation_probe", default=None)

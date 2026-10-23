@@ -5,6 +5,12 @@ They do not require deleting runtime state or disabling authentication.
 
 ## First enrollment
 
+The daemon enrolls a new Guard home the first time it starts, so most installs never
+need this step. Enrollment by default only runs on a home with no authority snapshot and
+no vault anchor, and the new authority starts with no control layers. If it could not
+complete (the background diagnostics log records `default_authority_enrollment_failed`),
+enroll manually:
+
 ```sh
 hol-guard command controls enroll
 ```

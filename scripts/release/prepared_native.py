@@ -14,25 +14,36 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def transfer(directory: Path, *, install: bool) -> None:
+def verify(directory: Path) -> dict[str, Path]:
+    """Verify every input before installing either executable."""
     expected = {"source_sha": os.environ["SOURCE_SHA"], "version": os.environ["VERSION"]}
     if build_id := os.environ.get("PREPARED_NATIVE_BUILD_ID"):
         expected["build_id"] = build_id
     paths = {key: Path(os.environ[key]) for key in ("RUNTIME", "SOURCE_COMPILER")}
     manifest = directory / "identity.json"
+    recorded = json.loads(manifest.read_text())
+    if any(recorded.get(key) != value for key, value in expected.items()):
+        raise ValueError("prepared native source/version mismatch")
+    for key, destination in paths.items():
+        source = directory / destination.name
+        if source.is_symlink() or digest(source) != recorded["sha256"][key]:
+            raise ValueError("prepared native binary hash mismatch")
+    return paths
+
+
+def transfer(directory: Path, *, install: bool) -> None:
     if install:
-        recorded = json.loads(manifest.read_text())
-        if any(recorded.get(key) != value for key, value in expected.items()):
-            raise ValueError("prepared native source/version mismatch")
-        for key, destination in paths.items():
-            source = directory / destination.name
-            if source.is_symlink() or digest(source) != recorded["sha256"][key]:
-                raise ValueError("prepared native binary hash mismatch")
+        paths = verify(directory)
         for destination in paths.values():
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(directory / destination.name, destination)
             destination.chmod(0o755)
     else:
+        expected = {"source_sha": os.environ["SOURCE_SHA"], "version": os.environ["VERSION"]}
+        if build_id := os.environ.get("PREPARED_NATIVE_BUILD_ID"):
+            expected["build_id"] = build_id
+        paths = {key: Path(os.environ[key]) for key in ("RUNTIME", "SOURCE_COMPILER")}
+        manifest = directory / "identity.json"
         directory.mkdir(parents=True, exist_ok=False)
         hashes = {}
         for key, source in paths.items():

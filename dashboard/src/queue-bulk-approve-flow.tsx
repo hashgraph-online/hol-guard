@@ -1,4 +1,4 @@
-import { useMemo, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, type ChangeEvent } from "react";
 import { bulkApproveConsequenceCopyForSelection } from "./approval-retry-guidance";
 import { BulkDrawerShell } from "./queue-bulk-drawer-shell";
 import { toneRing, toneChip, toneIcon } from "./queue-bulk-risk-presentation";
@@ -9,6 +9,7 @@ import {
   HiMiniShieldCheck,
   HiMiniXMark,
   HiMiniKey,
+  HiMiniNoSymbol,
 } from "react-icons/hi2";
 import {
   buildBulkApproveConsequenceCopy,
@@ -17,10 +18,10 @@ import {
 } from "./approval-center-utils";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
 import type { QueueGroup } from "./queue-state";
+import type { QueueBulkStickyBarProps } from "./use-queue-bulk-approve";
 import type {
   BulkRiskDisclosure,
   BulkRiskTier,
-  BulkRiskTone,
 } from "./queue-bulk-risk-disclosure";
 
 export {
@@ -36,54 +37,108 @@ const TIER_LABEL: Record<BulkRiskTier, string> = {
   high: "High risk",
 };
 
-export type QueueBulkStickyBarProps = {
-  visible: boolean;
-  selectedGroupCount: number;
-  selectedActionCount: number;
-  riskTier: BulkRiskTier;
-  riskTone: BulkRiskTone;
-  gateReady: boolean;
-  onStartReview: () => void;
-  onClearSelection: () => void;
-};
+export type { QueueBulkStickyBarProps } from "./use-queue-bulk-approve";
 
 export function QueueBulkStickyBar(props: QueueBulkStickyBarProps) {
-  if (!props.visible) return null;
-  const unit = props.selectedActionCount === 1 ? "action" : "actions";
+  const blockButton = useRef<HTMLButtonElement | null>(null);
+  const previousStep = useRef(props.blockStep);
+  useEffect(() => {
+    // Cancelling the confirmation returns focus to the button that opened it.
+    if (previousStep.current === "confirming" && props.blockStep === "idle") blockButton.current?.focus();
+    previousStep.current = props.blockStep;
+  }, [props.blockStep]);
+  if (!props.visible) {
+    // A partial block can leave nothing selected, such as when the one request
+    // that failed was settled elsewhere. Its outcome still has to be shown.
+    return props.blockError ? (
+      <p role="alert" className="mb-4 text-xs text-brand-attention">{props.blockError}</p>
+    ) : null;
+  }
+  const total = props.selectedRequestCount;
+  const unit = total === 1 ? "request" : "requests";
+  const approvableNote = props.selectedActionCount === total
+    ? "approve once"
+    : `${props.selectedActionCount} can be approved at once`;
   const ChipIcon = toneIcon(props.riskTone);
+  const confirmingBlock = props.blockStep !== "idle";
+  const blocking = props.blockStep === "blocking";
   return (
     <div
       className="sticky top-2 z-20 mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md backdrop-blur"
       role="region"
-      aria-label="Bulk approval selection"
+      aria-label="Bulk selection"
     >
-      <span
-        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${toneChip(props.riskTone)}`}
-      >
-        <ChipIcon className="h-3.5 w-3.5" aria-hidden="true" />
-        {TIER_LABEL[props.riskTier]}
-      </span>
+      {props.canApprove ? (
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${toneChip(props.riskTone)}`}
+        >
+          <ChipIcon className="h-3.5 w-3.5" aria-hidden="true" />
+          {TIER_LABEL[props.riskTier]}
+        </span>
+      ) : null}
       <p className="min-w-0 flex-1 text-sm font-medium text-brand-dark">
-        <span className="font-mono text-base font-semibold">{props.selectedActionCount}</span>
+        <span className="font-mono text-base font-semibold">{total}</span>
         {" "}
-        {unit} selected · approve once
+        {unit} selected{props.canApprove ? ` · ${approvableNote}` : ""}
       </p>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={props.onStartReview}
-          className="inline-flex min-h-9 items-center rounded-full bg-brand-blue px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90"
-        >
-          Review &amp; approve
-        </button>
-        <button
-          type="button"
-          onClick={props.onClearSelection}
-          className="inline-flex min-h-9 items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark"
-        >
-          Clear
-        </button>
-      </div>
+      {confirmingBlock ? (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Confirm block">
+          <p className="text-sm text-brand-dark">
+            Block {total} {unit} just this once? Any agent still waiting is told no.
+          </p>
+          <button
+            type="button"
+            onClick={props.onConfirmBlock}
+            disabled={blocking}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-brand-dark px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark/90 disabled:cursor-wait disabled:opacity-60"
+          >
+            <HiMiniNoSymbol className="h-4 w-4" aria-hidden="true" />
+            {blocking ? "Blocking…" : `Block ${total}`}
+          </button>
+          <button
+            type="button"
+            onClick={props.onCancelBlock}
+            disabled={blocking}
+            autoFocus
+            className="inline-flex min-h-9 items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark disabled:opacity-60"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          {props.canApprove ? (
+            <button
+              type="button"
+              onClick={props.onStartReview}
+              className="inline-flex min-h-9 items-center rounded-full bg-brand-blue px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90"
+            >
+              Review &amp; approve
+            </button>
+          ) : null}
+          {props.blockAvailable ? (
+            <button
+              ref={blockButton}
+              type="button"
+              onClick={props.onRequestBlock}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-1.5 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50"
+            >
+              <HiMiniNoSymbol className="h-4 w-4" aria-hidden="true" />
+              Block selected
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={props.onClearSelection}
+            className="inline-flex min-h-9 items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+      {props.blockError ? (
+        <p role="alert" className="w-full text-xs text-brand-attention">{props.blockError}</p>
+      ) : null}
     </div>
   );
 }

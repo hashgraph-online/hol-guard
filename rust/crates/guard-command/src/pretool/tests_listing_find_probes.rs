@@ -100,13 +100,17 @@ fn recursive_listing_and_globs_stay_inside_clean_trees() {
         "ls app/registry/[slug] src",
         // The unmatched bracket drops out under nullglob; `src` remains.
         "ls -R app/registry/[slug] src",
+        // A recursion without `-a` prints no hidden name and descends into no
+        // hidden directory, so the credential file below `bad` is not part of
+        // what the listing can emit.
+        "ls -R bad",
+        "ls --rec bad",
     ] {
         assert!(allowed_in(&fixture, ws, command), "{command}");
     }
     for command in [
-        // Recursion reaches hidden credential files and credential data.
-        "ls -R bad",
-        "ls --rec bad",
+        // Recursion reaches credential data and key containers the listing
+        // prints without being asked for a hidden name.
         "ls --recurs .",
         "ls -R .",
         "ls -R keys",
@@ -501,14 +505,14 @@ fn powershell_recurse_prefixes_take_the_recursive_proof_on_windows() {
     // On Windows `ls` can be PowerShell's Get-ChildItem. `-s` is `-Recurse`,
     // and any other prefix of `-Recurse` or `-Depth` is recursive too.
     for command in [
-        "ls -rec bad",
-        "ls -recurse -Force bad",
-        "ls -Depth:1 bad",
-        "ls -s bad",
+        "ls -rec docs",
+        "ls -recurse -Force docs",
+        "ls -Depth:1 docs",
+        "ls -s docs",
     ] {
         assert!(!windows(command), "{command}");
     }
-    for command in ["ls -la bad", "ls -rec src", "ls -Force bad"] {
+    for command in ["ls -la bad", "ls -rec src", "ls -Force bad", "ls docs"] {
         assert!(windows(command), "{command}");
     }
 }

@@ -32,6 +32,7 @@ from ..adapters.diagnostic_probes import without_command_probes
 from ..approval_gate_nudge import approval_gate_posture
 from ..daemon.bounded_http import daemon_admission_snapshot
 from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
+from ..native_aibom_summaries import NativeAibomSummariesError
 from ..native_runtime_admission import native_resident_admission_snapshot
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
 from ..runtime.connector_setup_items import connector_setup_status
@@ -422,8 +423,14 @@ def _run_guard_doctor_command(
     payload["native_runtime"] = native_runtime
     payload["trust"] = build_trust_doctor_payload(store)
     payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
+    from ..native_inventory_url_redaction import NativeInventoryUrlRedactionError
+
     with nullcontext() if args.harness else without_command_probes():
-        payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
+        try:
+            payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
+        except (NativeAibomSummariesError, NativeInventoryUrlRedactionError) as error:
+            # The rest of the report still diagnoses why the resident is missing.
+            payload["aibom"] = {"available": False, "error": str(error)}
     from ..harness_posture import harness_posture_summary
     from ..protection_coverage import protection_is_in_effect
     from ..protection_posture import protection_status_fields

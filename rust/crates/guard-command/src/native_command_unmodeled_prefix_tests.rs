@@ -116,3 +116,44 @@ fn a_launcher_that_is_also_a_shell_prefix_keeps_its_grammar() {
     assert_ne!(code, FAILED, "nohup cargo build");
     assert_eq!(action, "review", "nohup cargo build: {code}");
 }
+
+/// `exec npm test` runs what `npm test` runs: the shell replaces itself with
+/// the program this text already names, as this user and in this directory.
+/// The parser reads `exec` as a nested executor, so every one of these reached
+/// an evaluation failure and blocked outright, with no approval left to give
+/// it.
+#[test]
+fn exec_replacing_the_shell_reaches_its_owners_floor() {
+    let controls = controls(github("enabled", None), false);
+    for command in [
+        "exec npm test",
+        "exec npm run build",
+        "exec cargo build",
+        "exec make -j4",
+    ] {
+        let (action, code) = decision(&controls, command);
+        assert_ne!(code, FAILED, "{command}");
+        assert_eq!(action, "review", "{command}: {code}");
+    }
+}
+
+/// An `exec` leaves the program unknown as soon as it carries an option of its
+/// own: `-a` renames the process, `-c` empties its environment and `-l` makes
+/// it a login shell. A bare `exec` names no program at all, and an interpreter
+/// behind one reads a file this scan never opened.
+#[test]
+fn an_exec_without_a_named_program_keeps_the_failure() {
+    let controls = controls(github("enabled", None), false);
+    for command in [
+        "exec",
+        "exec -a worker npm test",
+        "exec -c npm test",
+        "exec -l bash",
+        "exec bash -lc 'npm run build'",
+        "exec python3 deploy.py",
+        "exec node server.js",
+        "exec xargs rm -f",
+    ] {
+        assert_eq!(decision(&controls, command).1, FAILED, "{command}");
+    }
+}

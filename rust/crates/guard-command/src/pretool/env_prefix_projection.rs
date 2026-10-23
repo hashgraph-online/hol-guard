@@ -13,7 +13,10 @@ use crate::pretool::PathContext;
 mod reviewed;
 #[path = "env_prefix_search_path.rs"]
 mod search_path;
+#[path = "env_prefix_values.rs"]
+mod values;
 pub(super) use reviewed::join_reviewed;
+pub(super) use values::removes_values;
 
 const MAX_PROJECTED_CHARS: usize = 32_768;
 

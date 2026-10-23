@@ -47,6 +47,15 @@ runs:
         "SCCACHE_GHA_RW_MODE=$($env:SCCACHE_MODE)" >> $env:GITHUB_ENV
         "SCCACHE_IGNORE_SERVER_IO_ERROR=1" >> $env:GITHUB_ENV
         "CARGO_INCREMENTAL=0" >> $env:GITHUB_ENV
+    - name: Check Windows shim compiler cache readiness
+      shell: bash
+      run: |
+        # Storage initialization can fail before the server's I/O fallback.
+        # Keep diagnostics with signed cache URLs out of public job output.
+        if ! sccache --zero-stats > "$RUNNER_TEMP/sccache-readiness.log" 2>&1; then
+          echo "::warning::Compiler cache unavailable; compiling directly."
+          echo "RUSTC_WORKSPACE_WRAPPER=" >> "$GITHUB_ENV"
+        fi
     - name: Replay the recorded Windows shim vectors
       if: inputs.shim-gate == 'vectors'
       shell: pwsh
@@ -72,6 +81,13 @@ runs:
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
         cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib shim_op
+    - name: Export fresh offline data through the native Windows fallback
+      if: inputs.shim-gate == 'native-op'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib fresh_non_unix_export_preserves_native_exclusive_creation
     - name: Observe direct-lane policy inputs as CPython stats them
       if: inputs.shim-gate == 'native-op'
       shell: pwsh

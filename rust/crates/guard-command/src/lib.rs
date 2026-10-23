@@ -109,6 +109,7 @@ mod executable_flag_contract;
 pub mod extension_control;
 pub mod extension_evidence;
 pub mod extension_trust;
+mod github_additional_commands;
 pub mod github_capability_contract;
 #[cfg(test)]
 mod github_capability_contract_tests;
@@ -528,3 +529,6 @@ pub mod verified_npm;
 pub mod verified_read_decision;
 #[cfg(test)]
 mod verified_read_decision_tests;
+pub mod verified_read_plan;
+#[cfg(test)]
+mod verified_read_plan_tests;

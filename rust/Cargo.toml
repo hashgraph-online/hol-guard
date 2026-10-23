@@ -16,6 +16,7 @@ members = [
     "crates/guard-hook-core",
     "crates/guard-hook-payload",
     "crates/guard-policy-snapshot",
+    "crates/guard-policy-bundle",
     "crates/guard-pack-compiler",
     "crates/guard-rule-contract",
     "crates/guard-runtime",
