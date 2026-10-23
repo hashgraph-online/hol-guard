@@ -3,7 +3,7 @@
   "id": "mcp.raw-browser",
   "version": "1.0.0",
   "name": "Raw Browser",
-  "description": "Drives the Chrome or Edge you are already signed into through the Raw Browser 0.6.2 bridge: 16 tools for tabs, navigation, reading, clicking, filling, screenshots and cookies. Read-only tools inherit normal policy; navigation and input are reviewed; raw_screenshot is reviewed because it writes a PNG; raw_visit, raw_cookies, raw_eval and the raw_call escape hatch are blocked. Install with npm install -g raw-browser; the raw-mcp command starts the server. Off until you turn it on.",
+  "description": "Drives the Chrome or Edge you are already signed into: 16 tools for tabs, navigation, reading, clicking, filling, screenshots and cookies. Read-only tools inherit normal policy; navigation and input are reviewed; raw_screenshot is reviewed because it writes a PNG; raw_visit, raw_cookies, raw_eval and raw_call are blocked. On Windows, install with npm install -g raw-browser, run the bridge installer, and load its unpacked extension with Developer mode before starting raw-mcp. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
