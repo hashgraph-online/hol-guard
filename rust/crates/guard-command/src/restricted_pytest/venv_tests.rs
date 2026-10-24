@@ -517,7 +517,7 @@ fn a_workspace_venv_is_found_by_being_one_not_by_a_search_path_entry() {
             &workspace,
             Some(&format!("{} -q", bin.join("pytest").display()))
         ),
-        vec![bin]
+        vec![bin.clone()]
     );
     // A command that starts no program in the venv is planned without it, so
     // the interpreter prefix it links out to stays out of that plan.
