@@ -166,6 +166,15 @@ Use the existing segmented radio controls for mutually exclusive permission sett
 
 Primary is brand blue with white label, 8px corners, 44px minimum height and a visible focus ring (brand blue at 40%, 2px, offset 2px). Secondary is white with a light brand-dark border and brand-dark label, same height and radius, tinted to surface-1 on hover. External text links and program buttons in a page body show a small trailing arrow-out icon at 60% opacity. A link that cannot be verified renders as inert text at 50% opacity rather than a dead button.
 
+### Brand Hero
+
+Home, About and Supply chain each open on the same branded surface (`brand-hero.tsx`), so every first viewport reads as the same product. It is the dark `guard-hero` gradient with white type, a state badge, one title and one line of detail, then at most two actions (the primary one white) and a row of dot-led facts. The HOL particle mark sits in the right column with a mono live label under it.
+
+- **Tone:** clear, review or setup, read from the install. The tone sets the accent glow, the badge tint, the live dot and the particle mood. A state Guard cannot report is setup and claims nothing.
+- **Compact:** task pages whose work sits under the hero (Supply chain) use a 260px mark column instead of 380px.
+- **Phones:** task pages replace the particle stage below 1024px with a 44px flat mark in the top-right corner, so the work under the hero stays in the first viewport. About and Home keep the stage.
+- **Facts:** short, countable, and consistent with the badge and live label. Name what a number counts ("3 tools unprotected", never "3 open" next to "2 to fix").
+
 ### Labeled Device Figure
 
 A figure draws a boundary the page is making claims about. It is a `figure` labelled by its caption, with no focusable elements inside.

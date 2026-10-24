@@ -282,11 +282,10 @@ function groupReleaseAssets(assets) {
 }
 const MONOGRAM_TONES = [
   "bg-brand-blue/10 text-brand-blue",
-  "bg-emerald-500/10 text-emerald-700",
-  "bg-purple-500/10 text-purple-700",
-  "bg-amber-500/10 text-amber-700",
-  "bg-rose-500/10 text-rose-700",
-  "bg-slate-500/10 text-slate-700"
+  "bg-brand-green-bg text-brand-green-text",
+  "bg-brand-purple/10 text-brand-purple",
+  "bg-brand-attention-bg text-brand-attention-text",
+  "bg-brand-dark/[0.07] text-brand-dark/75"
 ];
 function contributorMonogram(contributor) {
   const name = contributorName(contributor).replace(/^@/, "");
@@ -842,7 +841,7 @@ function CodeBlock({ block }) {
         onClick: copy,
         className: "absolute right-2 top-2 flex size-9 items-center justify-center rounded-lg text-white/55 opacity-0 transition-opacity duration-150 hover:bg-white/10 hover:text-white focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 group-hover/code:opacity-100 motion-reduce:transition-none",
         "aria-label": copied ? "Copied" : "Copy this command",
-        children: copied ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "size-4 text-emerald-300", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "size-4", "aria-hidden": "true" })
+        children: copied ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "size-4 text-white", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "size-4", "aria-hidden": "true" })
       }
     )
   ] });
@@ -880,8 +879,8 @@ function ReleaseInlineText({ source }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(InlineNodes, { nodes });
 }
 function CoverageNote({ note }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm leading-6 text-amber-900", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-[3px] size-4 shrink-0", "aria-hidden": "true" }),
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "flex items-start gap-2 rounded-xl bg-surface-1 px-3 py-2.5 text-sm leading-6 text-brand-dark/75", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-[3px] size-4 shrink-0 text-brand-dark/45", "aria-hidden": "true" }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: note })
   ] });
 }
@@ -1057,7 +1056,7 @@ function ReleaseDetailPanel({
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: detail.channel === "stable" ? "green" : "amber", children: channelLabel(detail.channel) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: detail.channel === "stable" ? "green" : "attention", children: channelLabel(detail.channel) }),
               isInstalled ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Tag, { tone: "blue", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "size-3.5", "aria-hidden": "true" }),
                 "Running here"
@@ -1185,7 +1184,7 @@ function ReleaseStatusBand(props) {
                       children: copy.title
                     }
                   ),
-                  release ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: release.channel === "stable" ? "green" : "amber", children: channelLabel(release.channel) }) : null
+                  release ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: release.channel === "stable" ? "green" : "attention", children: channelLabel(release.channel) }) : null
                 ]
               }
             ),

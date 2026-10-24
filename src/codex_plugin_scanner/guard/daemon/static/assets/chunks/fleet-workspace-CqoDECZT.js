@@ -1,8 +1,8 @@
-import { a8 as isUnsupportedPlatformCheck, h as harnessDisplayName, j as jsxRuntimeExports, a9 as RECHECK_UNAVAILABLE_SIGNATURE, aa as protectionReasonText, r as reactExports, A as ActionButton, ab as HiMiniExclamationCircle, ac as hasRepairableProtectionGap, ad as remainingProtectionRepairParts, ae as protectionGapSignature, af as repairOutcomeIsStalled, ag as ProtectionRepairFlowError, ah as nextProtectionRepairOutcome, ai as waitForAuthorizeUrl, aj as startOrRecoverCloudConnect, ak as safeCloudConnectUrl, al as openPackageFirewallAuthorizeFallback, am as waitForCloudConnection, an as activeFailedHarnesses, ao as resetRepairOutcomeTracker, ap as HiMiniWrenchScrewdriver, s as HiMiniCheckCircle, c as HiMiniChevronDown, aq as fetchSettings, ar as harnessPostureRows, as as selectHarnessPosture, at as harnessPosturePatch, I as updateSettings, au as harnessRowTone, S as SectionLabel, av as harnessPostureOptions, aw as HiMiniEye, R as HiMiniShieldCheck, ax as harnessRowStatus, ay as PROTECTION_POSTURE_COPY, az as globalPosture, u as isConnectableAppHarness, L as protectionHealthFor, K as useProtectionPresentationState, aA as GuardHero, aB as ProofStrip, N as EmptyState, H as HiMiniChevronRight, aC as HiMiniXCircle, aD as HiMiniClipboardDocumentCheck, aE as HiMiniClipboard } from "../guard-dashboard.js";
-import { a as SUPPORTED_APPS_BRIEF, d as defaultConnectHarness, A as APP_STATUS_LABELS } from "./app-catalog-BU3dzTBu.js";
-import { u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, r as resolveDetectedAppStatus, a as versionCompatibilityFor, H as HarnessVersionLabel } from "./harness-version-label-BEu-FrKY.js";
+import { a8 as isUnsupportedPlatformCheck, h as harnessDisplayName, j as jsxRuntimeExports, a9 as RECHECK_UNAVAILABLE_SIGNATURE, aa as protectionReasonText, r as reactExports, A as ActionButton, ab as HiMiniExclamationCircle, ac as hasRepairableProtectionGap, ad as remainingProtectionRepairParts, ae as protectionGapSignature, af as repairOutcomeIsStalled, ag as ProtectionRepairFlowError, ah as nextProtectionRepairOutcome, ai as waitForAuthorizeUrl, aj as startOrRecoverCloudConnect, ak as safeCloudConnectUrl, al as openPackageFirewallAuthorizeFallback, am as waitForCloudConnection, an as activeFailedHarnesses, ao as resetRepairOutcomeTracker, ap as HiMiniWrenchScrewdriver, s as HiMiniCheckCircle, c as HiMiniChevronDown, aq as fetchSettings, ar as harnessPostureRows, as as selectHarnessPosture, at as harnessPosturePatch, I as updateSettings, au as harnessRowTone, av as PROTECTION_POSTURE_COPY, aw as harnessPostureOptions, ax as globalPosture, S as SectionLabel, ay as harnessRowStatus, N as EmptyState, H as HiMiniChevronRight, az as HiMiniEye, aA as HiMiniXCircle, u as isConnectableAppHarness, L as protectionHealthFor, K as useProtectionPresentationState, aB as GuardHero, aC as ProofStrip, aD as HiMiniClipboardDocumentCheck, aE as HiMiniClipboard } from "../guard-dashboard.js";
+import { H as HarnessVersionLabel, u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, r as resolveDetectedAppStatus, a as versionCompatibilityFor } from "./harness-version-label-BEu-FrKY.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-D3-S0tLq.js";
-import { G as GuardRepairControl, H as HarnessPostureChoiceLabel, S as SettingsSaveProofModal } from "./settings-save-proof-modal-DSJONzDi.js";
+import { a as SUPPORTED_APPS_BRIEF, d as defaultConnectHarness, A as APP_STATUS_LABELS } from "./app-catalog-BU3dzTBu.js";
+import { G as GuardRepairControl, S as SettingsSaveProofModal, H as HarnessPostureChoiceLabel } from "./settings-save-proof-modal-CZZvxWFO.js";
 const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
 function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, urls) {
   const hasApps = activeInstallCount > 0;
@@ -571,9 +571,6 @@ function fleetManagedRows(rows, apps) {
   const rest = rows.filter((row) => managed.has(row.harness) && row.effective !== "watch").sort(byName);
   return [...watching, ...rest];
 }
-function fleetInactiveAppCount(apps) {
-  return apps.filter((app) => !app.active).length;
-}
 function fleetPostureStatusMessage(choice, displayName) {
   return choice === "watch" ? `Guard is only recording in ${displayName}.` : `Protection restored in ${displayName}.`;
 }
@@ -593,7 +590,7 @@ function gateProofUpdate(gate, proof) {
     ...proof?.totpCode ? { totp_code: proof.totpCode } : {}
   };
 }
-function FleetAppProtection(props) {
+function useFleetAppPosture(props) {
   const { onChanged } = props;
   const [state, setState] = reactExports.useState({ kind: "loading" });
   const [pendingWatch, setPendingWatch] = reactExports.useState(null);
@@ -702,136 +699,238 @@ function FleetAppProtection(props) {
     }
   }, [proofRequest, commit]);
   const handleCancelWatch = reactExports.useCallback(() => setPendingWatch(null), []);
-  if (state.kind === "loading") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-14 w-full", "aria-hidden": "true" });
+  const rowFor = reactExports.useCallback((harness) => rows.find((row) => row.harness === harness), [rows]);
+  if (state.kind !== "ready") {
+    return {
+      kind: state.kind,
+      rowFor,
+      control: () => null,
+      watchConfirm: () => null,
+      summary: null,
+      footer: state.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: "Per-app protection settings are unavailable right now." }) : null
+    };
   }
-  if (state.kind === "error") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-xl border border-slate-100 bg-white px-4 py-2.5 text-xs text-slate-500", children: "App protection settings are unavailable right now." });
-  }
-  if (rows.length === 0) return null;
-  const locked = state.settings.harness_postures_locked === true;
+  const settings = state.settings;
+  const locked = settings.harness_postures_locked === true;
   const watchingCount = rows.filter((row) => harnessRowTone(row) === "watch").length;
-  const inactiveCount = fleetInactiveAppCount(props.apps);
-  const pendingRow = pendingWatch !== null ? rows.find((row) => row.harness === pendingWatch) : void 0;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "section",
-    {
-      className: "overflow-hidden rounded-2xl border border-slate-100 bg-white",
-      "data-testid": "fleet-app-protection",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 px-4 pb-2 pt-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Protection by app" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
-            "Machine:",
-            " ",
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-brand-dark", children: fleetMachinePostureLabel(state.settings) }),
-            watchingCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-semibold text-brand-attention", children: [
-              " · ",
-              watchingCount,
-              " in Watch"
-            ] }) : null
-          ] })
-        ] }),
-        error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "border-t border-brand-attention/20 bg-brand-attention/[0.05] px-4 py-2 text-xs text-brand-dark", children: error }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "divide-y divide-slate-100 border-t border-slate-100", children: rows.map((row) => {
-          const tone = harnessRowTone(row);
-          const saving = savingHarness === row.harness;
-          const options = harnessPostureOptions(state.settings, row.harness);
-          return /* @__PURE__ */ jsxRuntimeExports.jsxs(reactExports.Fragment, { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "li",
+  const control = (harness) => {
+    const row = rowFor(harness);
+    if (!row) return null;
+    const saving = savingHarness === harness;
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "flex shrink-0 items-center gap-2 border-0 p-0", "data-testid": "fleet-app-posture", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "sr-only", children: `Protection for ${row.displayName}` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1", children: harnessPostureOptions(settings, harness).map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HarnessPostureChoiceLabel,
+        {
+          groupName: `fleet-posture-${harness}`,
+          choice: option.choice,
+          label: option.label,
+          selected: row.selected === option.choice,
+          disabled: locked || saving,
+          harness,
+          onChoose: handleChoice,
+          compact: true
+        },
+        option.choice
+      )) }),
+      saving ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: "Saving…" }) : null
+    ] });
+  };
+  const watchConfirm = (harness) => {
+    if (pendingWatch !== harness) return null;
+    const row = rowFor(harness);
+    if (!row) return null;
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "mt-2 flex flex-col gap-2 rounded-xl bg-brand-attention/[0.06] px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between",
+        role: "alertdialog",
+        "aria-label": `Switch ${row.displayName} to Watch`,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
+            "Guard will only record in ",
+            row.displayName,
+            " until you switch it back."
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
               {
-                className: `flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between ${tone === "watch" ? "bg-brand-attention/[0.05]" : ""}`,
-                "data-harness": row.harness,
-                children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-2", children: [
-                    tone === "watch" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEye, { className: "h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4 shrink-0 text-brand-blue", "aria-hidden": "true" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate text-sm font-semibold text-brand-dark", children: row.displayName }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden truncate text-xs text-slate-400 lg:inline", children: harnessRowStatus(row) }),
-                    saving ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: "Saving…" }) : null
-                  ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "border-0 p-0", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "sr-only", children: `Protection for ${row.displayName}` }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "inline-flex gap-1 rounded-xl bg-slate-100 p-1", children: options.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-                      HarnessPostureChoiceLabel,
-                      {
-                        groupName: `fleet-posture-${row.harness}`,
-                        choice: option.choice,
-                        label: option.label,
-                        selected: row.selected === option.choice,
-                        disabled: locked || saving,
-                        harness: row.harness,
-                        onChoose: handleChoice,
-                        compact: true
-                      },
-                      option.choice
-                    )) })
-                  ] })
-                ]
+                type: "button",
+                onClick: () => handleConfirmWatch(harness),
+                className: "inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
+                children: "Switch to Watch"
               }
             ),
-            pendingRow?.harness === row.harness ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-              "li",
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
               {
-                className: "bg-brand-attention/[0.06]",
-                role: "alertdialog",
-                "aria-label": `Switch ${pendingRow.displayName} to Watch`,
-                children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
-                    "Guard will only record in ",
-                    pendingRow.displayName,
-                    " until you switch it back."
-                  ] }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(
-                      "button",
-                      {
-                        type: "button",
-                        onClick: () => handleConfirmWatch(pendingRow.harness),
-                        className: "inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
-                        children: "Switch to Watch"
-                      }
-                    ),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(
-                      "button",
-                      {
-                        type: "button",
-                        onClick: handleCancelWatch,
-                        className: "inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark",
-                        children: "Keep protection on"
-                      }
-                    )
-                  ] })
-                ] })
+                type: "button",
+                onClick: handleCancelWatch,
+                className: "inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark",
+                children: "Keep protection on"
               }
-            ) : null
-          ] }, row.harness);
-        }) }),
-        inactiveCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "border-t border-slate-100 px-4 py-2 text-xs text-slate-400", children: inactiveCount === 1 ? "1 more app isn't connected yet — see App coverage below." : `${inactiveCount} more apps aren't connected yet — see App coverage below.` }) : null,
-        locked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "border-t border-slate-100 px-4 py-2 text-xs text-slate-400", children: "Your organization manages protection for each app, so these choices can't be changed here." }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: statusMessage ?? "" }),
-        proofRequest !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-          SettingsSaveProofModal,
-          {
-            open: true,
-            mode: "verify-save",
-            gate,
-            title: "Confirm before changing protection",
-            detail: `Enter your approval proof to switch ${proofRequest.displayName}.`,
-            confirmLabel: "Save change",
-            error: proofError,
-            pending: proofPending,
-            onCancel: () => {
-              if (proofPending) return;
-              setProofRequest(null);
-              setProofError(null);
-            },
-            onConfirm: handleProofConfirm
-          }
-        ) : null
-      ]
+            )
+          ] })
+        ]
+      }
+    );
+  };
+  const summary = rows.length === 0 ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", "data-testid": "fleet-machine-posture", children: [
+    "Machine:",
+    " ",
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold text-brand-dark", children: fleetMachinePostureLabel(settings) }),
+    watchingCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-semibold text-brand-attention", children: [
+      " · ",
+      watchingCount,
+      " in Watch"
+    ] }) : null
+  ] });
+  const footer = /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-lg bg-brand-attention/[0.05] px-3 py-2 text-xs text-brand-dark", children: error }) : null,
+    locked && rows.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-400", children: "Your organization manages protection for each app, so these choices can't be changed here." }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { "aria-live": "polite", "aria-atomic": "true", className: "sr-only", children: statusMessage ?? "" }),
+    proofRequest !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      SettingsSaveProofModal,
+      {
+        open: true,
+        mode: "verify-save",
+        gate,
+        title: "Confirm before changing protection",
+        detail: `Enter your approval proof to switch ${proofRequest.displayName}.`,
+        confirmLabel: "Save change",
+        error: proofError,
+        pending: proofPending,
+        onCancel: () => {
+          if (proofPending) return;
+          setProofRequest(null);
+          setProofError(null);
+        },
+        onConfirm: handleProofConfirm
+      }
+    ) : null
+  ] });
+  return { kind: "ready", rowFor, control, watchConfirm, summary, footer };
+}
+function formatCount$1(value) {
+  return value.toLocaleString();
+}
+function toInstallStatus(status) {
+  if (status === "protected") return "active";
+  if (status === "partial") return "partial";
+  if (status === "needs_repair") return "partial";
+  if (status === "found_unprotected") return "observed";
+  return "not_installed";
+}
+function StatusIcon({ status, watching }) {
+  if (watching) return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEye, { className: "h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" });
+  if (status === "protected") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 shrink-0 text-emerald-500", "aria-hidden": "true" });
+  if (status === "found_unprotected") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEye, { className: "h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" });
+  if (status === "needs_repair") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-4 w-4 shrink-0 text-brand-purple", "aria-hidden": "true" });
+  if (status === "not_found") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXCircle, { className: "h-4 w-4 shrink-0 text-slate-300", "aria-hidden": "true" });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationCircle, { className: "h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" });
+}
+function StatusBadge({ status }) {
+  if (status === "partial") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-blue", children: "Partially protected" });
+  if (status === "needs_repair") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-attention", children: "Needs repair" });
+  }
+  const installStatus = toInstallStatus(status);
+  const label = APP_STATUS_LABELS[installStatus];
+  if (installStatus === "active") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-emerald-600", children: label });
+  if (installStatus === "partial") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-purple", children: label });
+  if (installStatus === "observed") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: label });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: label });
+}
+function AppSummary({ app, postureNote, watching, showBadge, onOpenAppDetail }) {
+  const handleClick = reactExports.useCallback(() => onOpenAppDetail?.(app.harness), [onOpenAppDetail, app.harness]);
+  const content = /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex min-w-0 items-center gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(StatusIcon, { status: app.status, watching }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-sm font-medium text-brand-dark", children: harnessDisplayName(app.harness) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "block text-xs text-slate-400", children: [
+          formatCount$1(app.inventoryCount),
+          " actions · ",
+          formatCount$1(app.policyCount),
+          " decisions"
+        ] }),
+        postureNote !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `block text-xs ${watching ? "font-medium text-brand-attention" : "text-slate-400"}`, children: postureNote }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HarnessVersionLabel, { compatibility: app.versionCompatibility })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex shrink-0 items-center gap-2", children: [
+      showBadge ? /* @__PURE__ */ jsxRuntimeExports.jsx(StatusBadge, { status: app.status }) : null,
+      onOpenAppDetail ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" }) : null
+    ] })
+  ] });
+  const layout = "flex min-w-0 flex-1 items-center justify-between gap-3 rounded-lg text-left";
+  if (!onOpenAppDetail) return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: layout, children: content });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "button",
+    {
+      type: "button",
+      onClick: handleClick,
+      className: `${layout} -mx-2 px-2 py-1 transition-colors hover:bg-slate-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue`,
+      children: content
     }
   );
+}
+function FleetAppCoverage(props) {
+  const posture = useFleetAppPosture({ apps: props.postureApps, onChanged: props.onPostureChanged });
+  const isWatching = (harness) => {
+    const row = posture.rowFor(harness);
+    return row !== void 0 && harnessRowTone(row) === "watch";
+  };
+  const ordered = [...props.apps].sort((a, b) => Number(isWatching(b.harness)) - Number(isWatching(a.harness)));
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "App coverage", "data-testid": "fleet-app-coverage", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "App coverage" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Which apps Guard watches on this machine, and whether it protects or only records each one." })
+      ] }),
+      posture.summary
+    ] }),
+    ordered.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "divide-y divide-slate-100 border-t border-slate-100", children: ordered.map((app) => {
+      const row = posture.rowFor(app.harness);
+      const watching = isWatching(app.harness);
+      const control = posture.control(app.harness);
+      const postureNote = row !== void 0 && (watching || row.hasOverride) ? harnessRowStatus(row) : null;
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "li",
+        {
+          className: watching ? "-mx-2 rounded-lg bg-brand-attention/[0.05] px-2 py-3" : "py-3",
+          "data-harness": app.harness,
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                AppSummary,
+                {
+                  app,
+                  postureNote,
+                  watching,
+                  showBadge: control === null || app.status !== "protected",
+                  onOpenAppDetail: props.onOpenAppDetail
+                }
+              ),
+              control
+            ] }),
+            posture.watchConfirm(app.harness)
+          ]
+        },
+        app.harness
+      );
+    }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+      EmptyState,
+      {
+        title: "No watched apps yet",
+        body: "Run HOL Guard once with Codex, Claude Code, OpenCode, Copilot, Cursor, Gemini, Hermes, or another supported app and this machine will show coverage here.",
+        tone: "teach"
+      }
+    ),
+    posture.footer,
+    props.notes
+  ] });
 }
 function collectHarnesses(snapshot) {
   const harnesses = /* @__PURE__ */ new Set();
@@ -855,76 +954,6 @@ function repairHarnessesFor(installs, health) {
       (app) => app.harness === install.harness
     )?.checks.find((check) => check.check_id === "harness_hooks")?.status !== "pass").map((install) => install.harness)
   ));
-}
-function toInstallStatus(status) {
-  if (status === "protected") return "active";
-  if (status === "partial") return "partial";
-  if (status === "needs_repair") return "partial";
-  if (status === "found_unprotected") return "observed";
-  return "not_installed";
-}
-function StatusIcon({ status }) {
-  if (status === "protected") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-4 w-4 text-emerald-500", "aria-hidden": "true" });
-  if (status === "found_unprotected") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEye, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" });
-  if (status === "needs_repair") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "h-4 w-4 text-brand-purple", "aria-hidden": "true" });
-  if (status === "not_found") return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXCircle, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" });
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationCircle, { className: "h-4 w-4 text-brand-attention", "aria-hidden": "true" });
-}
-function StatusBadge({ status }) {
-  if (status === "partial") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-blue", children: "Partially protected" });
-  if (status === "needs_repair") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-attention", children: "Needs repair" });
-  }
-  const installStatus = toInstallStatus(status);
-  const label = APP_STATUS_LABELS[installStatus];
-  if (installStatus === "active") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-emerald-600", children: label });
-  if (installStatus === "partial") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-brand-purple", children: label });
-  if (installStatus === "observed") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: label });
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: label });
-}
-function AppRow({ harness, status, inventoryCount, policyCount, versionCompatibility, onOpenAppDetail }) {
-  const isClickable = onOpenAppDetail !== void 0;
-  const handleClick = reactExports.useCallback(() => {
-    onOpenAppDetail?.(harness);
-  }, [onOpenAppDetail, harness]);
-  const handleKeyDown = reactExports.useCallback(
-    (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        onOpenAppDetail?.(harness);
-      }
-    },
-    [onOpenAppDetail, harness]
-  );
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "div",
-    {
-      className: `flex items-center justify-between gap-3 py-3 transition-colors ${isClickable ? "cursor-pointer hover:bg-slate-50/60" : ""}`,
-      onClick: isClickable ? handleClick : void 0,
-      role: isClickable ? "button" : void 0,
-      tabIndex: isClickable ? 0 : void 0,
-      onKeyDown: isClickable ? handleKeyDown : void 0,
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(StatusIcon, { status }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: harnessDisplayName(harness) }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-400", children: [
-              formatCount(inventoryCount),
-              " actions · ",
-              formatCount(policyCount),
-              " decisions"
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HarnessVersionLabel, { compatibility: versionCompatibility ?? null })
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(StatusBadge, { status }),
-          isClickable && /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "h-4 w-4 text-slate-300", "aria-hidden": "true" })
-        ] })
-      ]
-    }
-  );
 }
 function FleetWorkspace(props) {
   const harnessDetection = useHarnessDetection();
@@ -960,6 +989,19 @@ function FleetWorkspace(props) {
     const known = /* @__PURE__ */ new Set([...managedInstalls.map((install) => install.harness), ...visibleHarnesses]);
     return Array.from(known, (harness) => ({ harness, active: activeSet.has(harness) })).sort((a, b) => a.harness.localeCompare(b.harness));
   })();
+  const coverageApps = visibleHarnesses.map((harness) => {
+    const install = managedInstalls.find((i) => i.harness === harness);
+    const presentInventory = inventory.filter((i) => i.harness === harness && i.present);
+    const appProtection = protectionHealthFor(props.runtime, harness);
+    const status = resolveDetectedAppStatus(install, appProtection, presentInventory.length > 0, receiptHarnesses.has(harness), detected.includes(harness));
+    return {
+      harness,
+      status,
+      inventoryCount: presentInventory.length,
+      policyCount: props.policies.filter((p) => p.harness === harness).length,
+      versionCompatibility: versionCompatibilityFor(harnessDetection, harness) ?? null
+    };
+  });
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
     activeInstalls.length,
@@ -1009,60 +1051,34 @@ function FleetWorkspace(props) {
         onRepairHarness: props.onRepairHarness ?? props.onConnectHarness
       }
     ) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsx(FleetAppProtection, { apps: postureApps, onChanged: props.onRuntimeRefresh }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "App coverage" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Which apps Guard is watching on this machine." })
-        ] }),
-        visibleHarnesses.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "divide-y divide-slate-100 border-t border-slate-100", children: visibleHarnesses.map((harness) => {
-          const install = managedInstalls.find((i) => i.harness === harness);
-          const harnessInventory = inventory.filter((i) => i.harness === harness && i.present);
-          const harnessPolicies = props.policies.filter((p) => p.harness === harness);
-          const hasReceipts = receiptHarnesses.has(harness);
-          const isDetected = detected.includes(harness);
-          const appProtection = protectionHealthFor(props.runtime, harness);
-          const status = resolveDetectedAppStatus(install, appProtection, harnessInventory.length > 0, hasReceipts, isDetected);
-          return /* @__PURE__ */ jsxRuntimeExports.jsx(
-            AppRow,
-            {
-              harness,
-              status,
-              inventoryCount: harnessInventory.length,
-              policyCount: harnessPolicies.length,
-              versionCompatibility: versionCompatibilityFor(harnessDetection, harness),
-              onOpenAppDetail: props.onOpenAppDetail
-            },
-            harness
-          );
-        }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-          EmptyState,
-          {
-            title: "No watched apps yet",
-            body: "Run HOL Guard once with Codex, Claude Code, OpenCode, Copilot, Cursor, Gemini, Hermes, or another supported app and this machine will show coverage here.",
-            tone: "teach"
-          }
-        ),
-        props.inventory.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: props.inventory.message }) : null,
-        harnessDetection.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: harnessDetection.message }) : null
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      FleetAppCoverage,
+      {
+        apps: coverageApps,
+        postureApps,
+        onOpenAppDetail: props.onOpenAppDetail,
+        onPostureChanged: props.onRuntimeRefresh,
+        notes: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          props.inventory.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: props.inventory.message }) : null,
+          harnessDetection.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-500", children: harnessDetection.message }) : null
+        ] })
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent choices" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "What Guard decided recently." })
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Recent choices" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "What Guard decided recently." })
-        ] }),
-        props.runtime.latest_receipts.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-0 divide-y divide-slate-100 border-t border-slate-100", children: props.runtime.latest_receipts.slice(0, 6).map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "py-2.5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: receipt.artifact_name ?? receipt.artifact_id }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: renderReceiptContext(receipt) })
-        ] }, receipt.receipt_id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-          EmptyState,
-          {
-            title: "No choices yet",
-            body: "Allow or block an action once and HOL Guard will start building local history for this machine."
-          }
-        )
-      ] })
+      props.runtime.latest_receipts.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid border-t border-slate-100 sm:grid-cols-2 sm:gap-x-8", children: props.runtime.latest_receipts.slice(0, 6).map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 border-b border-slate-100 py-2.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "truncate text-sm font-medium text-brand-dark", children: receipt.artifact_name ?? receipt.artifact_id }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-400", children: renderReceiptContext(receipt) })
+      ] }, receipt.receipt_id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+        EmptyState,
+        {
+          title: "No choices yet",
+          body: "Allow or block an action once and HOL Guard will start building local history for this machine."
+        }
+      )
     ] }),
     activeInstalls.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
       SetupGuide,

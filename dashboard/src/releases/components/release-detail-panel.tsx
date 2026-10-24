@@ -38,8 +38,8 @@ import { ReleaseInlineText, ReleaseNotes } from "./release-notes";
 
 function CoverageNote({ note }: { note: string }) {
   return (
-    <p className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm leading-6 text-amber-900">
-      <HiMiniInformationCircle className="mt-[3px] size-4 shrink-0" aria-hidden="true" />
+    <p className="flex items-start gap-2 rounded-xl bg-surface-1 px-3 py-2.5 text-sm leading-6 text-brand-dark/75">
+      <HiMiniInformationCircle className="mt-[3px] size-4 shrink-0 text-brand-dark/45" aria-hidden="true" />
       <span>{note}</span>
     </p>
   );
@@ -267,7 +267,7 @@ export function ReleaseDetailPanel({
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Tag tone={detail.channel === "stable" ? "green" : "amber"}>{channelLabel(detail.channel)}</Tag>
+            <Tag tone={detail.channel === "stable" ? "green" : "attention"}>{channelLabel(detail.channel)}</Tag>
             {isInstalled ? (
               <Tag tone="blue">
                 <HiMiniShieldCheck className="size-3.5" aria-hidden="true" />

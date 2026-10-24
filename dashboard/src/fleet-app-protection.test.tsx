@@ -1,8 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { FleetAppCoverage } from "./fleet-app-coverage";
 import {
-  FleetAppProtection,
-  fleetInactiveAppCount,
   fleetMachinePosture,
   fleetMachinePostureLabel,
   fleetManagedCapabilities,
@@ -47,8 +46,6 @@ assert(
   managed.length === 2 && managed[0].harness === "codex" && managed[1].harness === "claude-code",
   "unmanaged apps are absent and Watch rows sort first",
 );
-assert(fleetInactiveAppCount(apps) === 1, "inactive apps are counted for the coverage note");
-assert(fleetInactiveAppCount([{ harness: "codex", active: true }]) === 0, "no note when everything is managed");
 
 // A managed app missing from the capability catalog still gets an entry.
 const managedCaps = fleetManagedCapabilities(capabilities, [{ harness: "grok", active: true }]);
@@ -115,7 +112,22 @@ const withoutProof = gateProofUpdate(gate);
 assert(withoutProof.enabled === true, "gate payload without proof keeps the gate state");
 assert(!("current_password" in withoutProof) && !("totp_code" in withoutProof), "gate payload without proof omits credentials");
 
-const loading = renderToStaticMarkup(<FleetAppProtection apps={apps} onChanged={() => undefined} />);
-assert(loading.includes("guard-skeleton"), "fleet panel starts in a loading state");
+// One list: coverage rows carry the per-app choice, so there is no second card.
+const coverage = renderToStaticMarkup(
+  <FleetAppCoverage
+    apps={[
+      { harness: "codex", status: "protected", inventoryCount: 3, policyCount: 1, versionCompatibility: null },
+      { harness: "cursor", status: "found_unprotected", inventoryCount: 0, policyCount: 0, versionCompatibility: null },
+    ]}
+    postureApps={apps}
+    onOpenAppDetail={() => undefined}
+  />,
+);
+assert(coverage.includes("App coverage"), "the coverage section renders");
+assert(!coverage.includes("Protection by app"), "the separate per-app card is gone");
+assert(!coverage.includes('role="button"'), "rows open app detail through a real button");
+assert((coverage.match(/<button type="button"/g) ?? []).length === 2, "each app row is one button");
+assert(coverage.includes("Observed"), "unmanaged apps keep their coverage status");
+assert(!coverage.includes("fleet-app-posture"), "no per-app choice renders before settings load");
 
 console.log("fleet-app-protection.test.tsx: all assertions passed");

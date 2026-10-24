@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { resolveAboutHeroState } from "./components/about-hero";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -15,6 +16,21 @@ const read = (name: string) => readFileSync(resolve(dir, name), "utf8");
 const hero = read("components/about-hero.tsx");
 assert(!hero.includes("SectionLabel"), "the hero does not stack a label above its own title");
 assert(hero.includes('id="about-hero-heading"'), "the hero title is the hero's label");
+assert(!hero.includes('labelledBy="about-hero-heading"'), "the hero surface does not repeat the section's landmark name");
+
+// The runtime summary carries no protection health, so About never claims protection.
+const idle = resolveAboutHeroState({
+  guardVersion: "1.0.0",
+  cloudState: "paired_active",
+  cloudStateLabel: "Connected",
+  syncConfigured: true,
+  syncHealth: "failed",
+  pendingCount: 0,
+  receiptCount: 0,
+  protectedAppCount: 0,
+});
+assert(idle.tone !== "clear" && !/protect/i.test(idle.badge), "About does not claim protection it cannot see");
+assert(idle.facts.includes("Cloud sync stalled"), "each sync state reads as its own fact");
 
 // Every section names itself with a real heading, and the landmark points at
 // it, so the page can be navigated by its sections.

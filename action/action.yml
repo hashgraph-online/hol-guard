@@ -51,6 +51,10 @@ inputs:
     description: "Write the full report inline for markdown scans, otherwise write a concise GitHub Actions job summary"
     required: false
     default: "true"
+  publish_hint:
+    description: "Add a short HOL Plugins publishing link to the concise job summary of public github.com repositories"
+    required: false
+    default: "true"
   registry_payload_output:
     description: "Write a machine-readable plugin ecosystem payload JSON file for registry or awesome-list automation"
     required: false
@@ -306,6 +310,7 @@ runs:
         ONLINE: ${{ inputs.online }}
         UPLOAD_SARIF: ${{ inputs.upload_sarif }}
         WRITE_STEP_SUMMARY: ${{ inputs.write_step_summary == 'true' && inputs.format != 'markdown' }}
+        PUBLISH_HINT: ${{ inputs.publish_hint }}
         REGISTRY_PAYLOAD_OUTPUT: ${{ inputs.registry_payload_output }}
         MIN_SCORE: ${{ inputs.min_score }}
         FAIL_ON: ${{ inputs.fail_on_severity }}

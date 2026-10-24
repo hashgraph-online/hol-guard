@@ -209,7 +209,7 @@ fn venv_layouts_that_could_widen_reads_or_exec_are_rejected() {
 }
 
 #[test]
-fn protected_or_workspace_holding_venvs_and_venv_pytest_scripts_are_rejected() {
+fn protected_or_workspace_holding_venvs_are_rejected() {
     let Some(base) = trusted_python() else { return };
     let fixture = fixture();
     let home = base.parent().unwrap().to_string_lossy().into_owned();
@@ -227,17 +227,116 @@ fn protected_or_workspace_holding_venvs_and_venv_pytest_scripts_are_rejected() {
     let image = forwarded_tool(&base).unwrap_or_else(|| base.clone());
     assert!(external_root(&venv.join("bin/python3"), &image, &inner).is_none());
     assert!(admit("python3", &inner, &venv).is_err());
-    let workspace = fixture.0.join("workspace");
+}
+
+/// A console script of `venv`, as `pip` and `uv` write one.
+fn entry_point(venv: &Path, interpreter: &str) {
     let script = venv.join("bin/pytest");
-    fs::write(
-        &script,
-        format!("#!{}\n", venv.join("bin/python3").display()),
-    )
-    .unwrap();
+    fs::write(&script, format!("#!{interpreter}\nimport sys\n")).unwrap();
     fs::set_permissions(script, fs::Permissions::from_mode(0o755)).unwrap();
-    let search = venv.join("bin").to_string_lossy().into_owned();
+}
+
+fn admit_entry_point(workspace: &Path, venv: &Path) -> Result<Vec<PathBuf>, RestrictedPytestError> {
     let command = vec!["pytest".to_owned()];
-    assert!(resolve_pytest_executable(&command, &workspace, &workspace, &search).is_err());
+    let search = venv.join("bin").to_string_lossy().into_owned();
+    let (launch, executable) = resolve_pytest_executable(&command, workspace, workspace, &search)?;
+    allowed_executables(
+        &executable,
+        &launch,
+        &command,
+        workspace,
+        workspace,
+        &search,
+    )
+}
+
+/// Running `pytest` from an external venv is the ordinary shape: the project
+/// is the workspace and the environment sits beside it. The console script is
+/// a regular file, so its `#!` line is what names the venv.
+#[test]
+fn an_external_venv_entry_point_runs_from_the_venv_that_installed_it() {
+    let Some(base) = trusted_python() else { return };
+    let fixture = fixture();
+    let home = base.parent().unwrap().to_string_lossy().into_owned();
+    let (workspace, venv) = layout(&fixture.0, &base, &home);
+    entry_point(&venv, &venv.join("bin/python3").display().to_string());
+    let allowed = admit_entry_point(&workspace, &venv).unwrap();
+    assert!(allowed.contains(&venv.join("bin/pytest")), "{allowed:?}");
+    let image = forwarded_tool(&base).unwrap_or_else(|| base.clone());
+    assert!(allowed.contains(&image), "{allowed:?}");
+    let roots = runtime_roots(&allowed, &workspace, None);
+    assert!(roots.contains(&venv), "{roots:?}");
+    assert!(
+        roots.iter().all(|root| !path_is_within(&fixture.0, root)),
+        "{roots:?}"
+    );
+}
+
+/// The grant follows the interpreter the script names outright. A line that
+/// defers the lookup to `PATH` or to another program, or that names something
+/// which is not a launcher of this venv's own `bin`, settles no venv.
+#[test]
+fn entry_points_that_do_not_name_their_own_venv_launcher_are_rejected() {
+    let Some(base) = trusted_python() else { return };
+    type Line = fn(&Path, &Path) -> Option<String>;
+    let cases: &[(&str, Line)] = &[
+        ("no shebang", |_, _| None),
+        ("path lookup", |_, _| {
+            Some("/usr/bin/env python3".to_owned())
+        }),
+        ("shell wrapper", |_, venv| {
+            Some(format!("/bin/sh {}", venv.join("bin/python3").display()))
+        }),
+        ("relative interpreter", |_, _| {
+            Some("bin/python3".to_owned())
+        }),
+        ("another directory", |root, _| {
+            fs::create_dir_all(root.join("other/bin")).unwrap();
+            Some(root.join("other/bin/python3").display().to_string())
+        }),
+        ("copied interpreter", |_, venv| {
+            executable(&venv.join("bin/python3.9"));
+            Some(venv.join("bin/python3.9").display().to_string())
+        }),
+        ("non-python launcher", |_, venv| {
+            symlink("python", venv.join("bin/tool")).unwrap();
+            Some(venv.join("bin/tool").display().to_string())
+        }),
+        ("module option", |_, venv| {
+            Some(format!(
+                "{} -mnot_pytest",
+                venv.join("bin/python3").display()
+            ))
+        }),
+        ("script operand", |_, venv| {
+            Some(format!(
+                "{} {}",
+                venv.join("bin/python3").display(),
+                venv.join("bin/other.py").display()
+            ))
+        }),
+    ];
+    for (name, line) in cases {
+        let fixture = fixture();
+        let home = base.parent().unwrap().to_string_lossy().into_owned();
+        let (workspace, venv) = layout(&fixture.0, &base, &home);
+        match line(&fixture.0, &venv) {
+            Some(line) => entry_point(&venv, &line),
+            None => {
+                let script = venv.join("bin/pytest");
+                fs::write(&script, "import sys\n").unwrap();
+                fs::set_permissions(script, fs::Permissions::from_mode(0o755)).unwrap();
+            }
+        }
+        // The end-to-end error alone would also come from a check that runs
+        // before the venv is read, so the venv decision is asserted directly.
+        let script = venv.join("bin/pytest");
+        assert!(
+            external_root(&script, &script, &workspace).is_none(),
+            "{name}"
+        );
+        assert!(admit_entry_point(&workspace, &venv).is_err(), "{name}");
+    }
 }
 
 #[test]

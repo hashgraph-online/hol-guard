@@ -94,6 +94,12 @@ const pairedHero = resolveSupplyChainWorkspaceHero({
 });
 assert(pairedHero.cloudMode === "paired_active", "SCSR151-B: paired active cloud mode surfaces in hero");
 assert(pairedHero.protectionStatus === "protected", "SCSR151-B: protected state surfaces in hero");
+// Counts come from the same manager lists as the badge, even with no detection data.
+assert(pairedHero.liveLabel === "Guarding 1 tool", "hero live label counts the badge's protected managers");
+assert(pairedHero.facts.includes("1 tool protected"), "hero facts count the badge's protected managers");
+assert(!pairedHero.facts.some((fact) => fact.includes("unprotected")), "a protected hero lists no unprotected count");
+const issuesHero = resolveSupplyChainWorkspaceHero(baseSnapshot, { openIssueCount: 2 });
+assert(issuesHero.liveLabel === "2 steps to fix", "the repair live label counts setup steps, as the summary does");
 
 const shim: PackageShimEntry = {
   active: true,

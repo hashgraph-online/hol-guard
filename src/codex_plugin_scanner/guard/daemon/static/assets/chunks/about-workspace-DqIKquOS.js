@@ -1,4 +1,5 @@
-import { r as reactExports, j as jsxRuntimeExports, d$ as Surface, co as HiMiniArrowTopRightOnSquare, df as HiMiniCheckBadge, a6 as Badge } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, d$ as Surface, co as HiMiniArrowTopRightOnSquare, a6 as Badge } from "../guard-dashboard.js";
+import { B as BrandHero, b as BrandHeroBadge, a as BrandHeroFacts, d as BrandMark } from "./brand-hero-COty1p6U.js";
 import { b as ALLOWED_LINKS, c as ABOUT_HERO_TITLE, d as ABOUT_HERO_BODY, e as ABOUT_TRUST_CONTRACT_CLAIMS, f as ABOUT_DATA_BOUNDARY_ROWS, g as ABOUT_STANDARDS_NODES, h as ABOUT_PATH_CARDS, i as ABOUT_PARTNER_SECTION_BODY, j as ABOUT_PARTNER_SECTION_TITLE, k as ABOUT_PARTNER_LEVELS, l as ABOUT_PARTNER_CTA, m as ABOUT_PARTNER_CTA_HREF, n as ABOUT_AFFILIATE_SECTION_BODY, o as ABOUT_AFFILIATE_SECTION_TITLE, p as ABOUT_AFFILIATE_TERMS, q as ABOUT_AFFILIATE_CTA, r as ABOUT_AFFILIATE_CTA_HREF, s as ABOUT_AFFILIATE_DISCLOSURE } from "./about-content-Dr9zFg1V.js";
 class AboutExternalLinkError extends Error {
   constructor(message) {
@@ -108,6 +109,7 @@ function TrackedExternalButton({
       target: safe.target,
       rel: safe.rel,
       onClick: handleClick,
+      "data-primary": variant === "primary" ? "true" : void 0,
       className: `${base} ${size} ${tone} no-underline`,
       children
     }
@@ -371,26 +373,64 @@ function Callout({ n }) {
     n
   ] });
 }
+const SYNC_FACT = {
+  on: "Cloud sync on",
+  stalled: "Cloud sync stalled",
+  pairing: "Cloud sync waiting for first upload",
+  off: "Cloud sync off",
+  unavailable: "Cloud sync unavailable"
+};
+function resolveAboutHeroState(runtimeSummary) {
+  if (!runtimeSummary) {
+    return {
+      tone: "setup",
+      badge: "Not reporting",
+      liveLabel: "Local-first",
+      facts: ["Open source under Apache-2.0"]
+    };
+  }
+  const pending = runtimeSummary.pendingCount;
+  const version = runtimeSummary.guardVersion?.trim();
+  const facts = [
+    version && version.toLowerCase() !== "unknown" ? `Version ${version}` : null,
+    SYNC_FACT[resolveSyncState(runtimeSummary)],
+    "Open source under Apache-2.0"
+  ].filter((fact) => fact !== null);
+  if (pending > 0) {
+    return {
+      tone: "review",
+      badge: `${pending} waiting for you`,
+      liveLabel: `${pending} waiting`,
+      facts
+    };
+  }
+  return { tone: "setup", badge: "Running on this device", liveLabel: "Local-first", facts };
+}
 function AboutHero({
   runtimeSummary
 }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,1fr)_auto]", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-[60ch]", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "h1",
-        {
-          id: "about-hero-heading",
-          className: "text-3xl font-bold tracking-[-0.03em] text-balance text-brand-dark sm:text-4xl",
-          children: ABOUT_HERO_TITLE
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-base leading-7 text-brand-dark/75 sm:text-lg sm:leading-8", children: ABOUT_HERO_BODY })
+  const hero = resolveAboutHeroState(runtimeSummary);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-10", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(BrandHero, { tone: hero.tone, liveLabel: hero.liveLabel, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(BrandHeroBadge, { tone: hero.tone, children: hero.badge }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-2xl", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "h1",
+          {
+            id: "about-hero-heading",
+            className: "guard-hero-title text-4xl font-semibold tracking-[-0.03em] text-white sm:text-5xl",
+            children: ABOUT_HERO_TITLE
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 max-w-xl text-base leading-7 text-white/80 sm:text-lg sm:leading-8", children: ABOUT_HERO_BODY })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-hero-ctas flex flex-wrap gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(TrackedExternalButton, { linkId: "guard_docs", href: "https://hol.org/guard/docs", variant: "primary", children: "Read Guard docs" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(TrackedExternalButton, { linkId: "hol_guard_source", href: "https://github.com/hashgraph-online/hol-guard", variant: "outline", children: "View source" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(BrandHeroFacts, { facts: hero.facts })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lg:col-span-2 lg:row-start-2 lg:mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(MachineFigure, { runtimeSummary }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap gap-3 lg:col-start-2 lg:row-start-1 lg:self-end", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TrackedExternalButton, { linkId: "guard_docs", href: "https://hol.org/guard/docs", variant: "primary", children: "Read Guard docs" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(TrackedExternalButton, { linkId: "hol_guard_source", href: "https://github.com/hashgraph-online/hol-guard", variant: "outline", children: "View source" })
-    ] })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(MachineFigure, { runtimeSummary })
   ] });
 }
 function TrustContractPanel() {
@@ -635,7 +675,7 @@ function EcosystemPrograms() {
 function AboutFooter() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("footer", { className: "border-t border-brand-dark/10 pt-8", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckBadge, { className: "h-5 w-5 text-brand-blue", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(BrandMark, { color: "currentColor", className: "size-6 text-brand-dark" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-semibold text-brand-dark", children: "HOL Guard" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone: "success", children: "Local-first" })
     ] }),
