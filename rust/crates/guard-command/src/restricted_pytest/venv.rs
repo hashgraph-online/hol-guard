@@ -264,6 +264,38 @@ pub(super) fn workspace_base_roots(bin: &Path, workspace: &Path) -> Vec<PathBuf>
     roots
 }
 
+/// The `bin` directories of the venvs a workspace holds at its top level.
+///
+/// A command can start `.venv/bin/pytest` by naming its path, and nothing
+/// puts the venv on the session's PATH when it does. Discovery that reads
+/// only the PATH misses that venv, so the install its launchers link out to
+/// is never an executable root, the sandbox cannot start the program the
+/// command names, and ordinary project work is reviewed instead of contained.
+/// Only a directory holding a `pyvenv.cfg` is considered; what it names still
+/// has to pass `workspace_base_roots`.
+pub(super) fn workspace_resident_bins(workspace: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(workspace) else {
+        return Vec::new();
+    };
+    let mut bins: Vec<PathBuf> = Vec::new();
+    for entry in entries.flatten().take(256) {
+        let root = entry.path();
+        if !root.join("pyvenv.cfg").is_file() {
+            continue;
+        }
+        let Ok(bin) = root.join("bin").canonicalize() else {
+            continue;
+        };
+        if !bins.contains(&bin) {
+            bins.push(bin);
+        }
+        if bins.len() == 4 {
+            break;
+        }
+    }
+    bins
+}
+
 #[cfg(test)]
 #[path = "venv_tests.rs"]
 mod tests;

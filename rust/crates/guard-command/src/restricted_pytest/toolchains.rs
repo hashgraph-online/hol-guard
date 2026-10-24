@@ -298,6 +298,21 @@ pub(super) fn workspace_exec_roots(
             }
         }
     }
+    // A venv the command starts by its own path, such as `.venv/bin/pytest`,
+    // never reaches the loop above when the session's PATH does not name it.
+    // The install its launchers link to becomes an executable root; its `bin`
+    // stays off the sandbox PATH, so a bare name still resolves inside the
+    // sandbox to the file the session resolved outside it.
+    for bin in super::venv::workspace_resident_bins(workspace) {
+        let Some((_, installs)) = workspace_venv(&bin, workspace) else {
+            continue;
+        };
+        for install in installs {
+            if !roots.contains(&install) {
+                roots.push(install);
+            }
+        }
+    }
     for system in ["/usr/bin", "/bin"] {
         if !entries.iter().any(|entry| entry == system) {
             entries.push(system.to_owned());
@@ -580,6 +595,49 @@ mod tests {
                 PathBuf::from("/sandbox/.cargo/registry"),
                 host.0.join("missing")
             )]
+        );
+    }
+
+    /// A command can start `.venv/bin/pytest` by naming its path, and nothing
+    /// puts the venv on the session's PATH when it does. Without the install
+    /// its launchers link out to, the sandbox cannot start that program.
+    #[test]
+    fn a_workspace_venv_the_search_path_never_names_still_grants_its_install() {
+        let Ok(system) = Path::new("/usr/bin/python3").canonicalize() else {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "this test needs a trusted /usr/bin/python3 on CI"
+            );
+            return;
+        };
+        let workspace = dir_with(0o755);
+        let venv = workspace.0.join(".venv");
+        fs::create_dir_all(venv.join("bin")).unwrap();
+        symlink(&system, venv.join("bin/python")).unwrap();
+        let configuration = venv.join("pyvenv.cfg");
+        fs::write(
+            &configuration,
+            format!(
+                "home = {}\ninclude-system-site-packages = false\n",
+                system.parent().unwrap().display()
+            ),
+        )
+        .unwrap();
+        // The venv is nowhere on the search path, and the workspace is not a
+        // directory any entry below names.
+        let search = "/bin";
+        let (with, _) = workspace_exec_roots(search, None, &workspace.0, false, false, false);
+        fs::rename(&configuration, venv.join("pyvenv.cfg.moved")).unwrap();
+        let (without, _) = workspace_exec_roots(search, None, &workspace.0, false, false, false);
+        let granted: Vec<&PathBuf> = with.iter().filter(|root| !without.contains(root)).collect();
+        assert!(!granted.is_empty(), "{with:?} {without:?}");
+        // Only the install outside the workspace is granted; the workspace
+        // itself is already read and run.
+        assert!(
+            granted
+                .iter()
+                .all(|root| !path_is_within(root, &workspace.0)),
+            "{granted:?}"
         );
     }
 
