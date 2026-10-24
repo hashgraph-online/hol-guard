@@ -526,6 +526,7 @@ fn a_workspace_venv_is_found_by_being_one_not_by_a_search_path_entry() {
     // grants nothing either.
     for text in [
         "echo .venv/bin/pytest",
+        "echo ./.venv/bin/pytest",
         "rg -n .venv/bin/pytest src",
         "ls .venv/bin",
         "cat .venv/bin/../pyvenv.cfg",
@@ -542,6 +543,9 @@ fn a_workspace_venv_is_found_by_being_one_not_by_a_search_path_entry() {
         "npm run build; .venv/bin/pytest -q",
         "{ npm run build; .venv/bin/pytest -q; }",
         "make build && exec .venv/bin/pytest -q",
+        // Writing the program from here names the same one.
+        "./.venv/bin/pytest -q",
+        "npm run build; ./.venv/bin/pytest -q",
     ] {
         assert_eq!(
             workspace_resident_bins(&workspace, Some(text)),

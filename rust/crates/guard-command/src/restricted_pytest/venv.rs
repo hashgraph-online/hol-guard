@@ -377,8 +377,8 @@ pub(super) fn workspace_resident_bins(workspace: &Path, text: Option<&str>) -> V
     bins
 }
 
-/// Whether `text` starts a program from `bin`, named by its own path or by
-/// the one the workspace holds it at.
+/// Whether `text` starts a program from `bin`, named by its own path, by the
+/// one the workspace holds it at, or by that one written from here.
 ///
 /// The path has to stand where a program is read from. `.venv/bin/pytest -q`
 /// starts the venv's interpreter; `echo .venv/bin/pytest` writes the path and
@@ -386,9 +386,14 @@ pub(super) fn workspace_resident_bins(workspace: &Path, text: Option<&str>) -> V
 /// reason to be an executable root of that run.
 fn starts_program_from(text: &str, workspace: &Path, bin: &Path) -> bool {
     let relative = bin.strip_prefix(workspace).unwrap_or(bin);
-    [bin, relative]
-        .iter()
-        .filter_map(|path| path.to_str())
+    // `./.venv/bin/pytest` is the same program as `.venv/bin/pytest`, and the
+    // leading `./` is no part of the directory, so it is read as its own
+    // spelling rather than as something standing in front of a program.
+    let from_here = relative.to_str().map(|path| format!("./{path}"));
+    [bin.to_str(), relative.to_str()]
+        .into_iter()
+        .flatten()
+        .chain(from_here.as_deref())
         .any(|path| {
             text.match_indices(path).any(|(at, _)| {
                 names_program(&text[at + path.len()..]) && starts_a_command(&text[..at])
