@@ -982,7 +982,7 @@ jobs:
         env:
           CHANNEL: ${{ steps.version.outputs.channel }}
         run: |
-          uv run --no-sync twine check dist/*
+          uv run --no-sync --with 'twine==7.0.0' twine check dist/*
           python3 scripts/verify_guard_wheel_entrypoints.py dist
           # Stable builds only: the version is stamped by now, so --release compares every
           # coverage record's Guard version against the build being published. Alpha and
@@ -1518,7 +1518,7 @@ jobs:
             --version "$VERSION" \
             --source-sha "$SOURCE_SHA" \
             --dist-dir dist
-          uv run --no-sync twine check dist/*
+          uv run --no-sync --with 'twine==7.0.0' twine check dist/*
       - name: Record aggregate immutable hashes
         run: |
           find dist -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > distribution-sha256-native.txt
