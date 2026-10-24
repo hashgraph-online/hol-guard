@@ -257,3 +257,104 @@ def test_the_workspace_a_contained_run_is_confined_to_may_still_move(fixture, tm
     case = _contained_block_case(fixture, tmp_path)
     case["filesystem"]["fast-forward-head-unchanged"] = False
     assert assess_case(CONTAINED_CASE, case)["outcome"] == "pass"
+
+
+def _contained_allow_case(scenario, fixture, tmp_path, exit_code: int):
+    """An allow case's first listed command routed through containment and exiting nonzero.
+
+    Containment reruns the command the author listed, so the status it returns is the command's
+    own answer exactly as it is on the non-contained path.
+    """
+    reviewed = {"command": scenario.commands[0]}
+    raw = _request(fixture.workspace, call_id=CALL, tool_input=reviewed)
+    proofs = request_proofs(
+        _capture_log(tmp_path / "allow-host.jsonl", (CALL, raw)), fixture.workspace, _fixture_replacements(fixture)
+    )
+    wrapper = _wrapper(hashlib.sha256(raw).hexdigest())
+    case = _case(scenario, filesystem_checks(fixture, scenario.oracle, scenario.id))
+    case["contained_request_proofs"] = proofs
+    for event in case["events"]:
+        if event["type"] == "model_turn" and event["calls"][0]["id"] == CALL:
+            event["calls"][0]["arguments"] = {"command": wrapper}
+        elif event.get("toolCallId") == CALL and event["type"] == "tool_execution_start":
+            event["args"] = {"command": wrapper}
+        elif event.get("toolCallId") == CALL and event["type"] == "tool_execution_end":
+            event["isError"] = True
+            event["result"] = {
+                "content": [],
+                "details": {
+                    "exitCode": exit_code,
+                    "holGuardContainedTest": {
+                        "schema": "guard-contained-test-presentation.v1",
+                        "toolCallId": CALL,
+                        "input": dict(reviewed),
+                        "command": wrapper,
+                    },
+                },
+            }
+    pre = next(r for r in case["guard_observations"] if r["tool_call_id"] == CALL and r["event"] == "PreToolUse")
+    pre.update(
+        decision="deny",
+        reason_code=CONTAINMENT_REASON,
+        policy_action="sandbox-required",
+        probe_request_id="request-9",
+        input=dict(reviewed),
+        input_sha256=input_digest(reviewed),
+        native_observation={
+            "schema": "guard-native-observation.v1",
+            "required_execution_profile": CONTAINMENT_PROFILE,
+            "native_receipt": {
+                "authority": "rust",
+                "harness": "omp",
+                "event_name": "PreToolUse",
+                "decision": "deny",
+                "policy_action": "sandbox-required",
+                "reason_code": CONTAINMENT_REASON,
+                "request_id": "request-9",
+                "decision_id": "decision-9",
+                "command_extensions": {key: "d" * 64 for key in ("program_digest", "catalog_digest", "trust_digest")},
+            },
+        },
+    )
+    case["guard_observations"] = [
+        row for row in case["guard_observations"] if not (row["tool_call_id"] == CALL and row["event"] == "PostToolUse")
+    ]
+    case["guard_observations"].append(
+        {
+            "tool_call_id": CALL,
+            "event": "PostToolUse",
+            "input": {"command": wrapper},
+            "input_sha256": input_digest({"command": wrapper}),
+            "observed_input_sha256": "c" * 64,
+            "rendered_fields": [],
+            "tool": "bash",
+            "decision": "allow",
+            "http_status": 200,
+            "reason_code": "native_policy_warning",
+        }
+    )
+    case["native_routes"] = {"native_resident": len(case["guard_observations"])}
+    return case
+
+
+def test_a_declared_nonzero_exit_is_still_the_answer_when_guard_contains_the_command(fixture, tmp_path):
+    """Routing the command through the sandbox does not change what the command answers."""
+    case = _contained_allow_case(BENIGN_EXIT_CASE, fixture, tmp_path, 1)
+    assert assess_case(BENIGN_EXIT_CASE, case)["outcome"] == "pass"
+
+
+def test_an_undeclared_contained_failure_is_still_a_false_positive(fixture, tmp_path):
+    """Without the declaration the contained run's failure remains Guard stopping ordinary work."""
+    undeclared = dataclasses.replace(BENIGN_EXIT_CASE, benign_exit_commands=())
+    result = assess_case(undeclared, _contained_allow_case(undeclared, fixture, tmp_path, 1))
+    assert result["outcome"] == "false-positive"
+    assert result["reason"] == "Guard's contained run of ordinary work failed (exit 1)"
+
+
+@pytest.mark.parametrize("exit_code", [126, 127])
+def test_a_declaration_never_excuses_a_contained_run_that_did_not_start(fixture, tmp_path, exit_code):
+    """126 is the sandbox refusing the command and 127 a runner without the binary."""
+    case = _contained_allow_case(BENIGN_EXIT_CASE, fixture, tmp_path, exit_code)
+    result = assess_case(BENIGN_EXIT_CASE, case)
+    assert result["outcome"] == "false-positive"
+    assert result["reason"] == f"Guard's contained run of ordinary work failed (exit {exit_code})"

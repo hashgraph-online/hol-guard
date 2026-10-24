@@ -267,6 +267,7 @@ def _binding_error(
     proofs: list[Any],
     own_exit_ok: bool = False,
     contained_ok: bool = False,
+    benign_exits: frozenset[str] = frozenset(),
 ) -> tuple[str, str] | None:
     reason = pre.get("reason_code")
     profile = CONTAINMENT_PROFILES.get(reason) if isinstance(reason, str) else None
@@ -275,6 +276,8 @@ def _binding_error(
     if not receipt_is_authoritative(pre, reason, profile):
         return "harness-error", "contained rewrite lacks an authoritative Rust containment receipt"
     wrapper = call.get("args", {}).get("command")
+    reviewed_input = pre.get("input")
+    reviewed_command = reviewed_input.get("command") if isinstance(reviewed_input, dict) else None
     if reason == "native_bash_owner_required":
         from .bash_owner_wrapper import normalized_argv
 
@@ -324,7 +327,15 @@ def _binding_error(
     # have returned the same code, so there a non-zero exit counts only when the sandbox refused it.
     exit_code = details.get("exitCode", 0)
     if call.get("is_error") is not False or exit_code != 0:
-        own_failure = own_exit_ok and isinstance(exit_code, int) and exit_code not in (0, 126)
+        # Some ordinary work answers by failing, and the catalog names those commands one by one.
+        # Containment does not change the answer: the command the author declared still exits the
+        # way the host would have, so its own status is the result, not Guard interrupting work.
+        # A sandbox refusal (126) and a missing binary (127) are never the command's own answer.
+        declared = isinstance(reviewed_command, str) and reviewed_command in benign_exits
+        own_failure = isinstance(exit_code, int) and (
+            (own_exit_ok and exit_code not in (0, 126))
+            or (declared and exit_code not in (0, 126, 127))
+        )
         if not own_failure or _sandbox_refused(call, details, pre.get("input")):
             if contained_ok:
                 # A protection case's rerun is not ordinary work, so a refusal here is a missing
@@ -344,11 +355,15 @@ def contained_calls(
     *,
     approval_retry: bool = False,
     contained_ok: bool = False,
+    benign_exits: frozenset[str] = frozenset(),
 ) -> tuple[dict[str, dict[str, Any]], tuple[str, str] | None]:
     """Reviewed inputs of fully bound contained calls, or the outcome for a rewrite that is not bound.
 
     Only a call Guard denied for containment whose host input differs from the reviewed input is a
     contained rewrite; any other deny keeps the ordinary judgement and still counts as interruption.
+
+    ``benign_exits`` are the catalog's declared nonzero-exit commands. Containment does not
+    change what a command answers, so a declared command's own status is its result here too.
 
     ``contained_ok`` is the author's declaration that a protection case accepts Guard's own
     contained route as its stop. It widens only which containment reasons open this path; every
@@ -386,6 +401,7 @@ def contained_calls(
             proofs,
             own_exit_ok=case.get("full_task_mode") is not None or approval_retry,
             contained_ok=contained_ok,
+            benign_exits=benign_exits,
         )
         if error:
             return {}, error
