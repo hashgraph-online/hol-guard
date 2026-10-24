@@ -528,6 +528,11 @@ fn a_workspace_venv_is_found_by_being_one_not_by_a_search_path_entry() {
         "echo .venv/bin/pytest",
         "echo ./.venv/bin/pytest",
         "echo ../.venv/bin/pytest",
+        // A backslash before a line ending continues the line, so the path
+        // is still an argument of the command before it, and a carriage
+        // return on its own stays inside the word.
+        "echo \\\n.venv/bin/pytest",
+        "echo x\r.venv/bin/pytest",
         "rg -n .venv/bin/pytest src",
         "ls .venv/bin",
         "cat .venv/bin/../pyvenv.cfg",
@@ -553,6 +558,9 @@ fn a_workspace_venv_is_found_by_being_one_not_by_a_search_path_entry() {
         "cd a/b && ../../.venv/bin/pytest -q",
         // A line ending separates two commands as a semicolon does.
         "make build\n.venv/bin/pytest -q",
+        // An escaped backslash is a backslash, and the line ending after it
+        // still separates the two commands.
+        "printf x\\\\\n.venv/bin/pytest -q",
         "make build\r\n  PYTHONHASHSEED=0 ./.venv/bin/pytest -q",
     ] {
         assert_eq!(

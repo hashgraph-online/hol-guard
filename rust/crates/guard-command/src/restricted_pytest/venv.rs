@@ -419,7 +419,7 @@ fn starts_a_command(before: &str) -> bool {
     let mut head = before.trim_end_matches([' ', '\t']);
     loop {
         head = head.trim_end_matches(['\'', '"']);
-        if head.is_empty() || head.ends_with([';', '&', '|', '(', '{', '\n', '\r']) {
+        if head.is_empty() || head.ends_with([';', '&', '|', '(', '{']) || ends_a_line(head) {
             return true;
         }
         let word = head.rsplit(char::is_whitespace).next().unwrap_or_default();
@@ -430,6 +430,18 @@ fn starts_a_command(before: &str) -> bool {
         }
         head = head[..head.len() - word.len()].trim_end_matches([' ', '\t']);
     }
+}
+
+/// Whether `head` ends at a line ending that separates two commands. A line
+/// ending a backslash escapes is a continuation instead: the shell joins the
+/// two lines, so what follows stays part of the command before it. A carriage
+/// return on its own ends no line, and the shell keeps it inside the word.
+fn ends_a_line(head: &str) -> bool {
+    let Some(body) = head.strip_suffix('\n') else {
+        return false;
+    };
+    let body = body.strip_suffix('\r').unwrap_or(body);
+    (body.len() - body.trim_end_matches('\\').len()) % 2 == 0
 }
 
 /// Whether `word` is the prefix a relative path is written from: `./`, `../`,
