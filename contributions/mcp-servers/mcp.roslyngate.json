@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.roslyngate",
+  "version": "1.0.0",
+  "name": "RoslynGate",
+  "description": "Answers .NET symbol questions with Roslyn instead of text search: definitions, semantic references, type hierarchies, name search, and reload_workspace after structural changes. Returns compact, deterministic JSON. Built for medium and large solutions; on a couple of projects the MCP overhead can cost more than it saves. Read-only with respect to your code: it does not edit files, build, or run tests. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.sammybytes",
+    "displayName": "SammyBytes",
+    "url": "https://github.com/SammyBytes"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#0B0F14" },
+  "homepage": "https://github.com/SammyBytes/RoslynGate",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "roslyngate"
+  },
+  "riskClasses": ["external-filesystem-read", "package-or-source-installation"],
+  "tools": [
+    { "name": "get_symbol_definition", "state": "inherit" },
+    { "name": "find_symbol_references", "state": "inherit" },
+    { "name": "get_type_hierarchy", "state": "inherit" },
+    { "name": "search_symbols", "state": "inherit" },
+    { "name": "reload_workspace", "state": "inherit" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/SammyBytes/RoslynGate",
+    "https://www.npmjs.com/package/roslyngate",
+    "https://github.com/SammyBytes/RoslynGate/blob/main/docs/BENCHMARKS.md"
+  ],
+  "saferAlternatives": [
+    "All five tools are read-only and return JSON; the server does not edit files, build, or run tests.",
+    "It evaluates the solution with MSBuild, which reads project files and may run MSBuild logic from the repository. Pin the version with npx -y roslyngate@0.2.2 and only open solutions you trust.",
+    "The .cs watcher is on by default and applies edits incrementally; pass --no-watch to disable it.",
+    "If the workspace changed on disk, a call can return stale=true with empty results. Call reload_workspace and retry; that is not a missing symbol."
+  ]
+}
