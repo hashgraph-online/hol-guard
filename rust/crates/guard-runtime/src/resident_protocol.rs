@@ -110,6 +110,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "shell-helpers-v1".into(),
         "native-resident-lifecycle-v1".into(),
         "secrets-cli-v1".into(),
+        crate::runtime_identity::FEATURE.into(),
         guard_plugin_kit::FEATURE.into(),
         crate::workspace_snapshot::FEATURE.into(),
     ];

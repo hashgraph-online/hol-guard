@@ -708,6 +708,8 @@ mod runner_sync_url;
 mod runtime_artifact_identity_op;
 mod runtime_cli;
 mod runtime_detector_run_op;
+mod runtime_identity;
+mod runtime_identity_range;
 mod secrets_cli;
 mod sensitive_request_op;
 #[cfg(all(test, unix))]
