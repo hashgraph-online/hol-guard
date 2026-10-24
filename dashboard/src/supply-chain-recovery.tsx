@@ -3,9 +3,9 @@ import {
   HiMiniCheckCircle,
   HiMiniChevronDown,
   HiMiniExclamationCircle,
-  HiMiniWrenchScrewdriver,
 } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
+import { BrandHero, BrandHeroBadge, BrandHeroFacts } from "./brand-hero";
 import type { SupplyChainFixAllState } from "./supply-chain-fix-all";
 import {
   supplyChainFixAllButtonLabel,
@@ -19,6 +19,8 @@ type SupplyChainRecoveryProps = {
   state: SupplyChainFixAllState;
   onFixAll: () => void;
   guidance?: string | null;
+  /** One-line facts under the summary, from the workspace hero state. */
+  facts?: string[];
 };
 
 function recoverySummary(issueCount: number): string {
@@ -30,6 +32,7 @@ export function SupplyChainRecovery({
   state,
   onFixAll,
   guidance = null,
+  facts = [],
 }: SupplyChainRecoveryProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const handleDetailsToggle = useCallback(() => {
@@ -49,69 +52,67 @@ export function SupplyChainRecovery({
   );
 
   return (
-    <section
-      className="border-y border-brand-attention/20 bg-brand-attention/[0.04] px-4 py-4 sm:px-5"
-      aria-label="Supply-chain recovery"
-      data-testid="supply-chain-recovery"
+    <BrandHero
+      tone="review"
+      liveLabel={`${issues.length} to fix`}
+      ariaLabel="Supply-chain recovery"
+      testId="supply-chain-recovery"
+      markOnSmall="inline"
+      compact
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <HiMiniWrenchScrewdriver
-              className="h-4 w-4 shrink-0 text-brand-attention"
-              aria-hidden="true"
-            />
-            <h2 className="text-sm font-semibold text-brand-dark">
-              Restore supply-chain protection
-            </h2>
-          </div>
-          <p className="mt-1 max-w-3xl text-sm text-slate-600">
-            {recoverySummary(issues.length)}
+      <BrandHeroBadge tone="review">Needs repair</BrandHeroBadge>
+      <div className="max-w-2xl">
+        <h2 className="guard-hero-title text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+          Restore supply-chain protection
+        </h2>
+        <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-white/80">
+          {recoverySummary(issues.length)}
+        </p>
+        {guidance ? (
+          <p
+            className="mt-2 max-w-xl text-sm font-medium text-white"
+            data-testid="supply-chain-restart-guidance"
+          >
+            {guidance}
           </p>
-          {guidance ? (
-            <p
-              className="mt-2 max-w-3xl text-sm font-medium text-brand-primary"
-              data-testid="supply-chain-restart-guidance"
-            >
-              {guidance}
-            </p>
-          ) : null}
-        </div>
-        <ActionButton onClick={onFixAll} disabled={pending} aria-busy={pending}>
+        ) : null}
+      </div>
+      <div className="guard-hero-ctas flex flex-wrap gap-3">
+        <ActionButton onClick={onFixAll} disabled={pending} aria-busy={pending} data-primary="true">
           {buttonLabel}
         </ActionButton>
       </div>
 
-      <div className={showResult ? "mt-3" : ""} aria-live="polite">
+      <div className={showResult ? undefined : "!mt-0"} aria-live="polite">
         {showResult ? (
           <>
             <p
               className={`flex items-start gap-2 text-sm ${
-                isHardFailure ? "text-red-600" : "text-slate-600"
+                isHardFailure ? "text-[#fecaca]" : "text-white/80"
               }`}
             >
               {state.phase === "success" || needsCloudConnect ? (
                 <HiMiniCheckCircle
-                  className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500"
+                  className="mt-0.5 h-4 w-4 shrink-0 text-brand-green"
                   aria-hidden="true"
                 />
               ) : null}
               {state.message}
             </p>
             {failures.length > 0 ? (
-              <ul className="mt-2 space-y-1 text-xs text-red-600">
+              <ul className="mt-2 space-y-1 text-xs text-[#fecaca]">
                 {failures.map((failure, index) => (
                   <li key={`failed:${index}:${failure}`}>{failure}</li>
                 ))}
               </ul>
             ) : null}
             {state.phase === "access_required" ? (
-              <a className="mt-2 inline-block text-sm font-medium text-brand-primary underline underline-offset-4 focus-visible:outline focus-visible:outline-2" href="https://hol.org/guard/pricing" target="_blank" rel="noopener noreferrer">
+              <a className="mt-2 inline-block text-sm font-medium text-white underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white" href="https://hol.org/guard/pricing" target="_blank" rel="noopener noreferrer">
                 Review Cloud plan
               </a>
             ) : null}
             {remainingSteps.length > 0 ? (
-              <ul className="mt-2 space-y-1 text-xs font-medium text-brand-primary">
+              <ul className="mt-2 space-y-1 text-xs font-medium text-white">
                 {remainingSteps.map((remaining, index) => (
                   <li key={`remaining:${index}:${remaining}`}>{remaining}</li>
                 ))}
@@ -121,11 +122,12 @@ export function SupplyChainRecovery({
         ) : null}
       </div>
 
+      <BrandHeroFacts facts={facts} />
       <button
         type="button"
         onClick={handleDetailsToggle}
         aria-expanded={detailsOpen}
-        className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-primary hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="-ml-1 inline-flex min-h-11 items-center gap-1 rounded-md px-1 text-sm font-medium text-white/85 hover:text-white hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
       >
         View issue details
         <HiMiniChevronDown
@@ -134,24 +136,24 @@ export function SupplyChainRecovery({
         />
       </button>
       {detailsOpen ? (
-        <ul className="mt-2 border-t border-brand-attention/10">
+        <ul className="!mt-2 rounded-xl border border-white/15 bg-white/[0.06] px-3">
           {issues.map((issue) => (
             <li
               key={issue.id}
-              className="flex items-start gap-2 border-t border-brand-attention/10 py-3 first:border-t-0"
+              className="flex items-start gap-2 border-t border-white/10 py-3 first:border-t-0"
             >
               <HiMiniExclamationCircle
-                className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand-attention"
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#ffd58a]"
                 aria-hidden="true"
               />
-              <span className="text-xs text-slate-600">
-                <strong className="block font-semibold text-brand-dark">{issue.title}</strong>
+              <span className="text-sm text-white/80">
+                <strong className="block font-semibold text-white">{issue.title}</strong>
                 {issue.detail}
               </span>
             </li>
           ))}
         </ul>
       ) : null}
-    </section>
+    </BrandHero>
   );
 }

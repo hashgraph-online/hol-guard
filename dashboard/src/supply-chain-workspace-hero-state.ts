@@ -11,7 +11,38 @@ export type SupplyChainWorkspaceHeroState = {
   stagedGuidance: string | null;
   tone: "green" | "blue" | "attention" | "slate";
   statLine: string;
+  /** Short status for the hero badge. */
+  badge: string;
+  /** The line under the HOL mark. */
+  liveLabel: string;
+  /** One-line facts under the hero copy. */
+  facts: string[];
 };
+
+const PROTECTION_BADGE: Record<HomeProtectionStatus, string> = {
+  protected: "Protected",
+  partial: "Partly protected",
+  staged: "Restart to finish",
+  unprotected: "Not protected",
+  unknown: "Checking",
+};
+
+function protectionLiveLabel(
+  status: HomeProtectionStatus,
+  stats: { protectedManagers: number; unprotectedManagers: number; repairRequiredManagers: number },
+): string {
+  if (status === "protected") {
+    return `Guarding ${stats.protectedManagers} tool${stats.protectedManagers === 1 ? "" : "s"}`;
+  }
+  if (status === "staged") {
+    return "Restart pending";
+  }
+  if (status === "partial" || status === "unprotected") {
+    const open = stats.unprotectedManagers + stats.repairRequiredManagers;
+    return `${open} unprotected`;
+  }
+  return "Checking";
+}
 
 function protectionTitle(status: HomeProtectionStatus): string {
   if (status === "protected") {
@@ -90,6 +121,14 @@ export function resolveSupplyChainWorkspaceHero(
   const stagedGuidance =
     protectionStatus === "staged" ? protectionDetail(snapshot, protectionStatus) : null;
 
+  const openManagers = stats.unprotectedManagers + stats.repairRequiredManagers;
+  const facts = [
+    `${stats.protectedManagers} tool${stats.protectedManagers === 1 ? "" : "s"} protected`,
+    openManagers > 0 ? `${openManagers} tool${openManagers === 1 ? "" : "s"} unprotected` : null,
+    preventedLabel,
+    cloudLabel(snapshot),
+  ].filter((fact): fact is string => fact !== null);
+
   const openIssueCount = options?.openIssueCount ?? 0;
   if (openIssueCount > 0) {
     const issueSummary = `${openIssueCount} setup step${openIssueCount === 1 ? "" : "s"} ${openIssueCount === 1 ? "needs" : "need"} attention on this device.`;
@@ -102,6 +141,9 @@ export function resolveSupplyChainWorkspaceHero(
       stagedGuidance,
       tone: protectionTone(protectionStatus),
       statLine: `${stats.protectedManagers} protected · ${stats.unprotectedManagers} open · ${preventedLabel}`,
+      badge: "Needs repair",
+      liveLabel: `${openIssueCount} to fix`,
+      facts,
     };
   }
 
@@ -114,6 +156,9 @@ export function resolveSupplyChainWorkspaceHero(
     stagedGuidance,
     tone: protectionTone(protectionStatus),
     statLine: `${stats.protectedManagers} protected · ${stats.unprotectedManagers} open · ${preventedLabel}`,
+    badge: PROTECTION_BADGE[protectionStatus],
+    liveLabel: protectionLiveLabel(protectionStatus, stats),
+    facts,
   };
 }
 

@@ -22,7 +22,7 @@ type SyncState = "on" | "stalled" | "pairing" | "off" | "unavailable";
  * waiting on its first sync, or one whose connection needs a retry, reports
  * `paired_waiting`, so that state is drawn closed.
  */
-function resolveSyncState(runtimeSummary: AboutRuntimeSummary | null): SyncState {
+export function resolveSyncState(runtimeSummary: AboutRuntimeSummary | null): SyncState {
   switch (runtimeSummary?.cloudState) {
     case "paired_active":
       switch (runtimeSummary.syncHealth) {

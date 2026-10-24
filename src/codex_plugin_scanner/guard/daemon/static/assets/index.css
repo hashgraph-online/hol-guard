@@ -199,6 +199,8 @@
     --text-3xl--line-height: calc(2.25 / 1.875);
     --text-4xl: 2.25rem;
     --text-4xl--line-height: calc(2.5 / 2.25);
+    --text-5xl: 3rem;
+    --text-5xl--line-height: 1;
     --font-weight-normal: 400;
     --font-weight-medium: 500;
     --font-weight-semibold: 600;
@@ -803,6 +805,14 @@
     margin-block: auto;
   }
 
+  .\!mt-0 {
+    margin-top: 0 !important;
+  }
+
+  .\!mt-2 {
+    margin-top: calc(var(--spacing) * 2) !important;
+  }
+
   .-mt-1 {
     margin-top: calc(var(--spacing) * -1);
   }
@@ -929,6 +939,10 @@
 
   .mb-10 {
     margin-bottom: calc(var(--spacing) * 10);
+  }
+
+  .-ml-1 {
+    margin-left: calc(var(--spacing) * -1);
   }
 
   .-ml-2 {
@@ -1601,10 +1615,6 @@
     max-width: 55%;
   }
 
-  .max-w-\[60ch\] {
-    max-width: 60ch;
-  }
-
   .max-w-\[62ch\] {
     max-width: 62ch;
   }
@@ -2072,6 +2082,12 @@
     margin-block-end: calc(calc(var(--spacing) * 8) * calc(1 - var(--tw-space-y-reverse)));
   }
 
+  :where(.space-y-10 > :not(:last-child)) {
+    --tw-space-y-reverse: 0;
+    margin-block-start: calc(calc(var(--spacing) * 10) * var(--tw-space-y-reverse));
+    margin-block-end: calc(calc(var(--spacing) * 10) * calc(1 - var(--tw-space-y-reverse)));
+  }
+
   :where(.space-y-16 > :not(:last-child)) {
     --tw-space-y-reverse: 0;
     margin-block-start: calc(calc(var(--spacing) * 16) * var(--tw-space-y-reverse));
@@ -2132,10 +2148,6 @@
 
   .gap-y-5 {
     row-gap: calc(var(--spacing) * 5);
-  }
-
-  .gap-y-6 {
-    row-gap: calc(var(--spacing) * 6);
   }
 
   :where(.divide-y > :not(:last-child)) {
@@ -4251,6 +4263,16 @@
     }
   }
 
+  .bg-white\/\[0\.06\] {
+    background-color: #ffffff0f;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-white\/\[0\.06\] {
+      background-color: color-mix(in oklab, var(--color-white) 6%, transparent);
+    }
+  }
+
   .bg-white\/\[0\.08\] {
     background-color: #ffffff14;
   }
@@ -5088,6 +5110,14 @@
     color: #f4f7fb;
   }
 
+  .text-\[\#fecaca\] {
+    color: #fecaca;
+  }
+
+  .text-\[\#ffd58a\] {
+    color: #ffd58a;
+  }
+
   .text-accent {
     color: hsl(var(--accent));
   }
@@ -5573,6 +5603,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .text-white\/75 {
       color: color-mix(in oklab, var(--color-white) 75%, transparent);
+    }
+  }
+
+  .text-white\/80 {
+    color: #fffc;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-white\/80 {
+      color: color-mix(in oklab, var(--color-white) 80%, transparent);
     }
   }
 
@@ -7047,6 +7087,10 @@
     outline-color: var(--brand-blue);
   }
 
+  .focus-visible\:outline-white:focus-visible {
+    outline-color: var(--color-white);
+  }
+
   .focus-visible\:outline-white\/50:focus-visible {
     outline-color: #ffffff80;
   }
@@ -7631,6 +7675,11 @@
       line-height: var(--tw-leading, var(--text-4xl--line-height));
     }
 
+    .sm\:text-5xl {
+      font-size: var(--text-5xl);
+      line-height: var(--tw-leading, var(--text-5xl--line-height));
+    }
+
     .sm\:text-lg {
       font-size: var(--text-lg);
       line-height: var(--tw-leading, var(--text-lg--line-height));
@@ -7870,10 +7919,6 @@
       grid-row: span 3 / span 3;
     }
 
-    .lg\:row-start-1 {
-      grid-row-start: 1;
-    }
-
     .lg\:row-start-2 {
       grid-row-start: 2;
     }
@@ -7888,10 +7933,6 @@
 
     .lg\:mt-1 {
       margin-top: var(--spacing);
-    }
-
-    .lg\:mt-2 {
-      margin-top: calc(var(--spacing) * 2);
     }
 
     .lg\:mt-5 {
@@ -11253,6 +11294,38 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   background: currentColor;
   opacity: 0.55;
   vertical-align: 2px;
+}
+
+/* The flat HOL mark: footers, and the corner of a hero on phones where the particle stage would push the page's work out of view */
+.guard-brand-mark {
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.guard-brand-mark svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.guard-hero-inline-mark {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 44px;
+  height: 44px;
+  opacity: 0.9;
+}
+
+@media (min-width: 1024px) {
+  .guard-hero-inline-mark {
+    display: none;
+  }
+}
+
+/* Task pages keep the mark smaller so the work under the hero stays in the first viewport */
+.guard-hero-stage--compact {
+  max-width: 260px;
 }
 
 .guard-hero-stage {

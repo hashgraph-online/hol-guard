@@ -3,12 +3,13 @@
  *   boundary it describes, with this install's live state on it.
  * OWN-WORLD: Guard dashboard system as committed (DESIGN.md): brand-dark ink,
  *   brand-blue for the one active path, light borders for depth, system type.
+ *   The page opens on Home's branded hero (brand-hero.tsx): the gradient
+ *   surface and the HOL particle mark, tinted by this install's state.
  * STORY: See the device and what can cross its edge, read the four claims the
  *   figure numbers, check the data table, then choose where to go next.
- * FIRST VIEWPORT: Title and one line, then Fig. 1, the labeled diagram of
- *   agents, Guard, decisions, records, the sync gate and hol.org. Wide screens
- *   set the two outbound actions beside the title; phones read them after the
- *   figure.
+ * FIRST VIEWPORT: The branded hero with title, one line, the two outbound
+ *   actions and this install's facts, then Fig. 1, the labeled diagram of
+ *   agents, Guard, decisions, records, the sync gate and hol.org.
  * FORM: c1031d85, structure "Fig. 1: This Machine".
  * FINISH: unreviewed and undocumented is unfinished; this build ends with the
  *   finish review, the verdict, and DESIGN.md.
