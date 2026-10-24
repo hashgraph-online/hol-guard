@@ -377,8 +377,8 @@ pub(super) fn workspace_resident_bins(workspace: &Path, text: Option<&str>) -> V
     bins
 }
 
-/// Whether `text` starts a program from `bin`, named by its own path, by the
-/// one the workspace holds it at, or by that one written from here.
+/// Whether `text` starts a program from `bin`, named by its own path or by
+/// the one the workspace holds it at.
 ///
 /// The path has to stand where a program is read from. `.venv/bin/pytest -q`
 /// starts the venv's interpreter; `echo .venv/bin/pytest` writes the path and
@@ -386,14 +386,9 @@ pub(super) fn workspace_resident_bins(workspace: &Path, text: Option<&str>) -> V
 /// reason to be an executable root of that run.
 fn starts_program_from(text: &str, workspace: &Path, bin: &Path) -> bool {
     let relative = bin.strip_prefix(workspace).unwrap_or(bin);
-    // `./.venv/bin/pytest` is the same program as `.venv/bin/pytest`, and the
-    // leading `./` is no part of the directory, so it is read as its own
-    // spelling rather than as something standing in front of a program.
-    let from_here = relative.to_str().map(|path| format!("./{path}"));
-    [bin.to_str(), relative.to_str()]
-        .into_iter()
-        .flatten()
-        .chain(from_here.as_deref())
+    [bin, relative]
+        .iter()
+        .filter_map(|path| path.to_str())
         .any(|path| {
             text.match_indices(path).any(|(at, _)| {
                 names_program(&text[at + path.len()..]) && starts_a_command(&text[..at])
@@ -428,11 +423,26 @@ fn starts_a_command(before: &str) -> bool {
             return true;
         }
         let word = head.rsplit(char::is_whitespace).next().unwrap_or_default();
-        if word.is_empty() || !(stamps_a_variable(word) || PREFIX_VERBS.contains(&word)) {
+        if word.is_empty()
+            || !(leads_a_path(word) || stamps_a_variable(word) || PREFIX_VERBS.contains(&word))
+        {
             return false;
         }
         head = head[..head.len() - word.len()].trim_end_matches([' ', '\t']);
     }
+}
+
+/// Whether `word` is the prefix a relative path is written from: `./`, `../`,
+/// `../../`. It names where the program is read from rather than something
+/// standing in front of it, so what runs next is still read from the text
+/// before it. Every segment has to be one of those, and the prefix has to end
+/// at a separator, so a directory whose own name begins with dots is not read
+/// as one.
+fn leads_a_path(word: &str) -> bool {
+    word.ends_with('/')
+        && word
+            .split_terminator('/')
+            .all(|segment| segment == "." || segment == "..")
 }
 
 /// Whether `word` is a `NAME=value` assignment the command stamps on the
