@@ -23671,6 +23671,23 @@
       "expect": "allow"
     },
     {
+      "id": "control-flow-conditional-double-bracket-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "if [[ -f README.md ]]; then cat README.md; fi"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
       "id": "control-flow-conditional-else",
       "fix_area": "shell",
       "harnesses": [
@@ -24945,6 +24962,23 @@
       "tool": "shell",
       "tool_input": {
         "command": "[ -f README.md ] && cat \"$HOME/.ssh/id_rsa\""
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-double-bracket-test-then-read-ssh-key",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "[[ -f README.md ]] && cat \"$HOME/.ssh/id_rsa\""
       },
       "cwd": "worktree",
       "expect": "not_allow"
