@@ -536,6 +536,11 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::CodexHookIdentity(request) => {
                 crate::codex_hook_identity_op::evaluate_codex_hook_identity_request(&request)
             }
+            ResidentOperationV1::CodexHookFileIdentity(request) => {
+                crate::codex_hook_file_identity_op::evaluate_codex_hook_file_identity_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::InventoryScanTargets(request) => {
                 crate::inventory_scan_targets_op::evaluate_inventory_scan_targets_request(&request)
             }

@@ -141,6 +141,7 @@ mod codex_hook_bridge;
 mod codex_hook_bridge_direct;
 mod codex_hook_bridge_direct_resident;
 mod codex_hook_bridge_transport;
+mod codex_hook_file_identity_op;
 mod codex_hook_identity;
 mod codex_hook_response;
 mod codex_hooks;
