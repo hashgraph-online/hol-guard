@@ -25819,6 +25819,142 @@
       "cwd": "worktree",
       "expect": "not_allow",
       "contained_ok": true
+    },
+    {
+      "id": "group-subshell-in-pipeline",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "( ls ) | wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "group-brace-in-pipeline",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "{ ls; } | wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "group-brace-as-pipeline-sink",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls | { wc -l; }"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "group-subshell-as-pipeline-sink",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls | ( wc -l )"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "group-brace-redirected-tail",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "{ git status --short; } 2>&1"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "group-brace-conditional-tail",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "{ ls; } && git status --short"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-group-subshell-list-in-pipeline",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "( ls; cat Cargo.toml ) | wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-group-subshell-leading-conditional",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "(cd src) && ls"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     }
   ],
   "mcp_cases": [

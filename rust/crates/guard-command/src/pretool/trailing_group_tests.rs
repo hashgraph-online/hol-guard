@@ -39,12 +39,38 @@ fn trailing_group_unwraps_to_its_command_list() {
 }
 
 #[test]
+fn a_group_in_a_pipeline_reads_as_its_command_list() {
+    // Every element of a pipeline already runs in a child shell, so the
+    // subshell the parentheses open adds nothing the blanked text lacks.
+    for (grouped, ungrouped) in [
+        ("ls | (cat)", "ls |  cat"),
+        ("( ls ) | wc -l", "ls   | wc -l"),
+        ("(cd src) | wc -l", "cd src  | wc -l"),
+        ("npm test | (tee log)", "npm test |  tee log"),
+    ] {
+        assert_eq!(unwrap(grouped).as_deref(), Some(ungrouped), "{grouped}");
+    }
+}
+
+#[test]
+fn a_pipelined_group_of_more_than_one_command_keeps_its_review() {
+    // Blanking `( a; b ) | c` would pipe `b` alone, which is not the command
+    // that was submitted.
+    for command in [
+        "( cd src && ls ) | wc -l",
+        "(npm ci; npm test) | tee log",
+        "ls | (cd src && cat Cargo.toml)",
+    ] {
+        assert_eq!(unwrap(command), None, "{command}");
+    }
+}
+
+#[test]
 fn other_parentheses_keep_the_review() {
     for command in [
         "(cd src) && ls",
         "(ls) > out.txt",
         "(ls) &",
-        "ls | (cat)",
         "! (ls)",
         "echo $(ls)",
         "diff <(ls a) b",
