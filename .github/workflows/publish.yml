@@ -1554,7 +1554,7 @@ jobs:
           path: dist/
       - name: Keep only the Guard canary distribution
         run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
-      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
         with:
           repository-url: https://test.pypi.org/legacy/
       - name: Show canary install command
@@ -1946,7 +1946,7 @@ jobs:
           else
             echo "upload=false" >> "$GITHUB_OUTPUT"
           fi
-      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
         if: steps.testpypi.outputs.upload == 'true'
         with:
           repository-url: https://test.pypi.org/legacy/
@@ -2112,12 +2112,12 @@ jobs:
           HOL_GUARD_PYPI_PROJECT_LIMIT_BYTES: ${{ vars.HOL_GUARD_PYPI_PROJECT_LIMIT_BYTES }}
         run: uv run --with packaging==25.0 python scripts/pypi_project_storage.py --fail-if-over-limit
       - name: Publish HOL Guard to PyPI
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
         if: steps.pypi.outputs.hol_guard_upload == 'true'
         with:
           packages-dir: upload-dist-hol-guard/
       - name: Publish plugin-scanner to PyPI
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
         if: steps.pypi.outputs.plugin_scanner_upload == 'true'
         with:
           packages-dir: dist-plugin-scanner/
@@ -2273,7 +2273,7 @@ jobs:
             echo "Unexpected TestPyPI status: $status" >&2
             exit 1
           fi
-      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
         if: steps.testpypi.outputs.upload == 'true'
         with:
           repository-url: https://test.pypi.org/legacy/
@@ -2610,12 +2610,12 @@ jobs:
             exit "$quota_exit"
           fi
       - name: Publish HOL Guard to PyPI
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
         if: steps.pypi.outputs.hol_guard_upload == 'true' && steps.pypi_quota.outputs.blocked != 'true'
         with:
           packages-dir: pypi-hol-guard/
       - name: Publish plugin-scanner to PyPI
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
         if: steps.pypi.outputs.plugin_scanner_upload == 'true'
         with:
           packages-dir: pypi-plugin-scanner/
