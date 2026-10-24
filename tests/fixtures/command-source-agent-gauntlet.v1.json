@@ -1,0 +1,985 @@
+{
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "Agent Gauntlet forced journey init",
+            "Agent Gauntlet permission-asserted run"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews Agent Gauntlet CLI commands that run a checkout journey against a site with `--i-have-permission` or overwrite an existing journey file with `init --force`. Help, demo, report, version and plain init runs stay automatic.",
+          "ecosystem_ids": [
+            "agent-gauntlet"
+          ],
+          "executables": [
+            "agent-gauntlet"
+          ],
+          "extension_id": "command.agent-gauntlet",
+          "homepage": "https://github.com/jigar48/agent-gauntlet",
+          "icon": {
+            "background": "#0F172A",
+            "kind": "react-icon",
+            "name": "HiMiniCommandLine"
+          },
+          "license": "MIT",
+          "name": "Agent Gauntlet command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "Agent Gauntlet forced journey init"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `agent-gauntlet init --force`, which overwrites an existing starter journey file at the target path. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "example_command": "agent-gauntlet init --preset woocommerce --base-url https://shop.example --out journey.yml --force",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Agent Gauntlet forced journey init",
+              "permission_id": "command.agent-gauntlet.permission.init-force",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run `agent-gauntlet init` without `--force` first; it does not overwrite an existing file.",
+                "Write the starter journey to a new path with `--out`, or review the existing file before overwriting it."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "Agent Gauntlet permission-asserted run"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `agent-gauntlet run <journey> --i-have-permission`, which asserts permission to test a non-local site and drives a local Chromium browser through the journey's checkout steps against it, writing result.json, report.html and screenshots to a local output folder. The tool documents that it stops before payment and never places an order; Guard does not verify site ownership or permission. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "example_command": "agent-gauntlet run journey.yml --i-have-permission --out gauntlet-out",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Agent Gauntlet permission-asserted run",
+              "permission_id": "command.agent-gauntlet.permission.permission-run",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Run `agent-gauntlet demo` first; it only audits built-in fake shops on localhost.",
+                "Confirm you own the site or hold written permission before passing `--i-have-permission`, and review the journey file's steps and base URL."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Community",
+            "id": "community.agent-gauntlet",
+            "url": "https://github.com/jigar48/agent-gauntlet"
+          },
+          "reference_urls": [
+            "https://github.com/jigar48/agent-gauntlet#readme"
+          ],
+          "required": false,
+          "risk_classes": [
+            "destructive_shell",
+            "network_egress"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "Agent Gauntlet forced journey init"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `agent-gauntlet init --force`, which overwrites an existing starter journey file at the target path. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "agent-gauntlet",
+                        "agent-gauntlet.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--base-url",
+                        "--out",
+                        "--preset"
+                      ],
+                      "required_flags": [
+                        "--force"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "init"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.agent-gauntlet.permission.init-force",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.agent-gauntlet.init-force",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "agent-gauntlet",
+                            "agent-gauntlet.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--base-url",
+                            "--out",
+                            "--preset"
+                          ],
+                          "required_flags": [
+                            "--force",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "init"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "agent-gauntlet",
+                            "agent-gauntlet.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--base-url",
+                            "--out",
+                            "--preset"
+                          ],
+                          "required_flags": [
+                            "--force",
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "init"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Agent Gauntlet init help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run `agent-gauntlet init` without `--force` first; it does not overwrite an existing file.",
+                "Write the starter journey to a new path with `--out`, or review the existing file before overwriting it."
+              ],
+              "severity": "medium",
+              "title": "Agent Gauntlet init --force"
+            },
+            {
+              "action_classes": [
+                "Agent Gauntlet permission-asserted run"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `agent-gauntlet run <journey> --i-have-permission`, which asserts permission to test a non-local site and drives a local Chromium browser through the journey's checkout steps against it, writing result.json, report.html and screenshots to a local output folder. The tool documents that it stops before payment and never places an order; Guard does not verify site ownership or permission. exec and xargs launches are blocked by Guard's wrapper floor.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "agent-gauntlet",
+                        "agent-gauntlet.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--out"
+                      ],
+                      "required_flags": [
+                        "--i-have-permission"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "run"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.agent-gauntlet.permission.permission-run",
+              "risk_classes": [
+                "network_egress"
+              ],
+              "rule_id": "command.agent-gauntlet.run-permission",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "agent-gauntlet",
+                            "agent-gauntlet.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--out"
+                          ],
+                          "required_flags": [
+                            "--i-have-permission",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "run"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "agent-gauntlet",
+                            "agent-gauntlet.exe"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--out"
+                          ],
+                          "required_flags": [
+                            "--i-have-permission",
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "run"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Agent Gauntlet run help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Run `agent-gauntlet demo` first; it only audits built-in fake shops on localhost.",
+                "Confirm you own the site or hold written permission before passing `--i-have-permission`, and review the journey file's steps and base URL."
+              ],
+              "severity": "medium",
+              "title": "Agent Gauntlet run with --i-have-permission"
+            }
+          ],
+          "safer_alternatives": [
+            "Use `agent-gauntlet demo` to try the tool against built-in localhost fixture shops.",
+            "Only pass `--i-have-permission` for sites you own or have written permission to test."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.aether-vault",
+          "command.agent-gauntlet",
+          "command.agentbridge",
+          "command.agenticjobs",
+          "command.agentsocks",
+          "command.agi-memory",
+          "command.ai-dev",
+          "command.answerloops",
+          "command.appimg",
+          "command.batterycontrol",
+          "command.blitcp",
+          "command.blkcp",
+          "command.claude-tmux",
+          "command.cloudg",
+          "command.codesage",
+          "command.codex-migrate",
+          "command.cogext",
+          "command.crisp-tui",
+          "command.cs",
+          "command.ctty",
+          "command.dataman",
+          "command.dearmour",
+          "command.digline",
+          "command.dispat",
+          "command.envseal",
+          "command.errand",
+          "command.faf-cli",
+          "command.formicx",
+          "command.genclave",
+          "command.gitsync",
+          "command.golive",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.hashdup",
+          "command.iterlay",
+          "command.keibidrop",
+          "command.kelados",
+          "command.kim",
+          "command.kindling",
+          "command.kintsua",
+          "command.kranz",
+          "command.librarybridge",
+          "command.llmrig",
+          "command.macscope",
+          "command.master-of",
+          "command.mcp-agent-wire",
+          "command.mcp-agenthub",
+          "command.mcp-architecture-intelligence-platform",
+          "command.mcp-asdecided",
+          "command.mcp-aseprite",
+          "command.mcp-askjev",
+          "command.mcp-authyouragent",
+          "command.mcp-axpilot",
+          "command.mcp-azure-vm-pricing",
+          "command.mcp-brickproof-adb",
+          "command.mcp-ccm",
+          "command.mcp-cf-mail-mcp",
+          "command.mcp-ci-guard",
+          "command.mcp-clipugc",
+          "command.mcp-codex-claude-bridge",
+          "command.mcp-compose-bridge",
+          "command.mcp-contribos",
+          "command.mcp-dchub",
+          "command.mcp-debuganything",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-fetchsandbox",
+          "command.mcp-filesystem",
+          "command.mcp-ftp",
+          "command.mcp-g-krusch",
+          "command.mcp-garmin-coach-mcp",
+          "command.mcp-google-mcp-universal",
+          "command.mcp-google-workspace.gmail",
+          "command.mcp-halflife",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-jd-church-website-audit",
+          "command.mcp-kranz",
+          "command.mcp-krusch",
+          "command.mcp-krusch-agentic-proxy",
+          "command.mcp-krusch-context-mcp",
+          "command.mcp-krusch-git",
+          "command.mcp-kuuhaku",
+          "command.mcp-lattice-talk",
+          "command.mcp-leadline",
+          "command.mcp-loomdesk",
+          "command.mcp-mac-address-lookup",
+          "command.mcp-mail-server",
+          "command.mcp-melra",
+          "command.mcp-musiccontext",
+          "command.mcp-nuvui",
+          "command.mcp-obsidian-kanban",
+          "command.mcp-openscreenshot",
+          "command.mcp-ops-brain",
+          "command.mcp-pc-control",
+          "command.mcp-pinpoint",
+          "command.mcp-plim",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-quidli-connect",
+          "command.mcp-raw-browser",
+          "command.mcp-reaper",
+          "command.mcp-remote-pc-mcp",
+          "command.mcp-repo-notebook",
+          "command.mcp-run",
+          "command.mcp-seahorse",
+          "command.mcp-seminara",
+          "command.mcp-seq-mcp",
+          "command.mcp-setup-doctor",
+          "command.mcp-tether",
+          "command.mcp-thingery",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.mcp-xrpl-token-guard",
+          "command.mcp-xrpl-trading-lab",
+          "command.mcpguard",
+          "command.netdoctor",
+          "command.noodle",
+          "command.ollama",
+          "command.omairc",
+          "command.probe",
+          "command.pyrig",
+          "command.redpen",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.repro-surgeon",
+          "command.rls-saboteur",
+          "command.routed",
+          "command.rungs",
+          "command.salesforce.sf",
+          "command.seatbelt-guard",
+          "command.shellroute",
+          "command.showtime",
+          "command.simgit",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.skills-check-updates",
+          "command.snoboard",
+          "command.storage-clearer",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vaultsync",
+          "command.vttforge",
+          "command.where-are-we",
+          "command.x402shield",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.digitalocean",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "agent-gauntlet run journey.yml --i-have-permission",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-permission",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet run --i-have-permission journey.yml",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-permission-first",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet run journey.yml --out gauntlet-out --i-have-permission",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-permission-out",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet run \"my journeys/store.yml\" --out \"out dir\" --i-have-permission",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-permission-out-spaces",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet.exe run journey.yml --i-have-permission",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-permission-exe",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "cd shop && agent-gauntlet run journey.yml --i-have-permission",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "run-permission-compound",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet run journey.yml --i-have-permission | tee run.log",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-permission-pipeline",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet run --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "run-help",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet run journey.yml --i-have-permission --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "run-permission-help",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet run journey.yml --i-have-permission -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "run-permission-short-help",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet run journey.yml",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "run-localhost-no-flag",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet run journey.yml $PERMISSION_FLAG",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "run-permission-expansion",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet run journey.yml --i-have-permission",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "run-permission-inactive",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet run journey.yml --i-have-permission",
+      "disabled_permissions": [
+        "command.agent-gauntlet.permission.permission-run"
+      ],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-permission-disabled-permission",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "exec agent-gauntlet run journey.yml --i-have-permission",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "exec-run-permission",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "xargs -n 1 agent-gauntlet run --i-have-permission",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs-run-permission",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet demo",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "demo",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet report gauntlet-out/result.json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "report",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "version",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    },
+    {
+      "command": "agent-gauntlet init --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "init-force",
+      "rule_id": "command.agent-gauntlet.init-force"
+    },
+    {
+      "command": "agent-gauntlet init --preset woocommerce --base-url https://shop.example --out journey.yml --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "init-force-options",
+      "rule_id": "command.agent-gauntlet.init-force"
+    },
+    {
+      "command": "agent-gauntlet init --force --out journey.yml",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "init-force-first",
+      "rule_id": "command.agent-gauntlet.init-force"
+    },
+    {
+      "command": "agent-gauntlet init --out a.yml && agent-gauntlet init --out b.yml --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "init-force-compound",
+      "rule_id": "command.agent-gauntlet.init-force"
+    },
+    {
+      "command": "agent-gauntlet init --force --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "init-force-help",
+      "rule_id": "command.agent-gauntlet.init-force"
+    },
+    {
+      "command": "agent-gauntlet init --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "init-help",
+      "rule_id": "command.agent-gauntlet.init-force"
+    },
+    {
+      "command": "agent-gauntlet init --preset generic --out journey.yml",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "init-without-force",
+      "rule_id": "command.agent-gauntlet.init-force"
+    },
+    {
+      "command": "agent-gauntlet init --out journey.yml $FORCE_FLAG",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "init-force-expansion",
+      "rule_id": "command.agent-gauntlet.init-force"
+    },
+    {
+      "command": "agent-gauntlet init --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "init-force-inactive",
+      "rule_id": "command.agent-gauntlet.init-force"
+    },
+    {
+      "command": "agent-gauntlet init --force",
+      "disabled_permissions": [
+        "command.agent-gauntlet.permission.init-force"
+      ],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "init-force-disabled-permission",
+      "rule_id": "command.agent-gauntlet.init-force"
+    },
+    {
+      "command": "exec agent-gauntlet init --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "exec-init-force",
+      "rule_id": "command.agent-gauntlet.init-force"
+    },
+    {
+      "command": "xargs -n 1 agent-gauntlet init --force",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs-init-force",
+      "rule_id": "command.agent-gauntlet.init-force"
+    },
+    {
+      "command": "echo agent-gauntlet run journey.yml --i-have-permission",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.agent-gauntlet"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "unrelated-echo",
+      "rule_id": "command.agent-gauntlet.run-permission"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

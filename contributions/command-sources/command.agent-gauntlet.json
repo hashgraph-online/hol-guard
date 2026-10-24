@@ -1,0 +1,357 @@
+{
+  "extension": {
+    "action_classes": [
+      "Agent Gauntlet forced journey init",
+      "Agent Gauntlet permission-asserted run"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews Agent Gauntlet CLI commands that run a checkout journey against a site with `--i-have-permission` or overwrite an existing journey file with `init --force`. Help, demo, report, version and plain init runs stay automatic.",
+    "ecosystem_ids": [
+      "agent-gauntlet"
+    ],
+    "executables": [
+      "agent-gauntlet"
+    ],
+    "extension_id": "command.agent-gauntlet",
+    "homepage": "https://github.com/jigar48/agent-gauntlet",
+    "icon": {
+      "background": "#0F172A",
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine"
+    },
+    "license": "MIT",
+    "name": "Agent Gauntlet command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Agent Gauntlet forced journey init"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `agent-gauntlet init --force`, which overwrites an existing starter journey file at the target path. exec and xargs launches are blocked by Guard's wrapper floor.",
+        "example_command": "agent-gauntlet init --preset woocommerce --base-url https://shop.example --out journey.yml --force",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Agent Gauntlet forced journey init",
+        "permission_id": "command.agent-gauntlet.permission.init-force",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run `agent-gauntlet init` without `--force` first; it does not overwrite an existing file.",
+          "Write the starter journey to a new path with `--out`, or review the existing file before overwriting it."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Agent Gauntlet permission-asserted run"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `agent-gauntlet run <journey> --i-have-permission`, which asserts permission to test a non-local site and drives a local Chromium browser through the journey's checkout steps against it, writing result.json, report.html and screenshots to a local output folder. The tool documents that it stops before payment and never places an order; Guard does not verify site ownership or permission. exec and xargs launches are blocked by Guard's wrapper floor.",
+        "example_command": "agent-gauntlet run journey.yml --i-have-permission --out gauntlet-out",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Agent Gauntlet permission-asserted run",
+        "permission_id": "command.agent-gauntlet.permission.permission-run",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run `agent-gauntlet demo` first; it only audits built-in fake shops on localhost.",
+          "Confirm you own the site or hold written permission before passing `--i-have-permission`, and review the journey file's steps and base URL."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.agent-gauntlet",
+      "url": "https://github.com/jigar48/agent-gauntlet"
+    },
+    "reference_urls": [
+      "https://github.com/jigar48/agent-gauntlet#readme"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Agent Gauntlet forced journey init"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `agent-gauntlet init --force`, which overwrites an existing starter journey file at the target path. exec and xargs launches are blocked by Guard's wrapper floor.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agent-gauntlet",
+                  "agent-gauntlet.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--base-url",
+                  "--out",
+                  "--preset"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "init"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.agent-gauntlet.permission.init-force",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.agent-gauntlet.init-force",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "agent-gauntlet",
+                      "agent-gauntlet.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--base-url",
+                      "--out",
+                      "--preset"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "init"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "agent-gauntlet",
+                      "agent-gauntlet.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--base-url",
+                      "--out",
+                      "--preset"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "init"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Agent Gauntlet init help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `agent-gauntlet init` without `--force` first; it does not overwrite an existing file.",
+          "Write the starter journey to a new path with `--out`, or review the existing file before overwriting it."
+        ],
+        "severity": "medium",
+        "title": "Agent Gauntlet init --force"
+      },
+      {
+        "action_classes": [
+          "Agent Gauntlet permission-asserted run"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `agent-gauntlet run <journey> --i-have-permission`, which asserts permission to test a non-local site and drives a local Chromium browser through the journey's checkout steps against it, writing result.json, report.html and screenshots to a local output folder. The tool documents that it stops before payment and never places an order; Guard does not verify site ownership or permission. exec and xargs launches are blocked by Guard's wrapper floor.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agent-gauntlet",
+                  "agent-gauntlet.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--out"
+                ],
+                "required_flags": [
+                  "--i-have-permission"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "run"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.agent-gauntlet.permission.permission-run",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.agent-gauntlet.run-permission",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "agent-gauntlet",
+                      "agent-gauntlet.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--out"
+                    ],
+                    "required_flags": [
+                      "--i-have-permission",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "run"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "agent-gauntlet",
+                      "agent-gauntlet.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--out"
+                    ],
+                    "required_flags": [
+                      "--i-have-permission",
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "run"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Agent Gauntlet run help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `agent-gauntlet demo` first; it only audits built-in fake shops on localhost.",
+          "Confirm you own the site or hold written permission before passing `--i-have-permission`, and review the journey file's steps and base URL."
+        ],
+        "severity": "medium",
+        "title": "Agent Gauntlet run with --i-have-permission"
+      }
+    ],
+    "safer_alternatives": [
+      "Use `agent-gauntlet demo` to try the tool against built-in localhost fixture shops.",
+      "Only pass `--i-have-permission` for sites you own or have written permission to test."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}
