@@ -144,6 +144,7 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
         &input.search_path,
         input.home.as_deref(),
         &workspace,
+        Some(&input.text),
         reaches_go_modules(&input.text, &workspace),
         reaches_cargo_caches(&input.text, &workspace),
         reaches_maven_repository(&input.text, &workspace),

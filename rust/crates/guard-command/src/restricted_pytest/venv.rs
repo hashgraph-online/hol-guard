@@ -264,7 +264,9 @@ pub(super) fn workspace_base_roots(bin: &Path, workspace: &Path) -> Vec<PathBuf>
     roots
 }
 
-/// The `bin` directories of the venvs a workspace holds at its top level.
+/// The `bin` directories of the venvs a workspace holds at its top level that
+/// `text` starts a program from. `None` asks for every one of them, which is
+/// what a reachability check needs.
 ///
 /// A command can start `.venv/bin/pytest` by naming its path, and nothing
 /// puts the venv on the session's PATH when it does. Discovery that reads
@@ -273,7 +275,11 @@ pub(super) fn workspace_base_roots(bin: &Path, workspace: &Path) -> Vec<PathBuf>
 /// command names, and ordinary project work is reviewed instead of contained.
 /// Only a directory holding a `pyvenv.cfg` is considered; what it names still
 /// has to pass `workspace_base_roots`.
-pub(super) fn workspace_resident_bins(workspace: &Path) -> Vec<PathBuf> {
+///
+/// A run that names no venv is planned without one. The install a venv links
+/// out to is a whole interpreter prefix, and a command that never starts the
+/// venv has no reason to read or run it.
+pub(super) fn workspace_resident_bins(workspace: &Path, text: Option<&str>) -> Vec<PathBuf> {
     let Ok(entries) = fs::read_dir(workspace) else {
         return Vec::new();
     };
@@ -286,6 +292,11 @@ pub(super) fn workspace_resident_bins(workspace: &Path) -> Vec<PathBuf> {
         let Ok(bin) = root.join("bin").canonicalize() else {
             continue;
         };
+        // The limit counts the venvs the command starts a program from, so a
+        // named one is found wherever the directory order puts it.
+        if text.is_some_and(|text| !names_bin(text, workspace, &bin)) {
+            continue;
+        }
         if !bins.contains(&bin) {
             bins.push(bin);
         }
@@ -294,6 +305,16 @@ pub(super) fn workspace_resident_bins(workspace: &Path) -> Vec<PathBuf> {
         }
     }
     bins
+}
+
+/// Whether `text` names `bin`, by its own path or the one the workspace
+/// holds it at. A command starts a venv's program by naming where it is.
+fn names_bin(text: &str, workspace: &Path, bin: &Path) -> bool {
+    let relative = bin.strip_prefix(workspace).unwrap_or(bin);
+    [bin, relative]
+        .iter()
+        .filter_map(|path| path.to_str())
+        .any(|path| text.contains(path))
 }
 
 #[cfg(test)]

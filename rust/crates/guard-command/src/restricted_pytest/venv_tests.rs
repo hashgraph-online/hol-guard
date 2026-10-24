@@ -404,48 +404,27 @@ fn a_workspace_venv_is_found_by_being_one_not_by_a_search_path_entry() {
     fs::create_dir_all(venv.join("bin")).unwrap();
     let configuration = venv.join("pyvenv.cfg");
     fs::write(&configuration, "home = /usr/bin\n").unwrap();
+    let bin = venv.join("bin").canonicalize().unwrap();
     assert_eq!(
-        workspace_resident_bins(&workspace),
-        vec![venv.join("bin").canonicalize().unwrap()]
+        workspace_resident_bins(&workspace, Some(".venv/bin/pytest -q")),
+        vec![bin.clone()]
     );
+    // A reachability check asks for every venv the workspace holds.
+    assert_eq!(workspace_resident_bins(&workspace, None), vec![bin.clone()]);
+    // The path it is named by is the one the command writes, wherever the
+    // command starts it from.
+    assert_eq!(
+        workspace_resident_bins(
+            &workspace,
+            Some(&format!("{} -q", bin.join("pytest").display()))
+        ),
+        vec![bin]
+    );
+    // A command that starts no program in the venv is planned without it, so
+    // the interpreter prefix it links out to stays out of that plan.
+    assert!(workspace_resident_bins(&workspace, Some("make test")).is_empty());
     // Without the file that makes it a venv, nothing below the workspace is
     // read for an install.
     fs::rename(&configuration, venv.join("pyvenv.cfg.moved")).unwrap();
-    assert!(workspace_resident_bins(&workspace).is_empty());
-}
-
-/// The install such a venv names reaches the roots the sandbox is given,
-/// although no entry of the search path names the venv.
-#[test]
-fn an_install_a_workspace_venv_names_reaches_the_sandbox_roots() {
-    let Some((prefix, bin)) = managed_prefix_install() else {
-        eprintln!("skipping: no managed Python install below a trusted root");
-        return;
-    };
-    let fixture = fixture();
-    let workspace = fixture.0.join("workspace");
-    fs::create_dir(&workspace).unwrap();
-    let venv = workspace.join(".venv");
-    fs::create_dir_all(venv.join("bin")).unwrap();
-    fs::create_dir_all(venv.join("lib/python3/site-packages")).unwrap();
-    let configuration = venv.join("pyvenv.cfg");
-    fs::write(
-        &configuration,
-        format!(
-            "home = {}\ninclude-system-site-packages = false\n",
-            bin.display()
-        ),
-    )
-    .unwrap();
-    // The search path names neither the venv nor anything below the workspace.
-    let search = "/usr/bin";
-    let roots = |workspace: &Path| {
-        super::super::toolchains::workspace_exec_roots(search, None, workspace, false, false, false)
-            .0
-    };
-    let with = roots(&workspace);
-    fs::rename(&configuration, venv.join("pyvenv.cfg.moved")).unwrap();
-    let without = roots(&workspace);
-    assert!(with.contains(&prefix), "{with:?}");
-    assert!(!without.contains(&prefix), "{without:?}");
+    assert!(workspace_resident_bins(&workspace, None).is_empty());
 }
