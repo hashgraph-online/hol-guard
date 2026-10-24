@@ -423,6 +423,33 @@ fn a_workspace_venv_is_found_by_being_one_not_by_a_search_path_entry() {
     // A command that starts no program in the venv is planned without it, so
     // the interpreter prefix it links out to stays out of that plan.
     assert!(workspace_resident_bins(&workspace, Some("make test")).is_empty());
+    // Naming the path as an argument starts nothing out of the venv, so it
+    // grants nothing either.
+    for text in [
+        "echo .venv/bin/pytest",
+        "rg -n .venv/bin/pytest src",
+        "ls .venv/bin",
+        "cat .venv/bin/../pyvenv.cfg",
+    ] {
+        assert!(
+            workspace_resident_bins(&workspace, Some(text)).is_empty(),
+            "{text}"
+        );
+    }
+    // The assignments and verbs a command stamps on the program it starts
+    // leave the program where it is.
+    for text in [
+        "PYTHONHASHSEED=0 .venv/bin/pytest -q",
+        "npm run build; .venv/bin/pytest -q",
+        "{ npm run build; .venv/bin/pytest -q; }",
+        "make build && exec .venv/bin/pytest -q",
+    ] {
+        assert_eq!(
+            workspace_resident_bins(&workspace, Some(text)),
+            vec![bin.clone()],
+            "{text}"
+        );
+    }
     // Without the file that makes it a venv, nothing below the workspace is
     // read for an install.
     fs::rename(&configuration, venv.join("pyvenv.cfg.moved")).unwrap();
@@ -453,6 +480,12 @@ fn a_venv_the_workspace_links_to_is_named_by_the_link_the_command_writes() {
         workspace_resident_bins(&workspace, Some("envs/py311/bin/pytest -q")),
         vec![bin]
     );
-    // Naming neither still leaves the interpreter prefix out of the plan.
-    assert!(workspace_resident_bins(&workspace, Some("make test")).is_empty());
+    // Naming neither still leaves the interpreter prefix out of the plan,
+    // and naming the link as an argument grants nothing through it either.
+    for text in ["make test", "echo .venv/bin/pytest"] {
+        assert!(
+            workspace_resident_bins(&workspace, Some(text)).is_empty(),
+            "{text}"
+        );
+    }
 }

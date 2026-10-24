@@ -300,7 +300,8 @@ pub(super) fn workspace_resident_bins(workspace: &Path, text: Option<&str>) -> V
         // The limit counts the venvs the command starts a program from, so a
         // named one is found wherever the directory order puts it.
         if text.is_some_and(|text| {
-            !names_bin(text, workspace, &named) && !names_bin(text, workspace, &bin)
+            !starts_program_from(text, workspace, &named)
+                && !starts_program_from(text, workspace, &bin)
         }) {
             continue;
         }
@@ -314,14 +315,63 @@ pub(super) fn workspace_resident_bins(workspace: &Path, text: Option<&str>) -> V
     bins
 }
 
-/// Whether `text` names `bin`, by its own path or the one the workspace
-/// holds it at. A command starts a venv's program by naming where it is.
-fn names_bin(text: &str, workspace: &Path, bin: &Path) -> bool {
+/// Whether `text` starts a program from `bin`, named by its own path or by
+/// the one the workspace holds it at.
+///
+/// The path has to stand where a program is read from. `.venv/bin/pytest -q`
+/// starts the venv's interpreter; `echo .venv/bin/pytest` writes the path and
+/// starts nothing out of the venv, so the prefix that venv links out to has no
+/// reason to be an executable root of that run.
+fn starts_program_from(text: &str, workspace: &Path, bin: &Path) -> bool {
     let relative = bin.strip_prefix(workspace).unwrap_or(bin);
     [bin, relative]
         .iter()
         .filter_map(|path| path.to_str())
-        .any(|path| text.contains(path))
+        .any(|path| {
+            text.match_indices(path).any(|(at, _)| {
+                names_program(&text[at + path.len()..]) && starts_a_command(&text[..at])
+            })
+        })
+}
+
+/// Whether a program of the `bin` directory follows it. A deeper path that
+/// only begins with the venv's is a different directory, not its program.
+fn names_program(rest: &str) -> bool {
+    rest.strip_prefix('/').is_some_and(|rest| {
+        let name = rest.split_whitespace().next().unwrap_or_default();
+        !name.is_empty() && !name.contains('/')
+    })
+}
+
+/// Whether what runs next after `before` is a program: `before` is the start
+/// of the command or of one of its lists, plus the assignments and the verbs
+/// a command stamps on the program it starts.
+fn starts_a_command(before: &str) -> bool {
+    /// Verbs that take a program as their own first word.
+    const PREFIX_VERBS: &[&str] = &[
+        "command", "do", "else", "env", "exec", "nohup", "then", "time",
+    ];
+    let mut head = before.trim_end();
+    loop {
+        head = head.trim_end_matches(['\'', '"']);
+        if head.is_empty() || head.ends_with([';', '&', '|', '(', '{', '\n']) {
+            return true;
+        }
+        let word = head.rsplit(char::is_whitespace).next().unwrap_or_default();
+        if word.is_empty() || !(stamps_a_variable(word) || PREFIX_VERBS.contains(&word)) {
+            return false;
+        }
+        head = head[..head.len() - word.len()].trim_end();
+    }
+}
+
+/// Whether `word` is a `NAME=value` assignment the command stamps on the
+/// program it starts.
+fn stamps_a_variable(word: &str) -> bool {
+    word.split_once('=').is_some_and(|(name, _)| {
+        name.starts_with(|first: char| first.is_ascii_alphabetic() || first == '_')
+            && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    })
 }
 
 #[cfg(test)]
