@@ -1,0 +1,597 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.serverguardian",
+    "version": "1.0.0",
+    "name": "Server Guardian command protection",
+    "description": "Reviews Server Guardian package upgrades and Docker image or container lifecycle mutations while leaving its telemetry and notification commands unrestricted.",
+    "action_classes": [
+      "Server Guardian package upgrade command",
+      "Server Guardian Docker lifecycle command",
+      "Server Guardian telemetry command"
+    ],
+    "risk_classes": [
+      "destructive_shell",
+      "execution",
+      "network_egress"
+    ],
+    "safer_alternatives": [
+      "Inspect the package upgrade plan before applying apt changes.",
+      "Review the target image and container configuration before pulling or recreating containers."
+    ],
+    "reference_urls": [
+      "https://github.com/GonnyTech/ServerGuardian"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [],
+    "executables": [
+      "apt",
+      "apt-get",
+      "docker"
+    ],
+    "project_markers": [],
+    "permissions": [
+      {
+        "permission_id": "command.serverguardian.permission.package-upgrade",
+        "implementation_version": "1.0.0",
+        "label": "Server Guardian package upgrades",
+        "description": "Reviews apt update and upgrade operations used by Server Guardian's nightly maintenance.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Server Guardian package upgrade command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Inspect the package upgrade plan before applying apt changes."
+        ],
+        "example_command": "apt upgrade"
+      },
+      {
+        "permission_id": "command.serverguardian.permission.docker-lifecycle",
+        "implementation_version": "1.0.0",
+        "label": "Server Guardian Docker lifecycle",
+        "description": "Reviews Docker image pulls and container create, run, or Compose recreation operations.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Server Guardian Docker lifecycle command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Review the target image and container configuration before pulling or recreating containers."
+        ],
+        "example_command": "docker run --name server-guardian app:latest"
+      },
+      {
+        "permission_id": "command.serverguardian.permission.telemetry",
+        "implementation_version": "1.0.0",
+        "label": "Server Guardian telemetry",
+        "description": "Allows Server Guardian startup metrics and SMTP notification telemetry without review.",
+        "risk_tier": "low",
+        "baseline_floor": "allow",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Server Guardian telemetry command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [],
+        "example_command": "server-guardian"
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.serverguardian.package-update",
+        "rule_version": "1.0.0",
+        "permission_id": "command.serverguardian.permission.package-upgrade",
+        "title": "Server Guardian package index update",
+        "description": "Identifies apt package index updates used by Server Guardian maintenance.",
+        "severity": "high",
+        "risk_classes": [
+          "network_egress",
+          "execution"
+        ],
+        "action_classes": [
+          "Server Guardian package upgrade command"
+        ],
+        "safer_alternatives": [
+          "Inspect the package index update and its repository configuration before running it."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "leading-subcommand.v1",
+          "config": {
+            "executables": [
+              "apt",
+              "apt.cmd",
+              "apt.exe",
+              "apt-get",
+              "apt-get.cmd",
+              "apt-get.exe"
+            ],
+            "subcommands": [
+              "update"
+            ],
+            "options_with_values": [
+              "-o",
+              "--option",
+              "-c",
+              "--config-file",
+              "-t",
+              "--target-release"
+            ]
+          }
+        },
+        "safe_variants": []
+      },
+      {
+        "rule_id": "command.serverguardian.package-upgrade",
+        "rule_version": "1.0.0",
+        "permission_id": "command.serverguardian.permission.package-upgrade",
+        "title": "Server Guardian system package upgrade",
+        "description": "Identifies apt package upgrades used by Server Guardian nightly maintenance.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell",
+          "execution"
+        ],
+        "action_classes": [
+          "Server Guardian package upgrade command"
+        ],
+        "safer_alternatives": [
+          "Inspect the package upgrade plan before applying apt changes."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "apt",
+                  "apt.cmd",
+                  "apt.exe",
+                  "apt-get",
+                  "apt-get.cmd",
+                  "apt-get.exe"
+                ],
+                "subcommands": [
+                  "upgrade"
+                ],
+                "options_with_values": [
+                  "-o",
+                  "--option",
+                  "-c",
+                  "--config-file",
+                  "-t",
+                  "--target-release"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "apt",
+                  "apt.cmd",
+                  "apt.exe",
+                  "apt-get",
+                  "apt-get.cmd",
+                  "apt-get.exe"
+                ],
+                "subcommands": [
+                  "full-upgrade"
+                ],
+                "options_with_values": [
+                  "-o",
+                  "--option",
+                  "-c",
+                  "--config-file",
+                  "-t",
+                  "--target-release"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "apt",
+                  "apt.cmd",
+                  "apt.exe",
+                  "apt-get",
+                  "apt-get.cmd",
+                  "apt-get.exe"
+                ],
+                "subcommands": [
+                  "dist-upgrade"
+                ],
+                "options_with_values": [
+                  "-o",
+                  "--option",
+                  "-c",
+                  "--config-file",
+                  "-t",
+                  "--target-release"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": []
+      },
+      {
+        "rule_id": "command.serverguardian.docker-pull",
+        "rule_version": "1.0.0",
+        "permission_id": "command.serverguardian.permission.docker-lifecycle",
+        "title": "Server Guardian Docker image pull",
+        "description": "Identifies Docker image pulls used to refresh Server Guardian containers.",
+        "severity": "high",
+        "risk_classes": [
+          "network_egress",
+          "execution"
+        ],
+        "action_classes": [
+          "Server Guardian Docker lifecycle command"
+        ],
+        "safer_alternatives": [
+          "Review the exact image reference and registry before pulling it."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "docker",
+                  "docker.cmd",
+                  "docker.exe"
+                ],
+                "subcommands": [
+                  "pull"
+                ],
+                "options_with_values": [
+                  "-H",
+                  "--host",
+                  "-c",
+                  "--context",
+                  "--config",
+                  "-l",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "docker",
+                  "docker.cmd",
+                  "docker.exe"
+                ],
+                "subcommands": [
+                  "image",
+                  "pull"
+                ],
+                "options_with_values": [
+                  "-H",
+                  "--host",
+                  "-c",
+                  "--context",
+                  "--config",
+                  "-l",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": []
+      },
+      {
+        "rule_id": "command.serverguardian.docker-container-lifecycle",
+        "rule_version": "1.0.0",
+        "permission_id": "command.serverguardian.permission.docker-lifecycle",
+        "title": "Server Guardian Docker container lifecycle",
+        "description": "Identifies Docker container creation, execution, and Compose recreation operations.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell",
+          "execution"
+        ],
+        "action_classes": [
+          "Server Guardian Docker lifecycle command"
+        ],
+        "safer_alternatives": [
+          "Review the target image and container configuration before creating or recreating a container."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "docker",
+                  "docker.cmd",
+                  "docker.exe"
+                ],
+                "subcommands": [
+                  "container",
+                  "run"
+                ],
+                "options_with_values": [
+                  "-H",
+                  "--host",
+                  "-c",
+                  "--context",
+                  "--config",
+                  "-l",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "docker",
+                  "docker.cmd",
+                  "docker.exe"
+                ],
+                "subcommands": [
+                  "container",
+                  "create"
+                ],
+                "options_with_values": [
+                  "-H",
+                  "--host",
+                  "-c",
+                  "--context",
+                  "--config",
+                  "-l",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "docker",
+                  "docker.cmd",
+                  "docker.exe"
+                ],
+                "subcommands": [
+                  "run"
+                ],
+                "options_with_values": [
+                  "-H",
+                  "--host",
+                  "-c",
+                  "--context",
+                  "--config",
+                  "-l",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "docker",
+                  "docker.cmd",
+                  "docker.exe"
+                ],
+                "subcommands": [
+                  "create"
+                ],
+                "options_with_values": [
+                  "-H",
+                  "--host",
+                  "-c",
+                  "--context",
+                  "--config",
+                  "-l",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "docker",
+                  "docker.cmd",
+                  "docker.exe",
+                  "docker-compose",
+                  "docker-compose.cmd",
+                  "docker-compose.exe"
+                ],
+                "subcommands": [
+                  "compose",
+                  "up"
+                ],
+                "options_with_values": [
+                  "-H",
+                  "--host",
+                  "-c",
+                  "--context",
+                  "--config",
+                  "-l",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-f",
+                  "--file",
+                  "-p",
+                  "--project-name",
+                  "--project-directory",
+                  "--env-file"
+                ],
+                "interleaved_options_with_values": [
+                  "-f",
+                  "--file",
+                  "-p",
+                  "--project-name",
+                  "--project-directory",
+                  "--env-file"
+                ]
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "docker-compose",
+                  "docker-compose.cmd",
+                  "docker-compose.exe"
+                ],
+                "subcommands": [
+                  "up"
+                ],
+                "options_with_values": [
+                  "-H",
+                  "--host",
+                  "-c",
+                  "--context",
+                  "--config",
+                  "-l",
+                  "--log-level",
+                  "--tlscacert",
+                  "--tlscert",
+                  "--tlskey",
+                  "-f",
+                  "--file",
+                  "-p",
+                  "--project-name",
+                  "--project-directory",
+                  "--env-file"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": []
+      },
+      {
+        "rule_id": "command.serverguardian.telemetry-startup",
+        "rule_version": "1.0.0",
+        "permission_id": "command.serverguardian.permission.telemetry",
+        "title": "Server Guardian telemetry startup",
+        "description": "Allows the Server Guardian TUI and its local system metrics polling to start.",
+        "severity": "low",
+        "risk_classes": [
+          "execution"
+        ],
+        "action_classes": [
+          "Server Guardian telemetry command"
+        ],
+        "safer_alternatives": [],
+        "default_mode": "disabled",
+        "matcher": {
+          "op": "arguments.v1",
+          "config": {
+            "executables": [
+              "server-guardian",
+              "server-guardian.cmd",
+              "server-guardian.exe"
+            ],
+            "required_arguments": [
+              "--telemetry-only"
+            ]
+          }
+        },
+        "safe_variants": []
+      },
+      {
+        "rule_id": "command.serverguardian.telemetry-mailer",
+        "rule_version": "1.0.0",
+        "permission_id": "command.serverguardian.permission.telemetry",
+        "title": "Server Guardian email telemetry",
+        "description": "Allows the Server Guardian SMTP notification dispatch without review.",
+        "severity": "low",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "action_classes": [
+          "Server Guardian telemetry command"
+        ],
+        "safer_alternatives": [],
+        "default_mode": "disabled",
+        "matcher": {
+          "op": "command-sequence.v1",
+          "config": {
+            "executables": [
+              "python",
+              "python3",
+              "python.exe",
+              "python3.exe"
+            ],
+            "command_arities": [
+              [
+                "server-guardian/mailer.py",
+                1
+              ]
+            ],
+            "target_commands": [
+              "server-guardian/mailer.py"
+            ]
+          }
+        },
+        "safe_variants": []
+      }
+    ]
+  }
+}
