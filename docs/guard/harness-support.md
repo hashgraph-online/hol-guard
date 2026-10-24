@@ -15,7 +15,7 @@ they do not maintain independent exit-code tables.
 | --- | --- | --- |
 | Codex, Claude Code, Copilot, Pi, OMP | `0` for `PreToolUse`, `UserPromptSubmit`, and `PermissionRequest`; the JSON envelope carries the denial. `1` for other events, including `PostToolUse`. | `0` |
 | Cursor, Devin, Kimi, Hermes | `2` | `0` |
-| OpenCode, Superagent | `1` | `0` |
+| OpenCode, Superagent, Antigravity | `1` | `0` |
 | Grok, ZCode | Adapter-defined event/recording-mode behavior, through the shared authority. | Adapter-defined |
 | Unknown harness | `1` | `0` |
 
@@ -77,9 +77,12 @@ Current Guard support in this repo:
   - records synthetic bridge canaries separately from live Cline runtime proofs and does not mark a transport ready from file presence alone
   - reports JetBrains protection as unverified until a live pre-tool proof exists; see [Cline local protection contract](cline-local-protection-contract.md)
 - `antigravity`
-  - detects Antigravity user settings, installed extension profiles, and Antigravity-owned MCP and skill roots
-  - supports wrapper-mode management state
-  - uses the local approval center for blocked artifact changes today
+  - detects user settings in `~/.config/antigravity/user/settings.json` (`%APPDATA%\Antigravity\User\settings.json` on Windows), Antigravity extension manifests in `~/.antigravity/extensions/extensions.json`, and MCP configurations in `~/.gemini/antigravity/mcp_config.json`
+  - discovers Antigravity-owned skill directories bound to full accepted directory identity (see [Skill directory identity](./skill-directory-identity.md)) under `.gemini/antigravity/skills/`, `.gemini/config/plugins/`, and workspace `.agents/skills/`
+  - uses Rust runner authority `antigravity_detect` for fast, zero-dependency configuration parsing and artifact inspection
+  - supports wrapper-mode management state with smoke validation via `hol-guard install antigravity --dry-run`
+  - routes newly introduced or modified artifact reviews through the local Guard approval center (`127.0.0.1`)
+  - shell commands inside Antigravity are not currently observable via native editor hook traps, focusing Guard on pre-launch artifact verification and MCP server boundary checks
 - `gemini`
   - detects `.gemini/settings.json`, local extension manifests, embedded MCP declarations, hooks, and Gemini skill directories
   - supports wrapper-mode management state
