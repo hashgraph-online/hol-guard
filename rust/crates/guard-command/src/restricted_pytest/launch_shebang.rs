@@ -18,29 +18,53 @@ pub(super) enum Shebang {
     Unclear,
 }
 
-/// Read the `#!` line of `script`.
-pub(super) fn shebang(script: &Path) -> Shebang {
+/// The text of `script`'s `#!` line: `Ok(None)` for a script that has none,
+/// and `Err(())` for a line this does not read whole.
+fn shebang_line(script: &Path) -> Result<Option<String>, ()> {
     let mut head = [0_u8; SHEBANG_BYTES];
     let Some(read) = std::fs::File::open(script)
         .ok()
         .and_then(|mut file| file.read(&mut head).ok())
     else {
-        return Shebang::Absent;
+        return Ok(None);
     };
     let Some(line) = head[..read].strip_prefix(b"#!") else {
-        return Shebang::Absent;
+        return Ok(None);
     };
     // A line the buffer cuts off may still start its interpreter, so it is
     // neither read as a shorter line nor taken for a script with none.
     let end = match line.iter().position(|byte| *byte == b'\n') {
         Some(end) => end,
         None if read < SHEBANG_BYTES => line.len(),
-        None => return Shebang::Unclear,
+        None => return Err(()),
     };
-    match std::str::from_utf8(&line[..end]) {
-        Ok(text) => runs(text),
-        Err(_) => Shebang::Unclear,
+    std::str::from_utf8(&line[..end])
+        .map(|text| Some(text.to_owned()))
+        .map_err(|_| ())
+}
+
+/// Read the `#!` line of `script`.
+pub(super) fn shebang(script: &Path) -> Shebang {
+    match shebang_line(script) {
+        Ok(None) => Shebang::Absent,
+        Ok(Some(text)) => runs(&text),
+        Err(()) => Shebang::Unclear,
     }
+}
+
+/// The interpreter a `#!` line names outright and hands nothing else.
+///
+/// `shebang` answers which programs the line starts, which is what admitting
+/// a launch needs. Admitting a script as an entry point needs more: the
+/// kernel hands the rest of the line to the interpreter ahead of the script
+/// path, so `#!<venv>/bin/python3 -mother_module` runs that module and never
+/// the script it heads. A line carrying any operand names no sole
+/// interpreter.
+pub(super) fn sole_interpreter(script: &Path) -> Option<String> {
+    let text = shebang_line(script).ok().flatten()?;
+    let mut words = text.split_ascii_whitespace();
+    let interpreter = words.next()?;
+    words.next().is_none().then(|| interpreter.to_owned())
 }
 
 fn runs(line: &str) -> Shebang {

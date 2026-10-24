@@ -7,6 +7,7 @@
 //! approved runtime, and no ancestor relation to HOME or the workspace. A venv
 //! inside the workspace needs no grant of its own; what it needs is the
 //! interpreter install its launchers point out of the workspace to.
+use super::launch_shebang::sole_interpreter;
 use super::*;
 
 const VENV_ENTRIES: &[&str] = &[
@@ -143,19 +144,80 @@ pub(super) fn launcher_root(launch: &Path) -> Option<PathBuf> {
     venv_shape(&root).then_some(root)
 }
 
+/// The venv root of an entry point script in `<venv>/bin`.
+///
+/// `pip` and `uv` write a console script as a regular file, not a symlink, so
+/// the chain `resolve_executable` answers ends in the script itself and there
+/// is no launcher to read a venv out of. The script's `#!` line names one. It
+/// has to name it outright and hand it nothing else: `env` would look the
+/// interpreter up on `PATH`, which containment does not set, a wrapper such
+/// as `/bin/sh` would run something the line does not say, and an operand
+/// such as `-mother_module` would send the interpreter to that module instead
+/// of to this script. The interpreter it names has to be a launcher of the
+/// script's own `bin`, ending in an approved image rather than a `/usr/bin`
+/// shim, exactly as a Python-named launch does.
+///
+/// Running `<venv>/bin/pytest` is then that venv's interpreter over that
+/// venv's packages, which `<venv>/bin/python -m pytest` already reaches, so
+/// the grant is the one `launcher_root` would have made for it.
+fn entry_point_root(executable: &Path) -> Option<PathBuf> {
+    let bin = executable.parent()?.canonicalize().ok()?;
+    let interpreter = sole_interpreter(executable)?;
+    let interpreter = Path::new(&interpreter);
+    if !interpreter.is_absolute() || interpreter.parent()?.canonicalize().ok()? != bin {
+        return None;
+    }
+    let root = launcher_root(interpreter)?;
+    let image = interpreter.canonicalize().ok()?;
+    if super::developer_shim::forwarded_tool(&image).is_some() || !approved_image(&image) {
+        return None;
+    }
+    Some(root)
+}
+
+/// Whether `path` is the entry point script the venv grant was made for.
+///
+/// The venv's Python launchers are admitted by the name they carry in `bin`;
+/// the script the command named is admitted by identity, because
+/// `external_root` read its `#!` line back to that venv's own interpreter
+/// before granting the venv. A spelling that reaches the same file through a
+/// symlinked directory is that same script.
+fn is_entry_point(path: &Path, executable: &Path) -> bool {
+    if python_named(executable) {
+        return false;
+    }
+    if path == executable {
+        return true;
+    }
+    match (path.canonicalize(), executable.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
+}
+
+/// Whether `path` is part of the launcher an external venv grant was made for:
+/// one of the venv's own Python launchers, or the entry point script itself.
+pub(super) fn in_launcher(path: &Path, root: &Path, executable: &Path) -> bool {
+    in_bin(path, root) || is_entry_point(path, executable)
+}
+
 /// The root of an external venv launcher whose interpreter is an approved
 /// runtime; venvs inside, or holding, the workspace are not external.
 pub(super) fn external_root(launch: &Path, executable: &Path, workspace: &Path) -> Option<PathBuf> {
-    if !python_named(executable) || !approved_image(executable) {
-        return None;
-    }
     // The contained run execs the launcher, so its chain has to end in the
-    // image itself. One that still ends in a `/usr/bin` shim would run the
-    // shim's developer-directory lookup inside containment, where it fails.
+    // executable itself. One that still ends in a `/usr/bin` shim would run
+    // the shim's developer-directory lookup inside containment, where it fails.
     if launch.canonicalize().ok().as_deref() != Some(executable) {
         return None;
     }
-    let root = launcher_root(launch)?;
+    let root = if python_named(executable) {
+        if !approved_image(executable) {
+            return None;
+        }
+        launcher_root(launch)?
+    } else {
+        entry_point_root(executable)?
+    };
     if path_is_within(&root, workspace) || path_is_within(workspace, &root) {
         return None;
     }
