@@ -176,13 +176,7 @@ pub(super) fn project(
         None => command,
     };
     let command = relative_saved_reads(command, &targets, context.cwd);
-    let model = crate::parse_command(&CommandModelRequestV1 {
-        command: command.clone(),
-        dialect: "posix".to_owned(),
-        transport: "shell_string".to_owned(),
-        extraction_provenance: "pre-tool-generic".to_owned(),
-    })
-    .ok()?;
+    let model = projected_model(&command)?;
     // An earlier segment could cd or create a symlink before the shell opens
     // a target, so a chain may only write absolute temp files beside peers.
     let temporary_chain =
@@ -241,6 +235,39 @@ pub(super) fn project(
         init_chain,
         written: targets,
     })
+}
+
+/// The command model of the projected text, reading the shell control flow
+/// the parser does not model on its own.
+///
+/// `if cmd >/dev/null; then ...; fi` projects to an `if` the parser calls
+/// compound shell, so the structural checks below would lose the command
+/// they are meant to read and the projection would fail closed on a command
+/// the flattened list allows. The envelope runs the same rewrite when it
+/// evaluates the projected text, so flattening here only decides what those
+/// checks see; the text this projection returns is still the one the shell
+/// runs.
+fn projected_model(command: &str) -> Option<crate::CanonicalCommandV1> {
+    let parse = |text: &str| {
+        crate::parse_command(&CommandModelRequestV1 {
+            command: text.to_owned(),
+            dialect: "posix".to_owned(),
+            transport: "shell_string".to_owned(),
+            extraction_provenance: "pre-tool-generic".to_owned(),
+        })
+        .ok()
+    };
+    let mut text = command.to_owned();
+    let mut model = parse(&text)?;
+    let mut rounds = 0usize;
+    while (model.confidence != "exact" || model.uncertainty_reason.is_some())
+        && rounds < super::super::MAX_REWRITE_ROUNDS
+    {
+        text = super::super::rewritten_command_list(&text)?;
+        model = parse(&text)?;
+        rounds += 1;
+    }
+    Some(model)
 }
 
 /// `$(` or a backquote: a command substitution runs before the redirect

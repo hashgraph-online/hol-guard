@@ -677,7 +677,8 @@
     "rust/crates/guard-hook-payload/**",
     "rust/crates/guard-pack-compiler/**",
     "rust/crates/guard-runtime-pyjson/**",
-    "rust/crates/guard-adapter-detection/**"
+    "rust/crates/guard-adapter-detection/**",
+    "rust/crates/guard-plugin-kit/**"
    ],
    "current": "strict raw hook-envelope v2 parsing, harness/event normalization, bounded generic PreToolUse action classification, command parser floors, authenticated effective-policy floor joins for PreToolUse and PostToolUse, external-Ed25519 V3 and root-authenticated WebAuthn V4 native approval challenge/validation/consume with resident-memory replay fencing, supported PostToolUse authority, native resident framing/authentication, OS-bound process identity, and bounded lifecycle supervision",
    "target": "all supported hook parsing, classification, policy, approval validation, and final decisions"

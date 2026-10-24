@@ -260,6 +260,7 @@ pub mod redact_text_parity;
 pub mod redacted_command_tokens_parity;
 pub mod sed_workflow_boundaries;
 pub mod sfrs_conformance;
+pub mod supply_chain_bundle_producer_vector;
 pub mod workspace_sandbox_tool_path;
 pub mod workspace_write_boundaries;
 

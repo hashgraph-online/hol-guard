@@ -1,0 +1,19 @@
+[package]
+name = "guard-plugin-kit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# `hol-guard plugin …`: reads a plugin source repository (Claude Code, Codex,
+# Gemini CLI, MCP server.json, Agent Skills), checks it, and emits manifests
+# for other agent runtimes. It reads and writes only inside the paths the
+# request names and never touches the network.
+[dependencies]
+hex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

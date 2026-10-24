@@ -1,0 +1,26 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.acme/notes",
+  "description": "Search and edit notes.",
+  "version": "2.0.1",
+  "repository": {
+    "url": "https://github.com/acme/notes",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@acme/notes-mcp",
+      "version": "2.0.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "NOTES_TOKEN",
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

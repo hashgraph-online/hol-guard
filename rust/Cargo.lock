@@ -848,6 +848,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "guard-plugin-kit"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "guard-policy-bundle"
 version = "0.1.0"
 dependencies = [
@@ -1004,6 +1014,7 @@ dependencies = [
  "guard-contracts",
  "guard-google-identity",
  "guard-hook-core",
+ "guard-plugin-kit",
  "guard-policy-bundle",
  "guard-policy-snapshot",
  "guard-rule-contract",

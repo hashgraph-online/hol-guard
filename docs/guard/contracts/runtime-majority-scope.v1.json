@@ -448,6 +448,15 @@
         ]
       },
       {
+        "id": "plugin-kit-cli",
+        "category": "separate_product_cli",
+        "reason": "hol-guard plugin argument parsing and text rendering for the Plugin Kit; not a Guard runtime route. Detection, checks, packaging and file writes run in the native plugin-kit command. cli.py reaches the package only through main() for the `plugin` subcommand.",
+        "path": [
+          "src/codex_plugin_scanner/guard/plugin_kit/cli.py",
+          "src/codex_plugin_scanner/guard/plugin_kit/__init__.py"
+        ]
+      },
+      {
         "id": "secrets-cli",
         "category": "separate_product_cli",
         "reason": "hol-guard-secrets argument parsing and text rendering; separate product entry point, not a Guard runtime route. Detection, repository/staged scans and pre-commit hooks run in the native secrets-cli command. public_rule_catalog.py is the static public rule listing; cli.py reaches the package only through main() for the `secrets` subcommand.",

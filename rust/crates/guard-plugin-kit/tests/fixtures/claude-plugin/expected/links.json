@@ -1,0 +1,51 @@
+{
+  "checklist": [
+    {
+      "done": true,
+      "id": "github_repository",
+      "message": "Publish the source on GitHub and set repository in the manifest."
+    },
+    {
+      "done": true,
+      "id": "claude_marketplace",
+      "message": "List the plugin in .claude-plugin/marketplace.json so Claude Code can install it from the repository."
+    },
+    {
+      "done": false,
+      "id": "codex_marketplace",
+      "message": "List the plugin in .agents/plugins/marketplace.json so Codex can install it from the repository."
+    },
+    {
+      "done": false,
+      "id": "mcp_registry",
+      "message": "Publish MCP servers to the MCP Registry with server.json (https://github.com/modelcontextprotocol/registry)."
+    },
+    {
+      "done": false,
+      "id": "hol_listing",
+      "message": "Connect the repository on HOL to verify ownership and claim the listing."
+    }
+  ],
+  "hol": {
+    "connect": "https://hol.org/plugins/connect?repo=acme/pdf-tools&utm_source=hol-guard&utm_medium=cli&utm_campaign=plugin-kit",
+    "submit": "https://hol.org/registry/plugins/submit?intent=launch&utm_source=hol-guard&utm_medium=cli&utm_campaign=plugin-kit"
+  },
+  "install": [
+    {
+      "commands": [
+        "/plugin marketplace add acme/pdf-tools",
+        "/plugin install pdf-tools@acme"
+      ],
+      "runtime": "claude-code",
+      "verify": "claude plugin list"
+    },
+    {
+      "commands": [
+        "npx skills add acme/pdf-tools"
+      ],
+      "runtime": "agent-skills",
+      "verify": "npx skills list"
+    }
+  ],
+  "repository": "acme/pdf-tools"
+}
