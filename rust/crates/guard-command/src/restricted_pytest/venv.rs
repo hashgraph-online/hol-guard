@@ -418,17 +418,20 @@ fn starts_a_command(before: &str) -> bool {
     const PREFIX_VERBS: &[&str] = &[
         "command", "do", "else", "env", "exec", "nohup", "then", "time",
     ];
-    let mut head = before.trim_end();
+    // A line ending separates two commands as a semicolon does, so only the
+    // blanks are taken off the end; trimming every kind of whitespace would
+    // take the separator away with them.
+    let mut head = before.trim_end_matches([' ', '\t']);
     loop {
         head = head.trim_end_matches(['\'', '"']);
-        if head.is_empty() || head.ends_with([';', '&', '|', '(', '{', '\n']) {
+        if head.is_empty() || head.ends_with([';', '&', '|', '(', '{', '\n', '\r']) {
             return true;
         }
         let word = head.rsplit(char::is_whitespace).next().unwrap_or_default();
         if word.is_empty() || !(stamps_a_variable(word) || PREFIX_VERBS.contains(&word)) {
             return false;
         }
-        head = head[..head.len() - word.len()].trim_end();
+        head = head[..head.len() - word.len()].trim_end_matches([' ', '\t']);
     }
 }
 

@@ -546,6 +546,9 @@ fn a_workspace_venv_is_found_by_being_one_not_by_a_search_path_entry() {
         // Writing the program from here names the same one.
         "./.venv/bin/pytest -q",
         "npm run build; ./.venv/bin/pytest -q",
+        // A line ending separates two commands as a semicolon does.
+        "make build\n.venv/bin/pytest -q",
+        "make build\r\n  PYTHONHASHSEED=0 ./.venv/bin/pytest -q",
     ] {
         assert_eq!(
             workspace_resident_bins(&workspace, Some(text)),
