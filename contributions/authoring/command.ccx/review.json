@@ -1,0 +1,184 @@
+{
+  "discoveryDigest": "59d553f908fe880acdcaf492e59d9152c9d6d6e8d9e674100bda24c4d09a142e",
+  "entries": {
+    "op-05be9e4406f4df13": {
+      "evidenceUrl": "https://github.com/aaronwong1999/ccx/blob/v0.0.39/plugins/ccx/lib/ccx/sync.py",
+      "rationale": "Imports a Claude Code session into Codex and links them the first time, writing a new Codex thread; afterwards it opens the linked thread.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "op-17df733ebd640133": {
+      "evidenceUrl": "https://github.com/aaronwong1999/ccx/blob/v0.0.39/plugins/ccx/lib/ccx/install.py",
+      "rationale": "Installs or repairs ccx's plugins in Claude Code and Codex, approves ccx's own Codex hook in Codex's config, installs the menu bar app and links the ccx command. It changes both agents' configuration.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "op-227d251131facfdb": {
+      "evidenceUrl": "https://github.com/aaronwong1999/ccx/blob/v0.0.39/plugins/ccx/lib/ccx/install.py",
+      "rationale": "Without --check it downloads the newest ccx release and reinstalls both apps' plugins. With --check it only reads the newest tag.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [
+        [
+          "update",
+          "--check"
+        ],
+        [
+          "update",
+          "--check",
+          "--json"
+        ]
+      ],
+      "saferAlternative": "Run the read-only form first: ccx update --check.",
+      "state": "review"
+    },
+    "op-2e390f4b1131c34a": {
+      "evidenceUrl": "https://github.com/aaronwong1999/ccx/blob/v0.0.39/plugins/ccx/lib/ccx/install.py",
+      "rationale": "Checks the installation and reads state; it changes nothing.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [
+        [
+          "doctor",
+          "--json"
+        ]
+      ],
+      "saferAlternative": "Run the read-only form first: ccx doctor --json.",
+      "state": "review"
+    },
+    "op-57cf1dfd75c9470d": {
+      "evidenceUrl": "https://github.com/aaronwong1999/ccx/blob/v0.0.39/plugins/ccx/lib/ccx/sync.py",
+      "rationale": "Imports a Codex thread into Claude Code and links them the first time, writing a new Claude session file; afterwards it opens the linked session.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "op-594c7c3c9cc85586": {
+      "evidenceUrl": "https://github.com/aaronwong1999/ccx/blob/v0.0.39/plugins/ccx/lib/ccx/pairs.py",
+      "rationale": "Forgets the link between a Claude session and a Codex thread in ~/.ccx/pairs.json; both conversations are kept.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "op-613137a1023655da": {
+      "evidenceUrl": "https://github.com/aaronwong1999/ccx/blob/v0.0.39/plugins/ccx/lib/ccx/install.py",
+      "rationale": "`on`/`off` writes or removes a LaunchAgent for the menu bar app; `status` only reads it.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [
+        [
+          "autostart",
+          "status"
+        ],
+        [
+          "autostart",
+          "status",
+          "--json"
+        ]
+      ],
+      "saferAlternative": "Run the read-only form first: ccx autostart status.",
+      "state": "review"
+    },
+    "op-74e4a98322c6bf2b": {
+      "evidenceUrl": "https://github.com/aaronwong1999/ccx/blob/v0.0.39/plugins/ccx/lib/ccx/usage.py",
+      "rationale": "Reads Claude's and Codex's usage windows; it changes nothing.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [
+        [
+          "usage",
+          "--json"
+        ]
+      ],
+      "saferAlternative": "Run the read-only form first: ccx usage --json.",
+      "state": "review"
+    },
+    "op-75eb278d6a9fb4cf": {
+      "evidenceUrl": "https://github.com/aaronwong1999/ccx/blob/v0.0.39/plugins/ccx/lib/ccx/cli.py",
+      "rationale": "The bare ccx command runs `switch`, which hands this folder's newest session to the other app (an import and link the first time).",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Name the session to hand over with ccx to-codex or ccx to-claude.",
+      "state": "review"
+    },
+    "op-77582c42f0922e1e": {
+      "evidenceUrl": "https://github.com/aaronwong1999/ccx/blob/v0.0.39/plugins/ccx/lib/ccx/cli.py",
+      "rationale": "Lists both apps' sessions and link status; it changes nothing.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [
+        [
+          "ls",
+          "--json"
+        ]
+      ],
+      "saferAlternative": "Run the read-only form first: ccx ls --json.",
+      "state": "review"
+    },
+    "op-a57c9b37dc13e103": {
+      "evidenceUrl": "https://github.com/aaronwong1999/ccx/blob/v0.0.39/plugins/ccx/lib/ccx/repairs.py",
+      "rationale": "Rewrites linked Codex threads' project grouping and history format through Codex's app-server.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "op-b7f1ad4eeef622c2": {
+      "evidenceUrl": "https://github.com/aaronwong1999/ccx/blob/v0.0.39/plugins/ccx/lib/ccx/cli.py",
+      "rationale": "Reports one session's app and link status; it changes nothing. Takes a session id, so no fixed safe invocation is listed.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    },
+    "op-e2631c390232adb5": {
+      "evidenceUrl": "https://github.com/aaronwong1999/ccx/blob/v0.0.39/plugins/ccx/lib/ccx/install.py",
+      "rationale": "Removes ccx's plugins from both apps, its Codex hook, the menu bar app and the ccx command.",
+      "reviewed": true,
+      "riskClasses": [
+        "execution"
+      ],
+      "safeArgv": [],
+      "saferAlternative": "Inspect the exact target and required permissions before running this operation.",
+      "state": "review"
+    }
+  },
+  "schemaVersion": "guard.extension-review.v1"
+}
