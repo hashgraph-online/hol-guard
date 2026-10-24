@@ -1,7 +1,7 @@
 # Codex CLI browser-approval continuation lab.
 # Exercises the same PreToolUse hook command Codex CLI runs after
 # `hol-guard install codex`, then proves a browser allow continues the turn.
-FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
 
 COPY tests/dockerlabs/codex-cli-resume/requirements.txt /opt/guard-lab/requirements.txt
 RUN python -m pip install --no-cache-dir --require-hashes -r /opt/guard-lab/requirements.txt \
