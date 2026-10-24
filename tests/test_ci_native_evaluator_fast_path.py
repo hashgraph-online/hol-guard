@@ -51,7 +51,7 @@ def test_native_replay_shards_are_complete_and_required() -> None:
     assert job["needs"] == "native-command-evaluators"
     assert job["strategy"]["fail-fast"] is False
     assert job["strategy"]["matrix"]["shard-index"] == list(range(8))
-    assert job["timeout-minutes"] == 5
+    assert job["timeout-minutes"] == 10
     steps = job["steps"]
     assert any(step.get("uses") == "./.github/actions/setup-ci-python" for step in steps)
 

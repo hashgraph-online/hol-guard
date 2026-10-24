@@ -194,14 +194,14 @@ def test_tool_action_reply_keeps_embedded_command_text(monkeypatch: pytest.Monke
     assert "secret\n" in texts
 
 
-def test_command_list_outage_blocks_the_post_tool_artifact(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands_support_codex_commands as codex
+def test_post_tool_review_outage_blocks_the_post_tool_artifact(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts as artifacts
+    from codex_plugin_scanner.guard.native_codex_tool_output import ToolOutputAnswer
 
-    def down(*_args: object, **_kwargs: object) -> tuple[str, ...]:
-        raise client.NativeSensitiveRequestError("native_sensitive_request_unavailable")
+    def down(*_args: object, **_kwargs: object) -> ToolOutputAnswer:
+        return ToolOutputAnswer(False, None, "native_codex_tool_output_unavailable")
 
-    monkeypatch.setattr(codex, "command_list_candidate_texts", down)
+    monkeypatch.setattr(artifacts, "codex_tool_output_native", down)
     result = artifacts._hook_runtime_artifact(
         harness="codex",
         payload={
@@ -223,21 +223,32 @@ def test_command_list_outage_blocks_the_post_tool_artifact(monkeypatch: pytest.M
     assert result.metadata.get("command_text") != "Bash"
 
 
-def test_command_list_outage_is_not_a_read_only_post_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resident_outage_is_not_a_read_only_post_tool(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.cli import commands_support_codex_commands as codex
+    from codex_plugin_scanner.guard.native_codex_tool_output import ToolOutputAnswer
 
-    def down(*_args: object, **_kwargs: object) -> tuple[str, ...]:
-        raise client.NativeSensitiveRequestError("native_sensitive_request_unavailable")
+    sent: list[tuple[str, dict[str, object]]] = []
 
-    monkeypatch.setattr(codex, "command_list_candidate_texts", down)
+    def down(kind: str, *, body: dict[str, object]) -> ToolOutputAnswer:
+        sent.append((kind, body))
+        return ToolOutputAnswer(False, None, "native_codex_tool_output_unavailable")
+
+    monkeypatch.setattr(codex, "codex_tool_output_native", down)
     assert (
         codex._codex_post_tool_command_is_read_only_source_inspection(
-            payload={"tool_input": {"commands": ["ls"]}},
-            cwd=None,
+            payload={"tool_name": "Bash", "tool_input": {"commands": ["ls"]}, "session_id": "s"},
+            cwd=tmp_path,
             home_dir=None,
         )
         is False
     )
+    # The resident reads the commands from the tool name and input alone.
+    assert sent == [
+        (
+            "post_tool_read_only_payload",
+            {"tool_name": "Bash", "tool_input": {"commands": ["ls"]}, "cwd": str(tmp_path), "home_dir": None},
+        )
+    ]
 
 
 def test_command_list_texts_are_a_tuple_of_strings(monkeypatch: pytest.MonkeyPatch) -> None:

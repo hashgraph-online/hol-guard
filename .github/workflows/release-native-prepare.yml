@@ -8,6 +8,7 @@ on:
       - scripts/release/native_cache_key.py
       - scripts/release/native_artifact.py
       - scripts/ci/native_cache_environment.py
+      - scripts/ci/normalize_rust_toolchains.py
       - rust/**
       - contracts/**
       - contributions/command-sources/**
@@ -157,6 +158,10 @@ jobs:
           rustup toolchain install 1.88.0 --profile minimal
           rustup default 1.88.0
           rustup target add "$RUST_TARGET"
+      - name: Normalize hosted Windows Rust compiler inventory
+        if: runner.environment == 'github-hosted' && runner.os == 'Windows' && runner.arch == 'X64' && env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true' && steps.native-artifact.outputs.accepted != 'true'
+        shell: bash
+        run: python scripts/ci/normalize_rust_toolchains.py --toolchain 1.88.0
       - name: Install Linux static toolchain
         if: runner.os == 'Linux' && steps.native-cache.outputs.cache-hit != 'true' && steps.native-artifact.outputs.accepted != 'true'
         run: |

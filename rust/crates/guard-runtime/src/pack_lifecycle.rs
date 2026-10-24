@@ -72,6 +72,16 @@ fn enrolled(candidate: Identity, key: &[u8]) -> Result<Value, String> {
     }, key)?, "stamp": "guard.command-pack-enrolled.v1"}))
 }
 
+/// The floor enrollment derives for `candidate`, for tests of the records
+/// that carry one.
+#[cfg(test)]
+pub(crate) fn enrolled_floor(candidate: &Value, key: &[u8]) -> String {
+    enrolled(parse(candidate).unwrap(), key).unwrap()["record"]
+        .as_str()
+        .unwrap()
+        .to_owned()
+}
+
 fn parse<T: serde::de::DeserializeOwned>(value: &Value) -> Result<T, String> {
     serde_json::from_value(value.clone()).map_err(|_| "pack_lifecycle_invalid".into())
 }

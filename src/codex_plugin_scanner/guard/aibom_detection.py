@@ -16,7 +16,7 @@ import os
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from .models import GuardArtifact, HarnessDetection
 from .native_context import _UNBOUND_PREFIX
@@ -29,19 +29,6 @@ from .skill_directory_identity import (
     skill_directory_identity_metadata,
 )
 
-InstructionRole = Literal[
-    "agents_md",
-    "cursor_rules",
-    "claude_md",
-    "mcp_json",
-    "design_md",
-    "product_md",
-    "roadmap_md",
-    "security_md",
-    "policy_md",
-    "standards_md",
-    "unknown_instruction",
-]
 INVENTORY_ITEM_KINDS: tuple[str, ...] = (
     "agent",
     "daemon_plugin",
@@ -72,49 +59,10 @@ _CODEX_HOME_SKILL_ROOTS = (".codex/skills", ".agents/skills")
 _WORKSPACE_CODEX_SKILL_HARNESSES = frozenset(
     {"codex", "openclaw", "opencode", "claude-code", "cursor", "gemini", "pi", "omp"}
 )
-_DOC_DIRECTORY_ROLES: tuple[tuple[str, InstructionRole], ...] = (
-    ("design", "design_md"),
-    ("product", "product_md"),
-    ("standards", "standards_md"),
-    ("policy", "policy_md"),
-    ("policies", "policy_md"),
-    ("security", "security_md"),
-    ("roadmap", "roadmap_md"),
-)
-_NAME_ROLES: dict[str, InstructionRole] = {
-    "agents.md": "agents_md",
-    "claude.md": "claude_md",
-    "design.md": "design_md",
-    "product.md": "product_md",
-    "roadmap.md": "roadmap_md",
-    "security.md": "security_md",
-    "policy.md": "policy_md",
-    "policies.md": "policy_md",
-    "standards.md": "standards_md",
-    "mcp.json": "mcp_json",
-}
 
 
 class NativeAibomError(ValueError):
     """The native resident could not supply a bound AIBOM discovery answer."""
-
-
-def instruction_role_for_path(path: Path) -> InstructionRole | None:
-    name = path.name.lower()
-    role = _NAME_ROLES.get(name)
-    if role is not None:
-        return role
-    if path.suffix.lower() in {".md", ".mdc"}:
-        parts = path.parts
-        for index, part in enumerate(parts):
-            if part == ".cursor" and index + 1 < len(parts) and parts[index + 1] == "rules":
-                return "cursor_rules"
-            if part == "docs" and index + 1 < len(parts):
-                child = parts[index + 1].lower()
-                for directory_name, doc_role in _DOC_DIRECTORY_ROLES:
-                    if child == directory_name:
-                        return doc_role
-    return None
 
 
 # Discovery kinds hash instruction documents, walk docs/* and compute skill

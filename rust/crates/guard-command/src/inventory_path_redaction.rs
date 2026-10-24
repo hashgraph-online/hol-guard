@@ -43,7 +43,13 @@ use std::sync::LazyLock;
 use fancy_regex::Regex as FancyRegex;
 use regex::Regex;
 
-use crate::inventory_redaction::{redact_url, PYTHON_SPACE_CLASS, PYTHON_WORD_CLASS};
+use serde_json::{Map, Value};
+
+use crate::inventory_contract::InventoryRedactionApi;
+use crate::inventory_redaction::{
+    assert_serialized_inventory_payload_safe, redact_url, safe_json, safe_source_detail,
+    substitute_sensitive_values, PYTHON_SPACE_CLASS, PYTHON_WORD_CLASS,
+};
 
 /// CPython `re.IGNORECASE` folds `İ` (U+0130) and `ı` (U+0131) onto `i`;
 /// Rust's simple case folding leaves both alone. The serializer half folds the
@@ -462,6 +468,72 @@ fn substitute_urls(value: &str) -> String {
     }
     out.push_str(&value[cursor..]);
     out
+}
+
+/// `_safe_finding_text(value, *, home_dir, workspace_dir)`.
+///
+/// The slice is `value[:500]` in CPython, which counts characters, so the
+/// truncation is taken over `char_indices` rather than bytes.
+pub fn safe_finding_text(
+    value: &str,
+    home_dir: &Path,
+    workspace_dir: Option<&Path>,
+    cwd: &Path,
+) -> String {
+    let redacted = substitute_sensitive_values(value);
+    let redacted = redact_command_value(&redacted, home_dir, workspace_dir, cwd);
+    match redacted.char_indices().nth(500) {
+        Some((boundary, _)) => redacted[..boundary].to_string(),
+        None => redacted,
+    }
+}
+
+/// The native `InventoryRedactionApi` seam for
+/// [`crate::inventory_contract::InventoryDeps`].
+///
+/// `cwd` is the directory CPython's `Path.resolve()` would have resolved a
+/// relative candidate against. The inventory callers only ever hand these
+/// functions absolute paths, so it decides nothing for them, but the seam
+/// carries it rather than inventing one per call.
+#[derive(Debug, Clone, Copy)]
+pub struct NativeInventoryRedaction<'a> {
+    pub cwd: &'a Path,
+}
+
+impl InventoryRedactionApi for NativeInventoryRedaction<'_> {
+    fn redact_local_path(&self, path: &Path, home_dir: Option<&Path>) -> String {
+        redact_local_path(&path.to_string_lossy(), home_dir, self.cwd)
+    }
+
+    fn _redact_known_path(
+        &self,
+        value: &str,
+        home_dir: &Path,
+        workspace_dir: Option<&Path>,
+    ) -> String {
+        redact_known_path(value, home_dir, workspace_dir, self.cwd)
+    }
+
+    fn _safe_finding_text(
+        &self,
+        value: &str,
+        home_dir: &Path,
+        workspace_dir: Option<&Path>,
+    ) -> String {
+        safe_finding_text(value, home_dir, workspace_dir, self.cwd)
+    }
+
+    fn _safe_source_detail(&self, run: &Map<String, Value>) -> String {
+        safe_source_detail(run)
+    }
+
+    fn _safe_json(&self, value: &Value, parent_key: &str, parent_sensitive: bool) -> Value {
+        safe_json(value, parent_key, parent_sensitive)
+    }
+
+    fn _assert_serialized_inventory_payload_safe(&self, payload: &Value) -> Result<(), String> {
+        assert_serialized_inventory_payload_safe(payload)
+    }
 }
 
 #[cfg(test)]

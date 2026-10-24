@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.figlens",
+  "version": "1.0.0",
+  "name": "figlens MCP",
+  "description": "Reads saved Figma .fig files offline: tree, find, inspect, nodes and variables return design data; bundle and export write a zip or an image to a caller-named path. gs:// inputs are fetched through the local gcloud CLI. Off until enabled locally.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.runkids",
+    "displayName": "runkids",
+    "url": "https://github.com/runkids"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://github.com/runkids/figlens",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "figlens"
+  },
+  "riskClasses": [
+    "local-data-access",
+    "local-file-write",
+    "external-network-read",
+    "external-command-execution"
+  ],
+  "tools": [
+    { "name": "tree", "state": "inherit" },
+    { "name": "find", "state": "inherit" },
+    { "name": "inspect", "state": "inherit" },
+    { "name": "nodes", "state": "inherit" },
+    { "name": "variables", "state": "inherit" },
+    { "name": "bundle", "state": "review" },
+    { "name": "export", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/runkids/figlens/releases/tag/v0.4.1",
+    "https://github.com/runkids/figlens/blob/v0.4.1/README.md",
+    "https://github.com/runkids/figlens/blob/v0.4.1/src/main.rs"
+  ],
+  "saferAlternatives": [
+    "Start the server as `figlens mcp --root <designs-folder>`: every file and output path a call names must then resolve inside that folder, and calls whose arguments leave the tool schema are refused.",
+    "Use inspect or nodes for layout, text and style values; bundle and export are only needed when files must be written.",
+    "Keep design files local; a gs:// path runs the gcloud CLI to download the object before it is read."
+  ]
+}

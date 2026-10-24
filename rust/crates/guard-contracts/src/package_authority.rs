@@ -30,8 +30,16 @@ pub const PACKAGE_POLICY_RESOLVE_FEATURE: &str = "package-policy-resolve-v1";
 /// decisions, and callers have no Python evaluation to fall back to.
 pub const SUPPLY_CHAIN_EVAL_FEATURE: &str = "supply-chain-eval-v1";
 
+/// Capability advertised when `package_intent_extract` reads a whole tool
+/// call for package intent in one request.
+pub const PACKAGE_INTENT_EXTRACT_FEATURE: &str = "package-intent-extract-v1";
+
 /// Largest canonical request serialization any of these ops will accept.
 pub const PACKAGE_AUTHORITY_MAX_BYTES: usize = 1024 * 1024;
+/// Largest canonical `package_intent_extract` request. The tool arguments ride
+/// in it whole, so it matches the MCP tool-call identity bound on the request
+/// that carries the same arguments, a frame's slack under the transport limit.
+pub const PACKAGE_INTENT_EXTRACT_MAX_BYTES: usize = 6 * 1024 * 1024 - 64 * 1024;
 
 // ---------------------------------------------------------------------------
 // PackageIntentParse — `parse_package_intent` port entry.
@@ -79,6 +87,39 @@ pub struct PackageIntentParseResultV1 {
     /// Exact targets for ephemeral enforcement, never public intent metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_private_metadata: Option<Value>,
+}
+
+// ---------------------------------------------------------------------------
+// PackageIntentExtract — `extract_package_intent_request` port entry.
+// ---------------------------------------------------------------------------
+
+/// One tool call to read for package intent. The resident walks the arguments
+/// of a shell tool for command texts, parses each until one names a package
+/// intent, and otherwise parses the action envelope's command. The answer is a
+/// [`PackageIntentParseResultV1`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PackageIntentExtractRequestV1 {
+    pub schema: String,
+    /// Optional caller correlation id; echoed back in the result.
+    #[serde(default)]
+    pub request_id: String,
+    /// The tool name as the harness sent it. Anything but a string names no
+    /// shell tool, so only the action envelope's command is read.
+    pub tool_name: Value,
+    /// The tool call's arguments, as the harness sent them.
+    pub arguments: Value,
+    /// The command the action envelope names, read when no argument command
+    /// names a package intent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action_envelope_command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_dir: Option<String>,
+    /// Explicit environment overlay. Non-string maps are ignored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<Value>,
 }
 
 // ---------------------------------------------------------------------------

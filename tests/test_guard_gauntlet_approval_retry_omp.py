@@ -176,3 +176,59 @@ def test_cli_routes_omp_consent_to_the_existing_session_runner(monkeypatch, tmp_
         == 0
     )
     assert seen["profile"] == "approval-retry" and seen["jobs"] == 1
+
+
+def _file_scenario():
+    return next(s for s in load_catalog(APPROVAL_CATALOG) if s.id == "approved-retry-identical-file-read")
+
+
+def test_omp_raises_the_floor_that_reaches_a_file_tool_call(tmp_path: Path):
+    """A file-tool call is not a subprocess, so the shell floor never reviews it."""
+    fixture = create_fixture(tmp_path / "fixture")
+    case: dict = {}
+    approval_retry_omp.OmpReview(_file_scenario(), fixture, case)
+    assert case["review_policy"]["default_action"] == "review"
+    assert "default_action" in (fixture.root / "guard-home" / "config.toml").read_text(encoding="utf-8")
+    shell: dict = {}
+    approval_retry_omp.OmpReview(_scenario(), fixture, shell)
+    assert shell["review_policy"]["subprocess_action"] == "review"
+
+
+def _file_observation(call_id: str, decision: str, reason: str, tool: str = "read") -> dict:
+    return {
+        "event": "PreToolUse",
+        "tool": tool,
+        "input": {"file_path": "{{workspace}}/README.md"},
+        "decision": decision,
+        "reason_code": reason,
+        "tool_call_id": call_id,
+    }
+
+
+def _file_case(tool: str = "read") -> dict:
+    """One file tool reviewed on the pinned file, approved, and retried successfully."""
+    return {
+        "guard_observations": [
+            _file_observation("c1", "deny", REVIEW_REASON, tool),
+            _file_observation("c2", "allow", "native_exact_safe_file_read", tool),
+        ],
+        "approval_grants": {
+            "granted": [{"request_id": "req-0", "target": "{{workspace}}/README.md", "tool": tool}],
+            "errors": [],
+        },
+    }
+
+
+def test_omp_carries_a_file_tool_path_into_the_decision_it_judges():
+    """Without the path the decision names no action, so the retry is never seen."""
+    assert approval_retry_omp.assess(_file_scenario(), _file_case(), [], {}) == (
+        "pass",
+        "one approval let the agent's own retry through with no second review",
+    )
+
+
+def test_omp_does_not_let_another_file_tool_stand_in_for_the_pinned_read():
+    """An edit approved and retried on README.md rides the same lane, but is not the read."""
+    outcome, reason = approval_retry_omp.assess(_file_scenario(), _file_case("edit"), [], {})
+    assert outcome == "not-exercised"
+    assert "the file the case pinned" in reason

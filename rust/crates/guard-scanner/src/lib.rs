@@ -297,7 +297,6 @@ fn is_sample(
         && (field_copy::is_field_copy(matched, rest_of_line)
             || guard_link::is_guard_link(matched, preceding)
             || self_named_value::is_self_named(matched, rest_of_line)
-            || prose_answer_value::is_prose_answer(matched, rest_of_line, preceding)
             || assignment_value(matched).is_some_and(|value| {
                 inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)
             })
@@ -341,11 +340,30 @@ fn counted_matches<'t>(
     documentation_sample_context: bool,
 ) -> impl Iterator<Item = regex::Match<'t>> {
     let classifier = PATTERNS[index].classifier;
+    // A prose answer is read here rather than inside `is_sample`, because it
+    // needs the line's last credential-shaped token, which this scan resolves
+    // once per line.
+    let answers = classifier == "credential-assignment";
     let mut line_end = 0;
+    let mut last_value = None;
     compiled()[index].find_iter(text).filter(move |matched| {
         if matched.end() > line_end {
             let rest = &text[matched.end()..];
             line_end = matched.end() + rest.find(['\r', '\n']).unwrap_or(rest.len());
+            last_value = answers
+                .then(|| prose_answer_value::last_value_offset(&text[matched.end()..line_end]))
+                .flatten()
+                .map(|offset| matched.end() + offset);
+        }
+        if answers
+            && prose_answer_value::is_prose_answer(
+                matched.as_str(),
+                &text[matched.end()..line_end],
+                &text[..matched.start()],
+                last_value.is_some_and(|start| start >= matched.end()),
+            )
+        {
+            return false;
         }
         !is_sample(
             classifier,

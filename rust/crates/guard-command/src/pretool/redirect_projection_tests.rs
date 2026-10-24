@@ -23,6 +23,7 @@ fn context() -> crate::pretool::PathContext<'static> {
         shell_home_matches: false,
         ripgrep_config_absent: false,
         psql_environment: Default::default(),
+        creates_nothing: false,
     }
 }
 
@@ -179,6 +180,7 @@ fn file_writes_never_follow_an_existing_symlink() {
         shell_home_matches: false,
         ripgrep_config_absent: false,
         psql_environment: Default::default(),
+        creates_nothing: false,
     };
     for command in [
         "echo hi > link/hosts".to_owned(),

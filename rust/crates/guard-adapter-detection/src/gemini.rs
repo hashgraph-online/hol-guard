@@ -96,11 +96,10 @@ fn extensions(
     scope: &Scope<'_>,
     extension_root: &Path,
 ) -> Result<(), &'static str> {
-    let root = host.resolve(extension_root);
-    if !root.is_dir() {
+    if !host.is_dir(extension_root)? {
         return Ok(());
     }
-    for child in extension_names(&root)? {
+    for child in extension_names(&host.resolve(extension_root))? {
         let manifest = extension_root.join(&child).join("gemini-extension.json");
         let payload = json_payload(&host.resolve(&manifest))?;
         if !payload.truthy() {

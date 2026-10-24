@@ -176,3 +176,46 @@ def peel_timeout_clock(command: list[str]) -> tuple[list[str], int | None]:
 def _assignment_word(word: str) -> bool:
     name, separator, _ = word.partition("=")
     return bool(separator and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name))
+
+
+# Native authority reads a launcher only when the first word is exactly one of
+# these names, so any other command keeps its words without asking it.
+_LAUNCHERS = frozenset({"nice", "stdbuf"})
+
+
+def _peel_launcher(command: list[str]) -> list[str]:
+    """The program a system `nice` or `stdbuf` runs, as the native parser reads it.
+
+    Native authority owns that grammar, so the sink asks it for the program's
+    position and never parses launcher options itself. A launcher the parser
+    leaves in place stays in place, and the planners refuse it.
+    """
+    if not command or command[0] not in _LAUNCHERS:
+        return command
+    from ..native_restricted_pytest import restricted_native
+
+    index = restricted_native("launcher_program", {"command": command}, (int, type(None)))
+    return command[index:] if type(index) is int and 0 < index < len(command) else command
+
+
+def peel_run_prefixes(command: list[str]) -> tuple[list[str], int | None]:
+    """Peel the prefixes native authority reads through, and the tightest clock.
+
+    A system `timeout`, `nice` and `stdbuf` each run the program they name
+    unchanged, so the planners are handed that program, as native authority
+    is. Each peel is followed by the inert `command`/`env` prefix and
+    assignment split the planners already receive. `nice` and `stdbuf` set
+    only scheduling priority and stdio buffering; the contained runner applies
+    its own process limits and returns the output when the run ends, so
+    neither setting changes what the caller reads.
+    """
+    seconds: int | None = None
+    for _ in range(4):
+        timed, clock = peel_timeout_clock(command)
+        if clock is not None:
+            seconds = clock if seconds is None else min(seconds, clock)
+        peeled = _peel_launcher(timed)
+        if peeled == command:
+            break
+        command, _ = _split_command_prefix(peeled)
+    return command, seconds

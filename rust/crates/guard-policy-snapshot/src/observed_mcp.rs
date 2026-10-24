@@ -10,6 +10,28 @@ fn token(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
 }
 
+/// Harnesses that present an MCP tool under a single flattened name.
+const FLATTENED_NAME_HARNESSES: [&str; 1] = ["omp"];
+
+/// Oh My Pi presents `mcp__<server>__<tool>` as `mcp__<server>_<tool>`, with
+/// the server's dashes turned into underscores. The boundary is not in the
+/// name, so such a selector names no namespace: the compiler recovers the
+/// boundary from the connector it catalogued the tool under, and here the
+/// selector is only ever matched by the exact tool name.
+fn flattened_mcp_tool(harness: &str, tool: &str) -> bool {
+    if !FLATTENED_NAME_HARNESSES.contains(&harness) || tool.len() > 160 {
+        return false;
+    }
+    let Some(rest) = tool.strip_prefix("mcp__") else {
+        return false;
+    };
+    !rest.is_empty()
+        && !rest.contains("__")
+        && rest
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
+}
+
 pub fn mcp_tool_namespace(tool: &str) -> Option<&str> {
     if tool.len() > 160 {
         return None;
@@ -51,7 +73,7 @@ pub(crate) fn validate_mcp_tool_actions(actions: &BTreeMap<String, String>) -> b
             return action == "block" && mcp_tool_namespace(&candidate) == Some(prefix);
         }
         matches!(action.as_str(), "allow" | "review" | "block")
-            && mcp_tool_namespace(tool).is_some()
+            && (mcp_tool_namespace(tool).is_some() || flattened_mcp_tool(harness, tool))
     })
 }
 
@@ -60,10 +82,14 @@ pub fn observed_mcp_tool_action<'a>(
     harness: &str,
     tool: &str,
 ) -> Option<&'a str> {
+    // A flattened name has no namespace, so its own selector is the only one
+    // that can answer for it. Read the exact choice before the fallback.
+    if let Some(action) = actions.get(&format!("{harness}:{tool}")) {
+        return Some(action.as_str());
+    }
     let namespace = mcp_tool_namespace(tool)?;
     actions
-        .get(&format!("{harness}:{tool}"))
-        .or_else(|| actions.get(&format!("{harness}:{namespace}*")))
+        .get(&format!("{harness}:{namespace}*"))
         .map(String::as_str)
 }
 
@@ -154,5 +180,69 @@ mod tests {
             "codex:mcp__codex_apps__composio__*".into(),
             "allow".into()
         ),])));
+    }
+
+    #[test]
+    fn a_flattened_name_is_answered_by_its_own_selector() {
+        // Oh My Pi presents `mcp__truenas-pilot__status` as
+        // `mcp__truenas_pilot_status`, and nothing in that text says where the
+        // server ends, so it names no namespace.
+        let tool = "mcp__truenas_pilot_status";
+        assert!(mcp_tool_namespace(tool).is_none());
+
+        let actions = BTreeMap::from([(format!("omp:{tool}"), "block".into())]);
+        assert!(validate_mcp_tool_actions(&actions));
+        assert_eq!(
+            observed_mcp_tool_action(&actions, "omp", tool),
+            Some("block")
+        );
+    }
+
+    #[test]
+    fn a_flattened_selector_belongs_to_the_harness_that_flattens() {
+        let tool = "mcp__truenas_pilot_status";
+        for harness in ["claude-code", "codex", "opencode", "cursor"] {
+            let actions = BTreeMap::from([(format!("{harness}:{tool}"), "block".into())]);
+            assert!(
+                !validate_mcp_tool_actions(&actions),
+                "{harness} does not flatten MCP tool names"
+            );
+        }
+    }
+
+    #[test]
+    fn a_connector_wildcard_still_never_answers_for_a_flattened_name() {
+        // The compiler names each catalogued tool when the connector is
+        // blocked, because this wildcard cannot reach one.
+        let actions = BTreeMap::from([("omp:mcp__truenas-pilot__*".into(), "block".into())]);
+        assert!(validate_mcp_tool_actions(&actions));
+        assert_eq!(
+            observed_mcp_tool_action(&actions, "omp", "mcp__truenas_pilot_status"),
+            None
+        );
+        assert_eq!(
+            observed_mcp_tool_action(&actions, "omp", "mcp__truenas-pilot__status"),
+            Some("block")
+        );
+    }
+
+    #[test]
+    fn an_exact_choice_is_read_before_the_connector_wildcard() {
+        let actions = BTreeMap::from([
+            ("omp:mcp__truenas-pilot__*".into(), "block".into()),
+            ("omp:mcp__truenas-pilot__status".into(), "allow".into()),
+        ]);
+        assert_eq!(
+            observed_mcp_tool_action(&actions, "omp", "mcp__truenas-pilot__status"),
+            Some("allow")
+        );
+    }
+
+    #[test]
+    fn a_selector_that_names_neither_shape_is_still_refused() {
+        for tool in ["mcp__", "not-a-tool", "mcp__truenas pilot status"] {
+            let actions = BTreeMap::from([(format!("omp:{tool}"), "block".into())]);
+            assert!(!validate_mcp_tool_actions(&actions), "{tool}");
+        }
     }
 }

@@ -205,6 +205,16 @@ def test_direct_hook_state_binds_only_what_the_resident_accepts() -> None:
         assert ("harness_postures" in bound) == (home_dir != "/home/guard")
 
 
+def test_connector_setup_notice_is_bound_only_when_the_drain_raises_it() -> None:
+    binding = {"workspaces": ["/work/repo"], "inputs": []}
+    state = {"home_dir": "/home/guard", "harness_postures": {}, "local_cli_block_rules": False, "evidence_drain": True}
+    # An old resident rejects unknown binding fields, so the default omits it.
+    assert "connector_setup_notice" not in with_direct_hook_state(binding, **state)
+    assert "connector_setup_notice" not in with_direct_hook_state(binding, **state, connector_setup_notice=False)
+    bound = with_direct_hook_state(binding, **state, connector_setup_notice=True)
+    assert bound is not None and bound["connector_setup_notice"] is True
+
+
 def test_local_cli_rule_probe_fails_toward_the_daemon() -> None:
     class _Store:
         def __init__(self, result: object) -> None:

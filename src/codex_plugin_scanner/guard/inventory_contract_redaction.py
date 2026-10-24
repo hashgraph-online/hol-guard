@@ -8,11 +8,11 @@ from pathlib import Path
 from . import native_inventory_url_redaction as _native_url
 from .inventory_contract_constants import (
     _SAFE_SERIALIZED_MARKERS,
-    _SENSITIVE_KEY_RE,
     _SENSITIVE_VALUE_RE,
     _SERIALIZER_REDACTED_VALUE,
     _SERIALIZER_SECRET_ASSIGNMENT_RE,
     _SERIALIZER_UNSAFE_PATH_RE,
+    _is_sensitive_key,
 )
 
 
@@ -107,7 +107,7 @@ def _collect_metadata_values(value: object, urls: list[str], paths: list[str]) -
         paths.append(str(value))
     elif isinstance(value, dict):
         for key, item in value.items():
-            if not _SENSITIVE_KEY_RE.search(str(key)):
+            if not _is_sensitive_key(str(key)):
                 _collect_metadata_values(item, urls, paths)
     elif isinstance(value, (list, tuple)):
         for item in value:
@@ -210,7 +210,7 @@ def _sanitize_paths(value: object, home_dir: Path, workspace_dir: Path | None) -
         redacted: dict[str, object] = {}
         for key, item in value.items():
             string_key = str(key)
-            if _SENSITIVE_KEY_RE.search(string_key):
+            if _is_sensitive_key(string_key):
                 redacted[string_key] = item if isinstance(item, bool) else "present_redacted"
                 continue
             redacted[string_key] = _sanitize_paths(item, home_dir, workspace_dir)
@@ -243,7 +243,7 @@ def _sanitize_serializer_string(
     """Apply final string redaction before inventory serialization."""
     if value in _SAFE_SERIALIZED_MARKERS:
         return value
-    if parent_sensitive or (parent_key and _SENSITIVE_KEY_RE.search(parent_key)):
+    if parent_sensitive or (parent_key and _is_sensitive_key(parent_key)):
         return _SERIALIZER_REDACTED_VALUE
     if _SERIALIZER_UNSAFE_PATH_RE.search(value):
         return _SERIALIZER_REDACTED_VALUE
@@ -272,7 +272,7 @@ def _safe_json(
     parent_sensitive: bool = False,
 ) -> object:
     """Normalize metadata into bounded JSON-compatible evidence."""
-    key_sensitive = parent_sensitive or bool(parent_key and _SENSITIVE_KEY_RE.search(parent_key))
+    key_sensitive = parent_sensitive or bool(parent_key and _is_sensitive_key(parent_key))
     if isinstance(value, dict):
         return {
             _sanitize_serializer_string(str(key)): _safe_json(

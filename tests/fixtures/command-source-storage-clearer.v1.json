@@ -561,7 +561,9 @@
         "command.storage-clearer"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [0],
+      "expected_effective_segments": [
+        0
+      ],
       "id": "bash-c",
       "rule_id": "command.storage-clearer.cleanup"
     },
@@ -572,7 +574,9 @@
         "command.storage-clearer"
       ],
       "expected_action": "review",
-      "expected_effective_segments": [0],
+      "expected_effective_segments": [
+        0
+      ],
       "id": "sh-c",
       "rule_id": "command.storage-clearer.cleanup"
     },

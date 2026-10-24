@@ -211,20 +211,28 @@ mod tests {
             "#!/bin/sh\nprintf fixture-safe\n",
         )
         .unwrap();
-        for (command, expected) in [
+        // A POSIX shell reads `\` as an escape, so the absolute spelling uses
+        // the forward slashes Windows accepts too, without the verbatim prefix
+        // canonicalization adds there.
+        let display = root.join("posting.sh").display().to_string();
+        let absolute = display
+            .strip_prefix(r"\\?\")
+            .unwrap_or(&display)
+            .replace('\\', "/");
+        let mut cases = vec![
             ("bash ./posting.sh".to_owned(), "block"),
             ("bash ./posting.sh && cd .".to_owned(), "block"),
             ("bash ./ordinary.sh".to_owned(), "review"),
             ("cd nested && bash ./posting.sh".to_owned(), "review"),
-            (
-                format!("bash {} && cd .", root.join("posting.sh").display()),
-                "block",
-            ),
-            (
-                format!("cd nested && bash {}", root.join("posting.sh").display()),
-                "block",
-            ),
-        ] {
+            (format!("bash {absolute} && cd ."), "block"),
+            (format!("cd nested && bash {absolute}"), "block"),
+        ];
+        if cfg!(windows) {
+            // The shell strips those backslashes and opens a different name, so
+            // that spelling is not read as this file. It keeps its review.
+            cases.push((format!("bash {display} && cd ."), "review"));
+        }
+        for (command, expected) in cases {
             let result = evaluate_pre_tool_envelope_with_context(
                 "zcode",
                 "PreToolUse",

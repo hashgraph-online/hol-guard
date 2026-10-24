@@ -25,7 +25,6 @@ from ..runtime.extension_allow_hint import compute_extension_allow_hint
 from ..runtime.native_command_evaluation import NativeCommandEvaluation, review_command_native
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from .commands_support_codex_commands import _codex_post_tool_command_texts
 from .commands_support_codex_paths import (
     _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH,
     _CODEX_TOOL_RESPONSE_MAX_DEPTH,
@@ -474,7 +473,6 @@ def _codex_post_tool_output_review(
             "tool_input": payload.get("tool_input"),
             "arguments": payload.get("arguments"),
             "tool_input_present": "tool_input" in payload,
-            "command_texts": list(_codex_post_tool_command_texts(payload)),
             "response_text": response_text,
             "cwd": None if cwd is None else anchor_to_process_directory(cwd),
             "home_dir": None if home_dir is None else anchor_to_process_directory(home_dir),

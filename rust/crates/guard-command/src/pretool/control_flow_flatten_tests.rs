@@ -39,11 +39,42 @@ fn a_construct_flattens_to_the_lists_it_holds() {
             "while read -r line; do echo hi; done < README.md",
             "cat README.md; echo hi",
         ),
+        (
+            "while IFS= read -r line; do echo hi; done < README.md",
+            "cat README.md; echo hi",
+        ),
     ] {
         assert_eq!(
             flatten(command).as_deref(),
             Some(expected),
             "{command} did not flatten to its command lists"
+        );
+    }
+}
+
+/// A conditional binds no name, so the values its lists read are the ones
+/// the surrounding shell holds, in the construct and in the flat list alike.
+/// Each expansion comes back as it stood.
+#[test]
+fn a_conditional_keeps_the_expansions_it_held() {
+    for (command, expected) in [
+        (
+            "if [ -f \"$PWD/README.md\" ]; then cat README.md; fi",
+            "[ -f \"$PWD/README.md\" ]; cat README.md",
+        ),
+        (
+            "if [ -d \"${PROJECT}\" ]; then ls \"${PROJECT}\"; fi",
+            "[ -d \"${PROJECT}\" ]; ls \"${PROJECT}\"",
+        ),
+        (
+            "if [ -n \"$1\" ]; then echo $1; fi",
+            "[ -n \"$1\" ]; echo $1",
+        ),
+    ] {
+        assert_eq!(
+            flatten(command).as_deref(),
+            Some(expected),
+            "{command} lost the expansions it held"
         );
     }
 }
@@ -69,6 +100,10 @@ fn a_construct_flattens_to_the_lists_it_holds() {
 fn an_unmodeled_construct_keeps_its_review() {
     for command in [
         "while read line; do echo $line; done < README.md",
+        "while read line; do echo \"${name}\"; done < README.md",
+        "if [ -f \"$(which ls)\" ]; then ls; fi",
+        "if [ -n \"$?\" ]; then ls; fi",
+        "if $RUNNER test; then echo ok; fi",
         "if [ -f a ]; then if [ -f b ]; then cat b; fi; fi",
         "if [ -f `which ls` ]; then ls; fi",
         "if true; then ; fi",

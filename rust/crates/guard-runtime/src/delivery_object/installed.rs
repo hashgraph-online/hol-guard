@@ -1,7 +1,7 @@
 //! Fetches from the installed release bundle.
 //!
 //! The bundle ships its delivery data under one fixed directory, one
-//! subdirectory per release tag. A location names the asset to read; this
+//! subdirectory per release tag, named for the tag's batch. A location names the asset to read; this
 //! resolves it against the bundle's source and reads a member out of its
 //! container in one step. A bulk traversal can share a process while retaining
 //! those same checks for each object.
@@ -46,11 +46,13 @@ pub(super) fn batch(input: &Value) -> Outcome {
     }
     let mut groups = BTreeMap::<(PathBuf, String), Vec<(usize, String, u64)>>::new();
     let mut replies = vec![Value::Null; items.len()];
+    let mut directories = vec![Value::Null; items.len()];
     for (index, (plan, length)) in plans.into_iter().enumerate() {
         if plan["bound"].is_null() {
             replies[index] = plan;
             continue;
         }
+        directories[index] = plan["directory"].clone();
         let path = path(&input["root"], &plan)?;
         groups
             .entry((path, plan["asset"].as_str().unwrap_or_default().to_owned()))
@@ -70,7 +72,9 @@ pub(super) fn batch(input: &Value) -> Outcome {
                 .iter()
                 .map(|(_, name, length)| (name.as_str(), *length)),
         )?;
-        for ((index, _, _), reply) in members.into_iter().zip(verified) {
+        for ((index, _, _), mut reply) in members.into_iter().zip(verified) {
+            // Each item answers as a single fetch of it would.
+            reply["directory"] = directories[index].take();
             replies[index] = reply;
         }
     }
@@ -107,18 +111,22 @@ pub(super) fn fetch(input: &Value) -> Outcome {
     }
     let path = path(&input["root"], &plan)?;
     check_tag(&path)?;
-    container::member(&json!({
+    let mut reply = container::member(&json!({
         "path": path.to_string_lossy(),
         "asset": plan["asset"],
         "name": plan["name"],
         "length": length,
-    }))
+    }))?;
+    // The caller keys its answer cache on the file this read, so it learns
+    // the directory from here rather than mapping the tag a second time.
+    reply["directory"] = plan["directory"].clone();
+    Ok(reply)
 }
 
 fn path(root: &Value, plan: &Value) -> Result<PathBuf, String> {
     let root = root.as_str().ok_or_else(request)?;
     let text = |key: &str| plan[key].as_str().unwrap_or_default();
-    let directory = Path::new(root).join(text("tag"));
+    let directory = Path::new(root).join(text("directory"));
     Ok(directory.join(text("asset")))
 }
 

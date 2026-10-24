@@ -125,7 +125,7 @@ def build(compiler, output, source_sha, *, source_root, assets_output=None, offl
         if len(data) > 65536:
             raise ValueError("installed policy bundle root exceeds byte budget")
         installed_count, installed_bytes = stage_assets(
-            asset_directory, output / "assets", assets, bundled, offline=offline
+            asset_directory, output / "assets", assets, bundled, source_sha=source_sha, offline=offline
         )
         if installed_count > MAX_BUNDLE_FILES or installed_bytes > MAX_BUNDLE_BYTES:
             raise ValueError("installed policy bundle exceeds package budget")

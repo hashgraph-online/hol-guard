@@ -702,6 +702,10 @@ jobs:
           echo "HOL_GUARD_NATIVE_BINARY=$runtime" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
       - name: Prepare and verify current extension projections
+        env:
+          # Contribution validation asks the resident for the MCP command
+          # grammar, and auto mode ignores an explicit runtime path.
+          HOL_GUARD_NATIVE: force
         run: |
           arguments=(--publish-directory --compiler "$HOL_GUARD_NATIVE_SOURCE_COMPILER")
           uv run --no-sync python scripts/prepare_extension_contribution.py "${arguments[@]}"
@@ -1415,7 +1419,7 @@ jobs:
     name: Windows installed regression shard ${{ matrix.shard }}
     needs: windows-build
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:

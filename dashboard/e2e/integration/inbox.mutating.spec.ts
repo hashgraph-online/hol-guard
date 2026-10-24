@@ -101,8 +101,8 @@ test("bulk approval allows the selected file reads once", async ({ page, state }
 
   await page.goto("/inbox");
   await searchQueue(page, SEED_SEARCH);
-  await page.getByRole("checkbox", { name: `Select ${readA.preview} for bulk approval` }).check();
-  await page.getByRole("checkbox", { name: `Select ${readB.preview} for bulk approval` }).check();
+  await page.getByRole("checkbox", { name: `Select ${readA.preview}` }).check();
+  await page.getByRole("checkbox", { name: `Select ${readB.preview}` }).check();
   await page.getByRole("button", { name: "Review & approve" }).click();
 
   const dialog = page.getByRole("dialog", { name: "Review 2 selected actions" });
@@ -123,15 +123,25 @@ test("bulk approval allows the selected file reads once", async ({ page, state }
   }
 });
 
-test("blocking the last seeded request leaves nothing of ours in the queue", async ({ page, state }) => {
+test("Block selected refuses the last seeded request once and leaves nothing of ours in the queue", async ({ page, state }) => {
   const seed = inboxSeed(state);
   const { exfil } = seed.requests;
 
-  await page.goto(`/requests/${exfil.id}`);
-  await decide(page, state, page.getByRole("button", { name: "Keep blocked" }), exfil.id, "Keep blocked");
+  // An exfiltration review can never be approved in bulk, but it can be refused.
+  await page.goto("/inbox");
+  await searchQueue(page, SEED_SEARCH);
+  await page.getByRole("checkbox", { name: `Select ${exfil.preview}` }).check();
+  const bar = page.getByRole("region", { name: "Bulk selection" });
+  await expect(bar.getByRole("button", { name: "Review & approve" })).toHaveCount(0);
+  await bar.getByRole("button", { name: "Block selected" }).click();
+  await expect(bar.getByText("Block 1 request just this once? Any agent still waiting is told no.")).toBeVisible();
+  await bar.getByRole("button", { name: "Block 1" }).click();
   await expect(queueRow(page, exfil.preview)).toHaveCount(0);
   expect(await requestRecord(state, exfil.id)).toMatchObject({ status: "resolved", resolution_action: "block" });
   expect(await receiptDecision(state, exfil.id)).toBe("block");
+  // A one-time block expires and is not listed; no lasting block rule is saved.
+  const policy = await daemonApi<{ items: Array<{ artifact_id: string | null; action: string }> }>(state, "/v1/policy");
+  expect(policy.items.filter((item) => item.action === "block" && item.artifact_id?.includes(exfil.id))).toEqual([]);
 
   // Every seeded request has left the pending list, whatever else is queued.
   const pending = await daemonApi<{ items: Array<{ request_id: string; display_status: string }> }>(

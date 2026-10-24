@@ -25,7 +25,7 @@ def test_feature_flags_can_disable_each_pipeline_stage() -> None:
         ManagedControlsFeatureFlags(enforcement=True).validate()
 
 
-def test_managed_control_environment_flags_default_and_malformed_values_fail_closed(monkeypatch) -> None:
+def test_managed_control_environment_flag_defaults_and_malformed_values_fail_closed(monkeypatch) -> None:
     names = (
         GUARD_EXTENSION_CATALOG_SYNC_V1,
         GUARD_POLICY_EXTENSION_TARGETS_V1,
@@ -35,6 +35,12 @@ def test_managed_control_environment_flags_default_and_malformed_values_fail_clo
     )
     for name in names:
         monkeypatch.delenv(name, raising=False)
+    # Catalog sync is the one stage that ships on; the managed stages stay off.
+    defaults = ManagedControlsFeatureFlags.from_environment()
+    assert defaults.catalog_sync is True
+    assert defaults.runtime_capabilities(protected_authority=True) == ("extension-catalog.v1",)
+    assert defaults.allows_custom_extension_continuity() is False
+    monkeypatch.setenv(GUARD_EXTENSION_CATALOG_SYNC_V1, "false")
     assert ManagedControlsFeatureFlags.from_environment().runtime_capabilities(protected_authority=True) == ()
     for name in names:
         monkeypatch.setenv(name, "enabled")

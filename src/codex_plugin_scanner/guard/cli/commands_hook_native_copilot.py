@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 
 from ..harness_posture import harness_is_recording_only, harness_posture_override
 from ..native_hook_decision import NativeHookDecisionError, native_copilot_settle
-from ..retry_lineage import capture_retry_lineage
+from ..native_retry_lineage import capture_retry_lineage
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus
 from ._commands_shared import *
 from .commands_parser_helpers import *
@@ -375,6 +375,7 @@ def _queue_copilot_approval(
         harness=str(args.harness),
         workspace=str(runtime_workspace) if runtime_workspace else None,
         action_envelope=action_envelope.to_dict() if action_envelope is not None else None,
+        guard_home=guard_home,
     )
     if retry_lineage is not None:
         hook_metadata["retry_lineage"] = retry_lineage

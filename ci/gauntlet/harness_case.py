@@ -22,6 +22,7 @@ from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_s
 from .case_helpers import add_credential_redactions, fixture_system_context
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario
 from .cleanup import cleanup_case_resources
+from .codex_contained import request_proofs as codex_request_proofs
 from .connector_fixtures import CONNECTOR_PROFILE, connector_checks, stage_connector_case, state_digest
 from .evidence import sha256_bytes
 from .extension_adapters import configure_extension_permission_denial, extension_adapter
@@ -204,9 +205,13 @@ def run_harness_case(
                 guard_home.mkdir(mode=0o700)
                 (guard_home / "config.toml").write_text('protection_posture = "watch"\nmode = "observe"\n')
             if scenario.oracle in {"approved-retry", BASH_LIFECYCLE_ORACLE}:
-                # Reviewing ordinary commands is this lane's point: the approve-then-retry
+                # Reviewing ordinary actions is this lane's point: the approve-then-retry
                 # path has no other way in, because a hard block never queues an approval.
-                case["review_policy"] = write_review_config(guard_home)
+                # A case whose repeated action is a file-tool call needs the default floor;
+                # the subprocess floor the shell cases raise never reaches a file tool.
+                case["review_policy"] = write_review_config(
+                    guard_home, file_tool="bash" not in scenario.required_tools
+                )
             if CONNECTOR_PROFILE in scenario.profiles:
                 connector = stage_connector_case(scenario.oracle, fixture.root, fixture.home, guard_home, harness)
                 connector_state = state_digest(connector.state_dir)
@@ -305,7 +310,9 @@ def run_harness_case(
             case["egress_requests"] = list(collector.requests)
             case["raw_transcript_sha256"] = digest_file(raw_log)
             case["transcript"] = redact_value(read_transcript(harness, raw_log), replacements)
-            case["guard_rows"] = redact_value(read_tap(tap_log), replacements)
+            tap_rows = read_tap(tap_log)
+            case["contained_request_proofs"] = codex_request_proofs(tap_rows) if harness == "codex" else []
+            case["guard_rows"] = redact_value(tap_rows, replacements)
             case["guard_decisions"] = guard_decisions(case["guard_rows"])
             if scenario.oracle == BASH_LIFECYCLE_ORACLE:
                 case["bash_lifecycle"] = bash_lifecycle_evidence(

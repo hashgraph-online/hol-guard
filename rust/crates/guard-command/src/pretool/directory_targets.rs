@@ -461,6 +461,10 @@ impl<'a> super::PathContext<'a> {
             pip_config_inert,
             shell_home_matches,
             ripgrep_config_absent,
+            // A session knows its environment, not the command, so the
+            // proof that no step creates a filesystem entry is set where a
+            // command model is in hand.
+            creates_nothing: false,
             psql_environment,
         }
     }

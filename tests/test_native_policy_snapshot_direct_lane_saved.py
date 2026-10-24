@@ -118,3 +118,58 @@ def test_the_integrity_key_also_binds_for_saved_decisions() -> None:
     assert direct_lane_integrity_key(_Keyed(), ("other",)) is None
     for features in (FEATURES, (DIRECT_HOOK_PERMISSION_NOTICE_FEATURE,)):
         assert direct_lane_integrity_key(_Keyed(), features) == (b"\x07" * 32, "synthetic:0707")
+
+
+@pytest.mark.parametrize("failed_refresh", [False, True])
+def test_windows_rechecks_saved_state_when_committed_wal_changes_have_the_same_stat(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, failed_refresh: bool
+) -> None:
+    class _RefreshingStore(_Store):
+        calls = 0
+        fail = False
+
+        def _refresh_policy_integrity_state(self, connection, *, now, create_key):
+            assert create_key is False
+            self.calls += 1
+            if self.fail:
+                self.fail = False
+                raise sqlite3.OperationalError("locked")
+
+    class _Lane(saved.NativePolicySnapshotSavedStateMixin):
+        guard_home = tmp_path
+        _direct_lane_ack_target = (1, "ack")
+        rebinds = 0
+
+        def __init__(self, store):
+            self.store = store
+            self._direct_lane_integrity_state = dict(STATE)
+
+        def _rebind_direct_lane(self):
+            self.rebinds += 1
+            self._direct_lane_integrity_state = dict(self.store.state)
+
+    store = _RefreshingStore()
+    lane = _Lane(store)
+    monkeypatch.setattr(saved, "os", SimpleNamespace(name="nt"))
+    # A live Windows SQLite connection can reuse WAL pages while both files'
+    # sizes and last-write timestamps remain unchanged after a committed write.
+    monkeypatch.setattr(saved, "_database_stamp", lambda _home: ((1, 8192), (1, 12392)))
+    lane._recheck_direct_lane_saved_state()
+    assert (store.calls, lane.rebinds) == (1, 0)
+
+    store.state = {**STATE, "generation": STATE["generation"] + 1}
+    store.fail = failed_refresh
+    lane._recheck_direct_lane_saved_state()
+    if failed_refresh:
+        assert (store.calls, lane.rebinds) == (2, 0)
+        lane._recheck_direct_lane_saved_state()
+    assert lane.rebinds == 1
+    assert lane._direct_lane_integrity_state == store.state
+
+    # An unchanged state stays bound; a failed refresh must remain retryable.
+    lane._recheck_direct_lane_saved_state()
+    assert lane.rebinds == 1
+    assert store.calls == (4 if failed_refresh else 3)
+    lane._direct_lane_ack_target = None
+    lane._recheck_direct_lane_saved_state()
+    assert store.calls == (4 if failed_refresh else 3)

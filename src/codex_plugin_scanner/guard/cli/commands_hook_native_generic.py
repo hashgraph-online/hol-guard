@@ -109,7 +109,7 @@ from ..models import GuardAction, GuardArtifact, HarnessDetection
 from ..native_approval_proof import claimed_row_is_still_the_authority
 from ..native_hook_approval_context import generic_hook_approval_context_inputs, native_hook_approval_context_token
 from ..native_hook_decision import native_compose_current, native_finalize, native_post_claim_decision
-from ..retry_lineage import capture_retry_lineage
+from ..native_retry_lineage import capture_retry_lineage
 from ..runtime.actions import _command_detail
 from ..runtime.approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
@@ -402,6 +402,7 @@ def _queue_generic_hook_approval(
         harness=str(args.harness),
         workspace=str(runtime_workspace) if runtime_workspace else None,
         action_envelope=action_envelope.to_dict() if action_envelope is not None else None,
+        guard_home=store.guard_home,
     )
     if retry_lineage is not None:
         hook_metadata["retry_lineage"] = retry_lineage

@@ -48,13 +48,13 @@ def test_an_export_asks_for_every_metadata_value_in_the_prefetched_batch(monkeyp
 
     from codex_plugin_scanner.guard import native_inventory_url_redaction as native_url
     from codex_plugin_scanner.guard.inventory_contract_redaction import (
+        _is_supported_scanner_run,
         _prefetch_export_redactions,
         _redact_known_path,
         _safe_artifact_metadata,
         _safe_finding_text,
         _scanner_finding_title,
     )
-    from codex_plugin_scanner.guard.inventory_contract_scans import _cisco_source
 
     requests: list[list[dict[str, object]]] = []
 
@@ -128,7 +128,7 @@ def test_an_export_asks_for_every_metadata_value_in_the_prefetched_batch(monkeyp
         for artifact in artifacts:
             _safe_artifact_metadata(artifact, home_dir=home, workspace_dir=None)
         for run in runs:
-            if _cisco_source(run) is None:
+            if not _is_supported_scanner_run(run):
                 continue
             _safe_finding_text(run.message, home_dir=home, workspace_dir=None)
             for finding in run.findings:

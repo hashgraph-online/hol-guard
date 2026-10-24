@@ -259,10 +259,18 @@ fn real_capture_kills_a_background_descendant_after_leader_exit() {
                     Instant::now() < deadline,
                     "descendant remains executable after native cleanup"
                 ),
-                Err(error) => {
-                    assert_eq!(error.kind(), io::ErrorKind::NotFound);
+                // The entry can go while the read is in flight, and the
+                // kernel answers that with `ESRCH` rather than letting the
+                // open fail with `ENOENT`. Rust has no `ErrorKind` for
+                // `ESRCH`, so it arrives uncategorized; both mean the
+                // descendant is gone, which is what this waits for.
+                Err(error)
+                    if error.kind() == io::ErrorKind::NotFound
+                        || error.raw_os_error() == Some(libc::ESRCH) =>
+                {
                     break;
                 }
+                Err(error) => panic!("unexpected error reading the descendant's state: {error}"),
             }
             std::thread::sleep(Duration::from_millis(5));
         }

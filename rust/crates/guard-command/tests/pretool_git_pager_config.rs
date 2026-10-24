@@ -131,6 +131,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(&context),
         );
@@ -165,6 +166,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(&caller),
         );
@@ -214,6 +216,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(&caller),
         );
@@ -279,6 +282,7 @@ fn empty_git_pager_overrides_a_custom_pager_variable() {
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(context),
         );
@@ -345,6 +349,7 @@ fn piped_git_output_never_starts_a_configured_pager() {
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(&context),
         );

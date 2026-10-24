@@ -595,10 +595,18 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
         )
         .reason_code
     };
+    // Git answers for a lone recursive removal of a missing target on every
+    // platform, before the sandbox is asked. Git cannot restore ignored
+    // files, so `dist` is left to the sandbox.
+    let missing = "rm -rf coverage";
+    assert_eq!(
+        reason(missing),
+        "native_exact_safe_recoverable_removal",
+        "{missing}"
+    );
     for command in [
         "rm -rf dist",
         "rm -rf dist && npm run build",
-        "rm -rf coverage",
         "rm src/a.ts",
         "rm -f src/a.ts dist/out.js",
         "sed --in-place=.orig -n 'p' src/a.ts && rm -f src/a.ts.orig",

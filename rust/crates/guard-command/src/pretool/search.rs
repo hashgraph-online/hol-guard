@@ -23,11 +23,26 @@ use options::unsafe_search_value;
 pub(super) use rg::{rg_hidden_whitelist_reason, safe_rg_stdin_arguments};
 pub(super) use sibling::named_path as sibling_repository_named_file;
 pub(super) use tree::{
-    safe_glob_operand, safe_literal_bracket_read_target, safe_literal_bracket_tree,
-    safe_recursive_listing_target, safe_recursive_target, safe_recursive_target_through_links,
-    safe_unmatched_glob_operand, SECRET_EXTENSIONS,
+    glob_matches_nothing, safe_glob_operand, safe_literal_bracket_read_target,
+    safe_literal_bracket_tree, safe_recursive_listing_target, safe_recursive_target,
+    safe_recursive_target_through_links, safe_unmatched_glob_operand, SECRET_EXTENSIONS,
 };
 pub(super) use walk_memo::with_walk_memo;
+
+/// Whether no step of `model` creates a filesystem entry.
+///
+/// A read of a path with nothing at it is proven only while it stays
+/// missing: a peer step that writes a file, makes a directory or links one
+/// (`ln -s <dir> <repo>/cfg && cat <repo>/cfg/id_rsa`) would put something
+/// there before the read opens it. `grep` asks the same question of its own
+/// peers; a whole-command answer serves the readers that prove one operand
+/// at a time.
+pub(super) fn command_creates_nothing(model: &crate::CanonicalCommandV1) -> bool {
+    model
+        .segments
+        .iter()
+        .all(|segment| grep::creates_nothing(segment, false))
+}
 
 /// A names-only walk (`find`) rooted at a project-metadata directory such as
 /// `.github` inside a repository work tree, the session's own or a sibling

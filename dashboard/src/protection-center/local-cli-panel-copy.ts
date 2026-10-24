@@ -120,6 +120,11 @@ export function bulkPolicyCopy(surface: LocalCliItem["surface"]): { groupLabel: 
   };
 }
 
+export function keepChoicesCopy(count: number): string {
+  const tools = count === 1 ? "1 tool is" : `${count} tools are`;
+  return `${tools} new or changed since you last saved. Keep the choices shown to mark them reviewed.`;
+}
+
 export const FRESH_TOTP_REQUIRED_MESSAGE = "Enter the current six-digit code from your authenticator.";
 
 /**

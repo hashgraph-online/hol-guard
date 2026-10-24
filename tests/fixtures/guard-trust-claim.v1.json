@@ -1,0 +1,7302 @@
+{
+  "schema": "guard-trust-claim-parity.v1",
+  "timestamps": [
+    {
+      "input": "2026-10-23T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00Z",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00Z",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456Z",
+      "epochMicroseconds": 1792756800123456
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999Z",
+      "epochMicroseconds": 1792799999999999
+    },
+    {
+      "input": "2026-10-23T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00Z",
+      "epochMicroseconds": 1709208000000000
+    },
+    {
+      "input": "2024-02-29T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00Z",
+      "epochMicroseconds": 1709208000000000
+    },
+    {
+      "input": "2024-02-29T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00.123456Z",
+      "epochMicroseconds": 1709208000123456
+    },
+    {
+      "input": "2024-02-29T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T23:59:59.999999Z",
+      "epochMicroseconds": 1709251199999999
+    },
+    {
+      "input": "2024-02-29T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00Z",
+      "epochMicroseconds": -62135553600000000
+    },
+    {
+      "input": "0001-01-01T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00Z",
+      "epochMicroseconds": -62135553600000000
+    },
+    {
+      "input": "0001-01-01T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00.123456Z",
+      "epochMicroseconds": -62135553599876544
+    },
+    {
+      "input": "0001-01-01T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T23:59:59.999999Z",
+      "epochMicroseconds": -62135510400000001
+    },
+    {
+      "input": "0001-01-01T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00Z",
+      "epochMicroseconds": 253402257600000000
+    },
+    {
+      "input": "9999-12-31T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00Z",
+      "epochMicroseconds": 253402257600000000
+    },
+    {
+      "input": "9999-12-31T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00.123456Z",
+      "epochMicroseconds": 253402257600123456
+    },
+    {
+      "input": "9999-12-31T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T23:59:59.999999Z",
+      "epochMicroseconds": 253402300799999999
+    },
+    {
+      "input": "9999-12-31T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00.123456Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T23:59:59.999999Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T 2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00Z",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23T12:00z",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23 12:00z",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23T12:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00+00:00",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23 12:00+00:00",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23T12:00-00:00",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23 12:00-00:00",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23T12:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00-05:30",
+      "epochMicroseconds": 1792776600000000
+    },
+    {
+      "input": "2026-10-23 12:00-05:30",
+      "epochMicroseconds": 1792776600000000
+    },
+    {
+      "input": "2026-10-23T12:00+05:30:15",
+      "epochMicroseconds": 1792736985000000
+    },
+    {
+      "input": "2026-10-23 12:00+05:30:15",
+      "epochMicroseconds": 1792736985000000
+    },
+    {
+      "input": "2026-10-23T12:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00+23:59",
+      "epochMicroseconds": 1792670460000000
+    },
+    {
+      "input": "2026-10-23 12:00+23:59",
+      "epochMicroseconds": 1792670460000000
+    },
+    {
+      "input": "2026-10-23T12:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1200Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1200Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00Z",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23T12:00:00z",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23 12:00:00z",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00+00:00",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23 12:00:00+00:00",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23T12:00:00-00:00",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23 12:00:00-00:00",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00-05:30",
+      "epochMicroseconds": 1792776600000000
+    },
+    {
+      "input": "2026-10-23 12:00:00-05:30",
+      "epochMicroseconds": 1792776600000000
+    },
+    {
+      "input": "2026-10-23T12:00:00+05:30:15",
+      "epochMicroseconds": 1792736985000000
+    },
+    {
+      "input": "2026-10-23 12:00:00+05:30:15",
+      "epochMicroseconds": 1792736985000000
+    },
+    {
+      "input": "2026-10-23T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00+23:59",
+      "epochMicroseconds": 1792670460000000
+    },
+    {
+      "input": "2026-10-23 12:00:00+23:59",
+      "epochMicroseconds": 1792670460000000
+    },
+    {
+      "input": "2026-10-23T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T120000Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 120000Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.5Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.5Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00,5Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00,5Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456Z",
+      "epochMicroseconds": 1792756800123456
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456z",
+      "epochMicroseconds": 1792756800123456
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456z",
+      "epochMicroseconds": 1792756800123456
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456+00:00",
+      "epochMicroseconds": 1792756800123456
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456+00:00",
+      "epochMicroseconds": 1792756800123456
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456-00:00",
+      "epochMicroseconds": 1792756800123456
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456-00:00",
+      "epochMicroseconds": 1792756800123456
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456-05:30",
+      "epochMicroseconds": 1792776600123456
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456-05:30",
+      "epochMicroseconds": 1792776600123456
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456+05:30:15",
+      "epochMicroseconds": 1792736985123456
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456+05:30:15",
+      "epochMicroseconds": 1792736985123456
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456+23:59",
+      "epochMicroseconds": 1792670460123456
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456+23:59",
+      "epochMicroseconds": 1792670460123456
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123456789Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.123456789Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:00.Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:0:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:0:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:60Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00:60Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:60:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:60:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:01Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:01Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00:00.1Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 24:00:00.1Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999Z",
+      "epochMicroseconds": 1792799999999999
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999z",
+      "epochMicroseconds": 1792799999999999
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999z",
+      "epochMicroseconds": 1792799999999999
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999+00:00",
+      "epochMicroseconds": 1792799999999999
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999+00:00",
+      "epochMicroseconds": 1792799999999999
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999-00:00",
+      "epochMicroseconds": 1792799999999999
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999-00:00",
+      "epochMicroseconds": 1792799999999999
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999-05:30",
+      "epochMicroseconds": 1792819799999999
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999-05:30",
+      "epochMicroseconds": 1792819799999999
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999+05:30:15",
+      "epochMicroseconds": 1792780184999999
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999+05:30:15",
+      "epochMicroseconds": 1792780184999999
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999+23:59",
+      "epochMicroseconds": 1792713659999999
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999+23:59",
+      "epochMicroseconds": 1792713659999999
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T23:59:59.999999Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 23:59:59.999999Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00.5Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 12:00.5Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T1 :00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23 1 :00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T 2:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23  2:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W435T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026W43T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-29T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00z",
+      "epochMicroseconds": 1709208000000000
+    },
+    {
+      "input": "2024-02-29T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00+00:00",
+      "epochMicroseconds": 1709208000000000
+    },
+    {
+      "input": "2024-02-29T12:00:00-00:00",
+      "epochMicroseconds": 1709208000000000
+    },
+    {
+      "input": "2024-02-29T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00-05:30",
+      "epochMicroseconds": 1709227800000000
+    },
+    {
+      "input": "2024-02-29T12:00:00+05:30:15",
+      "epochMicroseconds": 1709188185000000
+    },
+    {
+      "input": "2024-02-29T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00+23:59",
+      "epochMicroseconds": 1709121660000000
+    },
+    {
+      "input": "2024-02-29T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-29T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-13-01T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-00-10T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-00T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-32T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00z",
+      "epochMicroseconds": -62135553600000000
+    },
+    {
+      "input": "0001-01-01T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00+00:00",
+      "epochMicroseconds": -62135553600000000
+    },
+    {
+      "input": "0001-01-01T12:00:00-00:00",
+      "epochMicroseconds": -62135553600000000
+    },
+    {
+      "input": "0001-01-01T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00-05:30",
+      "epochMicroseconds": -62135533800000000
+    },
+    {
+      "input": "0001-01-01T12:00:00+05:30:15",
+      "epochMicroseconds": -62135573415000000
+    },
+    {
+      "input": "0001-01-01T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "0001-01-01T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00z",
+      "epochMicroseconds": 253402257600000000
+    },
+    {
+      "input": "9999-12-31T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00+00:00",
+      "epochMicroseconds": 253402257600000000
+    },
+    {
+      "input": "9999-12-31T12:00:00-00:00",
+      "epochMicroseconds": 253402257600000000
+    },
+    {
+      "input": "9999-12-31T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00-05:30",
+      "epochMicroseconds": 253402277400000000
+    },
+    {
+      "input": "9999-12-31T12:00:00+05:30:15",
+      "epochMicroseconds": 253402237785000000
+    },
+    {
+      "input": "9999-12-31T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00+23:59",
+      "epochMicroseconds": 253402171260000000
+    },
+    {
+      "input": "9999-12-31T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "9999-12-31T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-1-23T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "202610-23T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-2T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W00-1T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W53-1T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2020-W53-1T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-0T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00-00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00+05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00-05",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00+0530",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00-05:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00+05:30:15",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00+05:30:15.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00+24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00-24:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00+23:59",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00+5:30",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00++00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00ZZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-8T12:00:00Z+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23TZ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23X12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23_12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23t12:00:00Z",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-2312:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "20261023 120000Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-W43-5T12:00:00+01:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "  2026-10-23T12:00:00Z  ",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "\t2026-10-23T12:00:00Z\n",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "   ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "not-a-time",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "+2026-10-23T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "-2026-10-23T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "٢٠٢٦-10-23T12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00ğ",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00ğ+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00+00:00:30",
+      "epochMicroseconds": 1792756770000000
+    },
+    {
+      "input": "2026-10-23T12:00:00+00:00.500000",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "1970-01-01T00:00:00Z",
+      "epochMicroseconds": 0
+    },
+    {
+      "input": "1969-12-31T23:59:59Z",
+      "epochMicroseconds": -1000000
+    },
+    {
+      "input": "9999-12-31T23:59:59.999999+00:00",
+      "epochMicroseconds": 253402300799999999
+    },
+    {
+      "input": "0001-01-01T00:00:00+00:00",
+      "epochMicroseconds": -62135596800000000
+    },
+    {
+      "input": "0001-01-01T00:00:00+01:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-12-31T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-02-28T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2024-02-28T24:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00-23:59:59.999999",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "\u001c2026-10-23T12:00:00Z",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23T12:00:00Z\u001f",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "\u001d\u001e",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00Z\u001e\u001d",
+      "epochMicroseconds": 1792756800000000
+    },
+    {
+      "input": "2026-10-23☃12:00:00+00:00",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23é12:00:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00-00:00:00.000001",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00+00:00:00.999999",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00-00:00:01.000001",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T12:00:00.123+05:30",
+      "epochMicroseconds": 1792737000123000
+    },
+    {
+      "input": "2026-10-23T12:00:00.1234Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "2026-10-23T24:00Z",
+      "epochMicroseconds": null
+    },
+    {
+      "input": "1970-01-01T00:00Z",
+      "epochMicroseconds": 0
+    },
+    {
+      "input": "1970-01-01t00:00:09+00:00",
+      "epochMicroseconds": 9000000
+    },
+    {
+      "input": "1970-01-01 00:00:58.000000-00:00",
+      "epochMicroseconds": 58000000
+    },
+    {
+      "input": "1970-01-01T06:07:00.500000+05:30",
+      "epochMicroseconds": 2220500000
+    },
+    {
+      "input": "1970-01-01t06:07:09.000-08:00",
+      "epochMicroseconds": 50829000000
+    },
+    {
+      "input": "1970-01-01 06:07:58.750+14:00",
+      "epochMicroseconds": -28321250000
+    },
+    {
+      "input": "1970-01-01T13:45:09-12:00",
+      "epochMicroseconds": 92709000000
+    },
+    {
+      "input": "1970-01-01t13:45:58.000000+01:00:00",
+      "epochMicroseconds": 45958000000
+    },
+    {
+      "input": "1970-01-01 23:59:00.000000-03:30:00",
+      "epochMicroseconds": 98940000000
+    },
+    {
+      "input": "1970-01-01t23:59:09.000Z",
+      "epochMicroseconds": 86349000000
+    },
+    {
+      "input": "1970-01-01 23:59:58.750z",
+      "epochMicroseconds": 86398750000
+    },
+    {
+      "input": "1999-12-31T00:00:09+00:00",
+      "epochMicroseconds": 946598409000000
+    },
+    {
+      "input": "1999-12-31t00:00:58.000000-00:00",
+      "epochMicroseconds": 946598458000000
+    },
+    {
+      "input": "1999-12-31 06:07:00.000000+05:30",
+      "epochMicroseconds": 946600620000000
+    },
+    {
+      "input": "1999-12-31T06:07:09.000-08:00",
+      "epochMicroseconds": 946649229000000
+    },
+    {
+      "input": "1999-12-31t06:07:58.750+14:00",
+      "epochMicroseconds": 946570078750000
+    },
+    {
+      "input": "1999-12-31 13:45:00.750-12:00",
+      "epochMicroseconds": 946691100750000
+    },
+    {
+      "input": "1999-12-31T13:45:58.000000+01:00:00",
+      "epochMicroseconds": 946644358000000
+    },
+    {
+      "input": "1999-12-31t23:59:00.000000-03:30:00",
+      "epochMicroseconds": 946697340000000
+    },
+    {
+      "input": "1999-12-31T23:59:09.000Z",
+      "epochMicroseconds": 946684749000000
+    },
+    {
+      "input": "1999-12-31t23:59:58.750z",
+      "epochMicroseconds": 946684798750000
+    },
+    {
+      "input": "2000-02-29 00:00:00.750+00:00",
+      "epochMicroseconds": 951782400750000
+    },
+    {
+      "input": "2000-02-29T00:00:58.000000-00:00",
+      "epochMicroseconds": 951782458000000
+    },
+    {
+      "input": "2000-02-29t06:07:00.000000+05:30",
+      "epochMicroseconds": 951784620000000
+    },
+    {
+      "input": "2000-02-29 06:07:09.500000-08:00",
+      "epochMicroseconds": 951833229500000
+    },
+    {
+      "input": "2000-02-29T06:07:58.750+14:00",
+      "epochMicroseconds": 951754078750000
+    },
+    {
+      "input": "2000-02-29t13:45:00.750-12:00",
+      "epochMicroseconds": 951875100750000
+    },
+    {
+      "input": "2000-02-29 13:45:58+01:00:00",
+      "epochMicroseconds": 951828358000000
+    },
+    {
+      "input": "2000-02-29T23:59:00.000000-03:30:00",
+      "epochMicroseconds": 951881340000000
+    },
+    {
+      "input": "2000-02-29 23:59:09.500000Z",
+      "epochMicroseconds": 951868749500000
+    },
+    {
+      "input": "2000-02-29T23:59:58.750z",
+      "epochMicroseconds": 951868798750000
+    },
+    {
+      "input": "2026-01-15t00:00:00.750+00:00",
+      "epochMicroseconds": 1768435200750000
+    },
+    {
+      "input": "2026-01-15 00:00:58-00:00",
+      "epochMicroseconds": 1768435258000000
+    },
+    {
+      "input": "2026-01-15T06:07:00.000000+05:30",
+      "epochMicroseconds": 1768437420000000
+    },
+    {
+      "input": "2026-01-15t06:07:09.500000-08:00",
+      "epochMicroseconds": 1768486029500000
+    },
+    {
+      "input": "2026-01-15 06:07:58.000+14:00",
+      "epochMicroseconds": 1768406878000000
+    },
+    {
+      "input": "2026-01-15T13:45:00.750-12:00",
+      "epochMicroseconds": 1768527900750000
+    },
+    {
+      "input": "2026-01-15t13:45:58+01:00:00",
+      "epochMicroseconds": 1768481158000000
+    },
+    {
+      "input": "2026-01-15 23:59:00-03:30:00",
+      "epochMicroseconds": 1768534140000000
+    },
+    {
+      "input": "2026-01-15t23:59:09.500000Z",
+      "epochMicroseconds": 1768521549500000
+    },
+    {
+      "input": "2026-01-15 23:59:58.000z",
+      "epochMicroseconds": 1768521598000000
+    },
+    {
+      "input": "2038-01-19T00:00:00.750+00:00",
+      "epochMicroseconds": 2147472000750000
+    },
+    {
+      "input": "2038-01-19t00:00:58-00:00",
+      "epochMicroseconds": 2147472058000000
+    },
+    {
+      "input": "2038-01-19 06:07:00+05:30",
+      "epochMicroseconds": 2147474220000000
+    },
+    {
+      "input": "2038-01-19T06:07:09.500000-08:00",
+      "epochMicroseconds": 2147522829500000
+    },
+    {
+      "input": "2038-01-19t06:07:58.000+14:00",
+      "epochMicroseconds": 2147443678000000
+    },
+    {
+      "input": "2038-01-19 13:45:00.000-12:00",
+      "epochMicroseconds": 2147564700000000
+    },
+    {
+      "input": "2038-01-19T13:45:58+01:00:00",
+      "epochMicroseconds": 2147517958000000
+    },
+    {
+      "input": "2038-01-19t23:59:00-03:30:00",
+      "epochMicroseconds": 2147570940000000
+    },
+    {
+      "input": "2038-01-19T23:59:09.500000Z",
+      "epochMicroseconds": 2147558349500000
+    },
+    {
+      "input": "2038-01-19t23:59:58.000z",
+      "epochMicroseconds": 2147558398000000
+    },
+    {
+      "input": "2100-03-01 00:00:00.000+00:00",
+      "epochMicroseconds": 4107542400000000
+    },
+    {
+      "input": "2100-03-01T00:00:58-00:00",
+      "epochMicroseconds": 4107542458000000
+    },
+    {
+      "input": "2100-03-01t06:07:00+05:30",
+      "epochMicroseconds": 4107544620000000
+    },
+    {
+      "input": "2100-03-01 06:07:09.000000-08:00",
+      "epochMicroseconds": 4107593229000000
+    },
+    {
+      "input": "2100-03-01T06:07:58.000+14:00",
+      "epochMicroseconds": 4107514078000000
+    },
+    {
+      "input": "2100-03-01t13:45:00.000-12:00",
+      "epochMicroseconds": 4107635100000000
+    },
+    {
+      "input": "2100-03-01 13:45:09.750+01:00:00",
+      "epochMicroseconds": 4107588309750000
+    },
+    {
+      "input": "2100-03-01T23:59:00-03:30:00",
+      "epochMicroseconds": 4107641340000000
+    },
+    {
+      "input": "2100-03-01 23:59:09.000000Z",
+      "epochMicroseconds": 4107628749000000
+    }
+  ],
+  "claims": [
+    {
+      "name": "a complete local claim with layer identity",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": "785b9e2b13a68498184780f53565fb73023b23361ded80b736ea3d9ae5583767"
+    },
+    {
+      "name": "the same claim without layer identity required",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": false,
+      "claimHash": "785b9e2b13a68498184780f53565fb73023b23361ded80b736ea3d9ae5583767"
+    },
+    {
+      "name": "a claim missing layer identity needs a local resolution source",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": false,
+      "claimHash": "8d127427739af7c040830b4f0bb8cfd5c7d526c5e6668f180c5bc78a2dd3d719"
+    },
+    {
+      "name": "a claim missing layer identity is rejected when it is required",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "an empty layer id is rejected",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "layerId": "",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "a remote resolution source is rejected without layer identity",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "resolutionSource": "remote",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": false,
+      "claimHash": null
+    },
+    {
+      "name": "a cloud origin is rejected",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-cloud",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "a verified status is rejected",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "verified",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "an empty derivation is rejected",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": ""
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "a missing provenance is rejected",
+      "claim": {
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "a scoring claim is rejected",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": true,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "a zero is not false",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": 0,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "another evidence authority is rejected",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "vendor_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "a naive capture time is rejected",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "a missing capture time is rejected",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "a week-date capture time is rejected",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-W43-5T12:00:00+02:00",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "a mismatched evidence hash is rejected",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "an unrelated evidence schema is rejected",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": {
+            "deviceId": "device-7",
+            "layers": [
+              1,
+              2,
+              3
+            ],
+            "note": "café ✅"
+          },
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-other.v1",
+          "attestation": {
+            "signature": "stale"
+          },
+          "attestationBindings": [
+            "stale"
+          ],
+          "attestationRef": "stale",
+          "attestationVerification": {
+            "status": "stale"
+          },
+          "attestationStatus": "signed",
+          "collector": "native"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "metadata that is not a mapping is rejected",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": [
+          1,
+          2
+        ]
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "evidence that is not a mapping is rejected",
+      "claim": {
+        "provenance": {
+          "origin": "hol-guard-local",
+          "verificationStatus": "locally_derived",
+          "derivation": "native-scan"
+        },
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": false,
+        "capturedAt": "2026-10-23T12:00:00Z",
+        "layerId": "layer-1",
+        "layerType": "model",
+        "resolutionSource": "local",
+        "metadata": {
+          "evidence": "not-a-mapping",
+          "evidenceHash": "9d641713ec04bbf4ad98fca30e7c214d48b210082aab3f13ab69b36dfb7abff3",
+          "evidenceSchemaVersion": "guard-aibom-evidence.v1"
+        }
+      },
+      "requireLayerIdentity": true,
+      "claimHash": null
+    },
+    {
+      "name": "a claim that is not a mapping is rejected",
+      "claim": [
+        "not",
+        "a",
+        "claim"
+      ],
+      "requireLayerIdentity": true,
+      "claimHash": null
+    }
+  ],
+  "replayKeys": [
+    {
+      "name": "a complete attestation payload",
+      "payload": {
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "nonce": "n-1",
+        "itemId": "item-1",
+        "scope": "workspace",
+        "layerId": "layer-1",
+        "workspaceId": "workspace-1",
+        "repositoryId": "repo-1"
+      },
+      "replayKey": "2450acfcf06968e9e492e775f4b4aa99218308872fa098e907987990f7d717f1"
+    },
+    {
+      "name": "unrelated fields do not change the key",
+      "payload": {
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "nonce": "n-1",
+        "itemId": "item-1",
+        "scope": "workspace",
+        "layerId": "layer-1",
+        "workspaceId": "workspace-1",
+        "repositoryId": "repo-1",
+        "agentId": "a-1"
+      },
+      "replayKey": "2450acfcf06968e9e492e775f4b4aa99218308872fa098e907987990f7d717f1"
+    },
+    {
+      "name": "an absent field hashes as null",
+      "payload": {
+        "nonce": "n-1",
+        "itemId": "item-1"
+      },
+      "replayKey": "a0caf3f7e293ef572c0e4fdd90b1d0e5b38480aff62ced4622293a65586ea816"
+    },
+    {
+      "name": "an explicit null matches an absent field",
+      "payload": {
+        "nonce": "n-1",
+        "itemId": "item-1",
+        "domainSeparator": null,
+        "scope": null,
+        "layerId": null,
+        "workspaceId": null,
+        "repositoryId": null
+      },
+      "replayKey": "a0caf3f7e293ef572c0e4fdd90b1d0e5b38480aff62ced4622293a65586ea816"
+    },
+    {
+      "name": "an empty payload",
+      "payload": {},
+      "replayKey": "f051d15d7826efcaf3a126ae7b208f5ba2323b24078f10564a92266cbbd754f6"
+    },
+    {
+      "name": "a non-string scope",
+      "payload": {
+        "domainSeparator": "hol-guard:aibom-trust-attestation:v3",
+        "nonce": "n-1",
+        "itemId": "item-1",
+        "scope": {
+          "kind": "layer"
+        },
+        "layerId": "layer-1",
+        "workspaceId": "workspace-1",
+        "repositoryId": "repo-1"
+      },
+      "replayKey": "866d75c726c0981b7f0e87f9ee991f0c5d0e7c2d5be369b95c3db222a2022e5a"
+    }
+  ]
+}

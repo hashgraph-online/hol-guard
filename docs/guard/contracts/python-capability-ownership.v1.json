@@ -1679,6 +1679,25 @@
     "rust/crates/guard-command/src/extension_control.rs",
     "rust/crates/guard-runtime/src/extension_control_op.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/inventory_contract_scans.py",
+   "module": "codex_plugin_scanner.guard.inventory_contract_scans",
+   "source_sha256": "4a1b289d0ecf207a9b6cebaf9f0b9e7afc0c971c14e4d6434a7ed6074d4a8863",
+   "forbidden_symbols": [
+    "_cisco_inventory_findings",
+    "_cisco_inventory_sources",
+    "_cisco_source",
+    "_inventory_severity",
+    "_score_delta_for_severity",
+    "_artifact_id_for_cisco_finding",
+    "_source_status_for_cisco_status",
+    "_symlink_findings_from_items"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/inventory_contract.rs",
+    "rust/crates/guard-runtime/src/inventory_scan_findings_op.rs"
+   ]
   }
  ],
  "retired_test_paths": [

@@ -44,7 +44,7 @@ pub(crate) fn safe_grep_segment(
 /// A peer that cannot create a filesystem entry: no output redirect beyond
 /// `/dev/null`, and a command that only prints, filters or changes directory.
 /// `strict` admits only `cd` and stdin filters after a pipe.
-pub(super) fn creates_nothing(segment: &crate::CommandSegmentV1, strict: bool) -> bool {
+pub(in crate::pretool) fn creates_nothing(segment: &crate::CommandSegmentV1, strict: bool) -> bool {
     let text = ["2>&1", "2>/dev/null", ">/dev/null"]
         .iter()
         .fold(segment.text.clone(), |text, quiet| text.replace(quiet, ""));

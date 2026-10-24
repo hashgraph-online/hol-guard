@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BXyV7oNP.js","assets/chunks/home-protection-module-Du65PsUR.js","assets/chunks/about-content-Bsz4ilTC.js","assets/chunks/app-catalog-BU3dzTBu.js","assets/chunks/fleet-workspace-CkMTJ0-Z.js","assets/chunks/harness-version-label-0p6P70WE.js","assets/chunks/connect-guard-cloud-button-COC8NKLs.js","assets/chunks/settings-save-proof-modal-DSJONzDi.js","assets/chunks/settings-workspace-DdhT0dGq.js","assets/chunks/confirm-dialog-DoiBaaXB.js","assets/chunks/extensions-workspace-BPzLUHdQ.js","assets/chunks/app-detail-workspace-B9rlD0o5.js","assets/chunks/policy-workspace-page-B-AqWrAu.js","assets/chunks/about-workspace-XhWUF4Ah.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BXyV7oNP.js","assets/chunks/home-protection-module-Du65PsUR.js","assets/chunks/about-content-Bsz4ilTC.js","assets/chunks/app-catalog-BU3dzTBu.js","assets/chunks/fleet-workspace-CbqphIX4.js","assets/chunks/harness-version-label-BEu-FrKY.js","assets/chunks/connect-guard-cloud-button-D3-S0tLq.js","assets/chunks/settings-save-proof-modal-DSJONzDi.js","assets/chunks/settings-workspace-CpitooFy.js","assets/chunks/confirm-dialog-DClNtuX1.js","assets/chunks/extensions-workspace-BiG33v6D.js","assets/chunks/app-detail-workspace-3cnkv6h5.js","assets/chunks/policy-workspace-page--QnvLElq.js","assets/chunks/about-workspace-93T2cVjf.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -29250,17 +29250,29 @@ const TIER_LABEL = {
   high: "High risk"
 };
 function QueueBulkStickyBar(props) {
-  if (!props.visible) return null;
-  const unit = props.selectedActionCount === 1 ? "action" : "actions";
+  const blockButton = reactExports.useRef(null);
+  const previousStep = reactExports.useRef(props.blockStep);
+  reactExports.useEffect(() => {
+    if (previousStep.current === "confirming" && props.blockStep === "idle") blockButton.current?.focus();
+    previousStep.current = props.blockStep;
+  }, [props.blockStep]);
+  if (!props.visible) {
+    return props.blockError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mb-4 text-xs text-brand-attention", children: props.blockError }) : null;
+  }
+  const total = props.selectedRequestCount;
+  const unit = total === 1 ? "request" : "requests";
+  const approvableNote = props.selectedActionCount === total ? "approve once" : `${props.selectedActionCount} can be approved at once`;
   const ChipIcon = toneIcon(props.riskTone);
+  const confirmingBlock = props.blockStep !== "idle";
+  const blocking = props.blockStep === "blocking";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
       className: "sticky top-2 z-20 mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md backdrop-blur",
       role: "region",
-      "aria-label": "Bulk approval selection",
+      "aria-label": "Bulk selection",
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        props.canApprove ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "span",
           {
             className: `inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${toneChip(props.riskTone)}`,
@@ -29269,15 +29281,48 @@ function QueueBulkStickyBar(props) {
               TIER_LABEL[props.riskTier]
             ]
           }
-        ),
+        ) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "min-w-0 flex-1 text-sm font-medium text-brand-dark", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-base font-semibold", children: props.selectedActionCount }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-base font-semibold", children: total }),
           " ",
           unit,
-          " selected · approve once"
+          " selected",
+          props.canApprove ? ` · ${approvableNote}` : ""
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+        confirmingBlock ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", role: "group", "aria-label": "Confirm block", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
+            "Block ",
+            total,
+            " ",
+            unit,
+            " just this once? Any agent still waiting is told no."
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              onClick: props.onConfirmBlock,
+              disabled: blocking,
+              className: "inline-flex min-h-9 items-center gap-1.5 rounded-full bg-brand-dark px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark/90 disabled:cursor-wait disabled:opacity-60",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-4 w-4", "aria-hidden": "true" }),
+                blocking ? "Blocking…" : `Block ${total}`
+              ]
+            }
+          ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: props.onCancelBlock,
+              disabled: blocking,
+              autoFocus: true,
+              className: "inline-flex min-h-9 items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark disabled:opacity-60",
+              children: "Cancel"
+            }
+          )
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+          props.canApprove ? /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
               type: "button",
@@ -29285,7 +29330,20 @@ function QueueBulkStickyBar(props) {
               className: "inline-flex min-h-9 items-center rounded-full bg-brand-blue px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90",
               children: "Review & approve"
             }
-          ),
+          ) : null,
+          props.blockAvailable ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              ref: blockButton,
+              type: "button",
+              onClick: props.onRequestBlock,
+              className: "inline-flex min-h-9 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-1.5 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-4 w-4", "aria-hidden": "true" }),
+                "Block selected"
+              ]
+            }
+          ) : null,
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
@@ -29295,7 +29353,8 @@ function QueueBulkStickyBar(props) {
               children: "Clear"
             }
           )
-        ] })
+        ] }),
+        props.blockError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "w-full text-xs text-brand-attention", children: props.blockError }) : null
       ]
     }
   );
@@ -29611,6 +29670,73 @@ function QueueBulkDrawer(props) {
     }
   );
 }
+class BulkBlockError extends Error {
+  failedIds;
+  constructor(message, failedIds) {
+    super(message);
+    this.name = "BulkBlockError";
+    this.failedIds = failedIds;
+  }
+}
+const MAX_REASONS$1 = 3;
+async function blockRequestsOnce(groups, lookup, resolve) {
+  let blocked = 0;
+  const failures = /* @__PURE__ */ new Map();
+  const fail = (requestId, error) => {
+    failures.set(requestId, error instanceof Error ? error.message : String(error));
+  };
+  const blockOnce = async (item) => {
+    const payload = buildDecisionPayload({ item, action: "block", scope: "artifact", reason: "blocked in bulk review" });
+    if (payload.scope !== "artifact") {
+      throw new Error("A request could not be blocked just this once. Open it to choose how to block it.");
+    }
+    return resolve(payload);
+  };
+  for (const group of groups) {
+    const settled = /* @__PURE__ */ new Set();
+    try {
+      const result = await blockOnce(group.primary);
+      for (const id2 of result.resolved_duplicate_ids) settled.add(id2);
+      blocked += 1;
+    } catch (error) {
+      fail(group.primary.request_id, error);
+    }
+    for (const duplicateId of group.duplicateIds) {
+      if (settled.has(duplicateId)) {
+        blocked += 1;
+        continue;
+      }
+      const duplicate = lookup(duplicateId);
+      try {
+        if (duplicate === void 0) throw new Error("A selected request is no longer in the queue.");
+        const result = await blockOnce(duplicate);
+        for (const id2 of result.resolved_duplicate_ids) settled.add(id2);
+        blocked += 1;
+      } catch (error) {
+        fail(duplicateId, error);
+      }
+    }
+    for (const id2 of settled) {
+      if (failures.delete(id2)) blocked += 1;
+    }
+  }
+  const reasons2 = [];
+  for (const reason of failures.values()) {
+    if (reasons2.length < MAX_REASONS$1 && !reasons2.includes(reason)) reasons2.push(reason);
+  }
+  return { blocked, failed: failures.size, reasons: reasons2, failedIds: [...failures.keys()] };
+}
+function bulkBlockSummary(outcome) {
+  const unit = outcome.blocked === 1 ? "request" : "requests";
+  return `${outcome.blocked} ${unit} blocked.`;
+}
+function bulkBlockFailureMessage(outcome) {
+  const reason = outcome.reasons.length > 0 ? ` ${outcome.reasons.join(" ")}` : "";
+  if (outcome.blocked === 0) {
+    return `Guard could not block the selected requests. Open them to block them one at a time.${reason}`;
+  }
+  return `${outcome.blocked} blocked, ${outcome.failed} failed. Open the failed requests to block them one at a time.${reason}`;
+}
 const BULK_LOW_TIER_THRESHOLD = 5;
 const BULK_HIGH_TIER_THRESHOLD = 10;
 function resolveBulkRiskTier(stats) {
@@ -29748,6 +29874,13 @@ function buildBulkRiskDisclosure(stats) {
     confirmPhrase: phrase
   };
 }
+function isBulkBlockableGroup(group) {
+  const status = group.primary.status;
+  return (status === void 0 || status === "pending") && requestResolutionBlockReason(group.primary) === null;
+}
+function bulkBlockGroups(groups, selectedIds) {
+  return groups.filter((group) => isBulkBlockableGroup(group) && selectedIds.has(group.primary.request_id));
+}
 function useQueueBulkApprove(props) {
   const [drawerOpen, setDrawerOpen] = reactExports.useState(false);
   const [drawerStep, setDrawerStep] = reactExports.useState("review");
@@ -29757,6 +29890,9 @@ function useQueueBulkApprove(props) {
   const [typedConfirm, setTypedConfirm] = reactExports.useState("");
   const [bulkApproveError, setBulkApproveError] = reactExports.useState(null);
   const [bulkCompletedActionCount, setBulkCompletedActionCount] = reactExports.useState(null);
+  const [blockStep, setBlockStep] = reactExports.useState("idle");
+  const [blockError, setBlockError] = reactExports.useState(null);
+  const blocking = reactExports.useRef(false);
   const groups = reactExports.useMemo(() => groupDuplicates(props.items), [props.items]);
   const bulkEligibleGroups = reactExports.useMemo(
     () => groups.filter((group) => isBulkApprovableGroup(group)),
@@ -29771,6 +29907,12 @@ function useQueueBulkApprove(props) {
   const hasBulkHandler = props.onBulkApprove !== void 0;
   const hasEligibleGroups = bulkEligibleGroups.length >= 1;
   const showBulkApprove = hasBulkHandler && bulkGateReady && hasEligibleGroups;
+  const hasBlockHandler = props.onBulkBlock !== void 0 && props.approvalGate?.strict_all_decisions !== true;
+  const selectableGroups = reactExports.useMemo(
+    () => hasBlockHandler ? groups.filter((group) => isBulkBlockableGroup(group)) : bulkEligibleGroups,
+    [bulkEligibleGroups, groups, hasBlockHandler]
+  );
+  const selectionMode = showBulkApprove || hasBlockHandler && selectableGroups.length > 0;
   const selectedBulkGroups = reactExports.useMemo(
     () => bulkEligibleGroups.filter((group) => selectedBulkIds.has(group.primary.request_id)),
     [bulkEligibleGroups, selectedBulkIds]
@@ -29780,6 +29922,15 @@ function useQueueBulkApprove(props) {
     [selectedBulkGroups]
   );
   const selectedGroupCount = selectedBulkGroups.length;
+  const selectedBlockGroups = reactExports.useMemo(
+    () => hasBlockHandler ? bulkBlockGroups(groups, selectedBulkIds) : [],
+    [groups, hasBlockHandler, selectedBulkIds]
+  );
+  const selectedSelectableGroups = reactExports.useMemo(
+    () => selectableGroups.filter((group) => selectedBulkIds.has(group.primary.request_id)),
+    [selectableGroups, selectedBulkIds]
+  );
+  const selectedRequestCount = bulkApproveActionCount(selectedSelectableGroups);
   const selectionStats = reactExports.useMemo(() => {
     let highActionCount = 0;
     let elevatedActionCount = 0;
@@ -29832,12 +29983,44 @@ function useQueueBulkApprove(props) {
     setTypedConfirm("");
     setBulkApproveError(null);
     setBulkCompletedActionCount(null);
+    setBlockStep("idle");
+    setBlockError(null);
   }, []);
   const handleClearSelection = reactExports.useCallback(() => {
+    if (blocking.current) return;
     setSelectedBulkIds(/* @__PURE__ */ new Set());
     setTypedConfirm("");
     setBulkApproveError(null);
+    setBlockStep("idle");
+    setBlockError(null);
   }, []);
+  const handleRequestBlock = reactExports.useCallback(() => {
+    if (selectedBlockGroups.length === 0) return;
+    setBlockStep("confirming");
+    setBlockError(null);
+  }, [selectedBlockGroups.length]);
+  const handleCancelBlock = reactExports.useCallback(() => {
+    if (blockStep === "blocking") return;
+    setBlockStep("idle");
+  }, [blockStep]);
+  const handleConfirmBlock = reactExports.useCallback(async () => {
+    if (blockStep === "blocking" || selectedBlockGroups.length === 0 || !hasBlockHandler || props.onBulkBlock === void 0) {
+      return;
+    }
+    blocking.current = true;
+    setBlockStep("blocking");
+    setBlockError(null);
+    try {
+      await props.onBulkBlock(selectedBlockGroups);
+      setSelectedBulkIds(/* @__PURE__ */ new Set());
+    } catch (error) {
+      if (error instanceof BulkBlockError) setSelectedBulkIds(new Set(error.failedIds));
+      setBlockError(error instanceof Error ? error.message : "Blocking the selected requests failed.");
+    } finally {
+      blocking.current = false;
+      setBlockStep("idle");
+    }
+  }, [blockStep, hasBlockHandler, props.onBulkBlock, selectedBlockGroups]);
   const handleStartReview = reactExports.useCallback(() => {
     if (selectedBulkGroups.length === 0) {
       return;
@@ -29860,6 +30043,7 @@ function useQueueBulkApprove(props) {
     setBulkApproveTotpCode("");
   }, [drawerStep, resetBulkFlow]);
   const handleBulkToggleSelect = reactExports.useCallback((requestId) => {
+    if (blocking.current) return;
     setSelectedBulkIds((current) => {
       const next = new Set(current);
       if (next.has(requestId)) {
@@ -29871,18 +30055,21 @@ function useQueueBulkApprove(props) {
     });
     setTypedConfirm("");
     setBulkApproveError(null);
+    setBlockStep("idle");
+    setBlockError(null);
   }, []);
   const handleBulkToggleMany = reactExports.useCallback(
     (items, selectAll) => {
+      if (blocking.current) return;
       setSelectedBulkIds(() => {
         if (!selectAll) return /* @__PURE__ */ new Set();
-        const eligibleIds = new Set(bulkApprovePrimaryIds(bulkEligibleGroups));
+        const eligibleIds = new Set(bulkApprovePrimaryIds(selectableGroups));
         const targetIds = /* @__PURE__ */ new Set();
         for (const item of items) {
           if (eligibleIds.has(item.request_id)) {
             targetIds.add(item.request_id);
           } else {
-            for (const group of bulkEligibleGroups) {
+            for (const group of selectableGroups) {
               if (group.duplicateIds.includes(item.request_id)) {
                 targetIds.add(group.primary.request_id);
                 break;
@@ -29894,8 +30081,10 @@ function useQueueBulkApprove(props) {
       });
       setTypedConfirm("");
       setBulkApproveError(null);
+      setBlockStep("idle");
+      setBlockError(null);
     },
-    [bulkEligibleGroups]
+    [selectableGroups]
   );
   const handleBulkApprovePasswordChange = reactExports.useCallback((event) => {
     setBulkApprovePassword(event.target.value);
@@ -29960,14 +30149,14 @@ function useQueueBulkApprove(props) {
   const bulkSelectableMap = reactExports.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
     for (const group of groups) {
-      const isApprovable = isBulkApprovableGroup(group);
-      map.set(group.primary.request_id, isApprovable);
+      const selectable = hasBlockHandler ? isBulkBlockableGroup(group) : isBulkApprovableGroup(group);
+      map.set(group.primary.request_id, selectable);
       for (const id2 of group.duplicateIds) {
-        map.set(id2, isApprovable);
+        map.set(id2, selectable);
       }
     }
     return map;
-  }, [groups]);
+  }, [groups, hasBlockHandler]);
   const groupIdMap = reactExports.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
     for (const group of groups) {
@@ -29979,8 +30168,8 @@ function useQueueBulkApprove(props) {
     return map;
   }, [groups]);
   const isSelectable = reactExports.useCallback(
-    (item) => bulkSelectableMap.get(item.request_id) ?? isBulkApprovableGroup({ primary: item }),
-    [bulkSelectableMap]
+    (item) => bulkSelectableMap.get(item.request_id) ?? (hasBlockHandler ? isBulkBlockableGroup({ primary: item }) : isBulkApprovableGroup({ primary: item })),
+    [bulkSelectableMap, hasBlockHandler]
   );
   const isSelected = reactExports.useCallback(
     (item) => selectedBulkIds.has(groupIdMap.get(item.request_id) ?? item.request_id),
@@ -30002,7 +30191,8 @@ function useQueueBulkApprove(props) {
     },
     [groupIdMap, handleBulkToggleMany]
   );
-  const stickyBarVisible = showBulkApprove && selectedGroupCount > 0 && drawerStep !== "completed";
+  const canApprove = showBulkApprove && selectedGroupCount > 0;
+  const stickyBarVisible = (canApprove || selectedBlockGroups.length > 0) && drawerStep !== "completed";
   const gatePromptVisible = hasBulkHandler && hasEligibleGroups && !bulkGateReady;
   const eligibleActionCount = reactExports.useMemo(
     () => bulkApproveActionCount(bulkEligibleGroups),
@@ -30012,22 +30202,30 @@ function useQueueBulkApprove(props) {
     groups,
     showBulkApprove,
     bulkSelection: {
-      selectionMode: showBulkApprove,
+      selectionMode,
       isSelectable,
       isSelected,
       onToggle,
       onToggleMany,
-      selectedActionCount,
-      selectedGroupCount
+      selectedActionCount: hasBlockHandler ? selectedRequestCount : selectedActionCount,
+      selectedGroupCount: hasBlockHandler ? selectedSelectableGroups.length : selectedGroupCount
     },
     stickyBar: {
       visible: stickyBarVisible,
       selectedGroupCount,
       selectedActionCount,
+      selectedRequestCount: hasBlockHandler ? selectedRequestCount : selectedActionCount,
+      canApprove,
       riskTier: riskDisclosure.tier,
       riskTone: riskDisclosure.tone,
       gateReady: bulkGateReady,
+      blockAvailable: hasBlockHandler,
+      blockStep,
+      blockError,
       onStartReview: handleStartReview,
+      onRequestBlock: handleRequestBlock,
+      onConfirmBlock: handleConfirmBlock,
+      onCancelBlock: handleCancelBlock,
       onClearSelection: handleClearSelection
     },
     drawer: {
@@ -33742,7 +33940,7 @@ function QueueItemRow({ item, active, readState, index, onOpenRequest, selection
     },
     [item, onToggleSelect, canSelect]
   );
-  const checkboxLabel = canSelect ? `Select ${preview} for bulk approval` : `Not eligible for bulk approval: ${category.shortLabel.toLowerCase()}`;
+  const checkboxLabel = canSelect ? `Select ${preview}` : `Not eligible for bulk approval: ${category.shortLabel.toLowerCase()}`;
   const rowClassName = (() => {
     if (selected) return "border border-brand-blue/60 bg-brand-blue/[0.08] ring-1 ring-brand-blue/20";
     if (active) return "border border-brand-blue bg-brand-blue/[0.06]";
@@ -34782,6 +34980,10 @@ class LocalCliApiError extends Error {
     this.code = code;
   }
 }
+function unreviewedToolChangeCount(item) {
+  const changes = item.mcp_catalog?.changes;
+  return (changes?.added.length ?? 0) + (changes?.changed.length ?? 0);
+}
 function customExtensionNeedsReview(item) {
   return item.stale || item.state === "unset" || item.mcp_catalog?.stale || item.mcp_catalog?.complete === false || Boolean(item.mcp_catalog?.changes?.added.length) || Boolean(item.mcp_catalog?.changes?.changed.length);
 }
@@ -35673,6 +35875,7 @@ function ReviewWorkspace(props) {
     items: filteredRequests,
     approvalGate: props.approvalGate ?? null,
     onBulkApprove: props.onBulkApprove,
+    onBulkBlock: props.onBulkBlock,
     settingsHref: guardAwareHref("/settings")
   });
   reactExports.useEffect(() => {
@@ -35755,7 +35958,7 @@ function ReviewWorkspace(props) {
       bulkApprove.bulkSelection.selectedActionCount,
       " of ",
       filteredRequests.length,
-      " reads selected for bulk approval."
+      " requests selected."
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(QueueBulkDrawer, { ...bulkApprove.drawer }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -36460,7 +36663,7 @@ function turnProtectionOnUpdate(snapshot) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-DVglDkrr.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-MUAws0Y5.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -36533,7 +36736,8 @@ function renderInboxContent(props) {
       onResolve: props.onResolve,
       onGoHome: props.onGoHome,
       onRetryResume: props.onRetryResume,
-      onBulkApprove: props.onBulkApprove
+      onBulkApprove: props.onBulkApprove,
+      onBulkBlock: props.onBulkBlock
     }
   );
 }
@@ -36881,33 +37085,33 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-BXyV7oNP.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-CkMTJ0-Z.js"), true ? __vite__mapDeps([4,3,5,6,7]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-DdhT0dGq.js"), true ? __vite__mapDeps([8,7,3,9,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-CbqphIX4.js"), true ? __vite__mapDeps([4,3,5,6,7]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-CpitooFy.js"), true ? __vite__mapDeps([8,7,3,9,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-BPzLUHdQ.js"), true ? __vite__mapDeps([10,9]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-BiG33v6D.js"), true ? __vite__mapDeps([10,9]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-B9rlD0o5.js"), true ? __vite__mapDeps([11,5]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-3cnkv6h5.js"), true ? __vite__mapDeps([11,5]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-B0TZsHE3.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-B0jYL3ZG.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-DabvDO9V.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-B-AqWrAu.js"), true ? __vite__mapDeps([12,6]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page--QnvLElq.js"), true ? __vite__mapDeps([12,6]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-XhWUF4Ah.js"), true ? __vite__mapDeps([13,2]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-93T2cVjf.js"), true ? __vite__mapDeps([13,2]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-87opRVyg.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-DDSlU5cV.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-C7iXdeiN.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-zjCZDbfH.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -37555,6 +37759,26 @@ function App() {
       bulkApproveInFlight.current = false;
     }
   }, [refreshApprovalGate, refreshStateAfterAction, setResolutionMessage]);
+  const handleBulkBlock = reactExports.useCallback(async (selected) => {
+    if (bulkApproveInFlight.current || resolutionInFlight.current) {
+      throw new Error("Another decision is still being saved. Try again in a moment.");
+    }
+    bulkApproveInFlight.current = true;
+    resolutionInFlight.current = true;
+    const queued = new Map((requests.kind === "ready" ? requests.items : []).map((item) => [item.request_id, item]));
+    try {
+      const outcome = await blockRequestsOnce(selected, (id2) => queued.get(id2), resolveRequestWithQueueResult);
+      resolutionInFlight.current = false;
+      await refreshStateAfterAction();
+      if (outcome.failed > 0) {
+        throw new BulkBlockError(bulkBlockFailureMessage(outcome), outcome.failedIds);
+      }
+      setResolutionMessage(bulkBlockSummary(outcome));
+    } finally {
+      resolutionInFlight.current = false;
+      bulkApproveInFlight.current = false;
+    }
+  }, [refreshStateAfterAction, requests, setResolutionMessage]);
   const handleRetry = reactExports.useCallback(() => {
     setRuntime({ kind: "loading" });
     setRequests({ kind: "loading" });
@@ -37715,6 +37939,7 @@ function App() {
         onOpenRequest: handleOpenRequest,
         onResolve: handleResolve,
         onBulkApprove: handleBulkApprove,
+        onBulkBlock: handleBulkBlock,
         onRetry: handleRetry,
         onRetryDetail: () => setDetailRefreshKey((key) => key + 1),
         onRepair: handleRepair,
@@ -37939,7 +38164,7 @@ export {
   normalizeExtensionCatalogItem as by,
   guardApiCacheScope as bz,
   HiMiniChevronDown as c,
-  HiMiniHome as c$,
+  fetchPolicy as c$,
   readJson as c0,
   enrollablePackageScriptCommands as c1,
   seenSuggestionMeta as c2,
@@ -37950,33 +38175,33 @@ export {
   filterExtensionSuggestions as c7,
   suggestedHarnessExtensions as c8,
   suggestedSeenExtensions as c9,
-  extensionDisplayName as cA,
-  catalogRowSecondLine as cB,
-  extensionStateLabel as cC,
-  HiMiniGlobeAlt as cD,
-  HiMiniFunnel as cE,
-  discoveryFailureMessage as cF,
-  refreshCodexHostInventory as cG,
-  CODEX_HOST_FALLBACK as cH,
-  CONFIGURED_CONNECTIONS_FALLBACK as cI,
-  loadCurrentDashboardBuild as cJ,
-  canonicalExtensionId as cK,
-  extensionDetailHref as cL,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as cM,
-  acknowledgeDegradedExtensionControlAuthority as cN,
-  recoverExtensionControlAuthority as cO,
-  readExtensionDetailUrlState as cP,
-  parseProtectionRoute as cQ,
-  addCustomExtensionHref as cR,
-  GuardModalLayer as cS,
-  runHarnessAction as cT,
-  GuardHarnessActionError as cU,
-  HiMiniRocketLaunch as cV,
-  HiMiniTrash as cW,
-  fetchGuardApi as cX,
-  formatHarnessCommand as cY,
-  fetchApprovalPage as cZ,
-  fetchPolicy as c_,
+  customExtensionNeedsReview as cA,
+  extensionDisplayName as cB,
+  catalogRowSecondLine as cC,
+  extensionStateLabel as cD,
+  HiMiniGlobeAlt as cE,
+  HiMiniFunnel as cF,
+  discoveryFailureMessage as cG,
+  refreshCodexHostInventory as cH,
+  CODEX_HOST_FALLBACK as cI,
+  CONFIGURED_CONNECTIONS_FALLBACK as cJ,
+  loadCurrentDashboardBuild as cK,
+  canonicalExtensionId as cL,
+  extensionDetailHref as cM,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as cN,
+  acknowledgeDegradedExtensionControlAuthority as cO,
+  recoverExtensionControlAuthority as cP,
+  readExtensionDetailUrlState as cQ,
+  parseProtectionRoute as cR,
+  addCustomExtensionHref as cS,
+  GuardModalLayer as cT,
+  runHarnessAction as cU,
+  GuardHarnessActionError as cV,
+  HiMiniRocketLaunch as cW,
+  HiMiniTrash as cX,
+  fetchGuardApi as cY,
+  formatHarnessCommand as cZ,
+  fetchApprovalPage as c_,
   keepsPackageScriptCatalog as ca,
   recognizeLocalCli as cb,
   preferredPackageScriptExtension as cc,
@@ -37986,107 +38211,108 @@ export {
   HiMiniArrowLeft as cg,
   fetchLocalCliList as ch,
   normalizeLocalCliList as ci,
-  refreshMcpInventory as cj,
-  startGuardCloudConnect as ck,
-  extensionEffectiveState as cl,
-  permissionEffectiveState as cm,
-  HiMiniArrowTopRightOnSquare as cn,
-  fetchExtensionControlApi as co,
-  permissionForRule as cp,
-  refreshEffectiveExtensionControls as cq,
-  fetchExtensionDiscoveryApi as cr,
-  HiMiniClock as cs,
-  startCancelableDiscoveryJob as ct,
-  waitForMcpDiscoveryJob as cu,
-  isLocalCliId as cv,
-  localCliHref as cw,
-  filterCodexHostApps as cx,
-  connectorWorkspaceItems as cy,
-  customExtensionNeedsReview as cz,
+  unreviewedToolChangeCount as cj,
+  refreshMcpInventory as ck,
+  startGuardCloudConnect as cl,
+  extensionEffectiveState as cm,
+  permissionEffectiveState as cn,
+  HiMiniArrowTopRightOnSquare as co,
+  fetchExtensionControlApi as cp,
+  permissionForRule as cq,
+  refreshEffectiveExtensionControls as cr,
+  fetchExtensionDiscoveryApi as cs,
+  HiMiniClock as ct,
+  startCancelableDiscoveryJob as cu,
+  waitForMcpDiscoveryJob as cv,
+  isLocalCliId as cw,
+  localCliHref as cx,
+  filterCodexHostApps as cy,
+  connectorWorkspaceItems as cz,
   HiMiniArrowPath as d,
-  HiMiniEllipsisHorizontal as d$,
-  appSetupTarget as d0,
-  guardActionPresentation as d1,
-  DEFAULT_FILTER_STATE as d2,
-  filterEvidence as d3,
-  sortEvidence as d4,
-  computeMetrics as d5,
-  CommandActivityWorkspace as d6,
-  EvidenceFilterBar as d7,
-  EvidenceInsightStrip as d8,
-  EvidenceActionList as d9,
-  activatePackageFirewallRuntime as dA,
-  EntitlementNotice as dB,
-  chooseSupplyChainAuditFolder as dC,
-  fetchReceipts as dD,
-  lazyWorkspace as dE,
-  __vitePreload as dF,
-  scopeLabel as dG,
-  HiMiniCloudArrowUp as dH,
-  HiMiniCodeBracket as dI,
-  HiMiniClipboardDocument as dJ,
-  HiMiniUsers as dK,
-  HiMiniFolder as dL,
-  HiMiniIdentification as dM,
-  StyledSelect as dN,
-  policyActionLabel as dO,
-  createCloudExceptionRequest as dP,
-  HiMiniPuzzlePiece as dQ,
-  fetchCloudExceptions as dR,
-  fetchCloudExceptionRequests as dS,
-  downloadBlob as dT,
-  PaginationControls as dU,
-  PolicyStatField as dV,
-  HiMiniArrowDownTray as dW,
-  HiMiniInbox as dX,
-  HiMiniQueueList as dY,
-  subscribeDashboardLocation as dZ,
-  Surface as d_,
-  EvidenceActionDetail as da,
-  policyIdentityKey as db,
-  clearLabelForScope as dc,
-  HiMiniChartBar as dd,
-  HiMiniCheckBadge as de,
-  isSupplyChainAuditIncomplete as df,
-  isSupplyChainAuditEvidence as dg,
-  readString$1 as dh,
-  IconActionButton as di,
-  HiMiniBeaker as dj,
-  ActivationSummary as dk,
-  ActionResultPanel as dl,
-  HiMiniBugAnt as dm,
-  ConnectFlowCard as dn,
-  ApprovalProofInline as dp,
-  HiMiniCloudArrowDown as dq,
-  fetchPackageFirewallStatus as dr,
-  runPackageAudit as ds,
-  resolveSupplyChainAuditFailure as dt,
-  runPackageSync as du,
-  startPackageFirewallConnect as dv,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as dw,
-  repairSupplyChainProtection as dx,
-  runPackageFirewallAction as dy,
-  parseInterceptProofSnapshot as dz,
+  Surface as d$,
+  HiMiniHome as d0,
+  appSetupTarget as d1,
+  guardActionPresentation as d2,
+  DEFAULT_FILTER_STATE as d3,
+  filterEvidence as d4,
+  sortEvidence as d5,
+  computeMetrics as d6,
+  CommandActivityWorkspace as d7,
+  EvidenceFilterBar as d8,
+  EvidenceInsightStrip as d9,
+  parseInterceptProofSnapshot as dA,
+  activatePackageFirewallRuntime as dB,
+  EntitlementNotice as dC,
+  chooseSupplyChainAuditFolder as dD,
+  fetchReceipts as dE,
+  lazyWorkspace as dF,
+  __vitePreload as dG,
+  scopeLabel as dH,
+  HiMiniCloudArrowUp as dI,
+  HiMiniCodeBracket as dJ,
+  HiMiniClipboardDocument as dK,
+  HiMiniUsers as dL,
+  HiMiniFolder as dM,
+  HiMiniIdentification as dN,
+  StyledSelect as dO,
+  policyActionLabel as dP,
+  createCloudExceptionRequest as dQ,
+  HiMiniPuzzlePiece as dR,
+  fetchCloudExceptions as dS,
+  fetchCloudExceptionRequests as dT,
+  downloadBlob as dU,
+  PaginationControls as dV,
+  PolicyStatField as dW,
+  HiMiniArrowDownTray as dX,
+  HiMiniInbox as dY,
+  HiMiniQueueList as dZ,
+  subscribeDashboardLocation as d_,
+  EvidenceActionList as da,
+  EvidenceActionDetail as db,
+  policyIdentityKey as dc,
+  clearLabelForScope as dd,
+  HiMiniChartBar as de,
+  HiMiniCheckBadge as df,
+  isSupplyChainAuditIncomplete as dg,
+  isSupplyChainAuditEvidence as dh,
+  readString$1 as di,
+  IconActionButton as dj,
+  HiMiniBeaker as dk,
+  ActivationSummary as dl,
+  ActionResultPanel as dm,
+  HiMiniBugAnt as dn,
+  ConnectFlowCard as dp,
+  ApprovalProofInline as dq,
+  HiMiniCloudArrowDown as dr,
+  fetchPackageFirewallStatus as ds,
+  runPackageAudit as dt,
+  resolveSupplyChainAuditFailure as du,
+  runPackageSync as dv,
+  startPackageFirewallConnect as dw,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as dx,
+  repairSupplyChainProtection as dy,
+  runPackageFirewallAction as dz,
   HiMiniCheck as e,
-  HiMiniMinus as e0,
-  HiMiniWrench as e1,
-  HiMiniArrowLongRight as e2,
-  HiMiniArrowUpCircle as e3,
-  fetchReleaseFeedApi as e4,
-  fetchMcpPolicyRequest as e5,
-  resolveMcpPolicyRequest as e6,
-  HiMiniDocumentPlus as e7,
-  HiMiniDocumentMagnifyingGlass as e8,
-  fetchSupplyChainBundle as e9,
-  isSupplyChainScannerEvidence as ea,
-  isBlockedGuardAction as eb,
-  HiMiniShieldExclamation as ec,
-  HiMiniComputerDesktop as ed,
-  HiMiniChevronLeft as ee,
-  HiMiniArrowDown as ef,
-  HiMiniArrowUp as eg,
-  runAuditRemediation as eh,
-  HiMiniSignal as ei,
+  HiMiniEllipsisHorizontal as e0,
+  HiMiniMinus as e1,
+  HiMiniWrench as e2,
+  HiMiniArrowLongRight as e3,
+  HiMiniArrowUpCircle as e4,
+  fetchReleaseFeedApi as e5,
+  fetchMcpPolicyRequest as e6,
+  resolveMcpPolicyRequest as e7,
+  HiMiniDocumentPlus as e8,
+  HiMiniDocumentMagnifyingGlass as e9,
+  fetchSupplyChainBundle as ea,
+  isSupplyChainScannerEvidence as eb,
+  isBlockedGuardAction as ec,
+  HiMiniShieldExclamation as ed,
+  HiMiniComputerDesktop as ee,
+  HiMiniChevronLeft as ef,
+  HiMiniArrowDown as eg,
+  HiMiniArrowUp as eh,
+  runAuditRemediation as ei,
+  HiMiniSignal as ej,
   formatRelativeTime as f,
   HiMiniNoSymbol as g,
   harnessDisplayName as h,

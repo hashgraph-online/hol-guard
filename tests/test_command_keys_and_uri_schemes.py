@@ -8,10 +8,7 @@ Verifies:
 import pytest
 
 from codex_plugin_scanner.guard.cli._commands_shared import _hook_command_text
-from codex_plugin_scanner.guard.cli.commands_support_codex_commands import (
-    _codex_command_is_read_only_source_inspection,
-    _codex_post_tool_command_texts,
-)
+from codex_plugin_scanner.guard.cli.commands_support_codex_commands import _codex_command_is_read_only_source_inspection
 from codex_plugin_scanner.guard.runtime.actions import command_text_from_tool_payload, normalize_harness_payload
 
 
@@ -226,18 +223,6 @@ def test_pi_grep_action_command_renders_tool_invocation():
     envelope = normalize_harness_payload("pi", "PostToolUse", payload, workspace=".", home_dir="/home/user")
 
     assert envelope.command == "grep 'SupplyChainContextRow|context.*agent|context.*row' context"
-
-
-def test_pi_grep_post_tool_command_text_renders_tool_invocation():
-    payload = {
-        "hook_event_name": "PostToolUse",
-        "tool_name": "grep",
-        "tool_input": {"pattern": "SupplyChainContextRow|context.*agent|context.*row", "path": "context"},
-    }
-
-    assert _codex_post_tool_command_texts(payload) == (
-        "grep 'SupplyChainContextRow|context.*agent|context.*row' context",
-    )
 
 
 def test_hook_command_text_recognizes_query():

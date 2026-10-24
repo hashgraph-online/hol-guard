@@ -109,7 +109,7 @@
   {
    "verdict": "windows-equivalent",
    "note": "Unix is inert by definition; the Windows arm beside it proves the same property by checking that no drive letter has a `\\dev`, and fails closed when any does. Neither arm is a stub.",
-   "file": "rust/crates/guard-command/src/parser_segments.rs",
+   "file": "rust/crates/guard-command/src/parser_segment_shapes.rs",
    "item": "fn stderr_null_sink_is_inert -- cfg! expression",
    "cfg": "unix",
    "body": "750c75b326f4"
@@ -1020,11 +1020,11 @@
   },
   {
    "verdict": "other-platform",
-   "note": "Windows expands `USERPROFILE` in its own arm; elsewhere `None` leaves the home unknown, and every home-relative rule stays unmatched.",
+   "note": "Windows expands `USERPROFILE` in its own arm; elsewhere `None` leaves the home unknown, every home-relative rule stays unmatched, and a connector-setup review defers to the daemon.",
    "file": "rust/crates/guard-runtime/src/hook_direct_review_request.rs",
-   "item": "fn expanded_home(_environment: &BTreeMap<String, String>) -> Option<String>",
+   "item": "pub(super) fn expanded_home(_environment: &BTreeMap<String, String>) -> Option<String>",
    "cfg": "not(any(unix, windows))",
-   "body": "33ada8dda8e2"
+   "body": "de55ba4b1d6f"
   },
   {
    "verdict": "other-platform",

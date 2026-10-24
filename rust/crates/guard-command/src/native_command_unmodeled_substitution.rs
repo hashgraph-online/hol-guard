@@ -76,7 +76,16 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
             continue;
         }
         if character == '$' && chars.get(index + 1) == Some(&'(') {
-            if chars.get(index + 2) == Some(&'(') || redirect_target {
+            // `$(( … ))` is arithmetic: it expands to a number and runs no
+            // program at all. The shell reads the same three characters as a
+            // substitution around a subshell only when the arithmetic does
+            // not close on a `))` of its own, so `$((count + 1))` is a number
+            // and `$((cat id) | sh)` is a pipeline.
+            let arithmetic = match chars.get(index + 2) {
+                Some(&'(') => Some(crate::parser_segments::arithmetic_close(&chars, index)?),
+                _ => None,
+            };
+            if redirect_target {
                 return None;
             }
             // Output glued to the command's first word is part of the program
@@ -107,12 +116,20 @@ pub(super) fn bounded_substitutions(text: &str) -> Option<BoundedSubstitutions> 
             if is_assignment(&word) {
                 return None;
             }
-            let close = closing_parenthesis(&chars, index + 2)?;
-            let inner: String = chars[index + 2..close].iter().collect();
-            programs.extend(inner_programs(&inner)?);
-            programs.insert(program_name(receiver));
-            word.push_str(OUTPUT);
-            out.push_str(OUTPUT);
+            // Arithmetic prints a number and reaches no program of its own,
+            // so it leaves the owner set the rest of the text names.
+            let (close, printed) = match arithmetic {
+                Some(close) => (close, crate::parser_segments::ARITHMETIC_VALUE),
+                None => {
+                    let close = closing_parenthesis(&chars, index + 2)?;
+                    let inner: String = chars[index + 2..close].iter().collect();
+                    programs.extend(inner_programs(&inner)?);
+                    programs.insert(program_name(receiver));
+                    (close, OUTPUT)
+                }
+            };
+            word.push_str(printed);
+            out.push_str(printed);
             index = close + 1;
             continue;
         }

@@ -2,7 +2,11 @@ use super::*;
 #[cfg(unix)]
 #[path = "hook_direct_review_queue_size_tests.rs"]
 mod size_tests;
+#[cfg(unix)]
+use crate::blocked_request_mode::safe_alternative_reason_with_retry;
 use crate::policy_store::policy_store_direct_lane::{DirectLaneBinding, DirectLaneReviewFacts};
+#[cfg(unix)]
+use guard_command::hook_responses::pre_tool;
 
 fn ask_binding() -> DirectLaneBinding {
     let mut binding = super::super::tests::binding();
@@ -34,6 +38,7 @@ fn queued_payload(
         home_dir: "/home/user",
         guard_home: "/home/user/.hol-guard",
         binding,
+        hint: None,
     };
     facts(&context, result.as_object().unwrap()).map(|facts| facts.ask)
 }
@@ -101,6 +106,7 @@ fn only_a_claude_code_session_queues_with_its_notice() {
             home_dir: "/home/user",
             guard_home: "/home/user/.hol-guard",
             binding: &binding,
+            hint: None,
         };
         store_method(&context, result, Some("rb-1"))
             .map(|(method, extra)| (method, extra.get("claude_notice").cloned()))
@@ -236,6 +242,7 @@ fn the_queue_write_keeps_a_pending_request_for_the_same_action() {
         home_dir: "/home/user",
         guard_home: &guard_home,
         binding: &binding,
+        hint: None,
     };
     let vectors: Value = serde_json::from_str(WRITE_VECTORS).unwrap();
     let request = vectors["scenarios"][0]["request"].clone();
@@ -327,6 +334,7 @@ fn a_silent_review_blocks_after_queueing_its_request_and_event() {
             home_dir: "/home/user",
             guard_home: &guard_home,
             binding: &binding,
+            hint: None,
         };
         let vectors: Value = serde_json::from_str(SILENT_VECTORS).unwrap();
         let request = vectors["scenarios"][1]["request"].clone();
@@ -341,10 +349,15 @@ fn a_silent_review_blocks_after_queueing_its_request_and_event() {
             result.as_object().unwrap(),
             "default",
             request,
-            true,
-            false,
+            Flags {
+                ask: false,
+                retry_reuses_approval: true,
+                exact_action_allowable: false,
+            },
+            None,
         )
-        .unwrap();
+        .unwrap()
+        .0;
         let reason = reason.replace(
             "<wait>",
             &crate::blocked_request_mode::approval_wait_hint_for_home(
@@ -400,6 +413,7 @@ fn a_silent_review_links_its_row_only_when_approval_can_unblock_it() {
             home_dir: "/home/user",
             guard_home: &guard_home,
             binding: &binding,
+            hint: None,
         };
         let vectors: Value = serde_json::from_str(SILENT_VECTORS).unwrap();
         let request = vectors["scenarios"][1]["request"].clone();
@@ -414,10 +428,15 @@ fn a_silent_review_links_its_row_only_when_approval_can_unblock_it() {
             result.as_object().unwrap(),
             "default",
             request,
-            false,
-            exact_action_allowable,
+            Flags {
+                ask: false,
+                retry_reuses_approval: false,
+                exact_action_allowable,
+            },
+            None,
         )
-        .unwrap();
+        .unwrap()
+        .0;
         let safe = safe_alternative_reason_with_retry(
             "Deletes files.",
             Some("native_review"),
@@ -476,6 +495,7 @@ fn a_silent_review_hands_every_harness_a_resume_only_when_its_retry_is_bound() {
             home_dir: "/home/user",
             guard_home: &guard_home,
             binding: &binding,
+            hint: None,
         };
         let vectors: Value = serde_json::from_str(SILENT_VECTORS).unwrap();
         let request = vectors["scenarios"][1]["request"].clone();
@@ -490,10 +510,15 @@ fn a_silent_review_hands_every_harness_a_resume_only_when_its_retry_is_bound() {
             result.as_object().unwrap(),
             "default",
             request,
-            retry_reuses_approval,
-            exact_action_allowable,
+            Flags {
+                ask: false,
+                retry_reuses_approval,
+                exact_action_allowable,
+            },
+            None,
         )
-        .unwrap();
+        .unwrap()
+        .0;
         let expected =
             resumes.then(|| json!({"request_id": "r-new", "poll_path": "/v1/requests/r-new"}));
         assert_eq!(response.get("approval_resume").cloned(), expected, "{tag}");
@@ -543,10 +568,13 @@ fn ask_without_any_reusable_identity_records_without_starting_a_wait() {
             home_dir: fixture["home_dir"].as_str().unwrap(),
             guard_home: &guard_home,
             binding: &binding,
+            hint: None,
         };
+        // A non-recognition review would look its connector up first; this
+        // one is an ordinary per-action review.
         let result = json!({"decision": "deny", "policy_action": "review", "minimum_action": "review",
-                           "reason": "Review this command.", "reason_code": "native_command_review_required"});
-        let response = answer(
+                           "reason": "Review this command.", "reason_code": "native_review"});
+        let (response, notice) = answer(
             &context,
             result.as_object().unwrap(),
             None,
@@ -554,6 +582,7 @@ fn ask_without_any_reusable_identity_records_without_starting_a_wait() {
             &Err("mutable_command"),
         )
         .expect("an unbound review is recorded without a pause");
+        assert!(notice.is_none());
         assert_eq!(response["prompted"], false);
         assert_eq!(response["policy_action"], "block");
         assert!(response["reason"]

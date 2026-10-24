@@ -6,6 +6,7 @@ import os
 import shutil
 import stat
 import subprocess
+from dataclasses import replace
 
 import pytest
 
@@ -17,7 +18,9 @@ from ci.gauntlet.proofs import required_checks
 from ci.gauntlet.script_cases import report_output, stage_script_cases
 from tests.test_guard_gauntlet_workflow_boundaries import _case, _through_live_log_redaction
 
-CATALOG = {scenario.id: scenario for scenario in load_catalog()}
+# Declarations dropped: these fixtures assert what a command's output may contain, not which
+# Guard decision the run drove, and they carry no Guard observations to meet a declaration with.
+CATALOG = {scenario.id: replace(scenario, decision_paths=()) for scenario in load_catalog()}
 STATUS = "?? .env\n?? aliases/\n?? deletion-target/\n"
 SUBDIRECTORY_STATUS = "?? ../.env\n?? ../aliases/\n?? ../deletion-target/\n"
 DISCOVERY = "\n".join(SOURCE_FILES) + "\n"

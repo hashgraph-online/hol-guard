@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .approval_retry import ReviewApprover, pinned_retry_outcome, retry_assessment, write_review_config
+from .approval_retry_action import input_path, pinned_file_tool
 from .approval_retry_bash import BASH_LIFECYCLE_ORACLE, stage
 from .approval_retry_bash import assessment as bash_assessment
 from .approval_retry_bash import evidence as bash_evidence
@@ -36,7 +37,9 @@ class OmpReview:
         self.guard_home = fixture.root / "guard-home"
         self.known_ids: set[str] = set()
         stage(fixture.workspace, scenario.id)
-        case["review_policy"] = write_review_config(self.guard_home)
+        # The floor has to reach the case's own action: a file-tool call is not a
+        # subprocess, so the shell floor would leave its read unreviewed.
+        case["review_policy"] = write_review_config(self.guard_home, file_tool="bash" not in scenario.required_tools)
 
     def approver(self, worker: Any) -> ReviewApprover:
         self.known_ids = {
@@ -87,6 +90,9 @@ def assess(
             "event": row["event"],
             "tool": row["tool"],
             "command": row["input"].get("command"),
+            # A file-tool call carries no command text; its action is the tool and the
+            # file it names, so the path travels with the decision as it does elsewhere.
+            "path": input_path(row["input"]),
             "decision": row["decision"],
             "reason_code": row["reason_code"],
             "tool_call_id": row["tool_call_id"],
@@ -117,6 +123,10 @@ def assess(
     if scenario.oracle == BASH_LIFECYCLE_ORACLE:
         return bash_assessment(scenario.id, case, decisions)
     outcome = retry_assessment(case, decisions)
-    if outcome[0] == "pass" and (pinned := pinned_retry_outcome(scenario.commands, decisions)):
+    if outcome[0] == "pass" and (
+        pinned := pinned_retry_outcome(
+            scenario.commands, decisions, scenario.path, pinned_file_tool(scenario.required_tools)
+        )
+    ):
         return pinned
     return outcome

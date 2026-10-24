@@ -2,7 +2,8 @@
 """Serve a seeded HOL Guard daemon for the dashboard integration suite.
 
 The suite drives the real daemon, its HTTP API and the dashboard bundle it
-serves. Nothing between the browser and Guard's store is mocked. Each run starts
+serves. Nothing between the browser and Guard's store is mocked. Only the
+external discovery service uses an in-process transport fixture. Each run starts
 from an empty, private Guard home that the seed modules in
 ``dashboard_integration_seeds`` fill through Guard's own store APIs.
 
@@ -37,10 +38,12 @@ if "DASHBOARD_E2E_ROOT" in os.environ:
     for _variable in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "CODEX_HOME"):
         os.environ.pop(_variable, None)
 
+from dashboard_integration_discovery import DiscoveryFixtureOpener, require_discovery_projection
 from dashboard_integration_seeds import SeedContext, run_seeds
 from installed_extension_authority_fixture import describe_authority, read_authority
 
 from codex_plugin_scanner.guard.approval_gate import public_config, update_settings
+from codex_plugin_scanner.guard.daemon import extension_discovery_read
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
@@ -165,6 +168,11 @@ def main() -> None:
     seeded = run_seeds(SeedContext(store=store, guard_home=guard_home, workspace=workspace))
     _prepare_authority(store, guard_home, password)
 
+    # Replace only external discovery I/O. The daemon's authentication, store
+    # preference, bounded reads and native projection still execute normally.
+    discovery_opener = DiscoveryFixtureOpener(user_agent=extension_discovery_read.DISCOVERY_USER_AGENT)
+    extension_discovery_read._build_opener = lambda: discovery_opener  # pyright: ignore[reportPrivateUsage]
+
     daemon = GuardDaemonServer(
         store,
         host="127.0.0.1",
@@ -179,6 +187,9 @@ def main() -> None:
         auth_token = daemon._server.auth_token  # pyright: ignore[reportPrivateUsage]
         origin = f"http://127.0.0.1:{port}"
         _wait_for_catalog(origin, auth_token, guard_home)
+        require_discovery_projection(origin, auth_token)
+        if discovery_opener.request_count == 0:
+            raise RuntimeError("integration discovery preflight did not reach the external fixture")
         state = {
             "origin": origin,
             "session": build_local_dashboard_session_token(auth_token=auth_token, surface="dashboard"),

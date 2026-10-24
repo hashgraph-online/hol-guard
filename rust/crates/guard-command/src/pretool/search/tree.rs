@@ -304,6 +304,13 @@ pub(in crate::pretool) fn safe_unmatched_glob_operand(
     inert_bracket_class(value, context) && safe_literal_bracket_tree(value, context, recursive)
 }
 
+/// No shell option can make `value` match anything, so a program handed the
+/// word receives only the literal text or, under `nullglob`, nothing at all.
+pub(in crate::pretool) fn glob_matches_nothing(value: &str, context: ReadContext<'_>) -> bool {
+    glob_expand::expand_glob_matches_strict(value, context)
+        .is_some_and(|matches| matches.is_empty())
+}
+
 /// Content-search glob operand: every match is walked, and matches inside an
 /// Oh My Pi agent-state tree are refused as for a literal search root.
 pub(in crate::pretool) fn safe_glob_search_operand(value: &str, context: ReadContext<'_>) -> bool {

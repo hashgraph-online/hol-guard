@@ -204,6 +204,12 @@ fn argv_must_be_present_and_exact() {
 fn targets_are_static_relative_paths() {
     for target in [
         "/etc/passwd",
+        "\\etc\\passwd",
+        "\\\\server\\share\\main.py",
+        "//server/share/main.py",
+        "C:main.py",
+        "C:\\Windows\\win.ini",
+        "c:/Windows/win.ini",
         "$HOME/main.py",
         "`id`",
         "a<b",
@@ -221,6 +227,15 @@ fn targets_are_static_relative_paths() {
             "target {target}"
         );
     }
+}
+
+#[cfg(windows)]
+#[test]
+fn a_stream_name_is_not_a_relative_path_on_windows() {
+    assert_eq!(
+        error(&["head", "-5", "main.py:hidden"]),
+        "target must be a static relative path"
+    );
 }
 
 #[test]

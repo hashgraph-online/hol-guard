@@ -1,0 +1,5130 @@
+{
+  "buckets": [
+    {
+      "activity_id": "activity-1",
+      "bucket": 3131,
+      "cohort": "baseline"
+    },
+    {
+      "activity_id": "activity-1",
+      "bucket": 9297,
+      "cohort": "cdx-060-verified-reads"
+    },
+    {
+      "activity_id": "activity-1",
+      "bucket": 6385,
+      "cohort": "cdx-061-contained-checks"
+    },
+    {
+      "activity_id": "activity-1",
+      "bucket": 2735,
+      "cohort": "cdx-062-contained-writes"
+    },
+    {
+      "activity_id": "activity-1",
+      "bucket": 672,
+      "cohort": "cdx-063-task-capabilities"
+    },
+    {
+      "activity_id": "activity-1",
+      "bucket": 7577,
+      "cohort": "cdx-064-remote-mutation-floors"
+    },
+    {
+      "activity_id": "activity-1",
+      "bucket": 6972,
+      "cohort": "cdx-065-package-provenance-floors"
+    },
+    {
+      "activity_id": "activity-1",
+      "bucket": 6074,
+      "cohort": "cdx-066-critical-block-floors"
+    },
+    {
+      "activity_id": "A",
+      "bucket": 2262,
+      "cohort": "baseline"
+    },
+    {
+      "activity_id": "A",
+      "bucket": 1319,
+      "cohort": "cdx-060-verified-reads"
+    },
+    {
+      "activity_id": "A",
+      "bucket": 1510,
+      "cohort": "cdx-061-contained-checks"
+    },
+    {
+      "activity_id": "A",
+      "bucket": 6638,
+      "cohort": "cdx-062-contained-writes"
+    },
+    {
+      "activity_id": "A",
+      "bucket": 8154,
+      "cohort": "cdx-063-task-capabilities"
+    },
+    {
+      "activity_id": "A",
+      "bucket": 2535,
+      "cohort": "cdx-064-remote-mutation-floors"
+    },
+    {
+      "activity_id": "A",
+      "bucket": 121,
+      "cohort": "cdx-065-package-provenance-floors"
+    },
+    {
+      "activity_id": "A",
+      "bucket": 2614,
+      "cohort": "cdx-066-critical-block-floors"
+    },
+    {
+      "activity_id": "0",
+      "bucket": 2980,
+      "cohort": "baseline"
+    },
+    {
+      "activity_id": "0",
+      "bucket": 4468,
+      "cohort": "cdx-060-verified-reads"
+    },
+    {
+      "activity_id": "0",
+      "bucket": 1030,
+      "cohort": "cdx-061-contained-checks"
+    },
+    {
+      "activity_id": "0",
+      "bucket": 1001,
+      "cohort": "cdx-062-contained-writes"
+    },
+    {
+      "activity_id": "0",
+      "bucket": 8945,
+      "cohort": "cdx-063-task-capabilities"
+    },
+    {
+      "activity_id": "0",
+      "bucket": 3006,
+      "cohort": "cdx-064-remote-mutation-floors"
+    },
+    {
+      "activity_id": "0",
+      "bucket": 2931,
+      "cohort": "cdx-065-package-provenance-floors"
+    },
+    {
+      "activity_id": "0",
+      "bucket": 5919,
+      "cohort": "cdx-066-critical-block-floors"
+    },
+    {
+      "activity_id": "act.id_1:2-3",
+      "bucket": 8965,
+      "cohort": "baseline"
+    },
+    {
+      "activity_id": "act.id_1:2-3",
+      "bucket": 8669,
+      "cohort": "cdx-060-verified-reads"
+    },
+    {
+      "activity_id": "act.id_1:2-3",
+      "bucket": 6584,
+      "cohort": "cdx-061-contained-checks"
+    },
+    {
+      "activity_id": "act.id_1:2-3",
+      "bucket": 7645,
+      "cohort": "cdx-062-contained-writes"
+    },
+    {
+      "activity_id": "act.id_1:2-3",
+      "bucket": 3158,
+      "cohort": "cdx-063-task-capabilities"
+    },
+    {
+      "activity_id": "act.id_1:2-3",
+      "bucket": 2144,
+      "cohort": "cdx-064-remote-mutation-floors"
+    },
+    {
+      "activity_id": "act.id_1:2-3",
+      "bucket": 3458,
+      "cohort": "cdx-065-package-provenance-floors"
+    },
+    {
+      "activity_id": "act.id_1:2-3",
+      "bucket": 4408,
+      "cohort": "cdx-066-critical-block-floors"
+    },
+    {
+      "activity_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bucket": 6660,
+      "cohort": "baseline"
+    },
+    {
+      "activity_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bucket": 3430,
+      "cohort": "cdx-060-verified-reads"
+    },
+    {
+      "activity_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bucket": 6460,
+      "cohort": "cdx-061-contained-checks"
+    },
+    {
+      "activity_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bucket": 2769,
+      "cohort": "cdx-062-contained-writes"
+    },
+    {
+      "activity_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bucket": 5165,
+      "cohort": "cdx-063-task-capabilities"
+    },
+    {
+      "activity_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bucket": 6285,
+      "cohort": "cdx-064-remote-mutation-floors"
+    },
+    {
+      "activity_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bucket": 8282,
+      "cohort": "cdx-065-package-provenance-floors"
+    },
+    {
+      "activity_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bucket": 6592,
+      "cohort": "cdx-066-critical-block-floors"
+    },
+    {
+      "activity_id": "deadbeefdeadbeefdeadbeefdeadbeef",
+      "bucket": 7821,
+      "cohort": "baseline"
+    },
+    {
+      "activity_id": "deadbeefdeadbeefdeadbeefdeadbeef",
+      "bucket": 3526,
+      "cohort": "cdx-060-verified-reads"
+    },
+    {
+      "activity_id": "deadbeefdeadbeefdeadbeefdeadbeef",
+      "bucket": 4425,
+      "cohort": "cdx-061-contained-checks"
+    },
+    {
+      "activity_id": "deadbeefdeadbeefdeadbeefdeadbeef",
+      "bucket": 8524,
+      "cohort": "cdx-062-contained-writes"
+    },
+    {
+      "activity_id": "deadbeefdeadbeefdeadbeefdeadbeef",
+      "bucket": 6971,
+      "cohort": "cdx-063-task-capabilities"
+    },
+    {
+      "activity_id": "deadbeefdeadbeefdeadbeefdeadbeef",
+      "bucket": 2984,
+      "cohort": "cdx-064-remote-mutation-floors"
+    },
+    {
+      "activity_id": "deadbeefdeadbeefdeadbeefdeadbeef",
+      "bucket": 1714,
+      "cohort": "cdx-065-package-provenance-floors"
+    },
+    {
+      "activity_id": "deadbeefdeadbeefdeadbeefdeadbeef",
+      "bucket": 6307,
+      "cohort": "cdx-066-critical-block-floors"
+    }
+  ],
+  "comparisons": [
+    {
+      "comparison": "unchanged",
+      "current": "allow",
+      "proposed": "allow"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "allow",
+      "proposed": "warn"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "allow",
+      "proposed": "review"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "allow",
+      "proposed": "require-reapproval"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "allow",
+      "proposed": "sandbox-required"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "allow",
+      "proposed": "block"
+    },
+    {
+      "comparison": "lowered",
+      "current": "warn",
+      "proposed": "allow"
+    },
+    {
+      "comparison": "unchanged",
+      "current": "warn",
+      "proposed": "warn"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "warn",
+      "proposed": "review"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "warn",
+      "proposed": "require-reapproval"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "warn",
+      "proposed": "sandbox-required"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "warn",
+      "proposed": "block"
+    },
+    {
+      "comparison": "lowered",
+      "current": "review",
+      "proposed": "allow"
+    },
+    {
+      "comparison": "lowered",
+      "current": "review",
+      "proposed": "warn"
+    },
+    {
+      "comparison": "unchanged",
+      "current": "review",
+      "proposed": "review"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "review",
+      "proposed": "require-reapproval"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "review",
+      "proposed": "sandbox-required"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "review",
+      "proposed": "block"
+    },
+    {
+      "comparison": "lowered",
+      "current": "require-reapproval",
+      "proposed": "allow"
+    },
+    {
+      "comparison": "lowered",
+      "current": "require-reapproval",
+      "proposed": "warn"
+    },
+    {
+      "comparison": "lowered",
+      "current": "require-reapproval",
+      "proposed": "review"
+    },
+    {
+      "comparison": "unchanged",
+      "current": "require-reapproval",
+      "proposed": "require-reapproval"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "require-reapproval",
+      "proposed": "sandbox-required"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "require-reapproval",
+      "proposed": "block"
+    },
+    {
+      "comparison": "lowered",
+      "current": "sandbox-required",
+      "proposed": "allow"
+    },
+    {
+      "comparison": "lowered",
+      "current": "sandbox-required",
+      "proposed": "warn"
+    },
+    {
+      "comparison": "lowered",
+      "current": "sandbox-required",
+      "proposed": "review"
+    },
+    {
+      "comparison": "lowered",
+      "current": "sandbox-required",
+      "proposed": "require-reapproval"
+    },
+    {
+      "comparison": "unchanged",
+      "current": "sandbox-required",
+      "proposed": "sandbox-required"
+    },
+    {
+      "comparison": "strengthened",
+      "current": "sandbox-required",
+      "proposed": "block"
+    },
+    {
+      "comparison": "lowered",
+      "current": "block",
+      "proposed": "allow"
+    },
+    {
+      "comparison": "lowered",
+      "current": "block",
+      "proposed": "warn"
+    },
+    {
+      "comparison": "lowered",
+      "current": "block",
+      "proposed": "review"
+    },
+    {
+      "comparison": "lowered",
+      "current": "block",
+      "proposed": "require-reapproval"
+    },
+    {
+      "comparison": "lowered",
+      "current": "block",
+      "proposed": "sandbox-required"
+    },
+    {
+      "comparison": "unchanged",
+      "current": "block",
+      "proposed": "block"
+    }
+  ],
+  "controls": [
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {},
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": false,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": false,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "true"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": false,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": ""
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "1"
+      },
+      "generation": 1,
+      "kill_switch": true,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "yes"
+      },
+      "generation": 1,
+      "kill_switch": true,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": ""
+      },
+      "generation": 1,
+      "kill_switch": true,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": ""
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [
+        "baseline"
+      ],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,cdx-060-verified-reads"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [
+        "cdx-066-critical-block-floors"
+      ],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-066-critical-block-floors"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,nonsense"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "nonsense"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "BASELINE"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 0,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "1"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 1,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3131"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 3131,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3132"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 3132,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10001"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 0,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "-1"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 0,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "+500"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 500,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": " 500 "
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 500,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "5_000"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 5000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "500.0"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 0,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "many"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 0,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": ""
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 0,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0x10"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 0,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-060-verified-reads",
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1",
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "4000"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 4000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": false,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 10000,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "５００"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 0,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "٥٠٠"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 0,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "٥00"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 0,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "\u001f500"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 0,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": " 500 "
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 500,
+      "schema_version": "guard.command-shadow-control.v1"
+    },
+    {
+      "disabled_cohorts": [],
+      "enabled": true,
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "1_000"
+      },
+      "generation": 1,
+      "kill_switch": false,
+      "release_cohorts": [
+        "baseline"
+      ],
+      "sample_basis_points": 1000,
+      "schema_version": "guard.command-shadow-control.v1"
+    }
+  ],
+  "dispositions": [
+    {
+      "action": "allow",
+      "disposition": "silent-verified",
+      "matches": true
+    },
+    {
+      "action": "allow",
+      "disposition": "silent-contained",
+      "matches": true
+    },
+    {
+      "action": "allow",
+      "disposition": "workflow-authorized",
+      "matches": true
+    },
+    {
+      "action": "allow",
+      "disposition": "warn",
+      "matches": false
+    },
+    {
+      "action": "allow",
+      "disposition": "review",
+      "matches": false
+    },
+    {
+      "action": "allow",
+      "disposition": "require-reapproval",
+      "matches": false
+    },
+    {
+      "action": "allow",
+      "disposition": "sandbox-required",
+      "matches": false
+    },
+    {
+      "action": "allow",
+      "disposition": "block",
+      "matches": false
+    },
+    {
+      "action": "warn",
+      "disposition": "silent-verified",
+      "matches": false
+    },
+    {
+      "action": "warn",
+      "disposition": "silent-contained",
+      "matches": false
+    },
+    {
+      "action": "warn",
+      "disposition": "workflow-authorized",
+      "matches": false
+    },
+    {
+      "action": "warn",
+      "disposition": "warn",
+      "matches": true
+    },
+    {
+      "action": "warn",
+      "disposition": "review",
+      "matches": false
+    },
+    {
+      "action": "warn",
+      "disposition": "require-reapproval",
+      "matches": false
+    },
+    {
+      "action": "warn",
+      "disposition": "sandbox-required",
+      "matches": false
+    },
+    {
+      "action": "warn",
+      "disposition": "block",
+      "matches": false
+    },
+    {
+      "action": "review",
+      "disposition": "silent-verified",
+      "matches": false
+    },
+    {
+      "action": "review",
+      "disposition": "silent-contained",
+      "matches": false
+    },
+    {
+      "action": "review",
+      "disposition": "workflow-authorized",
+      "matches": false
+    },
+    {
+      "action": "review",
+      "disposition": "warn",
+      "matches": false
+    },
+    {
+      "action": "review",
+      "disposition": "review",
+      "matches": true
+    },
+    {
+      "action": "review",
+      "disposition": "require-reapproval",
+      "matches": false
+    },
+    {
+      "action": "review",
+      "disposition": "sandbox-required",
+      "matches": false
+    },
+    {
+      "action": "review",
+      "disposition": "block",
+      "matches": false
+    },
+    {
+      "action": "require-reapproval",
+      "disposition": "silent-verified",
+      "matches": false
+    },
+    {
+      "action": "require-reapproval",
+      "disposition": "silent-contained",
+      "matches": false
+    },
+    {
+      "action": "require-reapproval",
+      "disposition": "workflow-authorized",
+      "matches": false
+    },
+    {
+      "action": "require-reapproval",
+      "disposition": "warn",
+      "matches": false
+    },
+    {
+      "action": "require-reapproval",
+      "disposition": "review",
+      "matches": false
+    },
+    {
+      "action": "require-reapproval",
+      "disposition": "require-reapproval",
+      "matches": true
+    },
+    {
+      "action": "require-reapproval",
+      "disposition": "sandbox-required",
+      "matches": false
+    },
+    {
+      "action": "require-reapproval",
+      "disposition": "block",
+      "matches": false
+    },
+    {
+      "action": "sandbox-required",
+      "disposition": "silent-verified",
+      "matches": false
+    },
+    {
+      "action": "sandbox-required",
+      "disposition": "silent-contained",
+      "matches": false
+    },
+    {
+      "action": "sandbox-required",
+      "disposition": "workflow-authorized",
+      "matches": false
+    },
+    {
+      "action": "sandbox-required",
+      "disposition": "warn",
+      "matches": false
+    },
+    {
+      "action": "sandbox-required",
+      "disposition": "review",
+      "matches": false
+    },
+    {
+      "action": "sandbox-required",
+      "disposition": "require-reapproval",
+      "matches": false
+    },
+    {
+      "action": "sandbox-required",
+      "disposition": "sandbox-required",
+      "matches": true
+    },
+    {
+      "action": "sandbox-required",
+      "disposition": "block",
+      "matches": false
+    },
+    {
+      "action": "block",
+      "disposition": "silent-verified",
+      "matches": false
+    },
+    {
+      "action": "block",
+      "disposition": "silent-contained",
+      "matches": false
+    },
+    {
+      "action": "block",
+      "disposition": "workflow-authorized",
+      "matches": false
+    },
+    {
+      "action": "block",
+      "disposition": "warn",
+      "matches": false
+    },
+    {
+      "action": "block",
+      "disposition": "review",
+      "matches": false
+    },
+    {
+      "action": "block",
+      "disposition": "require-reapproval",
+      "matches": false
+    },
+    {
+      "action": "block",
+      "disposition": "sandbox-required",
+      "matches": false
+    },
+    {
+      "action": "block",
+      "disposition": "block",
+      "matches": true
+    }
+  ],
+  "rejected_activity_ids": [
+    {
+      "activity_id": "",
+      "error": "activity_id must be an opaque identifier"
+    },
+    {
+      "activity_id": "-leading-dash",
+      "error": "activity_id must be an opaque identifier"
+    },
+    {
+      "activity_id": ".leading-dot",
+      "error": "activity_id must be an opaque identifier"
+    },
+    {
+      "activity_id": "has space",
+      "error": "activity_id must be an opaque identifier"
+    },
+    {
+      "activity_id": "has/slash",
+      "error": "activity_id must be an opaque identifier"
+    },
+    {
+      "activity_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "error": "activity_id must be an opaque identifier"
+    },
+    {
+      "activity_id": "café",
+      "error": "activity_id must be an opaque identifier"
+    },
+    {
+      "activity_id": "new\nline",
+      "error": "activity_id must be an opaque identifier"
+    }
+  ],
+  "schema": "guard-command-shadow-parity.v1",
+  "selections": [
+    {
+      "activity_id": "activity-1",
+      "env": {},
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {},
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {},
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {},
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {},
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {},
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {},
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {},
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {},
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {},
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "true"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "true"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "true"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "true"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "true"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "true"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "true"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "true"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "true"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "true"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": ""
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": ""
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": ""
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": ""
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": ""
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": ""
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "1"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "1"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "1"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "1"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "1"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "1"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "yes"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "yes"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "yes"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "yes"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "yes"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "yes"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "yes"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "yes"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "yes"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "yes"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": ""
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": ""
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": ""
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": ""
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": ""
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": ""
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": ""
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": ""
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": ""
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": ""
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": ""
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": ""
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,cdx-060-verified-reads"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,cdx-060-verified-reads"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,cdx-060-verified-reads"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,cdx-060-verified-reads"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,cdx-060-verified-reads"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,cdx-060-verified-reads"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,cdx-060-verified-reads"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,cdx-060-verified-reads"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,cdx-060-verified-reads"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,cdx-060-verified-reads"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-066-critical-block-floors"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-066-critical-block-floors"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-066-critical-block-floors"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-066-critical-block-floors"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-066-critical-block-floors"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-066-critical-block-floors"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-066-critical-block-floors"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-066-critical-block-floors"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-066-critical-block-floors"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-066-critical-block-floors"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,nonsense"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,nonsense"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,nonsense"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,nonsense"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,nonsense"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,nonsense"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,nonsense"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,nonsense"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,nonsense"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,nonsense"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "nonsense"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "nonsense"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "nonsense"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "nonsense"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "nonsense"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "nonsense"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "nonsense"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "nonsense"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "nonsense"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "nonsense"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "BASELINE"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "BASELINE"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "BASELINE"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "BASELINE"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "BASELINE"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "BASELINE"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "BASELINE"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "BASELINE"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "BASELINE"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "BASELINE"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "baseline,"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "1"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "1"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "1"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "1"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "1"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "1"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3131"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3131"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3131"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3131"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3131"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3131"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3131"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3131"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3131"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3131"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3132"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3132"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3132"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3132"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3132"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3132"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3132"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3132"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3132"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "3132"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10001"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10001"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10001"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10001"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10001"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10001"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10001"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10001"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10001"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10001"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "-1"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "-1"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "-1"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "-1"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "-1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "-1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "-1"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "-1"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "-1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "-1"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "+500"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "+500"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "+500"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "+500"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "+500"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "+500"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "+500"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "+500"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "+500"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "+500"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": " 500 "
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": " 500 "
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": " 500 "
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": " 500 "
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": " 500 "
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": " 500 "
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": " 500 "
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": " 500 "
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": " 500 "
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": " 500 "
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "5_000"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "5_000"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "5_000"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "5_000"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "5_000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "5_000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "5_000"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "5_000"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "5_000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "5_000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "500.0"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "500.0"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "500.0"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "500.0"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "500.0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "500.0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "500.0"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "500.0"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "500.0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "500.0"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "many"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "many"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "many"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "many"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "many"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "many"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "many"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "many"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "many"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "many"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": ""
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": ""
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": ""
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": ""
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": ""
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": ""
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": ""
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0x10"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0x10"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0x10"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0x10"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0x10"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0x10"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0x10"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0x10"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0x10"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "0x10"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-060-verified-reads",
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1",
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "4000"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-060-verified-reads",
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1",
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "4000"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-060-verified-reads",
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1",
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "4000"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-060-verified-reads",
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1",
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "4000"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-060-verified-reads",
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1",
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "4000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-060-verified-reads",
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1",
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "4000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-060-verified-reads",
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1",
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "4000"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-060-verified-reads",
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1",
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "4000"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-060-verified-reads",
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1",
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "4000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_DISABLED_COHORTS": "cdx-060-verified-reads",
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "1",
+        "HOL_GUARD_DECISION_SHADOW_KILL_SWITCH": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "4000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": [
+        "baseline"
+      ]
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "baseline"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "cdx-060-verified-reads"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "activity-1",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    },
+    {
+      "activity_id": "A",
+      "env": {
+        "HOL_GUARD_DECISION_SHADOW_ENABLED": "0",
+        "HOL_GUARD_DECISION_SHADOW_SAMPLE_BASIS_POINTS": "10000"
+      },
+      "proposal_cohorts": [
+        "baseline",
+        "cdx-060-verified-reads",
+        "cdx-061-contained-checks",
+        "cdx-062-contained-writes",
+        "cdx-063-task-capabilities",
+        "cdx-064-remote-mutation-floors",
+        "cdx-065-package-provenance-floors",
+        "cdx-066-critical-block-floors"
+      ],
+      "selected": []
+    }
+  ]
+}

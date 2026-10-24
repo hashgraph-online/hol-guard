@@ -144,6 +144,8 @@ mod codex_hook_bridge_transport;
 mod codex_hook_identity;
 mod codex_hook_response;
 mod codex_hooks;
+#[cfg(test)]
+mod codex_hooks_parity_tests;
 mod codex_identity;
 #[cfg(all(test, unix))]
 mod codex_post_tool_output_vectors_tests;
@@ -270,6 +272,7 @@ mod extension_control_op;
 mod extension_control_prepared_op;
 mod extension_control_preview_op;
 mod extension_control_proof;
+mod extension_coverage_hint;
 #[path = "adapters/detection/gemini_detect.rs"]
 mod gemini_detect;
 mod git_execution_safety_binary;
@@ -479,6 +482,7 @@ mod pack_lifecycle;
 mod pack_preparation;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
+mod codex_hook_identity_op;
 mod command_pack_record_op;
 #[allow(dead_code)]
 mod hook_evidence_activity;
@@ -500,11 +504,15 @@ mod hook_policy_config;
 mod hook_process_spawn;
 mod hook_render_op;
 mod inventory_item_classification_op;
+mod inventory_scan_findings_op;
+mod inventory_scan_targets_op;
+mod inventory_snapshot_digest_op;
 mod inventory_source_evidence_op;
 mod inventory_url_redaction_op;
 #[path = "adapters/detection/kimi_detect.rs"]
 mod kimi_detect;
 mod local_cli_grant_op;
+mod local_cli_help;
 mod local_cli_hook_contained;
 mod local_cli_hook_op;
 mod local_cli_identify;
@@ -621,6 +629,7 @@ mod package_authority_op;
 mod package_context_build_op;
 mod package_evaluation_compose_op;
 mod package_evaluation_view_op;
+mod package_intent_extract_op;
 mod package_policy_resolve_op;
 mod package_posture_op;
 mod package_protect_finalize_op;
@@ -686,6 +695,7 @@ mod resident_update_lock;
 mod restricted_linux_launch;
 mod restricted_process_ceiling;
 mod restricted_pytest_op;
+mod retry_lineage_capture_op;
 mod reviewed_invocation_bindings_op;
 mod rich_command_model_op;
 mod runner_authority_detector;

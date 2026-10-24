@@ -37,6 +37,11 @@ pub trait DetectionHost {
     /// working directory.
     fn resolve(&self, path: &Path) -> PathBuf;
 
+    /// Python 3.12's `Path.is_dir` at `path`, read like `resolve`: `false`
+    /// when nothing is there or it is not a directory, and a refusal for any
+    /// other `stat` failure, so an unreadable directory never reads as empty.
+    fn is_dir(&self, path: &Path) -> Result<bool, &'static str>;
+
     /// Marks `path` found, keeping first position among equal paths.
     fn mark_found(&mut self, path: &Path);
 

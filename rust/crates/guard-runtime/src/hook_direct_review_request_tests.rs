@@ -44,6 +44,7 @@ fn input<'a>(vector: &'a Value, environment: &'a BTreeMap<String, String>) -> Re
         approval_center_url: text(vector, "approval_center_url"),
         review_binding: vector["review_binding"].as_str(),
         exact: exact(vector),
+        hint: None,
     }
 }
 

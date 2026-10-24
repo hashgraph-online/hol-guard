@@ -67,6 +67,10 @@ _PROBES_FOR_ABSENCE = frozenset(
         # of the case is that Git prints the path it could not enter.
         "observed-git-18",
         "gauntlet-git-C-missing-checkout-log",
+        # A read of a name that is not in the worktree: the absence is the
+        # whole case, since an absent name under the workspace is what the
+        # missing-read screen admits without a review.
+        "cat-missing-name-inside-the-worktree",
     }
 )
 

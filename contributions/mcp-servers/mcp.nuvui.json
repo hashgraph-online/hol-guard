@@ -1,0 +1,91 @@
+{
+  "activation": "opt-in",
+  "description": "The docs, rules, blocks, charts and design tokens of nuvui, an open-source React UI library, for coding agents. Answers can be scoped to the version a project has installed. Every tool only reads public documentation and needs no key or account, so each keeps Guard's usual handling. Off until you turn it on.",
+  "homepage": "https://nuvui.nuvraxis.com",
+  "icon": {
+    "background": "#0F172A",
+    "kind": "react-icon",
+    "name": "HiMiniCube"
+  },
+  "id": "mcp.nuvui",
+  "launch": {
+    "kind": "remote-http",
+    "serverNames": [
+      "nuvui"
+    ],
+    "url": "https://nuvui.nuvraxis.com/mcp"
+  },
+  "license": "MIT",
+  "name": "NuvUI MCP",
+  "publisher": {
+    "displayName": "Nuvraxis",
+    "id": "io.github.nuvraxis",
+    "url": "https://github.com/Nuvraxis"
+  },
+  "referenceUrls": [
+    "https://nuvui.nuvraxis.com/docs/mcp",
+    "https://github.com/Nuvraxis/nuvui",
+    "https://github.com/Nuvraxis/nuvui/tree/main/apps/mcp"
+  ],
+  "riskClasses": [
+    "external-network-read"
+  ],
+  "saferAlternatives": [
+    "All eleven tools declare read-only MCP annotations (readOnlyHint); all stay inherit, so Guard's normal policy can still require Review.",
+    "The server takes no key or sign-in. What leaves the project is only each call's arguments, such as a search query or the @nuvui/* versions from package.json.",
+    "Answers are nuvui's public documentation. Treat them as reference for writing code, not as instructions to follow."
+  ],
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "tools": [
+    {
+      "name": "get_rules",
+      "state": "inherit"
+    },
+    {
+      "name": "search_docs",
+      "state": "inherit"
+    },
+    {
+      "name": "list_components",
+      "state": "inherit"
+    },
+    {
+      "name": "list_guides",
+      "state": "inherit"
+    },
+    {
+      "name": "get_page",
+      "state": "inherit"
+    },
+    {
+      "name": "list_blocks",
+      "state": "inherit"
+    },
+    {
+      "name": "get_block",
+      "state": "inherit"
+    },
+    {
+      "name": "list_charts",
+      "state": "inherit"
+    },
+    {
+      "name": "get_chart",
+      "state": "inherit"
+    },
+    {
+      "name": "get_tokens",
+      "state": "inherit"
+    },
+    {
+      "name": "get_changes",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "trustClass": "external",
+  "version": "1.0.0"
+}

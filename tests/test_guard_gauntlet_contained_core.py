@@ -8,6 +8,7 @@ import json
 import os
 import sys
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -300,7 +301,8 @@ def test_workspace_sandbox_rewrite_is_judged_like_other_containment(fixture, tmp
     pre["reason_code"] = workspace_reason
     pre["native_observation"]["required_execution_profile"] = "workspace-contained-v1"
     pre["native_observation"]["native_receipt"]["reason_code"] = workspace_reason
-    assessment = assess_case(SCENARIO, case)
+    # The case drove the workspace route here, so it is the workspace route it declares.
+    assessment = assess_case(replace(SCENARIO, decision_paths=(workspace_reason,)), case)
     assert assessment["outcome"] == "pass", assessment["reason"]
 
 

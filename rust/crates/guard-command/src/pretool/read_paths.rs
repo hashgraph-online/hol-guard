@@ -8,6 +8,9 @@ pub(super) use allowances::{
 pub(super) mod feature_directories;
 #[path = "read_path_harness_notes.rs"]
 pub(super) mod harness_notes;
+#[path = "read_path_missing.rs"]
+mod missing;
+use missing::missing_absolute_read_allowed;
 #[path = "hidden_listing.rs"]
 mod hidden_listing;
 #[path = "omp_json_query.rs"]
@@ -88,7 +91,7 @@ pub(super) fn bounded_file_read_target(
 ) -> bool {
     // A missing harness note is a shell-read exception. Structured tools come
     // through this helper, and a missing note there stays unproved.
-    bounded_read_target_with_brackets(value, home_dir, cwd, false, false, false, false)
+    bounded_read_target_with_brackets(value, home_dir, cwd, ReadScreen::default())
 }
 
 pub(super) fn existing_regular_read_target(
@@ -118,7 +121,42 @@ pub(super) fn bounded_read_target(
     cwd: Option<&str>,
     allow_directory: bool,
 ) -> bool {
-    bounded_read_target_with_brackets(value, home_dir, cwd, allow_directory, false, true, false)
+    bounded_read_target_with_brackets(
+        value,
+        home_dir,
+        cwd,
+        ReadScreen {
+            allow_directory,
+            missing_notes: true,
+            ..ReadScreen::default()
+        },
+    )
+}
+
+/// A shell read of an absolute path with nothing at it, for a command no
+/// step of which creates a filesystem entry.
+///
+/// The open fails with `ENOENT`, so the read returns nobody's bytes, and the
+/// workspace-relative spelling of the same unresolvable path already passes
+/// its own lexical floor. The caller proves that no peer step can plant a
+/// file or a link where the kernel would walk, so what is missing now is
+/// still missing when the read runs; `bounded_read_target` carries no such
+/// proof and keeps the review.
+pub(super) fn bounded_missing_absolute_read_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    value == value.trim()
+        && bounded_read_target_with_brackets(
+            value,
+            home_dir,
+            cwd,
+            ReadScreen {
+                missing_absolute: true,
+                ..ReadScreen::default()
+            },
+        )
 }
 
 /// A structured read tool opens its path literally, so `[slug]` in a Next.js
@@ -130,7 +168,16 @@ pub(super) fn bounded_structured_file_read_target(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
-    bounded_read_target_with_brackets(value, home_dir, cwd, false, true, false, true)
+    bounded_read_target_with_brackets(
+        value,
+        home_dir,
+        cwd,
+        ReadScreen {
+            literal_brackets: true,
+            directory_listing: true,
+            ..ReadScreen::default()
+        },
+    )
 }
 
 /// A shell word whose bracket class matches nothing reaches the program
@@ -155,21 +202,31 @@ pub(super) fn bounded_literal_bracket_target(
             value,
             home_dir,
             cwd,
-            allow_directory,
-            true,
-            true,
-            false,
+            ReadScreen {
+                allow_directory,
+                literal_brackets: true,
+                missing_notes: true,
+                ..ReadScreen::default()
+            },
         )
+}
+
+/// What a read screen admits besides a resolved regular file. Every flag is
+/// a proof the caller already holds, so the default screen admits nothing.
+#[derive(Clone, Copy, Default)]
+struct ReadScreen {
+    allow_directory: bool,
+    literal_brackets: bool,
+    missing_notes: bool,
+    directory_listing: bool,
+    missing_absolute: bool,
 }
 
 fn bounded_read_target_with_brackets(
     value: &str,
     home_dir: Option<&str>,
     cwd: Option<&str>,
-    allow_directory: bool,
-    literal_brackets: bool,
-    missing_notes: bool,
-    directory_listing: bool,
+    screen: ReadScreen,
 ) -> bool {
     let path = value.trim();
     let path = path.strip_prefix(r"\\?\").unwrap_or(path);
@@ -179,7 +236,7 @@ fn bounded_read_target_with_brackets(
     let has_brackets = path.contains(['[', ']']);
     if path.contains([
         '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '{', '}',
-    ]) || (has_brackets && !literal_brackets)
+    ]) || (has_brackets && !screen.literal_brackets)
     {
         return false;
     }
@@ -213,12 +270,13 @@ fn bounded_read_target_with_brackets(
         // says it is a directory; either way it returns no file's bytes, so
         // the question is the listing one. A shell walk keeps its own root
         // rules, so the listing screen answers only for that tool.
-        let listing = directory_listing
+        let listing = screen.directory_listing
             && canonical.is_dir()
             && !guard_secure_fs::contains_symlink_component(&candidate)
             && resolved_location_allowed(&canonical, home_dir, cwd, false)
             && resolved_home_hidden_listing(&canonical, home_dir);
-        return (canonical.is_file() || ((allow_directory || listing) && canonical.is_dir()))
+        return (canonical.is_file()
+            || ((screen.allow_directory || listing) && canonical.is_dir()))
             && (listing
                 || resolved_read_target_allowed(&candidate, &canonical, home_dir, cwd)
                 || package_source::installed_package_source(
@@ -234,11 +292,13 @@ fn bounded_read_target_with_brackets(
     // answer instead. A workspace-relative spelling keeps the pre-existing
     // lexical floor.
     if expanded_path.is_absolute() {
-        return missing_notes
+        return (screen.missing_notes
             && harness_notes::missing_document(expanded_path).is_some_and(|resolved| {
                 resolved_location_allowed(&resolved, home_dir, cwd, false)
                     && harness_notes::harness_home_document(&resolved, home_dir)
-            });
+            }))
+            || (screen.missing_absolute
+                && missing_absolute_read_allowed(expanded_path, home_dir, cwd));
     }
     safe_read_target(path)
 }

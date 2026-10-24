@@ -465,3 +465,6 @@ mod request_identity_tests;
 
 #[path = "edge_review_anchor_tests.rs"]
 mod review_anchor_tests;
+
+#[path = "edge_watch_tests.rs"]
+mod watch_tests;

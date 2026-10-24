@@ -2,7 +2,7 @@ use super::unwrap;
 use crate::pretool::evaluate_pre_tool_with_context;
 use crate::CommandModelRequestV1;
 
-fn decide(command: &str) -> (String, String) {
+fn decision(command: &str) -> crate::pretool::PreToolDecisionV1 {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .canonicalize()
         .unwrap();
@@ -13,7 +13,11 @@ fn decide(command: &str) -> (String, String) {
         transport: "shell_string".to_owned(),
         extraction_provenance: "guard-shell".to_owned(),
     };
-    let decision = evaluate_pre_tool_with_context(&request, Some(root), Some(root)).unwrap();
+    evaluate_pre_tool_with_context(&request, Some(root), Some(root)).unwrap()
+}
+
+fn decide(command: &str) -> (String, String) {
+    let decision = decision(command);
     (decision.minimum_action, decision.reason_code)
 }
 
@@ -91,4 +95,42 @@ fn trailing_group_decides_like_its_command_list() {
 #[test]
 fn a_leading_group_is_not_unwrapped() {
     assert_ne!(decide("(cd src) && cat Cargo.toml").0, "allow");
+}
+
+#[test]
+fn a_reviewed_group_carries_its_command_list_model() {
+    // A review keeps the group's text, and that text models no command, so a
+    // decision taken from it cannot be contained or settled by a permission.
+    // The list's own model is what the group runs, so the review carries it.
+    for (grouped, ungrouped) in [
+        ("(cd src && npm run build)", "cd src && npm run build"),
+        ("(npm run build)", "npm run build"),
+        (
+            "git status && (npm run build)",
+            "git status && npm run build",
+        ),
+    ] {
+        let grouped = decision(grouped);
+        let ungrouped = decision(ungrouped);
+        assert_eq!(grouped.minimum_action, "review", "{grouped:?}");
+        assert_eq!(grouped.command_model.confidence, "exact", "{grouped:?}");
+        assert_eq!(
+            grouped.command_model.segments.len(),
+            ungrouped.command_model.segments.len(),
+            "{grouped:?}"
+        );
+        assert_eq!(grouped.minimum_action, ungrouped.minimum_action);
+        assert_eq!(grouped.reason_code, ungrouped.reason_code);
+    }
+}
+
+#[test]
+fn a_group_no_recognizer_unwraps_keeps_its_unmodeled_review() {
+    // Nothing is taken from a list the recognizer rejects, so a leading group
+    // and a redirected one keep the review their own text earns.
+    for command in ["(cd src) && cargo fmt", "(npm run build) > out.txt"] {
+        let decision = decision(command);
+        assert_eq!(decision.minimum_action, "review", "{command}");
+        assert_eq!(decision.command_model.confidence, "uncertain", "{command}");
+    }
 }

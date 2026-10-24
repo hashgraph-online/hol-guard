@@ -164,6 +164,15 @@ pub(super) fn safe_listing_segment(
     surviving > 0 || !recursive || search::safe_recursive_listing_target(".", context, lists_hidden)
 }
 
+/// A glob that a program prints instead of listing, as in `echo src/*`. The
+/// shell hands it the names a non-recursive `ls` of the same pattern prints, so
+/// the word takes that listing's proof.
+pub(super) fn listable_glob(value: &str, context: super::PathContext<'_>) -> bool {
+    search::safe_glob_operand(value, context, false)
+        || search::safe_unmatched_glob_operand(value, context, false)
+        || leaf_glob_operand(value, context)
+}
+
 /// `ls` of a path that does not exist prints only an error. Agents probe for
 /// optional directories this way (`ls ~/work/scripts 2>/dev/null`). The
 /// nearest existing ancestor must be a directory a listing may name, and every

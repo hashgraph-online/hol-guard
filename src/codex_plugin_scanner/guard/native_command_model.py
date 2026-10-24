@@ -12,7 +12,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .native_command_model_wrappers import decode_sudo_prefix, inline_shell_script
+from .native_command_model_wrappers import (
+    decode_sudo_prefix,
+    inline_shell_script,
+    skip_exec_launcher,
+)
 from .native_resident_client import (
     native_resident_client_request,
     record_native_resident_client_failure_code,
@@ -45,6 +49,43 @@ def _assignment_name(token: str) -> str | None:
     if not all(character == "_" or (character.isascii() and character.isalnum()) for character in name[1:]):
         return None
     return name
+
+
+_ENV_PROGRAMS = frozenset({"env", "/usr/bin/env", "/bin/env"})
+_TRANSPARENT_PROGRAMS = frozenset({"command", "time"})
+
+
+def _transparent_prefix(tokens: list[str], index: int) -> tuple[int, list[str]] | None:
+    """Step past a ``command``, ``time`` or ``env NAME=value...`` prefix the native parser reads through.
+
+    The parser reports the program after such a prefix as the executable, and
+    carries the names an ``env`` prefix sets the way it carries a bare
+    ``NAME=value`` prefix. It does that only when a program follows that is not
+    an option and that the shell would not take as an assignment, and for
+    ``env`` only after at least one assignment and before a program that holds
+    no ``=``, since ``env`` would take such a word as one more assignment.
+    Every other spelling leaves the prefix itself as the executable.
+    """
+    if index >= len(tokens):
+        return None
+    names: list[str] = []
+    following = index + 1
+    if tokens[index] in _ENV_PROGRAMS:
+        while following < len(tokens) and (name := _assignment_name(tokens[following])) is not None:
+            names.append(name)
+            following += 1
+        if not names:
+            return None
+    elif tokens[index] not in _TRANSPARENT_PROGRAMS:
+        return None
+    if following >= len(tokens):
+        return None
+    program = tokens[following]
+    if not program or program.startswith("-") or _assignment_name(program) is not None:
+        return None
+    if names and "=" in program:
+        return None
+    return following, names
 
 
 def _bound_to_request(normalized_text: str, command: str) -> bool:
@@ -200,14 +241,32 @@ def _decode_command_model(
                 break
             expected_environment_names.append(name)
             executable_index += 1
-        if profile == _WRAPPER_PARSER_PROFILE:
+        # The parser steps through these prefixes in one loop, in whatever
+        # order the text writes them, so `env FOO=1 sudo ls` and
+        # `sudo command ls` both reach `ls`.
+        expected_wrappers: list[str] = []
+        while True:
+            prefix = _transparent_prefix(tokens, executable_index)
+            if prefix is not None:
+                executable_index, names = prefix
+                expected_environment_names.extend(names)
+                continue
+            launched = skip_exec_launcher(tokens, executable_index)
+            if launched != executable_index:
+                executable_index = launched
+                continue
+            if profile != _WRAPPER_PARSER_PROFILE:
+                break
             decoded_prefix = decode_sudo_prefix(tokens, executable_index)
             if decoded_prefix is None:
                 return None
-            executable_index, expected_wrappers = decoded_prefix
-            if segment_wrappers != expected_wrappers:
+            executable_index, wrappers = decoded_prefix
+            if not wrappers:
+                break
+            expected_wrappers.extend(wrappers)
+            if len(expected_wrappers) > 4:
                 return None
-        elif segment_wrappers:
+        if segment_wrappers != expected_wrappers:
             return None
         expected_executable = tokens[executable_index] if executable_index < len(tokens) else None
         expected_arguments = tokens[executable_index + 1 :] if expected_executable is not None else []

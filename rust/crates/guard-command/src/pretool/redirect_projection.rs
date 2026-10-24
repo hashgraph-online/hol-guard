@@ -289,6 +289,16 @@ pub(super) fn package_profile(reason: &str) -> bool {
     )
 }
 
+/// The read-only profiles a plain output redirect disqualifies and the
+/// workspace sandbox may take in their place. The package and Node tool
+/// profiles run a project's own tool; the pytest profile runs the suite the
+/// same workspace holds, and a chain as short as `pytest -q && echo done`
+/// already reaches the sandbox, because two segments earn no profile of their
+/// own. The single command belongs there for the same reason.
+pub(super) fn redirected_profile(reason: &str) -> bool {
+    package_profile(reason) || reason == "native_pytest_readonly_containment_required"
+}
+
 pub(super) fn join(
     mut projected: PreToolResultV1,
     raw: PreToolResultV1,

@@ -120,6 +120,15 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
     marked = {c.base_id for c in expand() if c.expect == "block" and c.contained_ok}
     assert marked == {
         "neg-cargo-check-locked-host-toolchain",
+        # A missing name under a guarded root: the read keeps its review, and a
+        # contained run reaches none of the credential store, the key directory,
+        # the hidden home component or the system directory, so nothing there is
+        # read and nothing reports whether it is there.
+        "neg-cat-missing-name-inside-a-credential-store",
+        "neg-cat-missing-name-inside-a-hidden-key-directory",
+        "neg-cat-missing-name-under-a-hidden-home-component",
+        "neg-cat-missing-name-under-system-configuration",
+        "neg-cat-missing-name-under-system-logs",
         # A filter whose grammar the read recognizer rejects: the operands stay inside the
         # workspace, so the contained run reaches nothing, and the case pins the rejection
         # rather than an approval prompt an in-worktree write would never raise.
@@ -131,12 +140,20 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # matches nothing and no key material is printed.
         "neg-egrep-reads-private-key",
         "neg-env-bare-set-then-list",
+        # A directory the prefix names outside the workspace: a contained run
+        # reaches none of it, so the build runs nothing the sandbox does not
+        # already hold.
+        "neg-env-chdir-npm-run-build",
         "neg-env-git-dir-then-list",
         "neg-env-ld-preload-then-list",
         "neg-env-pager-names-program",
         # A pager option that carries its own shell escape: a contained run gives the
         # escape nothing outside the workspace to reach.
         "neg-env-pager-option-escape-export",
+        # A lookup path the prefix clears: the contained run resolves the
+        # build's programs inside the sandbox, so none of them comes from a
+        # directory the case plants outside it.
+        "neg-env-unset-path-npm-run-build",
         # A `find` that is not limited to regular files hands a link to `grep`, which opens its
         # target; the contained run reaches nothing outside the workspace.
         "neg-find-exec-grep-l-edge-clone-without-type-f",

@@ -585,12 +585,6 @@ def _prepare_cursor_hook_payload(payload: dict[str, object]) -> dict[str, object
         normalized["hook_event_name"] = "PreToolUse"
     return normalized
 
-
-def _cursor_read_file_permission(permission: str) -> str:
-    if permission in {"deny", "ask"}:
-        return "deny"
-    return "allow"
-
 '''.replace("__HOOK_INPUT_READER__", HOOK_INPUT_READER_TEMPLATE).replace(
     "__HOOK_HTTP_DEADLINE__", HOOK_HTTP_DEADLINE_TEMPLATE + "\n" + DAEMON_PID_LIVENESS_TEMPLATE
 )

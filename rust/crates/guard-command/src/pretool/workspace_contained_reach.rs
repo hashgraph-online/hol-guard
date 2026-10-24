@@ -65,6 +65,7 @@ pub(super) fn reaches_outside(
     // targets appear only in the segment text.
     let fixed_expansions = identity_expansions_only(segment, name)
         || exit_status_expansions_only(&segment.text)
+        || arithmetic_expansions_only(&segment.text)
         || (temp_fixed && private_temp_expansions_only(&segment.text));
     let guide = home_fixed && GUIDE_READERS.contains(&name);
     if (expands_variable(&segment.text, name) && !fixed_expansions)
@@ -222,6 +223,39 @@ fn exit_status_expansions_only(text: &str) -> bool {
                 }
                 index += 1;
                 count += 1;
+            }
+            _ => {}
+        }
+    }
+    count > 0 && count == text.matches('$').count()
+}
+
+/// Whether every `$` in `text` is an arithmetic expansion the shell works
+/// out itself. `$(( ))` evaluates to a number, so `make -j$((2 * 2)) build`
+/// names no path and reads no value the sandbox would resolve differently.
+/// `arithmetic_close` refuses a body that quotes, substitutes a command or
+/// opens a ksh command expansion, so only plain arithmetic reaches here; a
+/// `$NAME` inside the body is a number too and is counted with it.
+fn arithmetic_expansions_only(text: &str) -> bool {
+    let characters: Vec<char> = text.chars().collect();
+    let (mut single, mut double, mut count, mut index) = (false, false, 0usize, 0usize);
+    while let Some(&current) = characters.get(index) {
+        index += 1;
+        match current {
+            '\\' if !single => index += 1,
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            '`' if !single => return false,
+            '$' if !single => {
+                let Some(close) = crate::parser_segments::arithmetic_close(&characters, index - 1)
+                else {
+                    return false;
+                };
+                count += characters[index - 1..=close]
+                    .iter()
+                    .filter(|character| **character == '$')
+                    .count();
+                index = close + 1;
             }
             _ => {}
         }
@@ -424,5 +458,23 @@ mod redirect_target_tests {
         assert_eq!(targets("echo hi > out 2>&1"), ["out", "1"]);
         assert_eq!(targets("sort <in >>'log'"), ["in", "log"]);
         assert!(targets("cargo build --release").is_empty());
+    }
+}
+
+#[cfg(test)]
+mod arithmetic_expansion_tests {
+    use super::arithmetic_expansions_only;
+
+    #[test]
+    fn only_arithmetic_counts_as_a_fixed_expansion() {
+        assert!(arithmetic_expansions_only("make -j$((2 * 2)) build"));
+        assert!(arithmetic_expansions_only(
+            "head -n $((10 * $COUNT)) notes.md"
+        ));
+        assert!(arithmetic_expansions_only("sleep \"$(( (1 + 1) * 2 ))\""));
+        assert!(!arithmetic_expansions_only("make -j$NPROC build"));
+        assert!(!arithmetic_expansions_only("make -j$(nproc) build"));
+        assert!(!arithmetic_expansions_only("make -j$((`nproc`)) build"));
+        assert!(!arithmetic_expansions_only("make build"));
     }
 }

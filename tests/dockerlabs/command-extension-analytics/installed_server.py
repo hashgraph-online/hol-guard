@@ -41,6 +41,24 @@ def _safe_hook_diagnostic(value: str) -> str:
     return redacted[-_MAX_HOOK_DIAGNOSTIC_CHARS:]
 
 
+def _scrub_hook_detail(value: object) -> object:
+    """Put every string a hook response carries through the same scrub.
+
+    The fields below are the daemon's own prose, and the daemon quotes the
+    command it decided on. That command is the lab's sentinel in one case and
+    the workflow fixture in another, so a field copied straight out of the
+    response would print what `_safe_hook_diagnostic` exists to keep out of the
+    log.
+    """
+    if isinstance(value, str):
+        return _safe_hook_diagnostic(value)
+    if isinstance(value, Mapping):
+        return {_scrub_hook_detail(key): _scrub_hook_detail(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_scrub_hook_detail(item) for item in value]
+    return value
+
+
 def _safe_hook_response_summary(value: str) -> str:
     try:
         payload = json.loads(value)
@@ -65,6 +83,7 @@ def _safe_hook_response_summary(value: str) -> str:
         if isinstance(scanner_evidence, list)
         else None
     )
+    hook_output = payload.get("hookSpecificOutput")
     return json.dumps(
         {
             "keys": sorted(payload),
@@ -86,8 +105,47 @@ def _safe_hook_response_summary(value: str) -> str:
             }
             if isinstance(post_claim, dict)
             else None,
+            # What decided the hook, so a failed canary names its cause.
+            "decision_details": _scrub_hook_detail(
+                {
+                    "decision": payload.get("decision"),
+                    "reason": payload.get("reason"),
+                    "risk_summary": payload.get("risk_summary"),
+                    "terminal_action": payload.get("terminal_action"),
+                    "hook_output": {
+                        key: hook_output.get(key) for key in ("permissionDecision", "permissionDecisionReason")
+                    }
+                    if isinstance(hook_output, dict)
+                    else None,
+                    "artifact_type": payload.get("artifact_type"),
+                    "artifact_name": payload.get("artifact_name"),
+                    "operation": payload.get("operation"),
+                    "native_edge_decision": payload.get("native_edge_decision"),
+                    "native_edge_reason_code": payload.get("native_edge_reason_code"),
+                    "risk_signals": payload.get("risk_signals"),
+                    "policy_composition": composition,
+                    "scanner_evidence": [
+                        {k: v for k, v in item.items() if isinstance(v, (str, int, bool)) or v is None}
+                        for item in scanner_evidence
+                        if isinstance(item, dict)
+                    ]
+                    if isinstance(scanner_evidence, list)
+                    else None,
+                    "approval_requests": [
+                        {
+                            k: item.get(k)
+                            for k in ("artifact_type", "artifact_name", "policy_action", "reason_code", "source")
+                        }
+                        for item in payload.get("approval_requests") or []
+                        if isinstance(item, dict)
+                    ],
+                    "trigger_summary": payload.get("trigger_summary"),
+                    "why_now": payload.get("why_now"),
+                }
+            ),
         },
         sort_keys=True,
+        default=str,
     )
 
 
@@ -385,6 +443,8 @@ def _assert_seeded_activity(store: GuardStore) -> None:
             order by harness, execution_status, activity_id
             """
         ).fetchall()
+    # The daemon enrolls the extension-control authority at startup, so each
+    # hook records the built-in extension matches that shaped its decision.
     expected = [
         (
             "claude-code",
@@ -403,26 +463,26 @@ def _assert_seeded_activity(store: GuardStore) -> None:
             "prevented",
             "pre_hook",
             "require-reapproval",
-            "policy",
-            0,
+            "extension_match",
+            2,
             1,
             "not-applicable",
         ),
-        ("codex", "pre", "allowed_unconfirmed", "pre_hook", "allow", "capability", 0, 0, "accepted"),
+        ("codex", "pre", "allowed_unconfirmed", "pre_hook", "allow", "capability", 1, 0, "accepted"),
         (
             "codex",
             "post_success",
             "confirmed_success",
             "post_hook",
             "warn",
-            "policy",
-            0,
+            "extension_match",
+            1,
             0,
             "not-applicable",
         ),
-        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "policy", 0, 1, "not-applicable"),
-        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "policy", 0, 1, "rejected"),
-        ("cursor", "pre", "prevented", "pre_hook", "block", "policy", 0, 1, "not-applicable"),
+        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "extension_match", 1, 1, "not-applicable"),
+        ("codex", "pre", "prevented", "pre_hook", "require-reapproval", "extension_match", 1, 1, "rejected"),
+        ("cursor", "pre", "prevented", "pre_hook", "block", "extension_match", 2, 1, "not-applicable"),
     ]
     if sorted(rows) != sorted(expected):
         raise RuntimeError(f"installed hook activity mismatch: {rows!r}")

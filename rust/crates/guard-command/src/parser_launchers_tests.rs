@@ -241,3 +241,47 @@ fn text_that_could_shadow_a_launcher_stays_visible() {
     assert!(model.path_overridden);
     assert!(model.segments[0].path_overridden);
 }
+
+/// `exec npm test` runs what `npm test` runs: the shell replaces itself with
+/// the program this text already names. The program behind it is the word the
+/// command runs, exactly as it is behind the scheduling prefixes.
+#[test]
+fn exec_names_the_program_that_replaces_the_shell() {
+    for (command, program) in [
+        ("exec npm test", 1),
+        ("exec npm run build", 1),
+        ("exec cargo build", 1),
+        ("exec make -j4", 1),
+        ("exec codesage install codex", 1),
+    ] {
+        assert_eq!(
+            launcher_program(&words(command), 0),
+            Some(program),
+            "{command} did not name its program"
+        );
+    }
+}
+
+/// An `exec` that carries an option of its own leaves the program unread:
+/// `-a` renames the process, `-c` empties its environment and `-l` makes it a
+/// login shell. A bare `exec` names no program at all, and an interpreter
+/// behind one reads a file this scan never opened.
+#[test]
+fn an_exec_without_a_named_program_is_not_a_launcher() {
+    for command in [
+        "exec",
+        "exec -a worker npm test",
+        "exec -c npm test",
+        "exec -l bash",
+        "exec python3 deploy.py",
+        "exec node server.js",
+        "exec ./deploy.sh",
+        "exec -",
+    ] {
+        assert_eq!(
+            launcher_program(&words(command), 0),
+            None,
+            "{command} named a program it does not run"
+        );
+    }
+}

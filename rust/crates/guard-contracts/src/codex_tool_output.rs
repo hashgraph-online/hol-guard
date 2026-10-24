@@ -17,6 +17,10 @@ pub const CODEX_TOOL_OUTPUT_REQUEST_SCHEMA: &str = "guard-codex-tool-output-requ
 pub const CODEX_TOOL_OUTPUT_RESULT_SCHEMA: &str = "guard-codex-tool-output-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const CODEX_TOOL_OUTPUT_FEATURE: &str = "codex-tool-output-v1";
+/// Capability advertised when the post-tool reviews derive their command texts
+/// from the payload: `post_tool_read_only_payload`, and a `post_tool_output`
+/// body without `command_texts`.
+pub const CODEX_POST_TOOL_COMMANDS_FEATURE: &str = "codex-post-tool-commands-v1";
 /// Largest request the op accepts.
 pub const CODEX_TOOL_OUTPUT_MAX_BYTES: usize = 256 * 1024;
 /// Canonical request bound for a post-tool output review, which carries the
@@ -115,6 +119,9 @@ pub enum CodexToolOutputActionV1 {
     ReadOnlyInspection(CodexCommandScopeV1),
     /// Every post-tool command is a read-only inspection or git metadata read.
     PostToolReadOnly(CodexCommandsScopeV1),
+    /// The same verdict over the commands the payload names: a packed body
+    /// carrying exactly `tool_name`, `tool_input`, `cwd` and `home_dir`.
+    PostToolReadOnlyPayload(CodexPostToolOutputV1),
     /// A command targets a secret-like source file name.
     SecretLikeSourceName(CodexSecretNameScopeV1),
     /// The `git diff` pathspec selection identity (`value`).

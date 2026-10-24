@@ -1174,7 +1174,7 @@
       "enabled_extensions": [
         "command.formicx"
       ],
-      "expected_action": "block",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "id": "exec",
       "rule_id": "command.formicx.agent-register"

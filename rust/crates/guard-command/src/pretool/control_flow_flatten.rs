@@ -17,6 +17,10 @@
 //! the redirection onto each item instead would model the same access as a
 //! shape no proof covers, which is a review for work that only reads.
 //!
+//! A conditional binds no name, so an expansion inside one reads the same
+//! value in the flat list that it read in the construct, and it is written
+//! back as it stood. A loop that binds a name carries no expansion at all.
+//!
 //! Each list item still faces the ordinary proofs, and anything this
 //! recognizer does not fully understand returns `None`, which keeps the
 //! existing review behavior.
@@ -35,13 +39,6 @@ pub(super) fn flatten(command: &str) -> Option<String> {
         .chars()
         .any(|c| c.is_control() && !matches!(c, '\n' | '\t'))
     {
-        return None;
-    }
-    // A value the construct itself binds — the name a `while read` loop fills
-    // from its input — is not bound in the flat list, so an expansion there
-    // would stand for different text than the one the construct ran. No
-    // expansion at all is the rule that keeps the two forms the same work.
-    if command.contains(['$', '`']) {
         return None;
     }
     let text = command.trim();
@@ -86,6 +83,13 @@ fn flatten_conditional(rest: &str) -> Option<String> {
 /// itself only binds a name from that file, so the read of the file is the
 /// whole of what the loop's test reaches.
 fn flatten_loop(rest: &str) -> Option<String> {
+    // The loop binds a name of its own, and the flat list does not, so an
+    // expansion inside it would stand for different text than the one the
+    // loop ran. No expansion at all is the rule that keeps the two the same
+    // work. A conditional binds nothing, so it carries its expansions.
+    if rest.contains(['$', '`']) {
+        return None;
+    }
     let (test, _, after_test) = body_items(rest, "", &["do"])?;
     let (body, _, tail) = body_items(after_test, "", &["done"])?;
     if !driven_by_a_read(&test) {
@@ -122,7 +126,15 @@ fn driven_by_a_read(test: &[(String, &'static str)]) -> bool {
         return false;
     }
     let mut words = text.split_whitespace();
-    if words.next() != Some("read") {
+    let mut word = words.next();
+    // `IFS=` empties the field separator for the `read` alone, which keeps
+    // the whole line in the name instead of splitting it. It starts no
+    // program and leaves the flat list the same, so the loop is still the
+    // one a single pass describes. Any other assignment is some other loop.
+    if word == Some("IFS=") {
+        word = words.next();
+    }
+    if word != Some("read") {
         return false;
     }
     let mut names = words.peekable();

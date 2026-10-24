@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
+
+import pytest
 
 from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import (
     GuardAgentInventoryFinding,
     GuardAgentInventoryItem,
     GuardAgentInventorySnapshot,
+    _artifacts_with_unique_ids,
     fingerprint_mapping,
     fingerprint_path_tree,
     fingerprint_text,
@@ -824,3 +829,221 @@ def test_inventory_snapshot_preserves_antigravity_agent_type(tmp_path: Path) -> 
 
     assert snapshot.agent_type == "antigravity"
     assert payload["agentType"] == "antigravity"
+
+
+def test_inventory_snapshot_keeps_one_item_when_two_configs_declare_the_same_entry(tmp_path: Path) -> None:
+    cli_dir = tmp_path / ".zcode" / "cli"
+    cli_dir.mkdir(parents=True)
+    desktop_config = cli_dir / "config.json"
+    cli_config = cli_dir / "setting.json"
+    for path in (desktop_config, cli_config):
+        path.write_text('{"mcp": {"servers": {"docs": {"command": "docs-mcp"}}}}\n', encoding="utf-8")
+
+    detection = HarnessDetection(
+        harness="zcode",
+        installed=True,
+        command_available=True,
+        config_paths=(str(desktop_config), str(cli_config)),
+        artifacts=tuple(
+            GuardArtifact(
+                artifact_id="zcode:global:mcp:docs",
+                name="docs",
+                harness="zcode",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(path),
+                command="docs-mcp",
+            )
+            for path in (desktop_config, cli_config)
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-10-23T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    item_ids = [item.item_id for item in snapshot.items]
+
+    assert len(item_ids) == len(set(item_ids))
+    docs_items = [item for item in snapshot.items if item.item_id == "zcode:global:mcp:docs"]
+    assert len(docs_items) == 1
+    assert docs_items[0].metadata.get("configPath") == "{home}/.zcode/cli/config.json"
+
+
+def test_inventory_snapshot_keeps_distinct_entries_that_share_an_id(tmp_path: Path) -> None:
+    cli_dir = tmp_path / ".zcode" / "cli"
+    cli_dir.mkdir(parents=True)
+    desktop_config = cli_dir / "config.json"
+    cli_config = cli_dir / "setting.json"
+    commands = {desktop_config: "docs-mcp", cli_config: "notes-mcp"}
+    for path, command in commands.items():
+        path.write_text(f'{{"mcp": {{"servers": {{"docs": {{"command": "{command}"}}}}}}}}\n', encoding="utf-8")
+
+    detection = HarnessDetection(
+        harness="zcode",
+        installed=True,
+        command_available=True,
+        config_paths=(str(desktop_config), str(cli_config)),
+        artifacts=tuple(
+            GuardArtifact(
+                artifact_id="zcode:global:mcp:docs",
+                name="docs",
+                harness="zcode",
+                artifact_type="mcp_server",
+                source_scope="global",
+                config_path=str(path),
+                command=command,
+            )
+            for path, command in commands.items()
+        ),
+    )
+
+    snapshot = inventory_snapshot_from_detection(
+        detection,
+        generated_at="2026-10-23T00:00:00Z",
+        home_dir=tmp_path,
+    )
+    item_ids = [item.item_id for item in snapshot.items]
+    docs_items = [item for item in snapshot.items if item.item_id.startswith("zcode:global:mcp:docs")]
+
+    assert len(item_ids) == len(set(item_ids))
+    assert docs_items[0].item_id == "zcode:global:mcp:docs"
+    assert len(docs_items) == 2
+    assert docs_items[1].item_id.startswith("zcode:global:mcp:docs#")
+    assert {item.metadata.get("configPath") for item in docs_items} == {
+        "{home}/.zcode/cli/config.json",
+        "{home}/.zcode/cli/setting.json",
+    }
+
+
+def _docs_artifact(config_path: Path, command: str, artifact_id: str = "zcode:global:mcp:docs") -> GuardArtifact:
+    return GuardArtifact(
+        artifact_id=artifact_id,
+        name="docs",
+        harness="zcode",
+        artifact_type="mcp_server",
+        source_scope="global",
+        config_path=str(config_path),
+        command=command,
+    )
+
+
+def test_unique_ids_never_take_an_id_a_later_artifact_owns(tmp_path: Path) -> None:
+    setting = tmp_path / ".zcode" / "cli" / "setting.json"
+    suffix = fingerprint_text(redact_local_path(str(setting), home_dir=tmp_path))[:8]
+    artifacts = (
+        _docs_artifact(tmp_path / ".zcode" / "cli" / "config.json", "docs-mcp"),
+        _docs_artifact(setting, "notes-mcp"),
+        _docs_artifact(tmp_path / ".zcode" / "other.json", "other-mcp", f"zcode:global:mcp:docs#{suffix}"),
+    )
+
+    kept = _artifacts_with_unique_ids(artifacts, home_dir=tmp_path)
+    kept_ids = [cast(GuardArtifact, artifact).artifact_id for artifact in kept]
+
+    assert len(kept_ids) == 3
+    assert len(set(kept_ids)) == 3
+    assert kept_ids[1] == f"zcode:global:mcp:docs#{suffix}-2"
+    assert kept_ids[2] == f"zcode:global:mcp:docs#{suffix}"
+
+
+def test_unique_ids_keep_distinct_entries_that_are_not_dataclasses(tmp_path: Path) -> None:
+    artifacts = (
+        SimpleNamespace(artifact_id="docs", config_path=str(tmp_path / "a.json"), command="docs-mcp"),
+        SimpleNamespace(artifact_id="docs", config_path=str(tmp_path / "b.json"), command="notes-mcp"),
+        SimpleNamespace(artifact_id="docs", config_path=str(tmp_path / "c.json"), command="docs-mcp"),
+    )
+
+    kept = _artifacts_with_unique_ids(artifacts, home_dir=tmp_path)
+    kept_ids = [cast(SimpleNamespace, artifact).artifact_id for artifact in kept]
+
+    assert len(kept_ids) == 2
+    assert kept_ids[0] == "docs"
+    assert kept_ids[1].startswith("docs#")
+    assert artifacts[1].artifact_id == "docs"
+
+
+@dataclass(frozen=True)
+class _PathlessArtifact:
+    artifact_id: str
+    command: str
+
+
+def test_unique_ids_accept_dataclass_artifacts_without_a_config_path(tmp_path: Path) -> None:
+    artifacts = (
+        _PathlessArtifact("docs", "docs-mcp"),
+        _PathlessArtifact("docs", "docs-mcp"),
+        _PathlessArtifact("docs", "notes-mcp"),
+    )
+
+    kept = _artifacts_with_unique_ids(artifacts, home_dir=tmp_path)
+    kept_ids = [cast(_PathlessArtifact, artifact).artifact_id for artifact in kept]
+
+    assert len(kept_ids) == 2
+    assert kept_ids[0] == "docs"
+    assert kept_ids[1].startswith("docs#")
+
+
+def test_inventory_snapshot_serialization_keeps_evidence_authority(tmp_path: Path) -> None:
+    trust_claim = {
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
+        "authToken": "local-value",
+    }
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="snap-codex-1",
+        agent_id="agent-codex",
+        agent_type="codex",
+        generated_at="2026-10-23T00:00:00Z",
+        runtime_version="codex-test",
+        items=(
+            GuardAgentInventoryItem(
+                item_id="codex:global:skill:demo",
+                item_kind="skill",
+                display_name="demo",
+                description="Demo skill.",
+                source_fingerprint=fingerprint_text("demo"),
+                content_hash=fingerprint_text("demo"),
+                capability_categories=(),
+                metadata={"trustResolution": dict(trust_claim), "trustLayers": [dict(trust_claim)]},
+            ),
+        ),
+    )
+
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
+    metadata = payload["items"][0]["metadata"]
+
+    for claim in (metadata["trustResolution"], metadata["trustLayers"][0]):
+        assert claim["evidenceAuthority"] == "device_claim"
+        assert claim["affectsV4Score"] is False
+        assert claim["authToken"] == "[REDACTED]"
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["evidenceAuthorityToken", "xevidenceAuthority", "description\napiKey", "evidenceAuthor\u0131ty"],
+)
+def test_inventory_snapshot_serialization_only_exempts_the_exact_evidence_authority_key(key: str) -> None:
+    snapshot = GuardAgentInventorySnapshot(
+        snapshot_id="snap-codex-1",
+        agent_id="agent-codex",
+        agent_type="codex",
+        generated_at="2026-10-23T00:00:00Z",
+        runtime_version="codex-test",
+        items=(
+            GuardAgentInventoryItem(
+                item_id="codex:global:skill:demo",
+                item_kind="skill",
+                display_name="demo",
+                description="Demo skill.",
+                source_fingerprint=fingerprint_text("demo"),
+                content_hash=fingerprint_text("demo"),
+                capability_categories=(),
+                metadata={"trustResolution": {key: "local-value"}},
+            ),
+        ),
+    )
+
+    payload = cast(dict[str, Any], serialize_inventory_snapshot(snapshot))
+
+    assert payload["items"][0]["metadata"]["trustResolution"][key] == "[REDACTED]"

@@ -68,11 +68,17 @@ fn project(marker: Option<&str>) -> (PathBuf, PathBuf) {
     (project, home)
 }
 
-/// The review a run keeps when nothing contains it. A pnpm or Bun spelling is
-/// the package manager's own command, so it keeps that review rather than the
-/// generic one, exactly as it does on the other platforms.
+/// The review a run keeps when nothing contains it. A spelling that runs
+/// through a package manager's own subcommand (`npm exec`, `yarn exec`,
+/// `pnpm exec`, `bun`) keeps that manager's review rather than the generic
+/// one, since the manager may fetch what the install lacks, exactly as it does
+/// on the other platforms.
 fn review(command: &str) -> &'static str {
-    if command.starts_with("pnpm ") || command.starts_with("bun ") {
+    let package_manager = ["npm ", "yarn ", "pnpm ", "bun "];
+    if package_manager
+        .iter()
+        .any(|prefix| command.starts_with(prefix))
+    {
         PACKAGE_REVIEW
     } else {
         REVIEW

@@ -140,8 +140,24 @@ fn bounded_digits(value: &str, limit: usize) -> Option<u32> {
 /// Where it points, and whether that is a secret or a symlink, is answered
 /// against the filesystem by the executor.
 fn static_relative_target(value: &str) -> Result<String, &'static str> {
-    if Path::new(value).is_absolute() || value.contains(DYNAMIC) {
+    if Path::new(value).is_absolute() || anchored(value) || value.contains(DYNAMIC) {
         return Err("target must be a static relative path");
     }
     Ok(value.to_owned())
+}
+
+/// A spelling that names a root, a drive or a stream rather than a path below
+/// the working directory. `Path::is_absolute` answers by the host's rules, so
+/// on Windows it lets `/etc/passwd` (root-relative), `C:x` (drive-relative)
+/// and `x:stream` (an alternate data stream) through, and on Unix it lets
+/// `\\server\share` through. None of them is relative on every platform.
+fn anchored(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    if matches!(bytes.first(), Some(b'/' | b'\\')) {
+        return true;
+    }
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        return true;
+    }
+    cfg!(windows) && value.contains(':')
 }

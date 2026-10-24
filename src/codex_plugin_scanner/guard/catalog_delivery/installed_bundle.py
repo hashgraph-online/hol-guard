@@ -43,12 +43,10 @@ def validate_compatibility(value, extensions, *, compiler=None):
     _native_metadata("compatibility", value=value, extensions=extensions, compiler=compiler)
 
 
-def asset_path(relative, *, source_sha):
+def asset_path(relative):
     if (
         re.fullmatch(
-            r"assets/extension-data-"
-            + re.escape(source_sha)
-            + r"-0\.0-[0-9]{6}/(?:(?:objects|packs)-[0-9]{6}\.zip|object-[0-9a-f]{64}\.json|pack-[0-9a-f]{64}\.zip)",
+            r"assets/[0-9]{6}/(?:(?:objects|packs)-[0-9]{6}\.zip|object-[0-9a-f]{64}\.json|pack-[0-9a-f]{64}\.zip)",
             relative,
         )
         is None
@@ -234,7 +232,7 @@ class VerifiedInstalledBundle:
             # container member by its digest; a whole asset is only resolved.
             reply = addressed(
                 "installed",
-                sources=lambda _reply: [root / target_location["tag"] / target_location["asset"]],
+                sources=lambda reply: [root / reply["directory"] / target_location["asset"]],
                 root=str(root),
                 target=target_location,
                 source=self.source_sha,
@@ -247,7 +245,8 @@ class VerifiedInstalledBundle:
             raise
         if "data" in reply:
             return base64.b64decode(reply["data"], validate=True)
-        path = base / target_location["tag"] / target_location["asset"]
+        # Native validated the tag and names its directory.
+        path = base / reply["directory"] / target_location["asset"]
         if not path.exists() and not path.is_symlink() and reply["kind"] == "pack":
             # The fixed native factory checks the installed release/executable
             # binding and constructs the public URL. No selector, caller URL,

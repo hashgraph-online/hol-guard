@@ -22,6 +22,17 @@
 //! an adjustment, so `+10` is the program it runs and the word is left to
 //! name it.
 //!
+//! The shell's `exec` reads the same way. `exec npm test` runs exactly what
+//! `npm test` runs, as this user and in this directory; it only replaces the
+//! shell process instead of forking one, and writes nothing of its own. It
+//! documents no option this grammar covers, so `exec -a name prog`,
+//! `exec -c prog` and `exec -l bash` leave the program unread, as does an
+//! `exec` that names no program at all and only moves the shell's own file
+//! descriptors. Without this reading an ordinary `exec npm test` was a nested
+//! executor with nothing proven about it, and reached a refusal its owners
+//! could not approve, while an `exec` in front of a command a registered
+//! extension governs never reached that extension's rule at all.
+//!
 //! Two look-alikes are not here. `setsid` detaches the program into a session
 //! of its own rather than only scheduling it. `nohup` also keeps the program
 //! past a hangup, but when its standard output is a terminal it appends the
@@ -43,7 +54,15 @@ struct Grammar {
     option_required: bool,
 }
 
-const GRAMMARS: [Grammar; 2] = [
+const GRAMMARS: [Grammar; 3] = [
+    Grammar {
+        prefix: "exec",
+        // `exec` documents no option that still runs the named program.
+        short_values: "",
+        long_values: &[],
+        numeric_flag: false,
+        option_required: false,
+    },
     Grammar {
         prefix: "nice",
         short_values: "n",
@@ -72,7 +91,7 @@ const GRAMMARS: [Grammar; 2] = [
 /// `stdbuf -oL python3 deploy.py` keep the unmodelled failure they arrive
 /// with rather than reaching an owner as though `deploy.sh` were a program the
 /// text names.
-pub(super) fn launcher_program(tokens: &[String], index: usize) -> Option<usize> {
+pub(crate) fn launcher_program(tokens: &[String], index: usize) -> Option<usize> {
     let name = tokens.get(index)?;
     if name.contains(['/', '\\']) {
         return None;
@@ -146,6 +165,7 @@ fn value_safe(grammar: &Grammar, value: &str) -> bool {
     match grammar.prefix {
         "nice" => adjustment(value.strip_prefix(['-', '+']).unwrap_or(value)),
         "stdbuf" => buffering_mode(value),
+        // `exec` takes no value, so a word that looks like one is not its own.
         _ => false,
     }
 }

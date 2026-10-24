@@ -336,6 +336,7 @@ fn request_digest(request: &CodexToolOutputRequestV1) -> Result<String, &'static
     // that cannot answer is a review the user did not need.
     let limit = match request.action {
         CodexToolOutputActionV1::PostToolOutput(_)
+        | CodexToolOutputActionV1::PostToolReadOnlyPayload(_)
         | CodexToolOutputActionV1::PromptCredentialFile(_)
         | CodexToolOutputActionV1::PromptAttachment(_) => CODEX_POST_TOOL_OUTPUT_MAX_BYTES,
         _ => CODEX_TOOL_OUTPUT_MAX_BYTES,
@@ -388,7 +389,7 @@ fn action_is_bounded(action: &CodexToolOutputActionV1) -> bool {
             text_is_bounded(&text.command)
         }
         // The canonical digest already bounds the whole body.
-        Action::PostToolOutput(_) => true,
+        Action::PostToolOutput(_) | Action::PostToolReadOnlyPayload(_) => true,
         // A prompt is prose, not a command line: the canonical digest limit
         // bounds it, as it does for every other prompt review.
         Action::PromptCredentialFile(scope) => {

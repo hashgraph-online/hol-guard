@@ -31,6 +31,9 @@ const MAX_QUEUED_BYTES: usize = 8 * 1024 * 1024;
 const MAX_DRAIN_BYTES: usize = 1536 * 1024;
 pub(crate) const MAX_RECORD_BYTES: usize = 1024 * 1024;
 const DEFAULT_DRAIN_RECORDS: usize = 256;
+/// The records [`DirectEvidenceQueue::has_headroom`] keeps free for hooks
+/// that run concurrently with the one asking.
+const HEADROOM_RECORDS: usize = 64;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -99,6 +102,19 @@ impl DirectEvidenceQueue {
     /// The diagnostic counts of direct hooks since this queue started.
     pub(crate) fn counters(&self) -> &DirectHookCounters {
         &self.counters
+    }
+
+    /// Whether a worst-case record still fits with room to spare. A hook
+    /// about to take a step the daemon would repeat if the hook were handed
+    /// back asks this first, so a full queue defers before that step and not
+    /// after it. It is a check, not a reservation: hooks running at the same
+    /// time share the spare room.
+    pub(crate) fn has_headroom(&self) -> bool {
+        let Ok(state) = self.state.lock() else {
+            return false;
+        };
+        state.records.len() + HEADROOM_RECORDS <= MAX_QUEUED_RECORDS
+            && state.bytes + 2 * MAX_RECORD_BYTES <= MAX_QUEUED_BYTES
     }
 
     /// Queue one record, or refuse it when the queue cannot hold it.

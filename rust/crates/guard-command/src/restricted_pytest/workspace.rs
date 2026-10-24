@@ -50,6 +50,13 @@ pub(crate) fn workspace_admissible(cwd: &Path, home: Option<&Path>) -> Option<Pa
 /// still runs, so such a shape must run it whole, and the real `mktemp`
 /// creates its directory under the sandbox's private `TMPDIR`.
 pub(crate) fn exact_shape(text: &str, workspace: &Path) -> Option<Shape> {
+    // A trailing subshell group runs exactly the command list inside it, so
+    // the list's shape is the group's. The group text itself models no
+    // command, so without this the sandbox could not plan a group the
+    // decision already routed to it.
+    if let Some(ungrouped) = crate::pretool::ungrouped_command_list(text) {
+        return exact_shape(&ungrouped, workspace).filter(runs_whole);
+    }
     if let Some(projected) = temp_cd::project(text) {
         return exact_shape(&projected, workspace).filter(runs_whole);
     }

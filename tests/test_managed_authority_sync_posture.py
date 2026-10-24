@@ -64,6 +64,21 @@ def completed_catalog(monkeypatch):
     return state
 
 
+def test_connected_install_advertises_the_catalog_without_a_manual_switch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, completed_catalog
+) -> None:
+    monkeypatch.delenv("GUARD_EXTENSION_CATALOG_SYNC_V1", raising=False)
+    # Stop before the authority read: the flag gate is what this test pins.
+    completed_catalog.completed = False
+    store = GuardStore(tmp_path / "guard-home")
+    posture = runner._managed_controls_runtime_sync_posture(store, generated_at="2026-08-25T00:00:00Z")
+    assert posture["managedControlsCapabilities"] == ["extension-catalog.v2"]
+    assert posture["extensionCatalogDigest"] == "c" * 64
+
+    monkeypatch.setenv("GUARD_EXTENSION_CATALOG_SYNC_V1", "false")
+    assert runner._managed_controls_runtime_sync_posture(store, generated_at="2026-08-25T00:00:00Z") == {}
+
+
 @pytest.mark.parametrize(("local_revision", "managed_revision"), [(0, 0), (0, 1), (7, 1), (7, 2)])
 def test_cloud_sync_preserves_independent_protected_revisions(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, local_revision: int, managed_revision: int, completed_catalog

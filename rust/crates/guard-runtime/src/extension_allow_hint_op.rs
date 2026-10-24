@@ -76,7 +76,7 @@ pub(crate) fn evaluate_extension_allow_hint(
     })
 }
 
-fn decide(
+pub(crate) fn decide(
     request: &ExtensionAllowHintRequestV1,
     controls: Option<&CompiledNativeCommandControls>,
 ) -> Result<Option<ExtensionAllowHintV1>, String> {

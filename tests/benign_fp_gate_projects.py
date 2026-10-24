@@ -209,6 +209,15 @@ def _build_toolchain(workspace: Path) -> None:
         "<groupId>example.invalid</groupId><artifactId>fixture</artifactId>"
         "<version>1.0.0</version></project>\n",
     )
+    # JVM and autotools wrappers ship without an extension, and agents drive
+    # them both directly and through an interpreter (`sh ./gradlew test`).
+    for relative, body in (
+        ("gradlew", "#!/bin/sh\necho gradle\n"),
+        ("mvnw", "#!/bin/sh\necho maven\n"),
+        ("scripts/bootstrap", "#!/bin/sh\necho bootstrap\n"),
+    ):
+        _write(workspace / relative, body)
+        (workspace / relative).chmod(0o755)
     # `just` and `pre-commit` are the other two task runners agents drive from a checkout root.
     _write(workspace / "justfile", "build:\n    npm run build\n\ntest:\n    npm test\n")
     _write(

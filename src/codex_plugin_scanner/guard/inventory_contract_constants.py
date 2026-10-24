@@ -11,6 +11,18 @@ _SENSITIVE_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ``evidenceAuthority`` names who vouches for trust evidence (``device_claim``
+# from a local install). It is not a credential, and Guard Cloud rejects a
+# snapshot that masks it. Only this exact key is exempt.
+_NON_SECRET_KEY = "evidenceauthority"
+
+
+def _is_sensitive_key(key: str) -> bool:
+    """Whether a metadata key names a credential and its value must be masked."""
+    if key.isascii() and key.lower() == _NON_SECRET_KEY:
+        return False
+    return _SENSITIVE_KEY_RE.search(key) is not None
+
 
 _SENSITIVE_VALUE_RE = re.compile(r"(?i)(gh[pousr]_[a-z0-9_]+|sk-[a-z0-9_-]+|guard_live_[a-z0-9_-]+|bearer\s+\S+)")
 

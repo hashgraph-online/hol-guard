@@ -140,9 +140,6 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_daemon_lifecycle.py",
         # Gathers facts for and decodes the resident sensitive-read decisions; verdicts stay Rust.
         "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
-        # Retry lineage is local diagnostic metadata. Its digests protect
-        # reattachment integrity but never authorize or evaluate an action.
-        "src/codex_plugin_scanner/guard/retry_lineage.py",
     }
 )
 _TRANSPORT_AUTHORITY_PATHS: Final = frozenset(

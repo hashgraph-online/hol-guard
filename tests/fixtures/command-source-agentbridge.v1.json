@@ -586,8 +586,10 @@
       "enabled_extensions": [
         "command.agentbridge"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "exec-scaffold-force",
       "rule_id": "command.agentbridge.scaffold-plugin-force"
     },
@@ -630,8 +632,10 @@
       "enabled_extensions": [
         "command.agentbridge"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "exec-exe-scaffold-force",
       "rule_id": "command.agentbridge.scaffold-plugin-force"
     },
@@ -652,8 +656,10 @@
       "enabled_extensions": [
         "command.agentbridge"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
       "id": "exec-run-tool-registry",
       "rule_id": "command.agentbridge.run-tool-registry"
     },

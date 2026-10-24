@@ -273,3 +273,59 @@ def test_normalization_is_opt_in_and_precedes_full_environment_hashing() -> None
         step for step in windows["runs"]["steps"] if step.get("uses") == "./.github/actions/setup-rust"
     )
     assert windows_setup["with"] == {"normalize-toolchains": "true"}
+
+
+def test_release_normalization_is_hosted_windows_only_after_install_before_cache() -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/release-native-prepare.yml").read_text())
+    assert "scripts/ci/normalize_rust_toolchains.py" in workflow[True]["push"]["paths"]
+    steps = workflow["jobs"]["compile"]["steps"]
+    normalizers = [step for step in steps if "normalize_rust_toolchains.py" in step.get("run", "")]
+    assert len(normalizers) == 1
+    normalize_step = normalizers[0]
+    install = next(step for step in steps if step.get("name") == "Install pinned Rust target")
+    cache = next(step for step in steps if step.get("uses", "").startswith("Swatinem/rust-cache@"))
+    assert steps.index(install) < steps.index(normalize_step) < steps.index(cache)
+    miss_guard = (
+        "env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true' && "
+        "steps.native-artifact.outputs.accepted != 'true'"
+    )
+    assert install["if"] == cache["if"] == miss_guard
+    assert normalize_step["if"] == (
+        "runner.environment == 'github-hosted' && runner.os == 'Windows' && runner.arch == 'X64' && " + miss_guard
+    )
+    assert normalize_step["shell"] == "bash"
+    assert normalize_step["run"] == "python scripts/ci/normalize_rust_toolchains.py --toolchain 1.88.0"
+    assert normalize_step.get("continue-on-error", False) is False
+    commands = install["run"]
+    assert commands.index("rustup toolchain install 1.88.0") < commands.index("rustup default 1.88.0")
+    assert commands.index("rustup default 1.88.0") < commands.index('rustup target add "$RUST_TARGET"')
+
+
+def test_windows_normalization_preserves_pinned_cross_target_components(monkeypatch) -> None:
+    for name, value in {
+        "GITHUB_ACTIONS": "true",
+        "RUNNER_ENVIRONMENT": "github-hosted",
+        "RUNNER_OS": "Windows",
+        "RUNNER_ARCH": "X64",
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(sys, "argv", ["normalize", "--toolchain", "1.88.0"])
+    components = {"rustc", "rust-std-x86_64-pc-windows-msvc", "rust-std-aarch64-pc-windows-msvc"}
+    unused = f"1.99.1-{WINDOWS_HOST}"
+    toolchains = {WINDOWS_PINNED: components.copy(), unused: {"rustc"}}
+
+    def rustup(arguments, **kwargs):
+        assert kwargs["check"] is True
+        if arguments == ["rustup", "toolchain", "list"]:
+            output = f"{WINDOWS_PINNED} (default)\n{unused}\n"
+        elif arguments == ["rustup", "show", "active-toolchain"]:
+            output = f"{WINDOWS_PINNED} (default)\n"
+        else:
+            assert arguments == ["rustup", "toolchain", "uninstall", unused]
+            del toolchains[unused]
+            output = ""
+        return subprocess.CompletedProcess(arguments, 0, output)
+
+    monkeypatch.setattr(normalize.subprocess, "run", rustup)
+    normalize.main()
+    assert toolchains == {WINDOWS_PINNED: components}

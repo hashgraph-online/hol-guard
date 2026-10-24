@@ -223,15 +223,31 @@ def test_provider_delegates_raw_active_metadata_and_factory_authentication(monke
         SimpleNamespace(installed_discovery=lambda _: handle, require_handle=require),
     )
     active = SimpleNamespace(**{**raw(1), "name": "Active authoritative", "permissions": ()})
+    # The enforcement digest names the active entries, so this registry carries
+    # its own rather than the one the fixture view was prepared under.
+    registry = SimpleNamespace(extensions=(active,), catalog_digest="d" * 64)
     result = pages.prepare_installed_catalog_view(
-        view.guard_home,
-        registry=SimpleNamespace(extensions=(active,), catalog_digest="a" * 64),
-        guard_version="3.49.0",
-        generated_at=NOW,
+        view.guard_home, registry=registry, guard_version="3.49.0", generated_at=NOW
     )
     assert len(factory_calls) == 3
     assert next(iter(result.pages()))["entries"][1]["name"] == "Active authoritative"
     assert "PRIVATE-SENTINEL" not in pages.encoded(list(result.pages())).decode()
+
+    # A later sync of the same catalog reuses the native view without
+    # marshalling a single extension again, even at a new timestamp.
+    actions = []
+    native = pages.native_call
+
+    def recorded(home, **request):
+        actions.append(request["action"])
+        return native(home, **request)
+
+    monkeypatch.setattr(pages, "native_call", recorded)
+    again = pages.prepare_installed_catalog_view(
+        view.guard_home, registry=registry, guard_version="3.49.0", generated_at="2099-01-01T00:00:00Z"
+    )
+    assert actions == ["reuse"]
+    assert again == result
 
 
 def test_native_resident_delegation_has_no_python_fallback(monkeypatch, tmp_path):

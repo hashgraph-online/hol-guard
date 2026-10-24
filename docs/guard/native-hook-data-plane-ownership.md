@@ -161,7 +161,27 @@ a fixed floor): `compute_extension_allow_hint`, the resident's
 state the same rule, the resident stays authoritative, and the recorded vectors in
 `rust/crates/guard-runtime/testdata/hook_direct_review/` pin the resident and
 daemon copies together. The settle proofs and the counterfactual that verifies a
-hint before it is stored are Rust-owned.
+hint before it is stored are Rust-owned. A review the direct hook lane queues
+itself stores its hints without a daemon round trip:
+`rust/crates/guard-runtime/src/hook_direct_review_hint.rs` repeats the review
+with extension evidence under the admitted snapshot, inside one command
+authority lease, and asks `extension_allow_hint_op` only when that review
+matches the one that paused. The coverage hint
+(`rust/crates/guard-runtime/src/extension_coverage_hint.rs`, mirroring
+`extension_coverage_hint.py`) rides on every queued review an extension
+observed.
+
+A review due only to non-recognition of a command that launches a local CLI
+this device has not set up is a connector-setup review, and the direct hook lane
+queues it as well (`rust/crates/guard-runtime/src/hook_direct_review_connector.rs`).
+It asks the `local_cli_hook` resident op for the connector, as
+`native_review_setup_connector` does, stores the row under the connector's
+`queue_group_id` with the connector-setup hint in place of the extension hints,
+shows the agent the `connector_setup_reason` text, and records the connector's
+setup context. The resident cannot raise a desktop notice, so it hands the stored
+request id and the CLI name to the evidence drain, which raises the notice from
+the stored row. Any lookup the resident cannot spell exactly as the daemon would,
+and any failed lookup, leaves the review to the daemon.
 
 The recommendation shown with a pending review is that stored hint re-checked
 on every read, and the resident owns it too. The
@@ -319,6 +339,35 @@ snapshot drift states — and returns the three summaries the reply carries. A
 report whose rows exceed the request budget, or a resident that cannot answer,
 fails the summary closed; there is no Python recount.
 
+A hook's retry lineage is captured in the resident
+(`retry-lineage-capture-v1`, in `retry_lineage_capture_op.rs`). Python held the
+capture half of that grammar: which payload aliases name a provider session,
+thread, tool call, turn, invocation, request, workspace and device; when two
+aliases disagree; what counts as a clean identifier; and how the workspace,
+device, action envelope and record are digested. The validating half already
+lived in `guard_store_lineage`, so both halves now share one identifier rule
+and one record digest. Python sends the payload's top-level strings (any other
+value as `false`, which the grammar refuses exactly as it would the original),
+the runtime workspace and the action envelope, and attaches the record the
+reply carries. The lineage only correlates retries and never authorizes an
+action, so a resident that cannot answer leaves the hook without lineage
+rather than falling back to a Python capture.
+
+An inventory snapshot's content identity is computed in the resident
+(`inventory-snapshot-digest-v1`, in `inventory_snapshot_digest_op.rs`, over
+`inventory_fingerprints::inventory_snapshot_content_hash`). That identity is
+what decides whether an inventory changed, and reaching it is a grammar rather
+than a hash: observation stamps such as `observedAt` and `scanDurationMs` are
+dropped, nested lists are ordered, items, findings and sources are each sorted
+by their own key, and the result is serialized exactly one way before it is
+digested. Python sends only the fields the grammar reads, with an absent
+description travelling as an explicit null so it stays distinct from an empty
+one. The snapshot travels whole: a digest over part of an inventory is not a
+digest of it, so one too large for the request bound fails rather than being
+hashed in Python. A resident that cannot answer leaves the snapshot without an
+identity. The per-item content hashes that feed it are still assembled in
+Python; only the snapshot's own identity moved.
+
 Reading a stored or replayed package evaluation back into the view a harness
 shows is decided in the resident (`package-evaluation-view-v1`, in
 `package_evaluation_view_op.rs`, over the grammar in
@@ -364,16 +413,82 @@ earns, and the edits that bind a skill's document evidence or drop a directory
 hash nothing proved. The answer is edits — the keys to remove and the pairs to
 write — rather than a rebuilt map, so the caller keeps its own insertion order
 and an exported snapshot does not churn. The kind rides back from
-`inventory-source-evidence-v2`, the first question asked about an artifact,
+`inventory-source-evidence-v3`, the first question asked about an artifact,
 because the caller needs it to enrich metadata before it can ask anything else.
-The version marks the entry shape: a v2 client sends no kind of its own, and a
-v1 resident refuses an entry that leaves the field out, so the client asks for
-v2 and treats a resident that only advertises v1 as unavailable. The runtime
-keeps advertising v1 as well, because a client built before the change still
-sends its own kind and the resident ignores it. Python computed all of this; the copies are gone, the ownership
+That answer also names the instruction role an overlay's configured path stands
+for, read from the same grammar in `aibom_paths.rs` that the discovery walk
+applies, so the role a snapshot records cannot drift from the role discovery
+assigned. The version marks what the answer carries, not the wire schema: a v3
+resident reads the role, a v2 one derives the kind but leaves the role out, and
+a v1 one refuses an entry that does not spell its own kind. The client asks for
+v3 and treats anything older as unavailable rather than accepting a thinner
+answer. The runtime keeps advertising v2 and v1 as well, because a client built
+before either change still speaks this schema. Python computed all of this; the copies are gone, the ownership
 contract names the symbols so they cannot return, and
 `scripts/ci/inventory_item_metadata_reference.py` keeps the retired CPython only
 to regenerate the parity corpus the port is pinned to.
+
+Choosing what an inventory pass is allowed to open is the resident's as well
+(`inventory-scan-targets-v1`, in `inventory_scan_targets_op.rs`). One call per
+pass carries the detected artifacts along with the harness, the working
+directory, the home directory and the workspace, and answers with the MCP
+configurations worth scanning, the root each one is scanned under, the label a
+finding reports it as, and the skill collections to walk. Resolving a relative
+configuration path against the request's working directory, deciding which
+directory a server's declared roots make the scan root, collapsing a tree of
+skill directories to the collection that contains them, and ordering the answer
+are all settled there. A `skill_root` a detection recorded is used only when
+it stays inside the home or the workspace it was named against, because that
+value comes from metadata the workspace's own files can write and an absolute
+or `..`-rooted one would aim the skill scanner at any directory on the host;
+a root that leaves its base is dropped and the skill's own path decides the
+collection. An MCP configuration is not confined that way: the op opens the
+one a detection recorded wherever it sits, and bounds the reach instead by
+scanning it only under its own directory unless it is inside the workspace.
+Nothing expands `~`, which the Python this replaced did not do either. Python
+no longer picks targets at all: when the resident cannot answer,
+the pass reports each enabled scanner as unavailable rather than reporting a
+clean scan of configurations nothing opened.
+
+A Codex hook's canonical identity is the resident's too
+(`codex-hook-identity-v1`, in `codex_hook_identity_op.rs`). The digest decides
+whether an approval the user already gave still covers the hook in front of us,
+so a second implementation would be a second answer to that question. One call
+carries a batch of entries and answers each with a handler identity, a group
+identity, the conflict keys a group's handler slots must not collapse onto, or
+the argv a command reduces to when its shell tokenization is provably
+uncomplicated. The canonical form is CPython's: mappings sorted by key, floats
+that happen to be whole written as integers, and the payload hashed as
+`json.dumps(..., sort_keys=True, separators=(",", ":"), ensure_ascii=False)`
+writes it. A hook definition is read from TOML and JSON, so it holds scalars a
+JSON request cannot name - datetimes, dates, times, non-finite floats and
+integers wider than the resident's number type. Each travels as a token drawn
+from a per-request random prefix that is verified to match no string in the
+payload, with its meaning in a separate map, so a config file cannot spell a
+token itself and nothing it contains can pass as a substituted scalar.
+`codex_hook_identity.py` now only names what is being identified;
+`native_codex_hook_identity.py` ships it across and fails closed.
+
+What a local CLI's `--help` means is read in the resident
+(`local-cli-help-parse-v1`, in `local_cli_help.rs`). Python ran the prose
+grammar: which line opens a command section and which closes it, when an
+indented line is a command row rather than a wrapped description, which tokens
+are commands and which are option spellings, and how a row's description is
+recovered from the columns after it. That grammar decides which commands an
+operator is offered a grant over, so a second copy of it would be a second
+answer to the same question. Python now only probes - it runs the CLI, collects
+the help text each subcommand prints, and sends the text; the resident returns
+the commands it names and their descriptions.
+
+Two consequences are worth naming. Discovery fails closed: a resident that
+cannot answer leaves the CLI with no commands found, and the grant falls back
+to its "other" bucket rather than to a Python parse. And the port keeps a
+Python quirk rather than quietly fixing it - a two-word section header such as
+`Other things:` reads as a command row (`Other`, described as `things:`) and
+leaves the section open, while a one-word `Options:` closes it. Changing that
+would move which commands an existing grant covers, so
+`a_two_word_header_reads_as_a_row_and_keeps_the_section_open` pins the
+behaviour until it is changed deliberately.
 
 ## Harness route inventory
 

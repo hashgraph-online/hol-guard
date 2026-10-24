@@ -1,6 +1,6 @@
 use super::{
-    drain, DirectEvidenceQueue, HookDirectEvidenceDrainRequestV1, MAX_QUEUED_RECORDS,
-    MAX_RECORD_BYTES,
+    drain, DirectEvidenceQueue, HookDirectEvidenceDrainRequestV1, HEADROOM_RECORDS,
+    MAX_QUEUED_RECORDS, MAX_RECORD_BYTES,
 };
 use serde_json::{json, Value};
 
@@ -121,4 +121,27 @@ fn a_cursor_from_another_resident_drops_nothing() {
     }
     let page = drained_from(&restarted, None, Some(1), None);
     assert_eq!(page["records"], json!([{ "restarted": 0 }]));
+}
+
+#[test]
+fn headroom_keeps_a_worst_case_record_and_spare_slots_free() {
+    let queue = DirectEvidenceQueue::default();
+    assert!(queue.has_headroom());
+    let large = "x".repeat(MAX_RECORD_BYTES - 64);
+    for _ in 0..6 {
+        assert!(queue.offer(json!({ "payload": large.clone() })));
+    }
+    assert!(queue.has_headroom());
+    assert!(queue.offer(json!({ "payload": large })));
+    assert!(!queue.has_headroom());
+    // Headroom only gates the caller that asks; ordinary records still fit.
+    assert!(queue.offer(json!({ "small": 0 })));
+
+    let crowded = DirectEvidenceQueue::default();
+    for index in 0..MAX_QUEUED_RECORDS - HEADROOM_RECORDS {
+        assert!(crowded.offer(json!({ "index": index })));
+    }
+    assert!(crowded.has_headroom());
+    assert!(crowded.offer(json!({ "index": "one more" })));
+    assert!(!crowded.has_headroom());
 }

@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.extension_builder.repository_edits import edit_p
 from codex_plugin_scanner.guard.runtime import extension_contribution as commands
 from codex_plugin_scanner.guard.runtime import mcp_server_contribution as mcp
 from tests.extension_builder_support import metadata
+from tests.installed_bundle_layout import installed_layout
 from tests.test_command_projection_build_hook import hook as hook
 from tests.test_installed_command_pack_bundle import ENGINE, SOURCE, encoded, root
 from tests.test_installed_command_pack_bundle import package as package
@@ -42,6 +43,7 @@ def compatibility(package, monkeypatch, tmp_path, request):
         for family, payload in payloads.items()
     }
     plan.finish()
+    installed_layout(directory / "assets")
 
     def publish(value):
         data = encoded(value)

@@ -101,6 +101,9 @@ pub(super) fn execution_free_paging(
             | "rev-list"
             | "shortlog"
             | "check-ignore"
+            | "count-objects"
+            | "check-attr"
+            | "sparse-checkout"
             | "apply"
             | "bisect"
             | "notes"
@@ -126,8 +129,10 @@ pub(super) fn execution_free_paging(
     {
         return None;
     }
-    if matches!(operation, "shortlog" | "check-ignore")
-        && !super::git_listing_reads::read_form(operation, &remaining[1..])
+    if matches!(
+        operation,
+        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "sparse-checkout"
+    ) && !super::git_listing_reads::read_form(operation, &remaining[1..])
     {
         return None;
     }
@@ -332,7 +337,7 @@ fn probe(
             "config",
             "--null",
             "--get-regexp",
-            "^(core\\.fsmonitor|core\\.excludesfile|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|grep\\.fallbacktonoindex|extensions\\.partialclone|remote\\..*\\.promisor)$",
+            "^(core\\.fsmonitor|core\\.excludesfile|core\\.attributesfile|core\\.pager|pager\\..*|diff\\.external|diff\\..*\\.(command|textconv)|filter\\..*\\.(process|clean|smudge)|log\\.showsignature|gpg\\.program|gpg\\..*\\.program|format\\.pretty|pretty\\..*|grep\\.fallbacktonoindex|extensions\\.partialclone|remote\\..*\\.promisor)$",
         ])
 ,
         deadline, CONFIG_LIMIT,
@@ -398,7 +403,8 @@ fn probe(
         // `clean` prints its preview, and `apply` its check report, without
         // a pager.
         "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
-        | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" => false,
+        | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "count-objects"
+        | "check-attr" | "sparse-checkout" => false,
         "config" => super::git_config_reads::pages_by_default(&remaining[1..]),
         _ => true,
     };
@@ -477,6 +483,14 @@ fn probe(
                 !value.is_empty()
                     && super::git_listing_reads::prints_rule_source(operation, &remaining[1..])
             }
+            // An attribute check prints the attribute names and values of
+            // every rule that matches the paths it was given, and a configured
+            // attributes file names anything. Git splits each of its lines on
+            // whitespace and reads the first word as a pattern and the rest as
+            // attributes, so a file of credentials becomes attributes the
+            // check prints. The check keeps its review until someone reads
+            // that setting.
+            "core.attributesfile" => !value.is_empty() && operation == "check-attr",
             "core.pager" => {
                 configured_paging
                     && !git_pager_disabled

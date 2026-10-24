@@ -47,9 +47,10 @@ def _artifact_classification_entry(
     """Assemble what the resident needs to classify one native artifact.
 
     ``source_evidence`` is the resident's first answer about this artifact:
-    the kind its type maps onto, the source of truth behind a symlinked config
-    path, and the hash of its primary document. The two filesystem readings
-    are not derived here, and neither is the kind.
+    the kind its type maps onto, the instruction role an overlay's configured
+    path names, the source of truth behind a symlinked config path, and the
+    hash of its primary document. The two filesystem readings are not derived
+    here, and neither is the kind or the role.
 
     The result doubles as the classification request entry, so the caller can
     hand the whole artifact set over in one call.
@@ -61,6 +62,7 @@ def _artifact_classification_entry(
     if not isinstance(item_kind_value, str) or not item_kind_value:
         raise InventoryItemClassificationUnavailableError
     safe_metadata = _safe_artifact_metadata(artifact, home_dir=home_dir, workspace_dir=workspace_dir)
+    instruction_role = source_evidence.get("instruction_role")
     safe_metadata = _apply_aibom_metadata_enrichment(
         artifact,
         captured_at=generated_at,
@@ -68,6 +70,7 @@ def _artifact_classification_entry(
         metadata=safe_metadata,
         home_dir=home_dir,
         workspace_dir=workspace_dir,
+        instruction_role=instruction_role if isinstance(instruction_role, str) else None,
         cisco_runs=cisco_runs,
     )
     source_of_truth = source_evidence.get("source_of_truth")

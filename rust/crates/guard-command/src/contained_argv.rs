@@ -364,6 +364,7 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             | "tsx_test_invocation"
             | "vitest_arguments"
             | "contained_kind"
+            | "launcher_program"
     ) {
         return None;
     }
@@ -388,6 +389,7 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         "tsx_test_invocation" => tsx_test_invocation(&command).map(|value| json!(value)),
         "vitest_arguments" => vitest_arguments(&command).map(|v| json!(v)),
         "contained_kind" => contained_kind(&command),
+        "launcher_program" => Ok(json!(crate::parser_wrappers::launcher_program(&command, 0))),
         _ => unreachable!(),
     };
     Some(match result {

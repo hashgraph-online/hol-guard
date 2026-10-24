@@ -293,6 +293,68 @@
      }
     }
    }
+  },
+  {
+   "expected": {
+    "evidenceAuthority": "device_claim"
+   },
+   "value": {
+    "evidenceAuthority": "device_claim"
+   }
+  },
+  {
+   "expected": {
+    "EVIDENCEAUTHORITY": "device_claim"
+   },
+   "value": {
+    "EVIDENCEAUTHORITY": "device_claim"
+   }
+  },
+  {
+   "expected": {
+    "evidenceAuthorityToken": "[REDACTED]"
+   },
+   "value": {
+    "evidenceAuthorityToken": "abc"
+   }
+  },
+  {
+   "expected": {
+    "xevidenceAuthority": "[REDACTED]"
+   },
+   "value": {
+    "xevidenceAuthority": "abc"
+   }
+  },
+  {
+   "expected": {
+    "evidenceAuthorıty": "[REDACTED]"
+   },
+   "value": {
+    "evidenceAuthorıty": "abc"
+   }
+  },
+  {
+   "expected": {
+    "description\napiKey": "[REDACTED]"
+   },
+   "value": {
+    "description\napiKey": "abc"
+   }
+  },
+  {
+   "expected": {
+    "trust": {
+     "authToken": "[REDACTED]",
+     "evidenceAuthority": "device_claim"
+    }
+   },
+   "value": {
+    "trust": {
+     "authToken": "abc",
+     "evidenceAuthority": "device_claim"
+    }
+   }
   }
  ],
  "safe_source_detail": [

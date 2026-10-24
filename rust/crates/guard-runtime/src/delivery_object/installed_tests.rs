@@ -11,6 +11,11 @@ fn tag() -> String {
     format!("extension-data-{}-0.0-000007", source())
 }
 
+/// The directory the bundle keeps `tag()`'s assets in.
+fn slot() -> &'static str {
+    "000007"
+}
+
 fn digest(data: &[u8]) -> String {
     hex::encode(Sha256::digest(data))
 }
@@ -25,9 +30,9 @@ fn bundle() -> Bundle {
     let data: &'static [u8] = br#"{"n":1}"#;
     let name = format!("object-{}.json", digest(data));
     let dir = tempfile::tempdir().unwrap();
-    std::fs::create_dir(dir.path().join(tag())).unwrap();
+    std::fs::create_dir(dir.path().join(slot())).unwrap();
     std::fs::write(
-        dir.path().join(tag()).join("objects-000001.zip"),
+        dir.path().join(slot()).join("objects-000001.zip"),
         build(&[(&name, data)]),
     )
     .unwrap();
@@ -52,6 +57,7 @@ fn a_member_is_read_from_the_installed_container() {
     let bundle = bundle();
     let reply = ask(&bundle, member(&bundle), bundle.data.len() as u64).unwrap();
     assert_eq!(reply["data"], STANDARD.encode(bundle.data));
+    assert_eq!(reply["directory"], slot());
 }
 
 #[test]
@@ -118,7 +124,7 @@ fn a_member_of_the_wrong_length_or_a_missing_container_is_refused() {
 #[test]
 fn a_symlinked_tag_directory_is_not_followed() {
     let bundle = bundle();
-    let real = bundle.dir.path().join(tag());
+    let real = bundle.dir.path().join(slot());
     let moved = bundle.dir.path().join("moved");
     std::fs::rename(&real, &moved).unwrap();
     std::os::unix::fs::symlink(&moved, &real).unwrap();
@@ -149,7 +155,7 @@ fn a_bounded_batch_checks_every_member_and_preserves_order() {
     let second = br#"{"n":2}"#;
     let name = format!("object-{}.json", digest(second));
     std::fs::write(
-        bundle.dir.path().join(tag()).join("objects-000001.zip"),
+        bundle.dir.path().join(slot()).join("objects-000001.zip"),
         build(&[(&bundle.name, bundle.data), (&name, second)]),
     )
     .unwrap();
@@ -189,7 +195,7 @@ fn even_maximum_object_batches_have_a_bounded_serialized_reply() {
     let bytes = vec![b'a'; OBJECT_BYTES as usize];
     let name = format!("object-{}.json", digest(&bytes));
     std::fs::write(
-        bundle.dir.path().join(tag()).join("objects-000001.zip"),
+        bundle.dir.path().join(slot()).join("objects-000001.zip"),
         build(&[(&name, &bytes)]),
     )
     .unwrap();
@@ -219,7 +225,7 @@ fn batches_refuse_empty_oversized_and_non_object_requests() {
 #[test]
 fn every_batch_bound_is_checked_before_any_container_is_opened() {
     let bundle = bundle();
-    std::fs::remove_file(bundle.dir.path().join(tag()).join("objects-000001.zip")).unwrap();
+    std::fs::remove_file(bundle.dir.path().join(slot()).join("objects-000001.zip")).unwrap();
     let first = json!({"target": member(&bundle), "length": 7});
     let reads = container::read_count();
     for length in [json!(0), json!(OBJECT_BYTES + 1), json!("7")] {
@@ -255,7 +261,7 @@ fn a_batch_rechecks_changed_members_and_rejects_a_late_corruption() {
     });
     assert!(batch_ask(&bundle, vec![item.clone(), different]).is_err());
     std::fs::write(
-        bundle.dir.path().join(tag()).join("objects-000001.zip"),
+        bundle.dir.path().join(slot()).join("objects-000001.zip"),
         b"corrupt",
     )
     .unwrap();
@@ -268,13 +274,13 @@ fn interleaved_assets_and_tags_use_one_read_per_authorized_path() {
     let second = br#"{"n":22}"#;
     let name = format!("object-{}.json", digest(second));
     let other_tag = tag().replace("000007", "000008");
-    std::fs::create_dir(bundle.dir.path().join(&other_tag)).unwrap();
-    for (tag, asset) in [
-        (tag(), "objects-000002.zip"),
-        (other_tag.clone(), "objects-000001.zip"),
+    std::fs::create_dir(bundle.dir.path().join("000008")).unwrap();
+    for (directory, asset) in [
+        (slot(), "objects-000002.zip"),
+        ("000008", "objects-000001.zip"),
     ] {
         std::fs::write(
-            bundle.dir.path().join(tag).join(asset),
+            bundle.dir.path().join(directory).join(asset),
             build(&[(&name, second)]),
         )
         .unwrap();
@@ -323,7 +329,7 @@ fn a_later_member_must_pass_length_and_digest_checks_in_the_shared_snapshot() {
     let name = format!("object-{}.json", digest(second));
     let first = json!({"target": member(&bundle), "length": bundle.data.len()});
     let other = json!({"target": {"tag": tag(), "asset": "objects-000001.zip", "member": name}, "length": second.len()});
-    let path = bundle.dir.path().join(tag()).join("objects-000001.zip");
+    let path = bundle.dir.path().join(slot()).join("objects-000001.zip");
     std::fs::write(
         &path,
         build(&[(&bundle.name, bundle.data), (&name, second)]),
@@ -354,7 +360,7 @@ fn a_later_member_must_pass_length_and_digest_checks_in_the_shared_snapshot() {
 fn batch_reads_refuse_symlinked_tags_and_container_leaves() {
     for tag_link in [true, false] {
         let bundle = bundle();
-        let real = bundle.dir.path().join(tag());
+        let real = bundle.dir.path().join(slot());
         let real = if tag_link {
             real
         } else {
@@ -389,7 +395,7 @@ fn compare_single_loop_and_batch_on_the_same_real_container() {
         .collect();
     let archive = build(&entries);
     std::fs::write(
-        bundle.dir.path().join(tag()).join("objects-000001.zip"),
+        bundle.dir.path().join(slot()).join("objects-000001.zip"),
         &archive,
     )
     .unwrap();

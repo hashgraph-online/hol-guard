@@ -329,16 +329,13 @@ fn evaluate_validated_envelope(
                             envelope.deadline_budget_ms.unwrap_or(9_000).min(9_000),
                         ),
                 ),
+                // The envelope carries the roots and nothing more: every
+                // proof a context can hold is one a caller with the command
+                // in hand sets, so they all stay at their default false.
                 guard_command::pretool::PathContext {
                     home_dir: Some(envelope.source.home_dir.as_str()),
                     cwd: envelope.source.cwd.as_deref(),
-                    cdpath_unset: false,
-                    rustup_override_absent: false,
-                    npm_config_inert: false,
-                    pip_config_inert: false,
-                    shell_home_matches: false,
-                    ripgrep_config_absent: false,
-                    psql_environment: Default::default(),
+                    ..Default::default()
                 },
                 Some(
                     envelope
@@ -384,7 +381,6 @@ fn evaluate_validated_envelope(
             (value, receipt)
         }
         "PostToolUse" => {
-            let payload_kind = kind.clone();
             let request = NativeHookRequestV1 {
                 protocol_version: NATIVE_PROTOCOL_VERSION,
                 request_id: envelope.request_id.clone(),
@@ -409,9 +405,10 @@ fn evaluate_validated_envelope(
                 crate::policy_enforcement::apply_post_tool_policy_with_delivery(
                     snapshot,
                     &request,
-                    payload_kind,
+                    kind.clone(),
                     native,
                     delivery.as_ref(),
+                    envelope.recording_only,
                 )?
             } else {
                 native

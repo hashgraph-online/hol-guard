@@ -165,8 +165,9 @@ pub fn publish(spool: TempDir, draft_lease: fs::File, new: Value) -> Result<Valu
     }
     let lock = options.open(directory.join("cache.lock"))?;
     fs2::FileExt::lock_exclusive(&lock)?;
-    let paths = views(&directory)?;
-    for path in &paths {
+    let mut paths = views(&directory)?;
+    let mut damaged = None;
+    for (index, path) in paths.iter().enumerate() {
         let Ok(old) = record(path) else {
             continue;
         };
@@ -179,9 +180,21 @@ pub fn publish(spool: TempDir, draft_lease: fs::File, new: Value) -> Result<Valu
             .ok_or(Error::Invalid)?
             .remove("generated_at");
         if a == b && old["manifest"]["catalogDigest"] == new["manifest"]["catalogDigest"] {
-            verify(path, &old)?;
-            return summary(&old);
+            if verify(path, &old).is_ok() {
+                return summary(&old);
+            }
+            // A damaged copy of this view is replaced, unless a transfer
+            // still holds it.
+            let lease = lock_file(&path.join("lease"))?;
+            fs2::FileExt::try_lock_exclusive(&lease).map_err(|_| Error::Invalid)?;
+            drop(lease);
+            fs::remove_dir_all(path)?;
+            damaged = Some(index);
+            break;
         }
+    }
+    if let Some(index) = damaged {
+        paths.remove(index);
     }
     // An in-flight transfer keeps its immutable pages even when other views
     // are published. Refuse preparation if all four cache slots are pinned.
@@ -223,6 +236,36 @@ fn summary(value: &Value) -> Result<Value> {
         "discovery_root":value["observation"]["discovery_root"],
         "discovery_authority":value["observation"]["discovery_authority"]}),
     )
+}
+/// The finished view this observation already produced, or `{}` when it must
+/// be prepared. The enforcement digest names the appended entries and the
+/// discovery handle names the rest; `generated_at` only stamps the first
+/// preparation, so it never forces a rebuild.
+pub fn reuse(observation: &Observation) -> Result<Value> {
+    let root = directory(&observation.guard_home)?;
+    // Publication evicts under the exclusive cache lock; a shared lock keeps
+    // the view this read verifies in place until it returns.
+    let lock = lock_file(&root.join("cache.lock"))?;
+    fs2::FileExt::lock_shared(&lock)?;
+    let mut wanted = serde_json::to_value(observation).map_err(|_| Error::Invalid)?;
+    wanted
+        .as_object_mut()
+        .ok_or(Error::Invalid)?
+        .remove("generated_at");
+    for path in views(&root)?.into_iter().rev() {
+        let Ok(value) = record(&path) else {
+            continue;
+        };
+        let mut seen = value["observation"].clone();
+        let Some(fields) = seen.as_object_mut() else {
+            continue;
+        };
+        fields.remove("generated_at");
+        if seen == wanted && verify(&path, &value).is_ok() {
+            return summary(&value);
+        }
+    }
+    Ok(json!({}))
 }
 pub(super) fn page(directory: &Path, value: &Value, ordinal: usize) -> Result<Vec<u8>> {
     let hashes = value["hashes"].as_array().ok_or(Error::Invalid)?;
@@ -370,6 +413,17 @@ pub fn evaluate(request: &Value) -> Result<Value> {
         held.push((id.clone(), path, lease));
         return Ok(json!({"lease":id}));
     }
+    if request["action"] == "legacy" {
+        // Eviction takes the exclusive cache lock, so a shared one keeps this
+        // view in place while it is read, without holding a transfer lease.
+        let lock = lock_file(&root.join("cache.lock"))?;
+        fs2::FileExt::lock_shared(&lock)?;
+        let record = record(&path)?;
+        if digest(&record["manifest"])? != token {
+            return Err(Error::Invalid);
+        }
+        return Ok(json!({"catalog":legacy(&path,&record)?}));
+    }
     let record = record(&path)?;
     if digest(&record["manifest"])? != token {
         return Err(Error::Invalid);
@@ -379,9 +433,6 @@ pub fn evaluate(request: &Value) -> Result<Value> {
     }
     if request["action"] == "sync_ack" {
         return super::sync::ack(&record["manifest"], request);
-    }
-    if request["action"] == "legacy" {
-        return Ok(json!({"catalog":legacy(&path,&record)?}));
     }
     let op = request["operation"].as_str().ok_or(Error::Invalid)?;
     let key = format!("catalog-v2:{token}");

@@ -111,6 +111,35 @@ def test_relative_paths_are_anchored_to_the_callers_directory(monkeypatch: pytes
     ]
 
 
+def test_an_anchored_path_also_carries_the_one_the_harness_wrote(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The instruction role reads the configured path, not the directory we ran in."""
+
+    sent = _resident(monkeypatch, lambda request: {"evidence": [{}, {}]})
+    monkeypatch.setattr(
+        bridge.Path, "cwd", classmethod(lambda _cls: Path("/run/from/docs/security"))
+    )
+    bridge.native_inventory_source_evidence(
+        [
+            {"harness": "codex", "artifact_type": "instruction", "config_path": "notes.md"},
+            {
+                "harness": "codex",
+                "artifact_type": "instruction",
+                "config_path": "/w/notes.md",
+            },
+        ],
+        home_dir=Path("/h"),
+    )
+    (wire,) = sent
+    relative, absolute = wire["entries"]
+    assert relative["config_path"] == "/run/from/docs/security/notes.md"
+    assert relative["configured_path"] == "notes.md"
+    # An absolute path is already what the harness wrote, so the request keeps
+    # the shape every caller sends today and its digest with it.
+    assert "configured_path" not in absolute
+
+
 def test_a_bigger_batch_is_given_a_longer_deadline() -> None:
     """A fixed deadline would fail an inventory purely for being big."""
 
@@ -192,6 +221,13 @@ def _detection(count: int) -> HarnessDetection:
     )
 
 
+def _no_scan(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin the scan bridge: a snapshot makes a second resident call, and these
+    tests are about the first one."""
+
+    monkeypatch.setattr(inventory_contract, "native_inventory_scan_findings", lambda *_a, **_k: ([], []))
+
+
 def _no_classification(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pin the classification bridge: a snapshot makes a second resident call,
     and these tests are about the first one. The answer is the shape
@@ -224,6 +260,7 @@ def test_a_snapshot_asks_once_for_every_artifact(monkeypatch: pytest.MonkeyPatch
         ]
 
     monkeypatch.setattr(inventory_contract, "native_inventory_source_evidence", capture)
+    _no_scan(monkeypatch)
     _no_classification(monkeypatch)
     detection = _detection(3)
     snapshot = inventory_contract.inventory_snapshot_from_detection(
@@ -243,6 +280,7 @@ def test_a_snapshot_without_the_resident_fails_closed(monkeypatch: pytest.Monkey
         raise bridge.InventorySourceEvidenceUnavailableError
 
     monkeypatch.setattr(inventory_contract, "native_inventory_source_evidence", explode)
+    _no_scan(monkeypatch)
     _no_classification(monkeypatch)
     detection = _detection(1)
     with pytest.raises(bridge.InventorySourceEvidenceUnavailableError):
@@ -254,12 +292,13 @@ def test_a_snapshot_without_the_resident_fails_closed(monkeypatch: pytest.Monkey
         )
 
 
-def test_the_client_asks_for_the_resident_that_derives_the_item_kind(
+def test_the_client_asks_for_the_resident_that_reads_kind_and_role(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A v1 resident refuses an entry with no ``item_kind``, and this client
-    sends none. Asking for v2 turns that into plain unavailability rather than
-    an inventory that silently loses every artifact's source evidence."""
+    """A v1 resident refuses an entry with no ``item_kind`` and an older one
+    answers without the instruction role. This client derives neither, so it
+    asks for v3: anything older is plain unavailability rather than an
+    inventory that silently loses evidence it never sees missing."""
 
     asked: list[object] = []
     monkeypatch.setattr(bridge, "_resolve_digest_home", lambda _home: Path("/tmp/inventory-evidence-home"))
@@ -274,5 +313,5 @@ def test_the_client_asks_for_the_resident_that_derives_the_item_kind(
 
     _ask(_entries(1))
 
-    assert bridge.INVENTORY_SOURCE_EVIDENCE_FEATURE == "inventory-source-evidence-v2"
-    assert asked == ["inventory-source-evidence-v2"]
+    assert bridge.INVENTORY_SOURCE_EVIDENCE_FEATURE == "inventory-source-evidence-v3"
+    assert asked == ["inventory-source-evidence-v3"]

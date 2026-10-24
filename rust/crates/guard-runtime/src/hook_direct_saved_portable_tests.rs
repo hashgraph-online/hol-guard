@@ -63,6 +63,7 @@ fn status(
         home_dir: "/home/user",
         guard_home,
         binding: &binding,
+        hint: None,
     };
     let store = StoreShape {
         connection,

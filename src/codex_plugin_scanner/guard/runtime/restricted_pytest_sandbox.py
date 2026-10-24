@@ -136,27 +136,12 @@ def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path, user_site_
     return restricted_native("macos_profile", fields, str)
 
 
-def _collection_link_metadata(plan: RestrictedPytestPlan) -> tuple[Path, ...]:
-    return tuple(
-        Path(path)
-        for path in restricted_native("collection_link_metadata", _profile_fields(plan, plan.workspace), list)
-    )
-
-
 def _bubblewrap_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
     if plan.profile_version in READ_ONLY_TEST_PROFILES:
         from .restricted_linux_namespace import linux_readonly_argv
 
         return linux_readonly_argv(plan, private_root=private_root)
     return restricted_native("bubblewrap_argv", _profile_fields(plan, private_root), list)
-
-
-def _dedupe_parent_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
-    return tuple(Path(path) for path in restricted_native("dedupe_parent_paths", {"roots": paths}, list))
-
-
-def _ancestor_paths(paths: Sequence[Path]) -> tuple[Path, ...]:
-    return tuple(Path(path) for path in restricted_native("ancestor_paths", {"roots": paths}, list))
 
 
 def _runtime_read_roots(plan: RestrictedPytestPlan, *, private_root: Path | None = None) -> tuple[Path, ...]:
@@ -172,10 +157,6 @@ def _runtime_read_roots(plan: RestrictedPytestPlan, *, private_root: Path | None
             list,
         )
     )
-
-
-def _symlink_runtime_roots(executable: Path) -> tuple[Path, ...]:
-    return tuple(Path(path) for path in restricted_native("symlink_runtime_roots", {"path": executable}, list))
 
 
 def _current_user_process_ceiling() -> int:

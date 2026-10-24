@@ -85,6 +85,7 @@ fn home_result(
             pip_config_inert: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),
+            creates_nothing: false,
         },
         Some(&environment),
     )
@@ -197,6 +198,7 @@ fn the_home_projection_answers_for_a_sibling_root() {
         pip_config_inert: false,
         ripgrep_config_absent: false,
         psql_environment: Default::default(),
+        creates_nothing: false,
     };
     assert_eq!(
         crate::pretool::directory_targets::verified_cwd_target("~/projects/app-report", context)

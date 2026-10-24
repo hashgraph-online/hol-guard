@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.seminara",
+  "version": "1.0.0",
+  "name": "Seminara MCP",
+  "description": "Reviews and gates actions for Seminara's streamable HTTP MCP server (https://seminara.online/api/v1/mcp) that orchestrates live presentations, slides, and attendee lead capture. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "online.seminara",
+    "displayName": "Seminara",
+    "url": "https://seminara.online"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#1D6FF4"
+  },
+  "homepage": "https://seminara.online",
+  "license": "MIT",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://seminara.online/api/v1/mcp",
+    "serverNames": ["seminara"]
+  },
+  "riskClasses": ["external-session-creation", "external-lead-export"],
+  "tools": [
+    { "name": "create_session", "state": "review" },
+    { "name": "export_leads", "state": "review" },
+    { "name": "submit_attendee_lead", "state": "review" },
+    { "name": "pap_query_aura", "state": "review" },
+    { "name": "list_sessions", "state": "inherit" },
+    { "name": "get_session", "state": "inherit" },
+    { "name": "get_session_analytics", "state": "inherit" },
+    { "name": "discover_sessions", "state": "inherit" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://seminara.online/api/v1/mcp",
+    "https://seminara.online/.well-known/mcp.json",
+    "https://github.com/shivamselam/seminara-agentic-suite/blob/main/mcp.json",
+    "https://github.com/shivamselam/seminara-agentic-suite"
+  ],
+  "saferAlternatives": [
+    "Keep create_session on Review so an agent cannot provision new presentation sessions or consume account minutes without explicit confirmation.",
+    "Keep export_leads and submit_attendee_lead on Review so captured attendee contact information and PII cannot be exported or submitted without explicit user approval.",
+    "Keep pap_query_aura on Review so outbound attendee messages and conversation context require user review.",
+    "Use list_sessions, get_session, and get_session_analytics for read-only inspection of active presentations without modifying state or exposing attendee PII."
+  ]
+}

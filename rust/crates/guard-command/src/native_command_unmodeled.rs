@@ -41,6 +41,8 @@ use super::{rank, rule_floor, CompiledNativeCommandControls};
 use crate::pretool::generic::workspace_redirects;
 use crate::CanonicalCommandV1;
 
+#[path = "native_command_unmodeled_case.rs"]
+mod case_labels;
 #[path = "native_command_unmodeled_expansion.rs"]
 mod expansion;
 #[path = "native_command_unmodeled_find_exec.rs"]
@@ -57,9 +59,10 @@ mod shapes;
 mod substitution;
 #[path = "native_command_unmodeled_xargs.rs"]
 mod xargs;
+use case_labels::without_case_labels;
 use find_exec::{find_exec_programs, EXEC_ACTIONS};
 use link_makers::creates_links;
-pub(crate) use prefix::prefix_reads_a_program_file;
+pub(crate) use prefix::{launcher_body, prefix_reads_a_program_file};
 use redirections::without_redirections;
 use shapes::{data_heredocs, without_lookups, without_plain_awk};
 pub(crate) use shapes::{python_is_builtin_only, python_stdin};
@@ -299,6 +302,20 @@ impl CompiledNativeCommandControls {
                 // that was never read. The module name is already in the
                 // command.
                 None if !prefix::interpreter_launch_reads_a_file(&bare, sourced_bounded) => {}
+                // A script file behind a trailing `&` is no more opaque than
+                // the same file run in the foreground, which this scan does
+                // model: `node server.js &` runs what `node server.js` runs.
+                // Refusing it here blocked an ordinary dev server outright,
+                // with no approval left to give it, while the same text
+                // without the `&` ran. The owners stay the ones this text
+                // names, so the floor it reaches is still a review.
+                None if crate::pretool::backgrounded_launch(command, context) => {}
+                // A scheduling prefix leaves no segments either, so the
+                // program behind it reads as a script nobody opened even when
+                // the same words without the prefix model exactly. The
+                // command the prefix runs is the one the text already names,
+                // and its own programs count toward the owners below.
+                None if crate::pretool::prefixed_launch(command, context) => {}
                 None => return None,
             }
         }
@@ -448,6 +465,70 @@ impl CompiledNativeCommandControls {
     }
 }
 
+/// Whether a trailing `&` is all that hides a nested executor.
+///
+/// The scan stops at the first construct it cannot model, and the background
+/// job wins that race: `eval "$PAYLOAD" &` is a background job to the parser
+/// and an `eval` to the shell. Read without the `&` it is the nested executor
+/// the arm below refuses unless the text names the program it runs, so
+/// backgrounding must not be the thing that admits it.
+///
+/// The foreground text is read here rather than parsed again: a second parse
+/// answers for the shape the scan already gave up on, and the question is
+/// only which program the text puts in command position.
+fn backgrounded_nested_executor(normalized: &str) -> bool {
+    let Some(foreground) = crate::pretool::foreground_job(normalized) else {
+        return false;
+    };
+    // Both of these name the program they run, so the floor below can still
+    // bound them and backgrounding takes nothing away.
+    if named_xargs_pipeline(foreground) || named_find_exec(foreground) {
+        return false;
+    }
+    // Only one command of the foreground text has to be the executor, and it
+    // need not be the first: `cd src; eval "$CMD" &` and `true || xargs sh &`
+    // each put it behind a separator a background job is allowed to carry, and
+    // `"eval" "$CMD" &` spells its name in quotes the shell takes off. Every
+    // command position is read, with the quotes and the directory stripped, so
+    // none of them reaches the floor below on the strength of its first word.
+    let literal = unquoted_literal(foreground);
+    let programs: Vec<String> = command_words(&literal)
+        .filter(|word| !is_assignment(word))
+        .map(executor_name)
+        .collect();
+    if programs.iter().any(|program| {
+        matches!(
+            program.as_str(),
+            "." | "eval" | "exec" | "parallel" | "source" | "xargs"
+        )
+    }) {
+        return true;
+    }
+    programs
+        .iter()
+        .any(|program| matches!(program.as_str(), "find" | "fd"))
+        && literal.split_whitespace().any(|word| {
+            matches!(word, "-exec" | "-execdir" | "-ok" | "-okdir" | "-x" | "-X")
+                || word == "--exec"
+                || word.starts_with("--exec=")
+                || word.starts_with("--exec-batch")
+        })
+}
+
+/// The program a command-position word names, without the directory, the
+/// image extension and the quotes the shell takes off before it resolves the
+/// name: `"eval"`, `'ev'al` and `/bin/eval` are each that program.
+fn executor_name(word: &str) -> String {
+    let word = word.replace('"', "");
+    let base = word.rsplit(['/', '\\']).next().unwrap_or(&word);
+    let lowered = base.to_ascii_lowercase();
+    lowered
+        .strip_suffix(".exe")
+        .or_else(|| lowered.strip_suffix(".cmd"))
+        .unwrap_or(&lowered)
+        .to_owned()
+}
+
 /// A pipeline whose only data movement is a pipe into an `xargs` that names
 /// the program it runs. A pipe into a shell, `curl url | sh`, is not one.
 fn named_xargs_pipeline(text: &str) -> bool {
@@ -567,6 +648,7 @@ fn reviewable_structure(
             let literal = unquoted_literal(normalized);
             !background_pipeline(normalized)
                 && (!moves_data(&literal) || literal_redirects_only(normalized))
+                && !backgrounded_nested_executor(normalized)
         }
         Some("compound_shell_not_yet_supported") => {
             let literal = unquoted_literal(normalized);
@@ -614,7 +696,13 @@ fn reviewable_structure(
         // read.
         Some("transparent_wrapper_not_yet_supported") => {
             let literal = unquoted_literal(normalized);
-            prefix::launch_only(&literal)
+            // An interpreter or a script behind the prefix is read when its
+            // own text parses as the command it looks like: `nohup node
+            // server.js` runs what `node server.js` runs, which models
+            // exactly on its own. Without that reading the launcher made the
+            // command stricter than the same words without it - a block with
+            // no approval, where the bare spelling ran.
+            (prefix::launch_only(&literal) || crate::pretool::prefixed_launch(command, context))
                 && (!moves_data(&literal) || literal_redirects_only(normalized))
         }
         // An unquoted `${NAME}` expands to a value the shell splits into
@@ -662,6 +750,12 @@ fn reviewable_structure(
 /// ordinary review card. A file the text does not name at all, and anything
 /// else nested alongside the sourcing, keep their evaluation failure: those
 /// run words this text does not hold.
+///
+/// A file that is not there holds no words either, so it is reviewable too:
+/// `source venv/bin/activate && pytest -q` in a checkout whose virtualenv has
+/// not been created blocked outright, while the same command reviewed once the
+/// directory existed. The floor still collects owners only from files it read,
+/// and it starts at review.
 fn sourcing_names_its_files(
     command: &CanonicalCommandV1,
     context: crate::pretool::PathContext<'_>,
@@ -731,7 +825,7 @@ fn moves_data(literal: &str) -> bool {
     literal.contains(['<', '>', '`'])
         || literal.contains("$(")
         || command_words(literal).any(|word| {
-            (is_assignment(word) && !saves_job_pid(word))
+            (is_assignment(word) && !saves_job_pid(word) && !assigns_nothing(word))
                 || matches!(
                     word,
                     "export" | "declare" | "typeset" | "readonly" | "local" | "unset" | "alias"
@@ -1169,7 +1263,7 @@ fn glues_a_word(character: char) -> bool {
 }
 
 fn synthesizes_program(literal: &str, sourced: bool) -> bool {
-    let masked = mask_double_quoted_separators(literal);
+    let masked = mask_double_quoted_separators(&without_case_labels(literal));
     let mut words = command_words(&masked).filter(|word| !is_assignment(word));
     words.any(|word| {
         !matches!(
@@ -1288,6 +1382,39 @@ fn saves_job_pid(word: &str) -> bool {
             && !matches!(
                 name,
                 "PATH" | "IFS" | "HOME" | "CDPATH" | "ENV" | "BASH_ENV" | "PS4" | "PROMPT_COMMAND"
+            )
+            && !name.starts_with("LD_")
+            && !name.starts_with("DYLD_")
+    })
+}
+
+/// `IFS= read -r line`: an assignment that names a value of nothing at all.
+/// The shell sets the name to the empty string, so no text arrives through it
+/// and nothing the command does not already show can be carried by it. The
+/// canonical line reader is spelled this way, and reading the prefix as data
+/// movement left `while IFS= read -r line; do ...; done < list.txt` blocked
+/// outright with no approval left to give it, while the same loop without the
+/// prefix reached review. A name the shell or loader itself reads keeps its
+/// signal: emptying `PATH` is a change of its own, and so is emptying a name
+/// that decides which files a pattern reaches or which options the shell runs
+/// under. `GLOBIGNORE` is read as glob-changing wherever it is set, so an
+/// empty one has to keep the same signal here rather than slipping past as a
+/// prefix that carries nothing.
+fn assigns_nothing(word: &str) -> bool {
+    word.split_once('=').is_some_and(|(name, value)| {
+        matches!(value, "" | "''" | "\"\"")
+            && !matches!(
+                name,
+                "PATH"
+                    | "HOME"
+                    | "CDPATH"
+                    | "ENV"
+                    | "BASH_ENV"
+                    | "PS4"
+                    | "PROMPT_COMMAND"
+                    | "GLOBIGNORE"
+                    | "SHELLOPTS"
+                    | "BASHOPTS"
             )
             && !name.starts_with("LD_")
             && !name.starts_with("DYLD_")

@@ -1,0 +1,1290 @@
+{
+  "schema": "codex-hook-inventory-parity.v1",
+  "cases": [
+    {
+      "name": "a source with no hooks table",
+      "payload": {
+        "features": {
+          "hooks": true
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": []
+    },
+    {
+      "name": "a hooks value that is not an event table",
+      "payload": {
+        "hooks": [
+          "PreToolUse"
+        ]
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_unsupported_event_shape: /home/agent/.codex/hooks.json in /home/agent/.codex/hooks.json. Codex hooks must be an event table. Repair the hook configuration before retrying install."
+      ],
+      "records": []
+    },
+    {
+      "name": "an event whose groups are not a list",
+      "payload": {
+        "hooks": {
+          "PreToolUse": {
+            "matcher": "*"
+          }
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_unsupported_event_shape: PreToolUse in /home/agent/.codex/hooks.json. Each Codex hook event must contain a list of matcher groups. Repair the event shape before retrying install."
+      ],
+      "records": []
+    },
+    {
+      "name": "a group that is not an object",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            "not-a-group"
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_group: PreToolUse/group[0] in /home/agent/.codex/hooks.json. Each Codex hook matcher group must be an object. Repair the group before retrying install."
+      ],
+      "records": []
+    },
+    {
+      "name": "a group whose matcher is not a string",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": 7,
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo one"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_group: PreToolUse/group[0] in /home/agent/.codex/hooks.json. A Codex hook matcher and activation fields must use supported scalar types. Repair the group before retrying install."
+      ],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "a group whose activation field is not a boolean",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "enabled": "yes",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo two"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_group: PreToolUse/group[0] in /home/agent/.codex/hooks.json. A Codex hook matcher and activation fields must use supported scalar types. Repair the group before retrying install."
+      ],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "a group whose handlers are not a list",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": {
+                "type": "command"
+              }
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_group: PreToolUse/group[0] in /home/agent/.codex/hooks.json. A Codex hook group's handlers must be a list. Repair the group before retrying install."
+      ],
+      "records": []
+    },
+    {
+      "name": "a group with no handlers key",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*"
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": []
+    },
+    {
+      "name": "a handler that is not an object",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                "echo three"
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_handler: PreToolUse/group[0]/handler[0] in /home/agent/.codex/hooks.json. Each Codex hook handler must be an object. Repair the handler before retrying install."
+      ],
+      "records": []
+    },
+    {
+      "name": "a command handler with no command",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_handler: PreToolUse/group[0]/handler[0] in /home/agent/.codex/hooks.json. An executable Codex command hook must contain a non-empty string command. Repair the handler before retrying install."
+      ],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "a command handler whose command is only whitespace",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "   "
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_handler: PreToolUse/group[0]/handler[0] in /home/agent/.codex/hooks.json. An executable Codex command hook must contain a non-empty string command. Repair the handler before retrying install."
+      ],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "a handler type Guard cannot model",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "webhook",
+                  "command": "echo four"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_unknown_handler_type: PreToolUse/group[0]/handler[0] in /home/agent/.codex/hooks.json. Guard found an executable Codex hook type it cannot model. Remove or convert the handler to a supported command hook before retrying install."
+      ],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "an executable handler whose timeout is not a number",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo five",
+                  "timeout": "30"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_handler: PreToolUse/group[0]/handler[0] in /home/agent/.codex/hooks.json. An executable Codex hook timeout must be a finite non-negative number. Repair the handler before retrying install."
+      ],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "an executable handler whose timeout is negative",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo six",
+                  "timeout": -1
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_handler: PreToolUse/group[0]/handler[0] in /home/agent/.codex/hooks.json. An executable Codex hook timeout must be a finite non-negative number. Repair the handler before retrying install."
+      ],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "an executable handler whose environment is not string valued",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo seven",
+                  "env": {
+                    "A": 1
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_handler: PreToolUse/group[0]/handler[0] in /home/agent/.codex/hooks.json. An executable Codex hook environment must be a string-keyed object. Repair the handler before retrying install."
+      ],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "an executable handler whose activation field is not a boolean",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo eight",
+                  "disabled": "no"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_handler: PreToolUse/group[0]/handler[0] in /home/agent/.codex/hooks.json. Codex hook activation fields must be booleans. Repair the handler before retrying install."
+      ],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "a plain command handler is unmanaged",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo nine"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "a handler with no type but a command is still executable",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "command": "echo ten"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "a handler with neither type nor command is inert",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "note": "inert"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "a disabled group deactivates its handler",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "enabled": false,
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo eleven"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": false,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "a disabled handler is inactive inside an active group",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo twelve",
+                  "disabled": true
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": false,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "an integer and a float timeout are both kept",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo thirteen",
+                  "timeout": 30
+                },
+                {
+                  "type": "command",
+                  "command": "echo fourteen",
+                  "timeout": 2.5
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        },
+        {
+          "coordinate": "PreToolUse/group[0]/handler[1]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "environment keys are sorted",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo fifteen",
+                  "env": {
+                    "ZED": "1",
+                    "ALPHA": "2"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "an authenticated binding claims its handler",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "/usr/bin/python3 -m codex_plugin_scanner guard hook --harness codex"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [
+        {
+          "event": "PreToolUse",
+          "group": {
+            "matcher": "*"
+          },
+          "handler": {
+            "type": "command",
+            "command": "/usr/bin/python3 -m codex_plugin_scanner guard hook --harness codex"
+          }
+        }
+      ],
+      "legacy": [],
+      "warnings": [],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "a legacy binding claims its handler",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "legacy-guard-hook"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [
+        {
+          "event": "PreToolUse",
+          "group": {
+            "matcher": "*"
+          },
+          "handler": {
+            "type": "command",
+            "command": "legacy-guard-hook"
+          }
+        }
+      ],
+      "warnings": [],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "a binding for a different matcher claims nothing",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "/usr/bin/python3 -m codex_plugin_scanner guard hook --harness codex"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [
+        {
+          "event": "PreToolUse",
+          "group": {
+            "matcher": "*"
+          },
+          "handler": {
+            "type": "command",
+            "command": "/usr/bin/python3 -m codex_plugin_scanner guard hook --harness codex"
+          }
+        }
+      ],
+      "legacy": [],
+      "warnings": [],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "the reserved toml hook state table is skipped",
+      "payload": {
+        "hooks": {
+          "state": {
+            "PreToolUse/group[0]/handler[0]": {
+              "trusted_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "enabled": true
+            }
+          },
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo sixteen"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/config.toml",
+        "scope": "global",
+        "format": "toml",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "the same state table is an event shape in json",
+      "payload": {
+        "hooks": {
+          "state": {
+            "PreToolUse/group[0]/handler[0]": {
+              "trusted_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          }
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_unsupported_event_shape: state in /home/agent/.codex/hooks.json. Each Codex hook event must contain a list of matcher groups. Repair the event shape before retrying install."
+      ],
+      "records": []
+    },
+    {
+      "name": "a state table whose hash is not a sha256 digest is an event shape",
+      "payload": {
+        "hooks": {
+          "state": {
+            "PreToolUse/group[0]/handler[0]": {
+              "trusted_hash": "sha256:zz"
+            }
+          }
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/config.toml",
+        "scope": "global",
+        "format": "toml",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_unsupported_event_shape: state in /home/agent/.codex/config.toml. Each Codex hook event must contain a list of matcher groups. Repair the event shape before retrying install."
+      ],
+      "records": []
+    },
+    {
+      "name": "two events keep their own coordinates",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo seventeen"
+                }
+              ]
+            }
+          ],
+          "PostToolUse": [
+            {
+              "matcher": "Bash",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo eighteen"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        },
+        {
+          "coordinate": "PostToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "a source whose hooks are not enabled records that on each handler",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo nineteen"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": false
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "a group whose handlers key is null is skipped",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": null
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": []
+    },
+    {
+      "name": "an event with no matcher groups reports nothing",
+      "payload": {
+        "hooks": {
+          "PreToolUse": []
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": []
+    },
+    {
+      "name": "a group reports its matcher and its handler list separately",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": 7,
+              "hooks": {
+                "type": "command"
+              }
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_group: PreToolUse/group[0] in /home/agent/.codex/hooks.json. A Codex hook matcher and activation fields must use supported scalar types. Repair the group before retrying install.",
+        "codex_hook_inventory_malformed_group: PreToolUse/group[0] in /home/agent/.codex/hooks.json. A Codex hook group's handlers must be a list. Repair the group before retrying install."
+      ],
+      "records": []
+    },
+    {
+      "name": "an executable handler whose command is not a string",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "command": 12
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_handler: PreToolUse/group[0]/handler[0] in /home/agent/.codex/hooks.json. An executable Codex command hook must contain a non-empty string command. Repair the handler before retrying install."
+      ],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "an inert handler keeps its unsupported timeout and environment",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "note": "inert",
+                  "timeout": "30",
+                  "env": {
+                    "A": 1
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": false
+        }
+      ]
+    },
+    {
+      "name": "one handler reports every shape issue it carries in order",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "webhook",
+                  "command": "   ",
+                  "enabled": "yes",
+                  "timeout": -1,
+                  "env": {
+                    "A": 1
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_handler: PreToolUse/group[0]/handler[0] in /home/agent/.codex/hooks.json. Codex hook activation fields must be booleans. Repair the handler before retrying install.",
+        "codex_hook_inventory_malformed_handler: PreToolUse/group[0]/handler[0] in /home/agent/.codex/hooks.json. An executable Codex command hook must contain a non-empty string command. Repair the handler before retrying install.",
+        "codex_hook_inventory_unknown_handler_type: PreToolUse/group[0]/handler[0] in /home/agent/.codex/hooks.json. Guard found an executable Codex hook type it cannot model. Remove or convert the handler to a supported command hook before retrying install.",
+        "codex_hook_inventory_malformed_handler: PreToolUse/group[0]/handler[0] in /home/agent/.codex/hooks.json. An executable Codex hook timeout must be a finite non-negative number. Repair the handler before retrying install.",
+        "codex_hook_inventory_malformed_handler: PreToolUse/group[0]/handler[0] in /home/agent/.codex/hooks.json. An executable Codex hook environment must be a string-keyed object. Repair the handler before retrying install."
+      ],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[0]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    },
+    {
+      "name": "a later group keeps its own index after an earlier one fails",
+      "payload": {
+        "hooks": {
+          "PreToolUse": [
+            "not-a-group",
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "echo twenty"
+                }
+              ]
+            },
+            {
+              "matcher": "*",
+              "hooks": [
+                {
+                  "type": "command"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "source": {
+        "path": "/home/agent/.codex/hooks.json",
+        "scope": "global",
+        "format": "json",
+        "hooks_enabled": true
+      },
+      "authenticated": [],
+      "legacy": [],
+      "warnings": [
+        "codex_hook_inventory_malformed_group: PreToolUse/group[0] in /home/agent/.codex/hooks.json. Each Codex hook matcher group must be an object. Repair the group before retrying install.",
+        "codex_hook_inventory_malformed_handler: PreToolUse/group[2]/handler[0] in /home/agent/.codex/hooks.json. An executable Codex command hook must contain a non-empty string command. Repair the handler before retrying install."
+      ],
+      "records": [
+        {
+          "coordinate": "PreToolUse/group[1]/handler[0]",
+          "active": true,
+          "executable": true
+        },
+        {
+          "coordinate": "PreToolUse/group[2]/handler[0]",
+          "active": true,
+          "executable": true
+        }
+      ]
+    }
+  ]
+}
