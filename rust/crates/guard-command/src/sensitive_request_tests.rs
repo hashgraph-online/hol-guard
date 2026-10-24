@@ -659,3 +659,117 @@ fn an_artifact_name_is_the_last_path_component() {
         }
     );
 }
+
+/// Which harness configuration files a write may not reach without a review is
+/// this side's to decide. A caller that sends an empty table used to leave
+/// every Codex configuration file writable, so the table is derived here and
+/// the caller's entries are only added to it.
+#[test]
+fn a_codex_configuration_write_is_protected_without_a_supplied_table() {
+    for (path, label) in [
+        ("/home/user/.codex/config.toml", "Codex config"),
+        ("/home/user/.codex/hooks.json", "Codex hooks"),
+        ("/work/.codex/config.toml", "Codex config"),
+        ("/work/.codex/hooks.json", "Codex hooks"),
+    ] {
+        let reply = ask(
+            "file_write_artifact",
+            &json!({
+                "tool_name": "Write",
+                "arguments": {"file_path": path, "content": "x"},
+                "cwd": "/work",
+                "home_dir": "/home/user",
+                "protected_paths": {},
+                "harness": "codex",
+                "config_path": "/home/user/.codex/config.toml",
+                "source_scope": "user",
+            }),
+        )
+        .expect("answered");
+
+        let found = &reply["match"];
+        assert_eq!(found["path_class"], json!(label), "{path}: {reply}");
+        assert_eq!(
+            found["action_class"],
+            json!("guard-managed config write"),
+            "{path}: {reply}"
+        );
+        assert!(!reply["artifact"].is_null(), "{path}: {reply}");
+    }
+}
+
+/// The table follows from the harness, so another harness's write to a Codex
+/// path is not a Codex configuration write. It may still be sensitive for its
+/// own reasons; what it must not be is attributed to a harness that is not
+/// making the call.
+#[test]
+fn another_harness_derives_no_codex_protection() {
+    let reply = ask(
+        "file_write_artifact",
+        &json!({
+            "tool_name": "Write",
+            "arguments": {"file_path": "/home/user/.codex/config.toml", "content": "x"},
+            "cwd": "/work",
+            "home_dir": "/home/user",
+            "protected_paths": {},
+            "harness": "claude-code",
+            "config_path": "/home/user/.claude/settings.json",
+            "source_scope": "user",
+        }),
+    )
+    .expect("answered");
+
+    assert_ne!(
+        reply["match"]["action_class"],
+        json!("guard-managed config write"),
+        "{reply}"
+    );
+}
+
+/// The caller still names the paths this side does not model, so its table is
+/// added to the derived one rather than replaced by it.
+#[test]
+fn a_supplied_protected_path_is_still_honoured() {
+    let reply = ask(
+        "file_write_artifact",
+        &json!({
+            "tool_name": "Write",
+            "arguments": {"file_path": "/work/.claude/settings.json", "content": "x"},
+            "cwd": "/work",
+            "home_dir": "/home/user",
+            "protected_paths": {"/work/.claude/settings.json": "Claude settings"},
+            "harness": "claude-code",
+            "config_path": "/home/user/.claude/settings.json",
+            "source_scope": "project",
+        }),
+    )
+    .expect("answered");
+
+    assert_eq!(reply["match"]["path_class"], json!("Claude settings"));
+    assert_eq!(
+        reply["match"]["action_class"],
+        json!("guard-managed config write")
+    );
+}
+
+/// A caller that names a Codex path too must not make it two entries, and the
+/// label this side derived is the one the review carries.
+#[test]
+fn a_duplicate_supplied_codex_path_keeps_the_derived_label() {
+    let reply = ask(
+        "file_write_artifact",
+        &json!({
+            "tool_name": "Write",
+            "arguments": {"file_path": "/home/user/.codex/config.toml", "content": "x"},
+            "cwd": "/work",
+            "home_dir": "/home/user",
+            "protected_paths": {"/home/user/.codex/config.toml": "Something else"},
+            "harness": "codex",
+            "config_path": "/home/user/.codex/config.toml",
+            "source_scope": "user",
+        }),
+    )
+    .expect("answered");
+
+    assert_eq!(reply["match"]["path_class"], json!("Codex config"));
+}
