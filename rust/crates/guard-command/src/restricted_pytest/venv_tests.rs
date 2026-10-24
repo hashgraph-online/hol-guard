@@ -533,6 +533,10 @@ fn a_workspace_venv_is_found_by_being_one_not_by_a_search_path_entry() {
         // return on its own stays inside the word.
         "echo \\\n.venv/bin/pytest",
         "echo x\r.venv/bin/pytest",
+        // Detached, the prefix is a program of its own and the venv's path is
+        // only its argument.
+        "./ .venv/bin/pytest",
+        "../ .venv/bin/pytest",
         "rg -n .venv/bin/pytest src",
         "ls .venv/bin",
         "cat .venv/bin/../pyvenv.cfg",
@@ -550,10 +554,13 @@ fn a_workspace_venv_is_found_by_being_one_not_by_a_search_path_entry() {
         "{ npm run build; .venv/bin/pytest -q; }",
         "make build && exec .venv/bin/pytest -q",
         // The prefix a relative path is written from names where the program
-        // is read from, so the same program is read through any of them.
+        // is read from, so the same program is read through any of them. The
+        // `../` spellings are this workspace's own venv reached from a
+        // directory of it, which is what the prefix is read for; where such a
+        // path lands is not settled here, since that needs it resolved against
+        // the command's working directory.
         "./.venv/bin/pytest -q",
         "npm run build; ./.venv/bin/pytest -q",
-        "../.venv/bin/pytest -q",
         "cd src && ../.venv/bin/pytest -q",
         "cd a/b && ../../.venv/bin/pytest -q",
         // A line ending separates two commands as a semicolon does.

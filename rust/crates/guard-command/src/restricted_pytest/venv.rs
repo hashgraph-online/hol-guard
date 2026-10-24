@@ -413,6 +413,16 @@ fn starts_a_command(before: &str) -> bool {
     const PREFIX_VERBS: &[&str] = &[
         "command", "do", "else", "env", "exec", "nohup", "then", "time",
     ];
+    // A relative prefix written against the path is part of how the program is
+    // spelled, so it comes off before the words are read. Detached, it is a
+    // program of its own: in `./ .venv/bin/pytest` what runs is `./`, and the
+    // venv's program is only its argument.
+    let cut = before.len() - before.trim_end_matches(['.', '/']).len();
+    let before = if leads_a_path(&before[before.len() - cut..]) {
+        &before[..before.len() - cut]
+    } else {
+        before
+    };
     // A line ending separates two commands as a semicolon does, so only the
     // blanks are taken off the end; trimming every kind of whitespace would
     // take the separator away with them.
@@ -423,9 +433,7 @@ fn starts_a_command(before: &str) -> bool {
             return true;
         }
         let word = head.rsplit(char::is_whitespace).next().unwrap_or_default();
-        if word.is_empty()
-            || !(leads_a_path(word) || stamps_a_variable(word) || PREFIX_VERBS.contains(&word))
-        {
+        if word.is_empty() || !(stamps_a_variable(word) || PREFIX_VERBS.contains(&word)) {
             return false;
         }
         head = head[..head.len() - word.len()].trim_end_matches([' ', '\t']);
@@ -450,6 +458,14 @@ fn ends_a_line(head: &str) -> bool {
 /// before it. Every segment has to be one of those, and the prefix has to end
 /// at a separator, so a directory whose own name begins with dots is not read
 /// as one.
+///
+/// It says nothing about where the path lands. `../` written from a directory
+/// of the workspace reaches the workspace's own venv, which is the spelling
+/// this reads; written from the workspace root it reaches a venv outside it,
+/// and that one is granted the same interpreter prefix the plain spelling
+/// grants it, so the weaker justification adds no reach. Separating the two
+/// needs the path resolved against the command's working directory, which
+/// this layer is not given.
 fn leads_a_path(word: &str) -> bool {
     word.ends_with('/')
         && word
