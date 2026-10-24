@@ -428,3 +428,31 @@ fn a_workspace_venv_is_found_by_being_one_not_by_a_search_path_entry() {
     fs::rename(&configuration, venv.join("pyvenv.cfg.moved")).unwrap();
     assert!(workspace_resident_bins(&workspace, None).is_empty());
 }
+
+/// A workspace often holds its venv behind a symbolic link, `.venv -> envs/py311`
+/// being the ordinary spelling when a project keeps several interpreters. The
+/// command still names the link, so the link is the path the text has to be read
+/// against; the canonical directory is what admission and deduplication read.
+#[test]
+fn a_venv_the_workspace_links_to_is_named_by_the_link_the_command_writes() {
+    let fixture = fixture();
+    let workspace = fixture.0.join("workspace");
+    let real = workspace.join("envs").join("py311");
+    fs::create_dir_all(real.join("bin")).unwrap();
+    fs::write(real.join("pyvenv.cfg"), "home = /usr/bin\n").unwrap();
+    symlink(&real, workspace.join(".venv")).unwrap();
+    let bin = real.join("bin").canonicalize().unwrap();
+    // The link is what the command writes, and the canonical directory is what
+    // comes back, so admission reads the venv itself.
+    assert_eq!(
+        workspace_resident_bins(&workspace, Some(".venv/bin/pytest -q")),
+        vec![bin.clone()]
+    );
+    // The directory behind the link names it too.
+    assert_eq!(
+        workspace_resident_bins(&workspace, Some("envs/py311/bin/pytest -q")),
+        vec![bin]
+    );
+    // Naming neither still leaves the interpreter prefix out of the plan.
+    assert!(workspace_resident_bins(&workspace, Some("make test")).is_empty());
+}

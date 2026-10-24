@@ -289,12 +289,19 @@ pub(super) fn workspace_resident_bins(workspace: &Path, text: Option<&str>) -> V
         if !root.join("pyvenv.cfg").is_file() {
             continue;
         }
-        let Ok(bin) = root.join("bin").canonicalize() else {
+        // A command names the venv at the path the workspace holds it at,
+        // which is not the canonical one when the entry is a symbolic link
+        // to another directory. Both spellings are matched; the canonical
+        // path is what admission and the deduplication below read.
+        let named = root.join("bin");
+        let Ok(bin) = named.canonicalize() else {
             continue;
         };
         // The limit counts the venvs the command starts a program from, so a
         // named one is found wherever the directory order puts it.
-        if text.is_some_and(|text| !names_bin(text, workspace, &bin)) {
+        if text.is_some_and(|text| {
+            !names_bin(text, workspace, &named) && !names_bin(text, workspace, &bin)
+        }) {
             continue;
         }
         if !bins.contains(&bin) {
