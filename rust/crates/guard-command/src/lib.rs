@@ -149,6 +149,7 @@ pub mod github_workflow_lineage;
 #[cfg(test)]
 mod github_workflow_lineage_tests;
 pub mod github_workflow_operations;
+pub mod harness_attribution;
 mod harness_config_names;
 pub mod harness_identity;
 mod home_path_text;

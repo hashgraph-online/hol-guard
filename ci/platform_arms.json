@@ -59,6 +59,22 @@
    "body": "2385428e2299"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "`runtime/harness_attribution.py` returns `None` on `os.name == \"nt\"` before it ever reaches `/bin/ps`, so there is no Windows behaviour to keep parity with rather than an absent one. A Windows harness is still attributed by its environment markers, which every supported harness sets; only the fallback parent walk is missing, and its absence leaves the origin unknown rather than wrong. The slug is receipt and display identity, never a policy selector, so an unknown origin softens nothing.",
+   "file": "rust/crates/guard-command/src/harness_attribution.rs",
+   "item": "fn read_process_table() -> Option<String>",
+   "cfg": "not(unix)",
+   "body": "8e5de9c7806f"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Unreachable on Windows: `read_process_table` above has already answered `None` and ended the walk. Kept as its own arm so the Unix side can use `std::os::unix::process::parent_id`, which has no portable counterpart.",
+   "file": "rust/crates/guard-command/src/harness_attribution.rs",
+   "item": "fn parent_pid() -> Option<i64>",
+   "cfg": "not(unix)",
+   "body": "a64cdb9f2015"
+  },
+  {
    "file": "rust/crates/guard-command/src/local_supply_chain.rs",
    "item": "fn package_request_artifact_hash -- non-Unix block",
    "verdict": "windows-equivalent",
