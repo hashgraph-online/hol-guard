@@ -53,7 +53,17 @@ class GemmaVerificationSummary:
 
 
 def _get_api_key(api_key: str | None = None) -> str | None:
-    return api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GEMMA_API_KEY")
+    if api_key:
+        return api_key
+    try:
+        from dotenv import find_dotenv, load_dotenv
+
+        env_file = find_dotenv(usecwd=True)
+        if env_file:
+            load_dotenv(env_file)
+    except Exception:
+        pass
+    return os.environ.get("GEMINI_API_KEY") or os.environ.get("GEMMA_API_KEY")
 
 
 def is_gemma_available(api_key: str | None = None) -> bool:
