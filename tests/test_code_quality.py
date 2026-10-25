@@ -88,9 +88,7 @@ class TestCheckNoEval:
                 encoding="utf-8",
             )
             (root / "safe.py").write_text(
-                "class RuntimeClient:\n"
-                "    def eval(self, expression):\n"
-                "        return expression\n",
+                "class RuntimeClient:\n    def eval(self, expression):\n        return expression\n",
                 encoding="utf-8",
             )
 
@@ -120,10 +118,7 @@ class TestCheckNoEval:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             (root / "unsafe.js").write_text(
-                "eval(untrustedInput)\n"
-                "{\n"
-                "  audit();\n"
-                "}\n",
+                "eval(untrustedInput)\n{\n  audit();\n}\n",
                 encoding="utf-8",
             )
 
@@ -140,6 +135,49 @@ class TestCheckNoEval:
             _symlink_or_skip(root / "linked-evil.js", outside)
             r = check_no_eval(root)
             assert r.passed is True
+
+    @pytest.mark.parametrize(
+        "snippet",
+        (
+            'const msg = "Please do not use eval() in plugin code.";\n',
+            "const info = 'Warning: eval(x) is not permitted';\n",
+            "// do not call eval(code)\n",
+            "/* note: avoid eval() here */\n",
+            "const pattern = /eval\\s*\\(/;\n",
+            "# never invoke eval()\n",
+            '"""Documentation stating eval() is unsafe."""\n',
+        ),
+    )
+    def test_ignores_eval_in_string_literals_comments_and_docstrings(self, snippet: str):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ext = ".py" if "#" in snippet or '"""' in snippet else ".ts"
+            root = Path(tmpdir)
+            (root / f"safe{ext}").write_text(snippet, encoding="utf-8")
+
+            result = check_no_eval(root)
+
+            assert result.passed is True
+            assert result.points == 5
+
+    @pytest.mark.parametrize(
+        "snippet",
+        (
+            'const msg = "new Function() is prohibited";\n',
+            "// avoid new Function() call\n",
+            "/* new Function() is bad */\n",
+            "# do not use new Function()\n",
+        ),
+    )
+    def test_ignores_new_function_in_string_literals_and_comments(self, snippet: str):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ext = ".py" if "#" in snippet else ".js"
+            root = Path(tmpdir)
+            (root / f"safe{ext}").write_text(snippet, encoding="utf-8")
+
+            result = check_no_eval(root)
+
+            assert result.passed is True
+            assert result.points == 5
 
 
 class TestCheckNoShellInjection:
@@ -280,6 +318,49 @@ class TestCheckNoShellInjection:
             assert result.passed is False
             assert result.points == 0
             assert result.findings[0].file_path == "runner.js"
+
+    def test_detects_concatenated_string_passed_directly_to_exec(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "runner.js").write_text(
+                'const { execSync } = require("child_process");\nexecSync("git clone " + repo);\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_shell_injection(root)
+
+            assert result.passed is False
+            assert result.points == 0
+            assert result.findings[0].file_path == "runner.js"
+
+    def test_detects_concatenated_string_passed_to_child_process_member(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "runner.js").write_text(
+                'const cp = require("child_process");\ncp.execSync("rm -rf " + target);\n',
+                encoding="utf-8",
+            )
+
+            result = check_no_shell_injection(root)
+
+            assert result.passed is False
+            assert result.points == 0
+            assert result.findings[0].file_path == "runner.js"
+
+    def test_ignores_shell_execution_examples_in_string_literals_and_comments(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "safe.js").write_text(
+                'const doc = "Do not use child_process.exec(`rm ${x}`)";\n'
+                "// execSync(`echo ${x}`) is dangerous\n"
+                "/* cp.execSync(`git ${cmd}`) */\n",
+                encoding="utf-8",
+            )
+
+            result = check_no_shell_injection(root)
+
+            assert result.passed is True
+            assert result.points == 5
 
 
 class TestFindCodeFiles:
