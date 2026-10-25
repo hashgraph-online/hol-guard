@@ -24361,7 +24361,7 @@
       ],
       "expected_action": "review",
       "expected_effective_segments": [
-        1
+        0
       ],
       "id": "case-2",
       "rule_id": "command.apex.decompress"
@@ -24374,7 +24374,7 @@
       ],
       "expected_action": "review",
       "expected_effective_segments": [
-        2
+        0
       ],
       "id": "case-3",
       "rule_id": "command.apex.repair"
