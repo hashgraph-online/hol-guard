@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.doom-pay",
+  "version": "1.0.0",
+  "name": "doom-pay",
+  "description": "Read-only on-chain receipt verification and non-custodial checkout inspection for DOOM Layer-1 and wDOOM on Base Mainnet (8453)",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.doomsday-network",
+    "displayName": "Doomsday Network (@doomsday-network)",
+    "url": "https://github.com/doomsday-network"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://github.com/doomsday-network/doom-pay",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://doomsday.network/mcp.json",
+    "serverNames": [
+      "doom-pay"
+    ]
+  },
+  "riskClasses": [
+    "external-network-read",
+    "financial-data-read"
+  ],
+  "tools": [
+    {
+      "name": "verify_doom_payment",
+      "state": "inherit"
+    },
+    {
+      "name": "verify_bounty_escrow",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "block"
+    }
+  ],
+  "referenceUrls": [
+    "https://doomsday.network",
+    "https://github.com/doomsday-network/doom-pay"
+  ],
+  "saferAlternatives": [
+    "Use only read-only transaction hash and address inspection endpoints; never pass private keys or seed phrases to remote MCP tools."
+  ]
+}
