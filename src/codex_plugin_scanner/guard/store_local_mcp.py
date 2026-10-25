@@ -41,6 +41,27 @@ class StoreLocalMcpMixin:
             ensure_local_cli_schema(connection, for_read=True)
             return read_native_provider_choices(connection)
 
+    def observed_mcp_history(self, *, limit: int) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        """Return the paused requests and receipts the connector scan reads.
+
+        The resident projects each row to the tool label, the harness and the
+        history timestamps, which is all the scan parses. Asking for whole
+        approval rows and whole receipts encoded a store with a few hundred of
+        either past the native response cap, and the refresh then failed
+        instead of discovering connectors.
+        """
+
+        page = self._native_store_call("observed_mcp_history", {"limit": limit})
+        if not isinstance(page, dict):
+            raise sqlite3.DatabaseError("native_observed_mcp_history_invalid")
+        batches: list[list[dict[str, object]]] = []
+        for key in ("approvals", "receipts"):
+            rows = cast(dict[str, object], page).get(key)
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                raise sqlite3.DatabaseError("native_observed_mcp_history_invalid")
+            batches.append(cast("list[dict[str, object]]", rows))
+        return batches[0], batches[1]
+
     def read_observed_mcp_tool_actions(self) -> dict[str, str]:
         """Return the operator's exact choices for observed MCP connectors."""
 

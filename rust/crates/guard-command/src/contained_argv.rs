@@ -256,12 +256,31 @@ pub fn bun_vitest_invocation(command: &[String]) -> Option<(Option<String>, Vec<
     Some((directory, args[1..].to_vec()))
 }
 
-/// `pnpm exec vitest ...`. The sink runs the project's own Vitest, never pnpm,
-/// so only the bare form is read; a pnpm option before the tool (`-c` runs a
-/// shell, `-r`/`--filter` fan out) is not Vitest.
-fn pnpm_exec_vitest(command: &[String]) -> bool {
-    basename(command) == "pnpm"
-        && matches!(command.get(1..3), Some([exec, tool]) if exec == "exec" && tool == "vitest")
+/// The arguments from the tool on, when `command` is a manager's bare `exec`
+/// spelling of a local-bin run: `npm exec`, `npm x`, `pnpm exec` or
+/// `yarn exec`, each with an optional `--`. The sink runs the project's own
+/// tool, never the manager, so a manager option before the tool (`-c` runs a
+/// shell, `-r`/`--filter` fan out) is not a local-bin run.
+fn manager_exec_tool(command: &[String]) -> Option<&[String]> {
+    let rest = match (basename(command), command.get(1..)?) {
+        ("npm", [verb, rest @ ..]) if verb == "exec" || verb == "x" => rest,
+        ("pnpm" | "yarn", [verb, rest @ ..]) if verb == "exec" => rest,
+        _ => return None,
+    };
+    let rest = match rest {
+        [separator, rest @ ..] if separator == "--" => rest,
+        rest => rest,
+    };
+    rest.first().filter(|tool| !tool.starts_with('-'))?;
+    Some(rest)
+}
+
+/// `npm exec vitest ...` and the other manager `exec` spellings, as the
+/// arguments after `vitest`.
+fn manager_exec_vitest(command: &[String]) -> Option<&[String]> {
+    manager_exec_tool(command)
+        .filter(|rest| rest[0] == "vitest")
+        .map(|rest| &rest[1..])
 }
 
 pub fn vitest_arguments(command: &[String]) -> Result<Vec<String>, RestrictedPytestError> {
@@ -280,8 +299,8 @@ pub fn vitest_arguments(command: &[String]) -> Result<Vec<String>, RestrictedPyt
             return invalid_vitest();
         }
         args[1..].to_vec()
-    } else if pnpm_exec_vitest(&argv) {
-        argv[3..].to_vec()
+    } else if let Some(args) = manager_exec_vitest(&argv) {
+        args.to_vec()
     } else if name == "vitest" {
         argv[1..].to_vec()
     } else if matches!(name, "node" | "nodejs") {
@@ -313,11 +332,11 @@ fn invalid_vitest<T>() -> Result<T, RestrictedPytestError> {
     ))
 }
 
-/// The command a virtualenv activation hands its verdict to, or null when
-/// the activation is not one the scan can read through. A sink that plans the
-/// call again has to plan the text the pre-tool pass answered for, or it
-/// refuses the work that answer already admitted.
-fn venv_activation_target(input: &Value) -> Value {
+/// The command the pre-tool pass answered for, or null when the call is its
+/// own answer: a trailing group's command list, an activation's target, or
+/// both. A sink that plans the call again has to plan the text the pre-tool
+/// pass answered for, or it refuses the work that answer already admitted.
+fn contained_target(input: &Value) -> Value {
     let text = input
         .get("text")
         .and_then(Value::as_str)
@@ -327,13 +346,12 @@ fn venv_activation_target(input: &Value) -> Value {
         cwd: input.get("cwd").and_then(Value::as_str),
         ..Default::default()
     };
-    crate::pretool::generic::venv_activation_target(text, context)
-        .map_or(Value::Null, Value::String)
+    crate::pretool::generic::contained_target(text, context).map_or(Value::Null, Value::String)
 }
 
 pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
-    if operation == "venv_activation_target" {
-        return Some(json!({ "value": venv_activation_target(input) }));
+    if operation == "contained_target" {
+        return Some(json!({ "value": contained_target(input) }));
     }
     if !matches!(
         operation,
@@ -345,6 +363,8 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             | "tsx_test_invocation"
             | "vitest_arguments"
             | "contained_kind"
+            | "launcher_program"
+            | "transparent_prefix"
     ) {
         return None;
     }
@@ -369,6 +389,11 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         "tsx_test_invocation" => tsx_test_invocation(&command).map(|value| json!(value)),
         "vitest_arguments" => vitest_arguments(&command).map(|v| json!(v)),
         "contained_kind" => contained_kind(&command),
+        "launcher_program" => Ok(json!(crate::parser_wrappers::launcher_program(&command, 0))),
+        "transparent_prefix" => {
+            let prefix = crate::parser_wrappers::transparent_prefix(&command, 0);
+            Ok(json!(prefix.map(|(index, _)| index)))
+        }
         _ => unreachable!(),
     };
     Some(match result {
@@ -392,7 +417,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     let entries = command.iter().skip(1).take(2);
     let vitest = !command.is_empty()
         && (matches!(name, "bunx" | "npx" | "vitest")
-            || pnpm_exec_vitest(command)
+            || manager_exec_vitest(command).is_some()
             || bun.is_some()
             || tsx_test_invocation(command)?.is_some()
             || (matches!(name, "node" | "nodejs")
@@ -400,7 +425,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                     .clone()
                     .any(|v| v.ends_with("/node_modules/vitest/vitest.mjs"))));
     let node_tool = bun.is_none()
-        && !pnpm_exec_vitest(command)
+        && manager_exec_vitest(command).is_none()
         && !command.is_empty()
         && (matches!(
             name,

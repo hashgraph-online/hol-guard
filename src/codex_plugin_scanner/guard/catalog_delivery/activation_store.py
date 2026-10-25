@@ -11,20 +11,25 @@ from ..store_extension_control_authority_schema import (
     ensure_extension_control_authority_schema,
     extension_control_schema_marker_is_compatible,
 )
-from . import activation_baseline, lifecycle_store
+from . import activation_baseline, lifecycle, lifecycle_store
 from .activation_record import SCHEMA_V2, admission_is_current, open_record, verify_header
 from .activation_transition import ActivationDraft
+from .state_paths import resolved_guard_home
 
 
 def directory_for_store(store):
-    return store.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / "command-packs"
+    # The prefix above the Guard home is resolved once so that a host which
+    # reaches it through a symlink -- /home -> var/home, a relocated home
+    # directory, a Windows profile behind a directory symlink -- still yields a
+    # path every checked_path below here accepts. See state_paths.
+    return resolved_guard_home(store.guard_home) / NATIVE_RUNTIME_STATE_DIRECTORY / "command-packs"
 
 
 def prepare_directory_for_store(store):
     """Provision the private native state parent before creating pack caches."""
     from ..native_policy_snapshot_windows_support import _runtime_state_directory
 
-    return _runtime_state_directory(store.guard_home) / "command-packs"
+    return _runtime_state_directory(resolved_guard_home(store.guard_home)) / "command-packs"
 
 
 def _row(connection):
@@ -43,6 +48,7 @@ def _row(connection):
     return value
 
 
+@lifecycle.one_runtime
 def read(store):
     """Authenticate outside mutation locks; this may read cached metadata pages."""
     with store._connect() as connection:
@@ -70,6 +76,7 @@ def read(store):
     return result
 
 
+@lifecycle.one_runtime
 def header_for_store(store, verifier_key):
     """Small authenticated recheck; never materialize a catalog under a lease."""
     with store._connect() as connection:
@@ -88,6 +95,7 @@ def header_for_store(store, verifier_key):
     return value
 
 
+@lifecycle.one_runtime
 def write_in_transaction(store, connection, draft, *, verifier_key, recorded_at, now=None):
     """Commit with controls after external preparation and lineage checks.
 

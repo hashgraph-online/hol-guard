@@ -4,7 +4,8 @@ A direct answer skips the daemon's post-allow recording. The resident queues
 the inputs that recording needs, and this drain pulls them over the resident
 channel and records them exactly as the daemon path does. After a
 ``PreToolUse`` allow that is the decision receipt, the binding capture, the
-command activity, and the command-line observation; after a reviewed
+command activity, and the command-line observation, plus the desktop setup
+notice for a connector-setup review the resident queued; after a reviewed
 ``PostToolUse`` it is the receipt, the binding capture, and the post-tool
 command activity; after a ``UserPromptSubmit`` it is the receipt and the
 binding capture alone. A tool call the native MCP relay decided is recorded
@@ -56,6 +57,8 @@ _DIRECT_HARNESSES = frozenset(
 _PRE_TOOL_USE = "PreToolUse"
 _POST_TOOL_USE = "PostToolUse"
 _USER_PROMPT_SUBMIT = "UserPromptSubmit"
+# The desktop notice for a connector-setup review the resident queued.
+_CONNECTOR_NOTICE_FIELD = "connector_setup_notice"
 
 
 class _DrainHost(Protocol):
@@ -139,7 +142,33 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
     with suppress(Exception):
         observe_native_pre_tool_cli(host.store, payload=payload, workspace=Path(workspace), home_dir=Path(home_dir))
     _record_native_pre_activity(host, harness, payload, response, accepted)  # pyright: ignore[reportArgumentType]
+    with suppress(Exception):
+        _raise_connector_setup_notice(host.store, record.get(_CONNECTOR_NOTICE_FIELD))
     return True
+
+
+def _raise_connector_setup_notice(store: object, notice: object) -> None:
+    """The desktop notice for a connector-setup review the resident queued.
+
+    The resident names the stored row and the CLI; the notice is raised from
+    the stored row, as ``raise_connector_setup_notice`` raises it.
+    """
+
+    if not isinstance(notice, Mapping):
+        return
+    request_id = notice.get("request_id")
+    connector_name = notice.get("connector_name")
+    if not isinstance(request_id, str) or not request_id or not isinstance(connector_name, str) or not connector_name:
+        return
+    lookup = getattr(store, "get_approval_request", None)
+    if not callable(lookup):
+        return
+    queued = lookup(request_id)
+    if not isinstance(queued, dict):
+        return
+    from ..approvals import notify_connector_setup
+
+    notify_connector_setup(store, queued, connector_name=connector_name)
 
 
 def _decode_page(

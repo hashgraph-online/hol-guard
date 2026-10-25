@@ -306,6 +306,7 @@ def stub_native_hook_json_document(
     event_name: str,
     policy_action: str,
     reason: str,
+    exit_code: Callable[[], int] | None = None,
     envelope: object,
     system_message: str | None = None,
     generic_path: bool = False,
@@ -336,18 +337,19 @@ def stub_emit_native_hook_json_document(
     _out("json_emit", compact, output_stream is not None)
 
 
+POST_TOOL_BLOCKING_ACTIONS = {"review", "require-reapproval", "sandbox-required", "block"}
+
+
 def stub_emit_native_post_tool_envelope(
     harness: str,
     *,
-    policy_action: str,
+    blocking: bool,
     reason: str,
     response_payload: object,
     output_stream: object = None,
     as_json: bool = False,
 ) -> None:
-    _out(
-        "post_tool", harness, policy_action, reason, _payload_tag(response_payload), output_stream is not None, as_json
-    )
+    _out("post_tool", harness, blocking, reason, _payload_tag(response_payload), output_stream is not None, as_json)
 
 
 def stub_emit(command: str, payload: Mapping[str, object], as_json: bool) -> None:
@@ -594,7 +596,10 @@ def _recorded_finalize(case: Case) -> int:
     if event_name == "PostToolUse":
         stub_emit_native_post_tool_envelope(
             harness,
-            policy_action=policy_action,
+            # The recording keeps deriving this from the policy action, which is
+            # what Python did before the renderer started reading the native
+            # envelope decision.
+            blocking=policy_action in POST_TOOL_BLOCKING_ACTIONS,
             reason=runtime_reason(),
             response_payload=response_payload,
             output_stream=output_stream,
@@ -717,6 +722,12 @@ def observed_directive(case: Case, stdout: str, stderr: str, rc: int) -> dict[st
             _reason_fields(document[3], directive)
         directive["system_message"] = _system_message_kind(document[5])
         if case.json_document_owns:
+            # The stub owns the document route's status, so the recording
+            # carries the exit code the real route took: the harness table,
+            # before the replayed fallback envelope relaxes it to 0.
+            directive["json_exit_code"] = (
+                None if case.canonical == "grok" else _recorded_exit_code(case.canonical, case.action, case.event)
+            )
             return directive
     post = [line for line in out if line[0] == "post_tool"]
     envelope = [line for line in out if line[0] == "envelope"]
@@ -724,6 +735,10 @@ def observed_directive(case: Case, stdout: str, stderr: str, rc: int) -> dict[st
         directive["after_json"] = "native_response"
     elif post:
         directive["after_json"] = "post_tool_envelope"
+        # The post-tool envelope carries a verdict of its own, and the renderer
+        # now reads it off the directive instead of re-deriving it from the
+        # policy action, so the recording has to carry it as well.
+        directive["envelope_decision"] = "block" if post[0][2] else "allow"
         _reason_fields(post[0][3], directive)
     else:
         directive["after_json"] = "fallback_envelope"

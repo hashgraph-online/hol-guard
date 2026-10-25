@@ -7,7 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.interpreter_options import shell_interpreter_command_payload
-from codex_plugin_scanner.guard.runtime.shell_command_wrappers import normalize_transparent_shell_command
+from tests.shell_wrapper_test_support import native_shell_normalization
 
 
 def test_interpreter_and_wrapper_public_callers_share_native_option_admission(native_hook_force):
@@ -19,6 +19,6 @@ def test_interpreter_and_wrapper_public_callers_share_native_option_admission(na
         assert asdict(payload) == vector["expected"]
     for command in ("bash --command 'echo value'", "bash -co pipefail 'echo value'"):
         expected = next(v["expected"]["normalization"] for v in fixture["vectors"] if v["command"] == command)
-        actual = asdict(normalize_transparent_shell_command(command))
+        actual = asdict(native_shell_normalization(command))
         actual["wrapper_chain"] = list(actual["wrapper_chain"])
         assert actual == expected

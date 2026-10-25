@@ -392,6 +392,37 @@ export async function fetchEffectiveExtensionControls(): Promise<EffectiveExtens
   return { ...normalized, projection };
 }
 
+/**
+ * Ask the daemon to re-read durable authority and serve the catalog it was
+ * read for. The daemon publishes the catalog and the effective controls from
+ * two bindings that a restart can leave on different catalogs; this is the
+ * route that puts them back together, so a reader that sees two catalog
+ * digests calls it before reading again instead of giving up. The response is
+ * discarded: the caller reads both endpoints again, and only that pair tells
+ * it whether the two bindings now agree.
+ *
+ * The daemon waits on the authority lease here, and its own budget for that
+ * wait is far longer than a page should hold a load on. The deadline below
+ * bounds the wait so the retry ladder keeps moving instead of stalling on one
+ * repair; the caller already treats a failed repair as a reason to read again.
+ */
+export const REFRESH_DEADLINE_MS = 5_000;
+
+export async function refreshEffectiveExtensionControls(timeoutMs = REFRESH_DEADLINE_MS): Promise<void> {
+  const deadline = new AbortController();
+  const expired = setTimeout(() => deadline.abort(), timeoutMs);
+  try {
+    await request("/v1/extension-controls/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+      signal: deadline.signal,
+    });
+  } finally {
+    clearTimeout(expired);
+  }
+}
+
 export async function fetchExtensionControlHistory(): Promise<ExtensionControlHistoryResponse> {
   const raw = await request("/v1/extension-controls/history");
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new ExtensionControlApiError("Guard returned invalid settings history", 502);

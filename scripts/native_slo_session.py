@@ -28,6 +28,7 @@ from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_resident_client import close_native_resident_clients
 from codex_plugin_scanner.guard.native_runtime import native_runtime_health
 from codex_plugin_scanner.guard.store import GuardStore
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS
 from scripts.native_slo_adapter import Observation, is_allowed, payload
 from scripts.native_slo_contract import MAX_READINESS_P95_MS
 from scripts.native_slo_route_provenance import RequestRouteTracker
@@ -171,7 +172,7 @@ def stop_native_resident(
                     (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
                     check=False,
                     capture_output=True,
-                    timeout=2,
+                    timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
                 )
             except (OSError, subprocess.TimeoutExpired):
                 diagnostic = _build_stop_diagnostic(
@@ -315,7 +316,9 @@ class AdapterSession:
     """One private daemon and workspace, with deterministic resident cleanup."""
 
     def __init__(self, runtime: Path) -> None:
-        self.temporary = tempfile.TemporaryDirectory(prefix="hol-guard-slo-")
+        # A resident that is still exiting can leave files behind for a moment;
+        # a leftover scratch directory must not discard a finished measurement.
+        self.temporary = tempfile.TemporaryDirectory(prefix="hol-guard-slo-", ignore_cleanup_errors=True)
         # Keep the synthetic paths canonical. macOS may expose ``/tmp`` as
         # ``/private/tmp`` after the daemon validates a hook workspace; using
         # one spelling avoids registering the same workspace twice and

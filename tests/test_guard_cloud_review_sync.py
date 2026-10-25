@@ -230,7 +230,9 @@ class TestRedactionLevelPartial:
         assert isinstance(event["redactedCommand"], str)
         # The original secret value must not appear
         assert "supersecretkey123" not in event["redactedCommand"]
-        assert event["redactedCommand"] == "API_KEY=*****"
+        # The value is masked and what the assignment goes on to run stays
+        # readable, so a reviewer sees `./deploy.sh` rather than a bare mask.
+        assert event["redactedCommand"] == "API_KEY=***** && ./deploy.sh"
 
     def test_redaction_partial_display_command_is_redacted(self, tmp_path: Path) -> None:
         """display_command mirrors redacted_command (not raw secret)."""

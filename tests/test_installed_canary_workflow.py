@@ -9,6 +9,8 @@ from typing import cast
 
 import yaml
 
+from tests.release_workflow_helpers import native_wheel_job
+
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = ROOT / ".github/workflows/publish.yml"
 MANIFEST_PATH = ROOT / "release-metadata/release-22-installed-evidence.json"
@@ -86,13 +88,13 @@ def test_same_repo_post_publish_matrix_covers_all_supported_operating_systems() 
 
 
 def test_pr_native_wheel_checkout_cannot_write_release_compilation_cache() -> None:
-    steps = _steps(_job("build-native-guard-wheels"))
+    steps = _steps(native_wheel_job())
     checkout = _action_step(steps, "actions/checkout")
     setup_python = _action_step(steps, "actions/setup-python")
 
     checkout_ref = _text(_mapping(checkout["with"])["ref"])
     assert "github.event.pull_request.head.sha" in checkout_ref
-    assert "needs.build.outputs.source_sha" in checkout_ref
+    assert "inputs.source_sha" in checkout_ref
     setup_uv = _action_step(steps, "astral-sh/setup-uv")
     assert "if" not in setup_uv
     assert steps.index(setup_python) < steps.index(checkout)
@@ -117,7 +119,7 @@ def test_pr_native_wheel_checkout_cannot_write_release_compilation_cache() -> No
 
 
 def test_verify_step_preserves_version_matched_runtime_fingerprint() -> None:
-    steps = _steps(_job("build-native-guard-wheels"))
+    steps = _steps(native_wheel_job())
     build_step = _named_step(steps, "Build version-matched runtime")
     verify = next(step for step in steps if "verify_native_command_program.py" in str(step.get("run", "")))
     assemble = next(step for step in steps if "build_native_hol_guard_wheel.py" in str(step.get("run", "")))
@@ -132,7 +134,7 @@ def test_verify_step_preserves_version_matched_runtime_fingerprint() -> None:
         "RUSTFLAGS",
     ):
         assert verify_env[name] == build_env[name]
-    assert verify_env["HOL_GUARD_PACKAGE_VERSION"] == "${{ needs.build.outputs.version }}"
+    assert verify_env["HOL_GUARD_PACKAGE_VERSION"] == "${{ inputs.version }}"
     assert steps.index(build_step) < steps.index(verify) < steps.index(assemble)
 
 

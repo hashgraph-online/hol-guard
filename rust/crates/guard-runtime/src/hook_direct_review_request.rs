@@ -70,7 +70,7 @@ const ACTION_TYPES: [&str; 10] = [
 const ORDERED_SERVER_FIELDS: [&str; 3] = ["mcp_servers", "mcpServers", "servers"];
 /// Tool-input keys that carry nothing but the shell command
 /// (`_COMMAND_ONLY_INPUT_KEYS`).
-const COMMAND_ONLY_INPUT_KEYS: [&str; 12] = [
+const COMMAND_ONLY_INPUT_KEYS: [&str; 14] = [
     "command",
     "cmd",
     "shell_command",
@@ -83,6 +83,8 @@ const COMMAND_ONLY_INPUT_KEYS: [&str; 12] = [
     "runInBackground",
     "workdir",
     "cwd",
+    "working_directory",
+    "workingDirectory",
 ];
 /// Far under the adapter's 1 MiB string slot and 4 MiB request cap, so the
 /// daemon's adapter call cannot fail on a size the resident accepted.
@@ -112,6 +114,7 @@ pub(super) struct RequestInput<'a> {
     pub(super) approval_center_url: &'a str,
     pub(super) review_binding: Option<&'a str>,
     pub(super) exact: ExactKeys<'a>,
+    pub(super) hint: Option<&'a super::HintScope<'a>>,
 }
 
 /// The daemon's `action_envelope` adapter query for this review.
@@ -168,7 +171,7 @@ pub(super) fn envelope_query<'a>(input: &RequestInput<'a>) -> Option<EnvelopeQue
 /// `HOME` it reads the password database, which that environment cannot
 /// answer.
 #[cfg(unix)]
-fn expanded_home(environment: &BTreeMap<String, String>) -> Option<String> {
+pub(super) fn expanded_home(environment: &BTreeMap<String, String>) -> Option<String> {
     let trimmed = environment.get("HOME")?.trim_end_matches('/');
     Some(if trimmed.is_empty() { "/" } else { trimmed }.to_owned())
 }
@@ -177,7 +180,7 @@ fn expanded_home(environment: &BTreeMap<String, String>) -> Option<String> {
 /// `ntpath.join(HOMEDRIVE, HOMEPATH)`. `os.environ` spells Windows names in
 /// upper case, as published.
 #[cfg(windows)]
-fn expanded_home(environment: &BTreeMap<String, String>) -> Option<String> {
+pub(super) fn expanded_home(environment: &BTreeMap<String, String>) -> Option<String> {
     if let Some(profile) = environment.get("USERPROFILE") {
         return Some(profile.clone());
     }
@@ -200,7 +203,7 @@ fn join_home_drive(drive: &str, path: &str) -> Option<String> {
 }
 
 #[cfg(not(any(unix, windows)))]
-fn expanded_home(_environment: &BTreeMap<String, String>) -> Option<String> {
+pub(super) fn expanded_home(_environment: &BTreeMap<String, String>) -> Option<String> {
     None
 }
 
@@ -280,9 +283,10 @@ pub(super) fn finish(
     receipt: Option<&Value>,
     envelope: Value,
 ) -> Option<Value> {
+    let candidate = allow_hint_candidate(input.payload, result)?;
     if input.workspace.is_empty()
         || !policy_binding_valid(result, receipt)
-        || allow_hint_candidate(input.payload, result)?
+        || (candidate && input.hint.is_none())
     {
         return None;
     }
@@ -366,7 +370,7 @@ pub(super) fn finish(
         "first_seen_guard_version": null,
         "last_seen_guard_version": null,
         "continuation_snapshot": null,
-        "extension_allow_hint": null,
+        "extension_allow_hint": super::review_hint::coverage_hint(result),
     }))
 }
 
@@ -495,8 +499,8 @@ fn launch_target(
 }
 
 /// Whether `native_review_extension_allow_hint` could store a hint: a
-/// definite extension review of a command-only shell call. The resident does
-/// not run that re-review, so these defer.
+/// definite extension review of a command-only shell call. The resident runs
+/// that re-review itself when the hook handed it the admitted store.
 pub(super) fn allow_hint_candidate(payload: &Map<String, Value>, result: &Object) -> Option<bool> {
     if !matches!(
         result.get("minimum_action").and_then(Value::as_str),

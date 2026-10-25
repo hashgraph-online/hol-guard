@@ -14,8 +14,8 @@ from codex_plugin_scanner.guard import store_extension_control_authority as auth
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     MANAGED_CONTROLS_ACTIVATION_PURPOSE,
     MANAGED_CONTROLS_ACTIVE_STATE_KEY,
-    _projection_digest,
 )
+from codex_plugin_scanner.guard.native_extension_control import resolve_extension_controls
 from codex_plugin_scanner.guard.runtime import command_extensions
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
@@ -25,7 +25,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityError,
     ExtensionControlAuthorityView,
-    authenticated_record,
     layers_from_json,
     layers_to_json,
 )
@@ -37,7 +36,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ControlTargetKind,
     ResolverFailureCode,
 )
-from codex_plugin_scanner.guard.runtime.extension_control_resolver import resolve_extension_controls
+from tests.extension_control_records import authenticated_record
 from tests.test_guard_extension_control_authority import (
     MemorySecretStore,
     _commit_enabled_permission,
@@ -79,7 +78,7 @@ def _replace_active_managed_control(
     assert isinstance(acknowledgement, dict)
     unsigned["acknowledgement"] = {
         **acknowledgement,
-        "effectiveProjectionDigest": _projection_digest(unsigned),
+        "effectiveProjectionDigest": activation_support.activation_projection_digest(unsigned),
     }
     key = store._authority_key(required=True)  # pyright: ignore[reportPrivateUsage]
     assert key is not None
@@ -289,14 +288,18 @@ def test_catalog_upgrade_does_not_overwrite_replaced_managed_controls(
 
     entered = threading.Event()
     release = threading.Event()
-    original_loader = authority_store.managed_controls_layers_from_activation_state
+    original_op = store._extension_control_authority_op  # pyright: ignore[reportPrivateUsage]
 
-    def blocked_loader(*args: object, **kwargs: object) -> tuple[tuple[object, ...], int]:
-        entered.set()
-        assert release.wait(timeout=5)
-        return original_loader(*args, **kwargs)
+    def blocked_op(op: str, **kwargs: object) -> dict[str, object]:
+        # Hold the read after the resident composed the managed controls, so
+        # the replacement lands between that read and the read's return.
+        reply = original_op(op, **kwargs)
+        if op == "compose_managed":
+            entered.set()
+            assert release.wait(timeout=5)
+        return reply
 
-    monkeypatch.setattr(authority_store, "managed_controls_layers_from_activation_state", blocked_loader)
+    monkeypatch.setattr(store, "_extension_control_authority_op", blocked_op)
     read_results: list[ExtensionControlAuthorityView] = []
     reader = threading.Thread(
         target=lambda: read_results.append(

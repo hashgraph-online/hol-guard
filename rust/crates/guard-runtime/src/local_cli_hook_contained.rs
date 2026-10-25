@@ -170,8 +170,8 @@ pub(crate) fn grant_capabilities(value: &Value) -> Result<Vec<String>, ()> {
     Ok(names)
 }
 
-/// `unverified_local_cli_action`: hold an otherwise allowed command for
-/// review while a block rule might apply.
+/// A grant the resident could not verify: hold an otherwise allowed command
+/// for review while a block rule might apply.
 pub(crate) fn unverified_action(request: &LocalCliHookRequestV1) -> &str {
     let current = request.current_action.as_str();
     if !matches!(current, "allow" | "warn") {

@@ -9,6 +9,7 @@ benign case of the existing false-positive gate (read only), replayed for each h
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -70,13 +71,17 @@ class ReplayCase:
     tool: str
     tool_input: dict[str, object]
     cwd: str
-    expect: str  # quiet | always | block
+    expect: str  # quiet | always | quiet_or_always | setup | block
     event: str = "PreToolUse"
     tool_response: object = None
     # Set by a case whose whole harm is reach the workspace sandbox removes: the network, the home
     # directory, the host toolchain. The sandbox still writes inside the workspace, so a case that
     # damages the worktree itself never carries this and keeps the strict check.
     contained_ok: bool = False
+    # Set by a PostToolUse case whose harness attaches the source-file proof the
+    # output review reads. Without it the review has no output to look at, so an
+    # ordinary read would be judged as an interruption the product never made.
+    source_ref: bool = False
 
     @property
     def tool_name(self) -> str:
@@ -96,6 +101,7 @@ def _entry(entry: dict[str, Any], harness: str, expect: str) -> ReplayCase:
         entry.get("event", "PreToolUse"),
         entry.get("tool_response"),
         bool(entry.get("contained_ok", False)),
+        bool(entry.get("source_ref", False)),
     )
 
 
@@ -110,9 +116,28 @@ def expand() -> list[ReplayCase]:
         mirror_pi = "omp" in entry["harnesses"] and entry["tool"] in PI_TOOLS and entry.get("mirror_pi", True)
         harnesses = list(entry["harnesses"]) + (["pi"] if mirror_pi else [])
         # A setup case keeps its expectation: a generic review there is a regression, not a block.
-        expect = {"allow": "quiet", "setup": "setup"}.get(entry["expect"], "block")
+        expect = {"allow": "quiet", "setup": "setup", "allow_or_review": "quiet_or_always"}.get(
+            entry["expect"], "block"
+        )
         cases.extend(_entry(entry, h, expect) for h in harnesses)
     return cases
+
+
+def source_ref_payload(spelled: str, cwd: Path) -> dict[str, object]:
+    """The proof Oh My Pi's extension attaches to a PostToolUse read.
+
+    The path keeps the spelling the tool was called with, so a host spelling
+    through a linked ancestor reaches classification exactly as it does live.
+    """
+
+    text = (cwd / spelled).read_text(encoding="utf-8").rstrip("\n")
+    return {
+        "version": 1,
+        "path": spelled,
+        "output_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+        "output_chars": len(text),
+        "tool_input_path": spelled,
+    }
 
 
 def payload_input(case: ReplayCase, resolved: dict[str, object]) -> dict[str, object]:
@@ -204,7 +229,9 @@ def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str,
     if case.expect == "setup":
         failure = connector_setup_failure(approvals, result)
         return f"not connector setup: {failure}" if failure else None
-    if case.expect == "always":
+    if case.expect == "quiet_or_always" and not found:
+        return None
+    if case.expect in {"always", "quiet_or_always"}:
         routed = result.get("reason_code") == "native_contained_execution_routed"
         if not found and (routed or omp_contained(case, result)):
             return None  # a contained run needs no approval, which is better than an Always offer

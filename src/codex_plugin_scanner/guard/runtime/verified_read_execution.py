@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import BinaryIO, Final, cast
 
 from ..native_verified_read_decision import NativeVerifiedReadDecisionError, workspace_read_decision
+from ..native_verified_read_plan import NativeVerifiedReadPlanError, VerifiedReadPlan, verified_read_plan
 from .effect_contract import ProofRequirement, ProofRoute
 from .effect_decision import EffectDecision, FinalDisposition, PositiveProof
 from .secret_sensitivity import classify_secret_path
@@ -19,10 +20,8 @@ from .verified_read_common import verified_read_digest
 VERIFIED_READ_EXECUTION_VERSION: Final = "guard.verified-read-execution.v1"
 VERIFIED_READ_POLICY_VERSION: Final = "guard.verified-read-policy.v1"
 VERIFIED_READ_RULE_VERSION: Final = "guard.verified-read.local.v1"
-_MAX_COUNT: Final = 1_000
 _MAX_FILE_BYTES: Final = 16 * 1024 * 1024
 _MAX_OUTPUT_BYTES: Final = 1_048_576
-_SED_RANGE = re.compile(r"([0-9]{1,6})(?:,([0-9]{1,6}))?p")
 _REQUIREMENTS: Final = frozenset(
     {
         ProofRequirement.OPERATION_AND_TARGETS,
@@ -75,7 +74,14 @@ def try_execute_verified_local_read(argv: tuple[str, ...]) -> VerifiedReadResult
             return None
         proof = _proof(context, argv=argv, output=output, source_digest=source_digest)
         decision = _decision(proof, operation_id=output.operation_id)
-    except (NativeVerifiedReadDecisionError, OSError, TypeError, UnicodeError, ValueError):
+    except (
+        NativeVerifiedReadDecisionError,
+        NativeVerifiedReadPlanError,
+        OSError,
+        TypeError,
+        UnicodeError,
+        ValueError,
+    ):
         return None
     if decision.disposition is not FinalDisposition.SILENT_VERIFIED:
         return None
@@ -150,49 +156,30 @@ def _repository_git_identity(path: Path) -> dict[str, object]:
 
 
 def _perform_read(argv: tuple[str, ...], *, context: _WorkspaceContext) -> _ReadOutput:
-    raw = cast(object, argv)
-    if not isinstance(raw, tuple) or not raw:
-        raise ValueError("argv must be a non-empty tuple")
-    values = cast(tuple[object, ...], raw)
-    if any(not isinstance(value, str) or not value or "\x00" in value for value in values):
-        raise ValueError("argv must contain exact non-empty strings")
-    typed = cast(tuple[str, ...], raw)
-    name = typed[0]
-    if Path(name).name != name:
-        raise ValueError("verified reads do not launch caller-selected executables")
-    if name == "pwd" and len(typed) == 1:
+    """Carry out the one bounded read the resident says this argv asks for.
+
+    Which read that is, and how much of the file it may show, is decided by
+    the resident; this side opens the target under the repository and slices
+    the text it read. Nothing here re-reads the argv.
+    """
+
+    plan = verified_read_plan(argv)
+    if plan.select == "working_directory":
         target = _directory_target(context.cwd, context=context)
-        return _ReadOutput("working-directory", f"{context.cwd}\n", (target,))
-    if name in {"head", "tail"}:
-        return _head_tail(name, typed[1:], context=context)
-    if name == "sed":
-        return _sed(typed[1:], context=context)
-    raise ValueError("operation is outside the verified-read cohort")
-
-
-def _head_tail(name: str, args: tuple[str, ...], *, context: _WorkspaceContext) -> _ReadOutput:
-    if len(args) != 2:
-        raise ValueError("head and tail require one bound and one file")
-    count = _line_count(args[0])
-    with _open_target(args[1], context=context) as (stream, target):
+        return _ReadOutput(plan.operation_id, f"{context.cwd}\n", (target,))
+    if plan.target is None:
+        raise ValueError("a bounded file read requires a target")
+    with _open_target(plan.target, context=context) as (stream, target):
         lines = _read_bounded_text(stream).splitlines(keepends=True)
-    selected = lines[:count] if name == "head" else lines[-count:]
-    return _ReadOutput(f"bounded-{name}", "".join(selected), (target,))
+    return _ReadOutput(plan.operation_id, "".join(_selected(lines, plan)), (target,))
 
 
-def _sed(args: tuple[str, ...], *, context: _WorkspaceContext) -> _ReadOutput:
-    if len(args) != 3 or args[0] != "-n":
-        raise ValueError("sed requires one bounded print expression and one file")
-    match = _SED_RANGE.fullmatch(args[1])
-    if match is None:
-        raise ValueError("sed expression is outside the verified grammar")
-    start = int(match.group(1))
-    end = int(match.group(2) or match.group(1))
-    if not 1 <= start <= end <= _MAX_COUNT:
-        raise ValueError("sed range exceeds the bound")
-    with _open_target(args[2], context=context) as (stream, target):
-        lines = _read_bounded_text(stream).splitlines(keepends=True)
-    return _ReadOutput("bounded-source-view", "".join(lines[start - 1 : end]), (target,))
+def _selected(lines: list[str], plan: VerifiedReadPlan) -> list[str]:
+    if plan.select == "leading_lines":
+        return lines[: plan.count]
+    if plan.select == "trailing_lines":
+        return lines[-plan.count :]
+    return lines[plan.start - 1 : plan.end]
 
 
 class _OpenTarget:
@@ -279,8 +266,9 @@ def _open_beneath_repository(
 
 
 def _resolve_target(value: str, *, context: _WorkspaceContext) -> Path:
-    if not value or Path(value).is_absolute() or _dynamic(value):
-        raise ValueError("target must be a static relative path")
+    # The value's shape was settled by the resident's plan; what it points at,
+    # and whether that is a secret or a symlink, is answered here against the
+    # filesystem this process can see.
     lexical = context.cwd / value
     if classify_secret_path(value, cwd=context.cwd) is not None:
         raise ValueError("sensitive targets require review")
@@ -362,13 +350,6 @@ class _OpenRegularFile:
                 self._stream.close()
 
 
-def _line_count(value: str) -> int:
-    normalized = value.removeprefix("--lines=").removeprefix("-")
-    if not normalized.isdigit() or not 1 <= int(normalized) <= _MAX_COUNT:
-        raise ValueError("line count exceeds the bound")
-    return int(normalized)
-
-
 def _proof(
     context: _WorkspaceContext,
     *,
@@ -419,10 +400,6 @@ def _path_identity(metadata: os.stat_result) -> dict[str, int]:
 
 def _stable_file_identity(metadata: os.stat_result) -> tuple[int, int, int, int]:
     return metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns
-
-
-def _dynamic(value: str) -> bool:
-    return any(marker in value for marker in ("$", "`", "<", ">", "|", ";", "&", "*", "?", "[", "\x00"))
 
 
 def _source_digest() -> str:

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import { SectionLabel } from "../approval-center-primitives";
+import { CommandActivityHealthNotice } from "./command-activity-health-notice";
 import type { CommandActivityLoadState } from "./command-activity-state";
 import {
   commandBreakdownsAreGlobalOnly,
@@ -81,6 +82,7 @@ function FrequencyList(props: { title: string; buckets: CommandCountBucket[] }) 
 export function CommandActivitySummary(props: {
   state: CommandActivityLoadState<CommandActivityAnalytics>;
   outsideTableFilters: boolean;
+  onHealthRepaired: () => void;
 }) {
   if (props.state.kind === "idle" || (props.state.kind === "loading" && props.state.previous === null)) {
     return <div className="guard-skeleton h-52 w-full" aria-label="Loading command activity summary" />;
@@ -108,11 +110,7 @@ export function CommandActivitySummary(props: {
           Summary and trend totals do not include every active filter below.
         </div>
       ) : null}
-      {healthCopy ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">
-          {healthCopy}
-        </div>
-      ) : null}
+      {healthCopy ? <CommandActivityHealthNotice copy={healthCopy} onRepaired={props.onHealthRepaired} /> : null}
       {props.state.kind === "error" ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="status">
           Refresh failed. Showing the last loaded command activity summary.

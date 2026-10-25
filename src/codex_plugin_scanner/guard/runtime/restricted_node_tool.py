@@ -363,6 +363,15 @@ def _prepare_windows_tool(
     return replace(plan, output_roots=(_vite_output(args, workspace=plan.workspace, cwd=plan.cwd),))
 
 
+def _manager_local_run(name: str, args: tuple[str, ...]) -> tuple[str, ...] | None:
+    """The arguments from the tool on when `name args` is a manager's `exec` spelling."""
+    exec_verbs = {"npm": ("exec", "x"), "pnpm": ("exec",), "yarn": ("exec",)}.get(name, ())
+    if not args or args[0] not in exec_verbs:
+        return None
+    rest = args[1:]
+    return rest[1:] if rest[:1] == ("--",) else rest
+
+
 def prepare_restricted_node_tool(
     command: Sequence[str], *, workspace: Path, cwd: Path | None = None, home_dir: Path | None = None
 ) -> RestrictedPytestPlan:
@@ -373,12 +382,14 @@ def prepare_restricted_node_tool(
     if name == "bun" and args[:1] == ("x",):
         # `bun x` is Bun's spelling of `bunx`.
         name, args = "bunx", args[1:]
-    if name == "pnpm" and args[:1] == ("exec",):
-        # `pnpm exec` is pnpm's spelling of a local-bin run. A pnpm option before
-        # the tool (`-c` runs a shell, `-r`/`--filter` fan out) is not accepted.
-        if len(args) < 2 or args[1].startswith("-"):
+    local_run = _manager_local_run(name, args)
+    if local_run is not None:
+        # `npm exec`, `npm x`, `pnpm exec` and `yarn exec` are each manager's
+        # spelling of a local-bin run. A manager option before the tool (`-c`
+        # runs a shell, `-r`/`--filter` fan out) is not accepted.
+        if not local_run or local_run[0].startswith("-"):
             raise RestrictedPytestError("node_tool_invalid_command", "Missing local runner.")
-        name, args = args[1], args[2:]
+        name, args = local_run[0], local_run[1:]
     elif name in {"bun", "npm", "pnpm", "yarn"}:
         task = _script_task(name, args)
         if task is None:

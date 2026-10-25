@@ -61,6 +61,20 @@ pub(super) fn safe_sleep_arguments(arguments: &[String]) -> bool {
     sleep_seconds(arguments).is_some()
 }
 
+/// `exit` with no operand or a literal status ends the shell running the
+/// command and touches nothing else. In `rg -n TODO notes.md && exit 1 || true`
+/// it only decides which later step runs, and each of those steps carries its
+/// own proof.
+pub(super) fn safe_exit_arguments(arguments: &[String]) -> bool {
+    match arguments {
+        [] => true,
+        [status] => {
+            (1..=3).contains(&status.len()) && status.bytes().all(|byte| byte.is_ascii_digit())
+        }
+        _ => false,
+    }
+}
+
 /// Parse a bounded literal `sleep` duration in seconds.
 pub(super) fn sleep_seconds(arguments: &[String]) -> Option<f64> {
     let [duration] = arguments else {
@@ -280,6 +294,37 @@ pub(super) fn safe_date_arguments(arguments: &[String]) -> bool {
         return false;
     }
     !expect_epoch
+}
+
+#[cfg(test)]
+mod exit_tests {
+    fn arguments(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
+    }
+
+    #[test]
+    fn a_bare_or_literal_status_exit_is_inert() {
+        for values in [&[][..], &["0"], &["1"], &["255"]] {
+            assert!(super::safe_exit_arguments(&arguments(values)), "{values:?}");
+        }
+    }
+
+    #[test]
+    fn an_exit_operand_that_is_not_a_literal_status_stays_reviewed() {
+        for values in [
+            &["$STATUS"][..],
+            &["$(rm -rf build)"],
+            &["-1"],
+            &["1000"],
+            &[""],
+            &["1", "2"],
+        ] {
+            assert!(
+                !super::safe_exit_arguments(&arguments(values)),
+                "{values:?}"
+            );
+        }
+    }
 }
 
 #[cfg(test)]

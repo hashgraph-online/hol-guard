@@ -21,7 +21,7 @@ def encoded(value: object) -> bytes:
 
 def native_call(home: Path, **request: object) -> dict[str, Any]:
     from ..native_execution import _resident_request
-    from .extension_catalog_sync import ExtensionCatalogLimitError
+    from .extension_catalog_sync import ExtensionCatalogLimitError, ExtensionCatalogUnavailableError
 
     reply = _resident_request(
         operation="cloud_catalog",
@@ -33,7 +33,7 @@ def native_call(home: Path, **request: object) -> dict[str, Any]:
         max_request_bytes=4 * 1024 * 1024,
     )
     if not isinstance(reply, dict):
-        raise RuntimeError("Native complete catalog producer unavailable")
+        raise ExtensionCatalogUnavailableError("Native complete catalog producer unavailable")
     if reply.get("error") == "catalog_limit":
         raise ExtensionCatalogLimitError("Complete catalog exceeds native wire limits")
     payload = reply.get("payload")
@@ -96,8 +96,8 @@ class PreparedCatalogView:
             yield json.loads(self.request_bytes("page", ordinal))["page"]
 
     def legacy(self):
-        with self.pinned():
-            return native_call(self.guard_home, action="legacy", token=self.token)["catalog"]
+        # The native read holds the cache lock itself, so no transfer lease is taken.
+        return native_call(self.guard_home, action="legacy", token=self.token)["catalog"]
 
     @contextmanager
     def pinned(self):
@@ -148,6 +148,12 @@ def prepare_installed_catalog_view(
         "guard_version": guard_version,
         "generated_at": generated_at,
     }
+    # The native cache answers with a view this observation already produced, so
+    # an unchanged catalog is not marshalled again one extension at a time.
+    reused = native_call(guard_home, action="reuse", observation=observation)
+    if reused:
+        discovery.require_handle(handle, guard_home)
+        return PreparedCatalogView.from_native(guard_home, reused)
     draft = native_call(guard_home, action="begin", observation=observation)["draft"]
     try:
         for item in registry.extensions:

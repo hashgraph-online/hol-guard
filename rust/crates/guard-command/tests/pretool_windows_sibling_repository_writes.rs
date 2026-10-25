@@ -12,6 +12,9 @@
 #[path = "support/git_helper_fixture.rs"]
 mod git_helper_fixture;
 
+#[path = "pretool_windows_sibling_repository_writes/working_directory_projection.rs"]
+mod working_directory_projection;
+
 use git_helper_fixture::FixtureCleanup;
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -141,6 +144,7 @@ fn action(layout: &Layout, home: &str, command: &str) -> String {
             shell_home_matches: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),
+            creates_nothing: false,
         },
         Some(&environment),
     );

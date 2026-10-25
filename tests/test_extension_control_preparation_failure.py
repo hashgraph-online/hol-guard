@@ -6,6 +6,7 @@ import logging
 import socket
 import ssl
 import urllib.error
+from pathlib import Path
 
 import pytest
 
@@ -18,20 +19,21 @@ from codex_plugin_scanner.guard.daemon.extension_control_errors import (
     _CAUSE_RECOVERY_ACTIONS,
     ExtensionControlApiError,
 )
-from codex_plugin_scanner.guard.extension_builder.native_source_compiler import (
-    NativeSourceCompilerError,
-)
 from codex_plugin_scanner.guard.daemon.extension_control_preparation_failure import (
     classify,
     preparation_unavailable,
 )
-
+from codex_plugin_scanner.guard.extension_builder.native_source_compiler import (
+    NativeRequestTooLargeError,
+    NativeSourceCompilerError,
+)
 
 _CAUSES = (
     "installed_runtime_incomplete",
     "installed_runtime_unresponsive",
     "internal",
     "local_storage",
+    "native_request_too_large",
     "offline",
     "pack_authority_unavailable",
     "pack_revoked",
@@ -44,7 +46,7 @@ def _wrapped(error: BaseException) -> ValueError:
 
     try:
         raise error
-    except BaseException as exc:  # noqa: BLE001 - the chain is the point
+    except BaseException as exc:
         wrapper = ValueError(f"installed bundle metadata unavailable: {exc}")
         wrapper.__cause__ = exc
         return wrapper
@@ -84,6 +86,12 @@ def _wrapped(error: BaseException) -> ValueError:
         (
             _wrapped(NativeSourceCompilerError("source compiler timed out")),
             "installed_runtime_unresponsive",
+        ),
+        # A request the runtime will not read says nothing about the installed
+        # files, so it must not land on the broken-install verdict.
+        (
+            _wrapped(NativeRequestTooLargeError("compiler request exceeds the native input bound")),
+            "native_request_too_large",
         ),
         (ValueError("installed preparation authority is unavailable"), "pack_authority_unavailable"),
         (ValueError("pack_lifecycle_pack_authority_unavailable"), "pack_authority_unavailable"),
@@ -214,3 +222,132 @@ def test_the_daemon_record_carries_no_path():
 def test_the_cause_never_quotes_the_exception_message():
     error = preparation_unavailable(OSError("/Users/someone/.hol-guard/command-packs is unreadable"), stage="s")
     assert "/Users" not in repr(error.to_payload())
+
+
+def test_an_oversized_native_request_is_not_answered_with_a_reinstall():
+    """The payload is built from local data, so reinstalling cannot shrink it.
+
+    This is the failure a real install hit: the runtime refused the request,
+    the compiler reported unreadable JSON, and the classifier fell through to
+    `installed_runtime_incomplete`, whose action is `repair_guard_installation`.
+    """
+
+    error = preparation_unavailable(
+        _wrapped(NativeRequestTooLargeError("source compiler refused the request as too large")),
+        stage="candidate-preparation",
+    )
+    assert error.to_payload() == {
+        "error": "pack_preparation_unavailable",
+        "cause": "native_request_too_large",
+        "recovery": {"action": "inspect_daemon_log"},
+    }
+
+
+def test_the_daemon_log_records_the_request_that_grew_and_by_how_much(monkeypatch):
+    """The dashboard sends the operator to the log, so the log has to answer.
+
+    `native_request_too_large` is the one cause with no retry and no command
+    behind it, so the sentence the operator reads points at the daemon log
+    instead. That is only worth doing if the record names the request and the
+    size it reached; a bare cause code repeats what they already saw.
+    """
+
+    from codex_plugin_scanner.guard.catalog_delivery import lifecycle
+    from codex_plugin_scanner.guard.extension_builder import native_source_compiler as transport
+
+    monkeypatch.setattr(lifecycle._Session, "executable", lambda self: Path("/nonexistent/hol-guard-runtime"))
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("a request past the lifecycle bound must not reach Popen")
+
+    monkeypatch.setattr(transport.subprocess, "Popen", refuse)
+
+    with pytest.raises(ValueError) as raised:
+        lifecycle.invoke("preparation", history="x" * (transport._MAX_NATIVE_REQUEST_BYTES + 1))
+
+    taken = _recorded(raised.value)
+    assert len(taken) == 1
+    _event, detail = taken[0]
+    assert "cause=native_request_too_large" in detail
+    assert "pack-lifecycle request is" in detail
+    assert f"past the {transport._MAX_NATIVE_REQUEST_BYTES} byte native input bound" in detail
+
+
+def test_a_lifecycle_request_the_compiler_bound_would_have_passed_is_still_refused(monkeypatch):
+    """The two subcommands are read against different bounds.
+
+    `pack-lifecycle` is read by the runtime's own stdin reader at 6 MiB, while
+    the compiler front end reads 8 MiB. A request between the two is one the
+    runtime refuses, so holding the lifecycle path to the larger number sends a
+    process that is certain to fail and reports the refusal as a broken install.
+    """
+
+    from codex_plugin_scanner.guard.catalog_delivery import lifecycle
+    from codex_plugin_scanner.guard.extension_builder import native_source_compiler as transport
+
+    assert transport._MAX_NATIVE_REQUEST_BYTES < transport._MAX_REQUEST_BYTES
+
+    monkeypatch.setattr(lifecycle._Session, "executable", lambda self: Path("/nonexistent/hol-guard-runtime"))
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("a request past the lifecycle bound must not reach Popen")
+
+    monkeypatch.setattr(transport.subprocess, "Popen", refuse)
+
+    between = "x" * (transport._MAX_NATIVE_REQUEST_BYTES + 1024)
+    assert len(between) < transport._MAX_REQUEST_BYTES
+
+    with pytest.raises(ValueError) as raised:
+        lifecycle.invoke("preparation", history=between)
+
+    payload = preparation_unavailable(raised.value, stage="candidate-preparation").to_payload()
+    assert payload["cause"] == "native_request_too_large"
+    assert payload["recovery"] == {"action": "inspect_daemon_log"}
+
+
+def test_a_request_past_the_bound_reaches_that_answer_through_the_lifecycle_adapter(monkeypatch):
+    """Drive the real adapter, which encodes its own JSON and spawns directly."""
+
+    from codex_plugin_scanner.guard.catalog_delivery import lifecycle
+    from codex_plugin_scanner.guard.extension_builder import native_source_compiler as transport
+
+    # Stand in for the verified executable so the request itself, not the
+    # packaged runtime this checkout may not carry, decides the outcome.
+    monkeypatch.setattr(lifecycle._Session, "executable", lambda self: Path("/nonexistent/hol-guard-runtime"))
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("a request past the bound must not reach Popen")
+
+    monkeypatch.setattr(transport.subprocess, "Popen", refuse)
+
+    with pytest.raises(ValueError) as raised:
+        lifecycle.invoke("preparation", history="x" * (transport._MAX_NATIVE_REQUEST_BYTES + 1))
+
+    error = preparation_unavailable(raised.value, stage="candidate-preparation")
+    payload = error.to_payload()
+    assert payload["cause"] == "native_request_too_large"
+    assert payload["recovery"] == {"action": "inspect_daemon_log"}
+    assert payload["recovery"] != {"action": "repair_guard_installation"}
+
+
+def test_a_release_root_the_runtime_refuses_is_not_answered_with_a_reinstall(monkeypatch):
+    """A refused root names bad release data, not a broken installation."""
+
+    from codex_plugin_scanner.guard.catalog_delivery import authority, lifecycle
+    from codex_plugin_scanner.guard.extension_builder import native_source_compiler as transport
+
+    monkeypatch.setattr(lifecycle._Session, "executable", lambda self: Path("/nonexistent/hol-guard-runtime"))
+    refusal = (1, b'{"code":"distribution_identity_invalid"}', b"")
+    monkeypatch.setattr(transport, "_run_bounded", lambda *args, **kwargs: refusal)
+
+    with pytest.raises(ValueError, match="identity") as raised:
+        authority._native("root", data="{}", source="0" * 40, now=0)
+
+    assert not any(isinstance(error, NativeSourceCompilerError) for error in _chain(raised.value))
+    assert classify(raised.value) not in {"installed_runtime_incomplete", "installed_runtime_unresponsive"}
+
+
+def _chain(error):
+    while error is not None:
+        yield error
+        error = error.__cause__ or (None if error.__suppress_context__ else error.__context__)

@@ -71,8 +71,12 @@ def _stub_effects(monkeypatch: pytest.MonkeyPatch) -> None:
         assert inputs == now.facts
         return route_module.NativeHookRoute(*now.route)
 
-    def unavailable(_args: object, *, event_name: object, reason_code: object, recording_only: object, **_k: object):
-        return now.recorder.unavailable(event_name, reason_code, recording_only)
+    def unavailable(_args: object, *, event_name: object, reason_code: object, **_k: object):
+        # A route that never resolved has no edge, so no recording-only posture.
+        return now.recorder.unavailable(event_name, reason_code, False)
+
+    def run_unavailable(run: route_run.NativeHookRun, reason_code: str) -> int:
+        return now.recorder.unavailable(run.event_name, reason_code, run.recording_only)
 
     def artifact_flow(_args: object, **kw: Any) -> int:
         return now.recorder.artifact_flow(
@@ -112,7 +116,7 @@ def _stub_effects(monkeypatch: pytest.MonkeyPatch) -> None:
             "_normalize_hook_payload": lambda payload, *, harness: payload,
             "_run_native_artifact_hook_flow": artifact_flow,
         },
-        route_run: {"_emit_native_unavailable": unavailable},
+        route_run.NativeHookRun: {"unavailable": run_unavailable},
         handlers: {
             "_load_single_claude_pending_permission": lambda _store, _payload: now.recorder.pending_pair(),
             "_claude_guard_question_verdict": lambda _payload, _pending: now.recorder.question_verdict(),
@@ -207,15 +211,29 @@ def test_the_recorded_cases_are_the_vectors() -> None:
     assert all(case.facts() == vector["facts"] for case, vector in zip(CASES, VECTOR_LIST, strict=True))
 
 
+def _expected(vector: dict[str, Any], world: Any) -> tuple[list[Any], object]:
+    recorded = vector["worlds"][world.name]
+    trace, rc = recorded["trace"], recorded["rc"]
+    # One deliberate difference since the recording: a Claude permission dialog
+    # the resident cannot answer is the host outage response from its handler
+    # (``run.unavailable``), not an exception escaping the pipeline.
+    if rc == "raised" and trace[-1] == ["raise", "claude"] and trace[-2][0] == "claude_permission_request":
+        edge = rec.EDGES[world.edge]
+        recording_only = bool(isinstance(edge, dict) and edge.get("recording_only"))
+        trace = [*trace, ["unavailable", vector["route"]["event_name"], "outage_claude", recording_only]]
+        rc = rec.RC["unavailable"]
+    return trace, rc
+
+
 @pytest.mark.parametrize("world", rec.WORLDS, ids=lambda world: world.name)
 def test_the_pipeline_runs_the_recorded_effects(monkeypatch: pytest.MonkeyPatch, world: Any) -> None:
     _stub_effects(monkeypatch)
     failures = []
     for case, vector in zip(CASES, VECTOR_LIST, strict=True):
         trace, rc = _run_pipeline(case, vector, world)
-        expected = vector["worlds"][world.name]
-        if (trace, rc) != (expected["trace"], expected["rc"]):
-            failures.append(f"{vector['facts']}: {(trace, rc)!r} != {(expected['trace'], expected['rc'])!r}")
+        expected = _expected(vector, world)
+        if (trace, rc) != expected:
+            failures.append(f"{vector['facts']}: {(trace, rc)!r} != {expected!r}")
     assert failures[:3] == []
 
 

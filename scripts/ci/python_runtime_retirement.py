@@ -35,6 +35,22 @@ def _relative_path(value: object, *, source: bool) -> str:
     return value
 
 
+def _dead_code_removal(record: Mapping[str, object]) -> bool:
+    """Allow a retirement that deleted dead Python rather than superseding it.
+
+    Most retired modules name the Rust that took their behaviour over. A few
+    reached nobody at all, so there is no replacement to name; those still have
+    to be recorded here, or their path and digest keep no protection against
+    quietly coming back. Such a record declares why it was dead instead.
+    """
+    if record.get("retirement") != "dead_code":
+        return False
+    reason = record.get("removal_reason")
+    if not isinstance(reason, str) or not reason.strip():
+        raise RuntimeError(f"dead code retirement needs a removal reason: {record.get('path')}")
+    return True
+
+
 def _records(contract: Mapping[str, object]) -> list[dict[str, object]]:
     records = contract.get("retired_modules", [])
     if not isinstance(records, list):
@@ -59,14 +75,12 @@ def _records(contract: Mapping[str, object]) -> list[dict[str, object]]:
         ):
             raise RuntimeError(f"retired implementation symbols are required: {path}")
         replacements = record.get("native_replacements")
-        if (
-            not isinstance(replacements, list)
-            or not replacements
-            or not all(
-                isinstance(item, str) and item.startswith("rust/") and ".." not in PurePosixPath(item).parts
-                for item in replacements
-            )
+        if not isinstance(replacements, list) or not all(
+            isinstance(item, str) and item.startswith("rust/") and ".." not in PurePosixPath(item).parts
+            for item in replacements
         ):
+            raise RuntimeError(f"native replacement paths are required: {path}")
+        if not replacements and not _dead_code_removal(record):
             raise RuntimeError(f"native replacement paths are required: {path}")
         paths.add(path)
         modules.add(module)

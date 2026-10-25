@@ -109,7 +109,7 @@ from ..models import GuardAction, GuardArtifact, HarnessDetection
 from ..native_approval_proof import claimed_row_is_still_the_authority
 from ..native_hook_approval_context import generic_hook_approval_context_inputs, native_hook_approval_context_token
 from ..native_hook_decision import native_compose_current, native_finalize, native_post_claim_decision
-from ..retry_lineage import capture_retry_lineage
+from ..native_retry_lineage import capture_retry_lineage
 from ..runtime.actions import _command_detail
 from ..runtime.approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
@@ -402,6 +402,7 @@ def _queue_generic_hook_approval(
         harness=str(args.harness),
         workspace=str(runtime_workspace) if runtime_workspace else None,
         action_envelope=action_envelope.to_dict() if action_envelope is not None else None,
+        guard_home=store.guard_home,
     )
     if retry_lineage is not None:
         hook_metadata["retry_lineage"] = retry_lineage
@@ -786,7 +787,9 @@ def run_native_generic_payload(
     silent_review = final["silent_review"]
     if silent_review is not None:
         payload_map.update(policy_action="block", approval_requests=[], prompted=False)
-        blocked_request_guidance = safe_alternative_reason(silent_review["reason"])
+        blocked_request_guidance = safe_alternative_reason(
+            _native_network_reason(native_edge_result) or silent_review["reason"]
+        )
         payload_map["blocked_request_guidance"] = blocked_request_guidance
         _record_generic_hook_silent_review(
             args,
@@ -917,6 +920,7 @@ def run_native_generic_payload(
     incoming_reason = (
         blocked_request_guidance
         or composition["daemon_failure_reason"]
+        or _native_network_reason(native_edge_result)
         or _decision_v2_harness_message(payload_map)
         or payload_map.get("permission_decision_reason")
     )
@@ -952,6 +956,17 @@ def run_native_generic_payload(
         remediation=lambda: _embedded_script_remediation(command_text),
         verified_benign=lambda: hook_event_name == "PreToolUse" and bool(composition["verified_benign"]),
     )
+
+
+def _native_network_reason(native_edge_result: Mapping[str, object] | None) -> str | None:
+    """The network protection reason, which names the destination it matched."""
+    if not isinstance(native_edge_result, Mapping):
+        return None
+    reason_code = native_edge_result.get("reason_code")
+    reason = native_edge_result.get("reason")
+    if isinstance(reason_code, str) and reason_code.startswith("network_") and isinstance(reason, str):
+        return reason.strip() or None
+    return None
 
 
 __all__ = [

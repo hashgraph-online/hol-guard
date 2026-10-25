@@ -153,16 +153,17 @@ def _request(operation: str, wire_input: Mapping[str, Any], expected: type | tup
     )
 
 
-def venv_activation_target(command: str, *, cwd: Path | None = None, home_dir: Path | None = None) -> str | None:
-    """The command a virtualenv activation hands its verdict to, as the pre-tool pass read it.
+def contained_target(command: str, *, cwd: Path | None = None, home_dir: Path | None = None) -> str | None:
+    """The command the pre-tool pass answered for, when it read through the call's own wrapping.
 
-    The native scan owns the reading: the activation has to resolve to a
-    marked environment's own script, its text has to bound the programs it can
-    run, and only then does the command after it carry the verdict.
+    The native scan owns the reading: a trailing subshell or brace group is the
+    command list inside it, and an activation has to resolve to a marked
+    environment's own script, its text has to bound the programs it can run,
+    and only then does the command after it carry the verdict.
     """
     try:
         value = restricted_native(
-            "venv_activation_target",
+            "contained_target",
             {"text": command, "cwd": cwd, "home": home_dir},
             (str, type(None)),
         )

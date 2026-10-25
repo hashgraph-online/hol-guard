@@ -13,6 +13,7 @@ import { filterByDecision } from "./evidence-filters";
 import { groupByCategory, getCategoryInfo, type ReceiptCategory, CATEGORIES, detectCategory } from "./categories";
 import { plainEnglishDescription, resolveActionTitle, resolveActionTitleTooltip, resolveActionType, resolveActionSubtitle } from "./plain-english";
 import { formatRelativeTime, harnessDisplayName } from "../approval-center-utils";
+import { StyledSelect } from "../styled-select";
 import { DecisionBadge } from "./decision-badge";
 import { Badge } from "../approval-center-primitives";
 
@@ -128,26 +129,26 @@ function CategoryTabRaw({ receipts, onFilterCategory }: CategoryTabProps) {
             <HiMiniFunnel className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Filter:</span>
           </div>
-          <select
+          <StyledSelect
             value={decisionFilter}
             onChange={(e) => setDecisionFilter(e.target.value)}
-            className="min-h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+            className="min-h-8 rounded-lg py-1 text-xs font-medium"
           >
             <option value="all">All decisions</option>
             <option value="allow">Allowed</option>
             <option value="ask">Review</option>
             <option value="block">Stopped</option>
-          </select>
-          <select
+          </StyledSelect>
+          <StyledSelect
             value={harnessFilter}
             onChange={(e) => setHarnessFilter(e.target.value)}
-            className="min-h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-1 focus:ring-brand-blue/20"
+            className="min-h-8 rounded-lg py-1 text-xs font-medium"
           >
             <option value="">All apps</option>
             {harnesses.map((h) => (
               <option key={h} value={h}>{harnessDisplayName(h)}</option>
             ))}
-          </select>
+          </StyledSelect>
           {(decisionFilter !== "all" || harnessFilter) && (
             <button
               type="button"

@@ -90,11 +90,8 @@ fn the_embedded_artifact_compiles_to_the_fully_admitted_program() {
 fn packaged_program_is_admitted_once_and_exposes_explicit_coverage() {
     let first = packaged_command_program().unwrap();
     assert!(Arc::ptr_eq(&first, &packaged_command_program().unwrap()));
-    let catalog: serde_json::Value = serde_json::from_slice(include_bytes!(concat!(
-        env!("OUT_DIR"),
-        "/command-catalog.v1.json"
-    )))
-    .unwrap();
+    let catalog: serde_json::Value =
+        serde_json::from_slice(guard_command_catalog_data::CATALOG_JSON).unwrap();
     let entries = catalog["catalog"].as_array().unwrap();
     let mut catalog_ids: Vec<&str> = entries
         .iter()

@@ -762,6 +762,7 @@ class TestGuardSurfaceServer:
                 "/audit",
                 "/policy",
                 "/feed-health",
+                "/workspaces",
                 "/settings",
                 "/protection/repair",
             ):

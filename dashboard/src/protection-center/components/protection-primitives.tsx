@@ -107,6 +107,8 @@ export function ProtectionModuleRow(props: {
   ecosystemIds?: readonly string[];
   brand?: string;
   badge?: string;
+  /** The app a detected connection comes from, shown beside the name. */
+  source?: string;
   actionLabel?: string;
   state?: ExtensionRowState;
   ruleCount?: number;
@@ -125,7 +127,7 @@ export function ProtectionModuleRow(props: {
       size="md"
     />
     <span className="min-w-0 flex-1">
-      <span className="flex flex-wrap items-center gap-2"><strong className="text-sm text-brand-dark">{props.name}</strong>{props.required ? <span className="text-[11px] font-semibold text-brand-dark/55">Required by Guard</span> : null}{props.mcp ? <span className="text-[11px] font-semibold text-brand-dark/55">MCP</span> : null}{props.external ? <span className="text-[11px] font-semibold text-brand-dark/55">External</span> : null}{props.managed ? <span className="text-[11px] font-semibold text-brand-dark/55">{props.managedLabel ?? "Synced from Guard Cloud"}</span> : null}{props.custom ? <span className="text-[11px] font-semibold text-brand-dark/55">Custom</span> : null}{props.badge ? <span className="rounded-full border border-brand-blue/30 bg-brand-blue/5 px-2 py-0.5 text-[11px] font-semibold text-brand-dark" data-testid="custom-extension-badge">{props.badge}</span> : null}</span>
+      <span className="flex flex-wrap items-center gap-2"><strong className="text-sm text-brand-dark">{props.name}</strong>{props.required ? <span className="text-[11px] font-semibold text-brand-dark/55">Required by Guard</span> : null}{props.mcp ? <span className="text-[11px] font-semibold text-brand-dark/55">MCP</span> : null}{props.external ? <span className="text-[11px] font-semibold text-brand-dark/55">External</span> : null}{props.managed ? <span className="text-[11px] font-semibold text-brand-dark/55">{props.managedLabel ?? "Synced from Guard Cloud"}</span> : null}{props.custom ? <span className="text-[11px] font-semibold text-brand-dark/55">Custom</span> : null}{props.source ? <span className="max-w-[16rem] truncate text-[11px] font-semibold text-brand-dark/55" title={props.source} data-testid="extension-row-source">{props.source}</span> : null}{props.badge ? <span className="rounded-full border border-brand-blue/30 bg-brand-blue/5 px-2 py-0.5 text-[11px] font-semibold text-brand-dark" data-testid="custom-extension-badge">{props.badge}</span> : null}</span>
       <span className="mt-0.5 block truncate text-sm text-brand-dark/70">{props.behavior}</span>{meta ? <span className="mt-1 block truncate font-mono text-[11px] text-brand-dark/50" data-testid="extension-row-meta">{meta}</span> : null}{props.actionLabel ? <span className="mt-1 block text-sm font-semibold text-brand-blue">{props.actionLabel}</span> : null}
     </span>
     {props.state ? <ExtensionStatePill state={props.state} /> : null}

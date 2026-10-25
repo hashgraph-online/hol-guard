@@ -1,0 +1,11 @@
+{
+  "name": "weather-tools",
+  "version": "0.3.0",
+  "description": "Forecasts and alerts for Gemini CLI.",
+  "contextFileName": "GEMINI.md",
+  "mcpServers": {
+    "weather": {
+      "httpUrl": "https://weather.example/mcp"
+    }
+  }
+}

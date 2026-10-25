@@ -7,6 +7,8 @@ from pathlib import Path
 import tomllib
 import yaml
 
+from tests.release_workflow_helpers import native_wheel_job
+
 ROOT = Path(__file__).resolve().parents[1]
 PUBLISH_PR_PATHS = [
     "**",
@@ -17,6 +19,7 @@ PUBLISH_PR_PATHS = [
     "!.github/workflows/**",
     ".github/workflows/publish.yml",
     ".github/workflows/release-native-prepare.yml",
+    ".github/workflows/release-native-wheel.yml",
     "README.md",
     "src/**",
     "scripts/**",
@@ -93,8 +96,7 @@ def test_publish_path_filter_keeps_every_shipped_and_canary_input() -> None:
 
 
 def test_native_pr_base_wheel_rebuild_has_uv_available() -> None:
-    workflow = yaml.safe_load((ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8"))
-    steps = workflow["jobs"]["build-native-guard-wheels"]["steps"]
+    steps = native_wheel_job()["steps"]
     rebuild_index = next(
         index
         for index, step in enumerate(steps)

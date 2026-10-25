@@ -9,7 +9,9 @@
 //!
 //! A failed or malformed identity derivation records nothing. A grant step
 //! without a trustworthy answer is unverified: an allowed command is held for
-//! review while any block rule exists, as `unverified_local_cli_action` does.
+//! review while any block rule exists. A hook that gets no answer from this op
+//! at all answers with the host outage response, as the direct hook path's
+//! unverified block does; the transport never picks an action itself.
 
 use std::collections::BTreeSet;
 use std::time::{SystemTime, UNIX_EPOCH};

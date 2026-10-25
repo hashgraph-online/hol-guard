@@ -228,7 +228,6 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
         "src/codex_plugin_scanner/guard/runtime/command_model.py",
         "src/codex_plugin_scanner/guard/runtime/effect_contract.py",
         "src/codex_plugin_scanner/guard/runtime/extension_evidence.py",
-        "src/codex_plugin_scanner/guard/runtime/containment_outputs.py",
         "src/codex_plugin_scanner/guard/runtime/local_package_script_evidence.py",
         "src/codex_plugin_scanner/guard/runtime/verified_github_reads.py",
         "src/codex_plugin_scanner/guard/runtime/verified_read_execution.py",

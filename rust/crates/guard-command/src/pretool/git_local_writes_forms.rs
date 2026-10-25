@@ -280,11 +280,11 @@ pub(super) fn created_branch(original: &CommandSegmentV1) -> Option<&str> {
     }
 }
 
-/// Whether a write other than a branch creation may change the checked-out
-/// branch: any `checkout`, `switch` or `branch` form.
+/// Whether a write other than a branch creation may change what a push would
+/// send: any `checkout`, `switch` or `branch` form, and a `reset`, which moves
+/// the checked-out branch to another commit.
 pub(super) fn moves_head(original: &CommandSegmentV1) -> bool {
-    original
-        .arguments
-        .first()
-        .is_none_or(|command| matches!(command.as_str(), "checkout" | "switch" | "branch"))
+    original.arguments.first().is_none_or(|command| {
+        matches!(command.as_str(), "checkout" | "switch" | "branch" | "reset")
+    })
 }

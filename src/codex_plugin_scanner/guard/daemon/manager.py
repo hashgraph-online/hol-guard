@@ -169,6 +169,7 @@ _GUARD_DAEMON_ENV_KEYS = frozenset(
         "WINDIR",
     }
 )
+_SHIM_TOOL_DIRS_ENV = "HOL_GUARD_SHIM_TOOL_DIRS"
 _GUARD_DAEMON_DESKTOP_ENV_KEYS = ("HOL_GUARD_DESKTOP", "HOL_GUARD_DESKTOP_RUNTIME_OWNER", "HOL_GUARD_DESKTOP_VERSION")
 _RECOVERY_LOCKS: dict[str, threading.Lock] = {}
 _RECOVERY_LOCKS_GUARD = threading.Lock()
@@ -237,6 +238,11 @@ def _daemon_launcher_env(
             "HOME": str(trusted_home),
             "PYTHONNOUSERSITE": "1",
             "PYTHONSAFEPATH": "1",
+            # The daemon inherits its launcher's PATH, which a desktop or IDE launcher
+            # reduces to the system directories. Package-manager detection must still
+            # find what the user's shell reaches, so it searches the well-known
+            # directories too. A launching shell cannot switch this off.
+            _SHIM_TOOL_DIRS_ENV: "1",
         }
     )
     if getattr(sys, "frozen", False) is True or executable is not None:

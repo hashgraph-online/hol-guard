@@ -3,12 +3,29 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 
 SAFE_ALTERNATIVE_GUIDANCE = (
     "This action remains blocked. Continue with a safe, permitted alternative that respects "
     "the same protection. Do not retry an equivalent command, bypass Guard, or seek permission "
     "to run it. If no safe alternative can complete the task, explain the limitation."
 )
+
+
+def approval_wait_hint(request_id: str, *, guard_home: Path, home_dir: Path | None = None) -> str:
+    """Transport the resident's read-only notification for this queued request."""
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        result = native_runner_authority(
+            "approval_wait_hint",
+            {"request_id": request_id, "guard_home": str(guard_home), "home_dir": str(home_dir or Path.home())},
+            guard_home=guard_home,
+        )
+    except NativeRunnerAuthorityError:
+        return ""
+    hint = result.get("hint")
+    return hint if isinstance(hint, str) else ""
 
 
 def asks_for_approval(config: object) -> bool:

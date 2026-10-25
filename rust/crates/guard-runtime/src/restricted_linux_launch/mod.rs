@@ -11,6 +11,8 @@ mod socket;
 type BoundaryResult<T> = Result<T, &'static str>;
 #[cfg(target_os = "linux")]
 mod admission;
+#[cfg(all(test, target_os = "linux"))]
+mod boundary_tests;
 #[cfg(target_os = "linux")]
 mod capabilities;
 #[cfg(unix)]

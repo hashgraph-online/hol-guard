@@ -138,6 +138,13 @@ jobs:
           # Without the built compiler, the wheel build hook would compile it again through cargo run.
           HOL_GUARD_BUILD_SOURCE_COMPILER="$compiler" uv build --wheel --out-dir pure-dist
           RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
+          wheel_bound=()
+          if [[ "$QUALIFY_PROFILE" == "dev" ]]; then
+            # The development profile compiles the whole workspace at opt-level 0, so the runtime is
+            # several times the shipped size. These wheels are only installed for Gauntlet runs and are
+            # never published, so they name a larger bound; the release path keeps the default.
+            wheel_bound=(--max-runtime-bytes $((512 * 1024 * 1024)))
+          fi
           HOL_GUARD_BUILD_SOURCE_COMPILER="$compiler" uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
             --wheel "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" \
             --runtime "$runtime" \
@@ -148,7 +155,8 @@ jobs:
             --source-sha "$SOURCE_SHA" \
             --rule-digest "$RULE_DIGEST" \
             --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
-            --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)"
+            --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)" \
+            ${wheel_bound[@]+"${wheel_bound[@]}"}
           uv pip uninstall --python .venv/bin/python hol-guard
           uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
           (cd native-dist && shasum -a 256 ./*.whl)

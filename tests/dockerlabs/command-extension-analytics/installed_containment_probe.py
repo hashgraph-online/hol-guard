@@ -16,7 +16,10 @@ from typing import cast
 
 import codex_plugin_scanner
 from codex_plugin_scanner import __version__
+from codex_plugin_scanner.guard import native_execution
 from codex_plugin_scanner.guard.native_execution import contained_execute_native
+from codex_plugin_scanner.guard.native_policy_snapshot_publisher import ensure_native_launch_resident_verifier
+from codex_plugin_scanner.guard.store import GuardStore
 
 SENTINEL = "guard-private-command-sentinel"
 SCHEMA_VERSION = "containment-contract-v1"
@@ -64,6 +67,10 @@ def _probe() -> dict[str, object]:
         root = Path(temporary)
         guard_home = root / "guard-home"
         guard_home.mkdir()
+        # The resident refuses to start for a Guard home without its verifier
+        # key. A real install provisions it on first use; this bare home has to
+        # do the same before the first request.
+        ensure_native_launch_resident_verifier(GuardStore(guard_home))
         # The secret sits outside the workspace the request grants, so reading
         # or writing it proves the sandbox leaked a path it never granted.
         protected = root / "private"
@@ -79,15 +86,20 @@ def _probe() -> dict[str, object]:
         destination = output / "format-output.txt"
         protected_path = shlex.quote(str(secret_file))
         cat, copy = _tool("cat"), _tool("cp")
-        command = (
-            f"if secret=$({shlex.quote(cat)} {protected_path} 2>/dev/null); then printf '%s' \"$secret\"; exit 91; fi; "
-            f"if printf changed 2>/dev/null > {protected_path}; then exit 92; fi; "
-            f"{shlex.quote(copy)} format-input.txt output/format-output.txt"
+        # The containment contract caps each argv token at 256 bytes, and the
+        # script names the protected path twice, so it runs from a workspace
+        # file instead of an inline `sh -c` argument.
+        script = workspace / "probe.sh"
+        _ = script.write_text(
+            f"if secret=$({shlex.quote(cat)} {protected_path} 2>/dev/null); then printf '%s' \"$secret\"; exit 91; fi\n"
+            f"if printf changed 2>/dev/null > {protected_path}; then exit 92; fi\n"
+            f"{shlex.quote(copy)} format-input.txt output/format-output.txt\n",
+            encoding="utf-8",
         )
         request: dict[str, object] = {
             "schema_version": SCHEMA_VERSION,
             "kind": "installed-analytics-probe",
-            "argv": [_tool("sh"), "-c", command],
+            "argv": [_tool("sh"), script.name],
             "cwd": str(workspace),
             "env_allowlist": [],
             "timeout_seconds": 5,
@@ -112,14 +124,34 @@ def _probe() -> dict[str, object]:
             "additional_read_paths": [],
             "allow_outbound_network": False,
         }
-        result = contained_execute_native(
-            request,
-            policy,
-            guard_home=guard_home,
-            run_id=f"installed-analytics-probe-{uuid.uuid4().hex}",
-        )
+        # contained_execute_native folds every refusal into None. Keep the
+        # resident's own reply so a failed proof names the reason.
+        replies: list[object] = []
+        transport = native_execution.native_resident_client_request
+
+        def _recording_transport(**kwargs: object) -> object:
+            reply = transport(**kwargs)
+            replies.append(reply)
+            return reply
+
+        native_execution.native_resident_client_request = _recording_transport
+        try:
+            result = contained_execute_native(
+                request,
+                policy,
+                guard_home=guard_home,
+                run_id=f"installed-analytics-probe-{uuid.uuid4().hex}",
+            )
+        finally:
+            native_execution.native_resident_client_request = transport
         if result is None:
-            raise RuntimeError("installed containment proof could not reach the native runtime")
+            status = native_execution.native_runtime_status()
+            last = replies[-1] if replies else None
+            detail = last[:400].decode("utf-8", "replace") if isinstance(last, bytes) else repr(last)
+            raise RuntimeError(
+                "the native runtime did not run the installed containment proof "
+                f"(status={status.reason}, resident={detail})"
+            )
         stdout, stderr = str(result.get("stdout", "")), str(result.get("stderr", ""))
         exit_code = result.get("exit_code")
         written = destination.exists() and destination.read_text(encoding="utf-8") == "formatted\n"

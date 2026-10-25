@@ -3,10 +3,10 @@ import type { GuardPolicyDecision } from "./guard-types";
 import {
   buildRuleAttention,
   buildRulesHeroModel,
-  buildRulesSpotlight,
   isBroadAllow,
   isStaleRule,
   policyRiskScore,
+  widestBroadAllow,
 } from "./policy-rules-hero-model";
 import { countPolicyRules } from "./policy-rules-overview-model";
 
@@ -43,15 +43,16 @@ const attention = buildRuleAttention([broad, narrow, policy({ updated_at: "2026-
 assert.equal(attention.broadAllows.length, 1);
 assert.equal(attention.staleLocals.length, 1);
 
-const spotlight = buildRulesSpotlight([narrow, broad]);
-assert.equal(spotlight[0].reason, "broad");
-assert.ok(spotlight.length <= 3);
-
-// A broad allow must lead the shelf even when narrower rules outscore it.
+// The attention strip names the widest rule: a global allow leads a
+// harness-scoped one whatever their risk scores are, in either list order.
 const cloudBroad = policy({ scope: "global", source: "cloud-sync", artifact_id: "family:prompt", reason: "cloud-broad", updated_at: "2026-10-10T00:00:00Z" });
-const loudLocal = (n: number) => policy({ scope: "publisher", artifact_id: "family:tool-action", reason: `loud-${n}`, updated_at: `2026-10-1${n}T00:00:00Z` });
-const crowded = buildRulesSpotlight([loudLocal(1), loudLocal(2), loudLocal(3), cloudBroad]);
-assert.equal(crowded[0].reason, "cloud-broad");
+const harnessBroad = policy({ scope: "harness", artifact_id: "family:tool-action", reason: "harness-broad" });
+assert.ok(policyRiskScore(cloudBroad) < policyRiskScore(harnessBroad));
+assert.equal(widestBroadAllow([harnessBroad, cloudBroad])?.reason, "cloud-broad");
+assert.equal(widestBroadAllow([cloudBroad, harnessBroad])?.reason, "cloud-broad");
+// Same reach: the risk score decides.
+assert.equal(widestBroadAllow([cloudBroad, broad])?.reason, "broad");
+assert.equal(widestBroadAllow([]), undefined);
 
 const empty = buildRulesHeroModel({
   counts: countPolicyRules([]),
@@ -83,7 +84,7 @@ const clear = buildRulesHeroModel({
 });
 assert.equal(clear.tone, "clear");
 assert.match(clear.headline, /repeat for you/);
-assert.match(clear.subheadline, /choice you made once/);
+assert.equal(clear.subheadline, "");
 
 const cloudOnly = buildRulesHeroModel({
   counts: countPolicyRules([policy({ source: "cloud-sync", scope: "workspace" })]),
@@ -93,6 +94,5 @@ const cloudOnly = buildRulesHeroModel({
   pendingCount: 0,
 });
 assert.match(cloudOnly.subheadline, /read-only here/);
-assert.ok(!cloudOnly.subheadline.includes("choice you made once"));
 
 console.log("policy-rules-hero-model.test.ts: all assertions passed");

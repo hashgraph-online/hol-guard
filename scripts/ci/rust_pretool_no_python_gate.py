@@ -230,7 +230,7 @@ def _contract_failures(root: Path) -> list[str]:
     failures: list[str] = []
     checks = (
         (
-            root / "rust/crates/guard-command/src/pretool.rs",
+            root / "rust/crates/guard-command/src/pretool/mod.rs",
             ("pub fn evaluate_pre_tool", "PreToolDecisionV1", "pub mod generic", "~/.npmrc"),
         ),
         (

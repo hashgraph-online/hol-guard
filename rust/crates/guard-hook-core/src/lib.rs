@@ -531,7 +531,13 @@ fn review_source(
         deadline(request),
     );
     if scan.budget_exhausted {
-        return inconclusive_source();
+        // Name the real exit, as the inline path does. An exhausted scan budget
+        // is not a failed proof, and reporting it as `no_output_to_review` hid
+        // a load problem behind a classifier problem.
+        return HookReviewResponseV1::deny(
+            "scanner_budget_exhausted",
+            "HOL Guard could not complete local hook review safely.",
+        );
     }
     if !scan.matches.is_empty() && (raw_output_matches || !clean_slice(request, text, &source.path))
     {

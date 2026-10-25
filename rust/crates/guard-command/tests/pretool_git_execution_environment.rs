@@ -47,6 +47,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             Some(context),
         )
@@ -447,6 +448,7 @@ fn stamped_git_reads_allow_only_when_no_diff_helper_is_configured() {
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
+                creates_nothing: false,
             },
             context,
         )

@@ -75,13 +75,11 @@ class NativeHookRun:
         """The host outage response, keeping the resident's reason code."""
         return _emit_native_unavailable(
             self.args,
-            payload=self.payload,
             workspace=self.runtime_workspace,
             context=self.context,
             event_name=self.event_name,
             reason_code=reason_code,
             worker=self.worker,
-            recording_only=self.recording_only,
         )
 
 

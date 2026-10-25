@@ -5,6 +5,9 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
+from scripts.ci import generate_release_notes
 from scripts.ci.generate_release_notes import (
     Change,
     PreviousRelease,
@@ -171,7 +174,8 @@ def test_render_notes_groups_sections_and_links_everything() -> None:
     assert "@Michael Kantor" not in notes
 
 
-def test_render_notes_condenses_histories_too_large_to_list() -> None:
+def test_render_notes_condenses_histories_too_large_to_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(generate_release_notes, "MAX_CHANGE_LIST_CHARS", 1_000)
     changes = [
         _change(
             sha=f"{i:040x}",
@@ -590,3 +594,106 @@ def test_main_links_no_release_when_tag_exists_without_release_object(tmp_path: 
     assert "since tag `v3.0.191` (previous tag has no published release)." in notes
     assert "**Source comparison**: [v3.0.191...v3.0.192]" in notes
     assert "**Full changelog**" not in notes
+
+
+def _many_changes(count: int) -> list[Change]:
+    return [
+        _change(
+            sha=f"{index:040x}",
+            subject=f"fix(native): repair case {index} (#{1000 + index})",
+            type="fix",
+            scope="native",
+            description=f"repair case {index}",
+            pr_number=1000 + index,
+            pr_title=f"fix(native): repair case {index}",
+            summary_bullets=[f"Explains case {index} in one sentence"],
+        )
+        for index in range(count)
+    ]
+
+
+def _render_stable(changes: list[Change]) -> str:
+    return render_notes(
+        changes,
+        version="3.56.0",
+        channel="stable",
+        repo=REPO,
+        tag="v3.56.0",
+        previous_tag="v3.55.1",
+        source_sha="d" * 40,
+    )
+
+
+def test_render_notes_lists_every_change_of_a_large_release() -> None:
+    notes = _render_stable(_many_changes(214))
+
+    assert "too many changes to list" not in notes
+    assert "## Changes by category" not in notes
+    for index in range(214):
+        assert f"[#{1000 + index}](https://github.com/{REPO}/pull/{1000 + index})" in notes
+    assert "  - Explains case 213 in one sentence" in notes
+
+
+def test_render_notes_drops_summary_bullets_before_dropping_changes(monkeypatch: pytest.MonkeyPatch) -> None:
+    changes = _many_changes(30)
+    bare = generate_release_notes.render_sections(changes, REPO, with_bullets=False)
+    monkeypatch.setattr(generate_release_notes, "MAX_CHANGE_LIST_CHARS", len(bare))
+
+    notes = _render_stable(changes)
+
+    assert "Explains case" not in notes
+    assert "too many changes to list" not in notes
+    assert f"[#1029](https://github.com/{REPO}/pull/1029)" in notes
+
+
+def test_render_notes_condenses_only_when_bare_entries_exceed_the_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    changes = _many_changes(30)
+    bare = generate_release_notes.render_sections(changes, REPO, with_bullets=False)
+    monkeypatch.setattr(generate_release_notes, "MAX_CHANGE_LIST_CHARS", len(bare) - 1)
+
+    notes = _render_stable(changes)
+
+    assert "## Changes by category" in notes
+    assert "- **Fixes**: 30" in notes
+    assert "too many changes to list" in notes
+
+
+def _crowded_changes(count: int) -> list[Change]:
+    changes = _many_changes(count)
+    for index, change in enumerate(changes):
+        change.author = f"Contributor Number {index}"
+    return changes
+
+
+def test_render_notes_keeps_the_whole_body_within_the_github_limit() -> None:
+    notes = _render_stable(_crowded_changes(4_000))
+
+    assert len(notes) <= generate_release_notes.MAX_BODY_CHARS - generate_release_notes.RESERVED_BODY_CHARS
+    assert "Thanks Contributor Number 0," in notes
+
+
+def test_render_notes_shrinks_the_change_list_when_the_credits_are_wide(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    changes = _many_changes(30)
+    for index, change in enumerate(changes):
+        change.author = f"Contributor Number {index}"
+    full = generate_release_notes.render_sections(changes, REPO)
+    bare = generate_release_notes.render_sections(changes, REPO, with_bullets=False)
+    without_list = len(_render_stable(changes)) - len(full)
+    monkeypatch.setattr(generate_release_notes, "MAX_BODY_CHARS", without_list + len(bare))
+    monkeypatch.setattr(generate_release_notes, "RESERVED_BODY_CHARS", 0)
+
+    notes = _render_stable(changes)
+
+    assert "Explains case" not in notes
+    assert f"[#1029](https://github.com/{REPO}/pull/1029)" in notes
+    assert len(notes) <= generate_release_notes.MAX_BODY_CHARS
+
+
+def test_render_notes_credits_a_wide_contributor_list_by_count() -> None:
+    notes = _render_stable(_crowded_changes(generate_release_notes.MAX_CREDITED_CONTRIBUTORS + 7))
+
+    assert "Contributor Number 0," in notes
+    assert f"Contributor Number {generate_release_notes.MAX_CREDITED_CONTRIBUTORS}" not in notes
+    assert "and 7 more!" in notes

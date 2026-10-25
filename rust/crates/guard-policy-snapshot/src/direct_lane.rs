@@ -94,6 +94,11 @@ pub struct DirectLaneBindingV1 {
     /// daemon decides a relayed MCP tool call with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_relay: Option<serde_json::Value>,
+    /// True while the daemon's evidence drain raises the desktop setup notice
+    /// for a connector-setup review the resident queued. Without it such a
+    /// review stays with the daemon, which raises the notice itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connector_setup_notice: Option<bool>,
 }
 
 /// A process environment whose `Debug` output never shows the values.

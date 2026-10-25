@@ -10,10 +10,10 @@ import pytest
 
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime.shell_command_wrappers import is_trusted_absolute_command_path
 from tests.developer_inspection_test_support import assert_leading_cd_inspection_allowed
 from tests.git_execution_test_support import assert_host_git_proof_result
 from tests.native_command_test_support import RealNativeReviewFixture, real_native_review_fixture
+from tests.shell_wrapper_test_support import native_trusted_absolute_path
 
 
 @pytest.fixture(autouse=True)
@@ -386,7 +386,7 @@ def test_compound_stdin_only_python_observer_requires_host_binary_proof(tmp_path
     if windows_host:
         # The compound host recognizer has no Windows executable ACL proof.
         # A stdin-only script cannot waive the launch identity requirement.
-        assert not is_trusted_absolute_command_path(Path(sys.executable), cwd=workspace, home_dir=home)
+        assert not native_trusted_absolute_path(Path(sys.executable), cwd=workspace, home_dir=home)
         assert artifact is not None
         assert artifact.metadata["compound_segment_count"] == 3
         # Whichever floor fires first is accepted (unresolved leading-cd root, untrusted

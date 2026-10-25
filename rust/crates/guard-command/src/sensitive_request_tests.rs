@@ -200,6 +200,51 @@ fn native_evaluation_claim_without_redirects_binds() {
 }
 
 #[test]
+fn default_disabled_git_read_review_floor_is_not_an_interaction() {
+    let text = "git diff --stat";
+    let identity = crate::command_model::parse_shell_command(
+        text,
+        Some(std::path::Path::new("/work")),
+        Some(std::path::Path::new("/home/user")),
+        "posix",
+        "shell_string",
+        "guard-shell",
+        true,
+    )
+    .security_identity();
+    let evaluation = |minimum_action: &str| {
+        json!({
+            "tool_name": "Shell",
+            "arguments": {"command": text},
+            "cwd": "/work",
+            "home_dir": "/home/user",
+            "canonical": {"raw_text": text, "security_identity": identity},
+            "evaluation": {
+                "security_identity": identity,
+                "minimum_action": minimum_action,
+                "match_default_modes": ["disabled"],
+                "reason_codes": [],
+                "explicitly_enabled_permission_ids": [],
+                "controlling_action_class": "git read command",
+                "controlling_reason": "Identifies git diff operations.",
+            },
+        })
+    };
+    // An enrolled authority reports the verified-read proof floor as review;
+    // the default-disabled git rule must not make that an approval request.
+    let found = ask("tool_action", &evaluation("review")).expect("classified");
+    assert!(found.get("error").is_none(), "{found}");
+    assert!(found["match"].is_null(), "{found}");
+    // A block floor still names the controlling extension action.
+    let blocked = ask("tool_action", &evaluation("block")).expect("classified");
+    assert_eq!(
+        blocked["match"]["action_class"].as_str(),
+        Some("git read command"),
+        "{blocked}"
+    );
+}
+
+#[test]
 fn malformed_evaluation_is_rejected() {
     let input = json!({
         "tool_name": "Bash",

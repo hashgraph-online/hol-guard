@@ -14,7 +14,13 @@ import pytest
 
 from codex_plugin_scanner.guard import native_execution, native_shell_helpers
 from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
-from codex_plugin_scanner.guard.runtime import data_flow, shell_command_wrappers, shell_structure
+from codex_plugin_scanner.guard.runtime import shell_structure
+from tests.shell_data_flow_test_support import (
+    native_command_segments,
+    native_input_redirects,
+    native_pipes,
+)
+from tests.shell_wrapper_test_support import native_shell_normalization
 
 
 @pytest.mark.parametrize(
@@ -158,15 +164,15 @@ def test_public_helpers_replay_original_python_vectors(native_hook_force, monkey
     for vector in (fixture["vectors"][i] for i in (5, 8, 9, 13)):
         command, expected = vector["command"], vector["expected"]
         heredocs = shell_structure.extract_heredocs(command)
-        assert list(data_flow.extract_command_segments(command)) == expected["segments"]
-        assert list(data_flow.extract_input_redirects(command)) == expected["redirects"]
-        assert [asdict(p) for p in data_flow.extract_pipes(command)] == expected["pipes"]
+        assert list(native_command_segments(command)) == expected["segments"]
+        assert list(native_input_redirects(command)) == expected["redirects"]
+        assert [asdict(p) for p in native_pipes(command)] == expected["pipes"]
         assert [asdict(h) for h in heredocs] == expected["heredocs"]
         assert [asdict(s) for s in shell_structure.extract_command_substitution_spans(command)] == expected[
             "substitutions"
         ]
         assert shell_structure.mask_complete_heredocs(command, heredocs) == expected["masked_complete"]
-        result = asdict(shell_command_wrappers.normalize_transparent_shell_command(command))
+        result = asdict(native_shell_normalization(command))
         result["wrapper_chain"] = list(result["wrapper_chain"])
         assert result == expected["normalization"]
 
@@ -247,11 +253,11 @@ def test_fresh_process_provisions_resident_before_public_helper(native_hook_forc
 import os
 from pathlib import Path
 from codex_plugin_scanner.guard.native_context import bind_context_digest_home
-from codex_plugin_scanner.guard.runtime.shell_command_wrappers import normalize_transparent_shell_command
+from codex_plugin_scanner.guard.native_shell_helpers import call
 bind_context_digest_home(Path(os.environ["SHELL_HELPER_TEST_HOME"]))
-result = normalize_transparent_shell_command("bash --init-file /dev/null -c 'echo value'")
-assert result.normalized_command == "echo value"
-assert result.wrapper_chain == ("bash",)
+result = call("normalization", "bash --init-file /dev/null -c 'echo value'", cwd=None, home_dir=None)
+assert result["normalized_command"] == "echo value"
+assert result["wrapper_chain"] == ["bash"]
 """,
         ],
         env=environment,
@@ -305,7 +311,7 @@ def test_rejected_inputs_do_not_poison_shared_native_health(native_hook_force, m
             native_shell_helpers.call("masked_bodies", "echo", heredocs=[{}])
     text = "x" * 1_500_000
     assert native_shell_helpers.call("normalization", text)["normalized_command"] == text
-    assert data_flow.extract_command_segments("echo healthy") == ("echo healthy",)
+    assert native_command_segments("echo healthy") == ("echo healthy",)
     assert failures == []
 
 

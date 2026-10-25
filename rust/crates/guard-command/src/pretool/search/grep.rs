@@ -44,7 +44,7 @@ pub(crate) fn safe_grep_segment(
 /// A peer that cannot create a filesystem entry: no output redirect beyond
 /// `/dev/null`, and a command that only prints, filters or changes directory.
 /// `strict` admits only `cd` and stdin filters after a pipe.
-pub(super) fn creates_nothing(segment: &crate::CommandSegmentV1, strict: bool) -> bool {
+pub(in crate::pretool) fn creates_nothing(segment: &crate::CommandSegmentV1, strict: bool) -> bool {
     let text = ["2>&1", "2>/dev/null", ">/dev/null"]
         .iter()
         .fold(segment.text.clone(), |text, quiet| text.replace(quiet, ""));
@@ -63,6 +63,8 @@ pub(super) fn creates_nothing(segment: &crate::CommandSegmentV1, strict: bool) -
                 | "cut"
                 | "diff"
                 | "echo"
+                | "egrep"
+                | "fgrep"
                 | "grep"
                 | "head"
                 | "jq"
@@ -352,6 +354,12 @@ fn scan_into(
                 return false;
             }
         } else {
+            // The first positional is the pattern, and it meets the same
+            // screen a `-e` pattern does: a word the shell can still expand
+            // into a credential operand is not matching text yet.
+            if unsafe_search_value(SearchValueRole::Pattern, argument, context) {
+                return false;
+            }
             pattern_supplied = true;
             scan.patterns.push(argument.clone());
         }

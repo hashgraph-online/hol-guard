@@ -65,7 +65,7 @@ def core_trust(root, read_object):
     }
 
 
-def pack_descriptors(root, compiler: Path | None, read_object) -> list[dict]:
+def pack_descriptors(root, compiler: Path | None, read_object, *, inventory=None) -> list[dict]:
     """Public descriptors come from the complete pack stream, never an aggregate program."""
     if compiler is None:
         metadata = subprocess.run(
@@ -100,16 +100,22 @@ def pack_descriptors(root, compiler: Path | None, read_object) -> list[dict]:
         # Leaving scripts/ first lets scripts/ci shadow the ci namespace package.
         sys.path.remove(str(root / "scripts"))
 
+    def descriptors(directory):
+        release = read_object(directory / "release.json", root=directory)
+        reader = PackReader(directory / "objects")
+        result = []
+        for _, reference in entries(reader, release["index"], release["extensions"]):
+            manifest = reader.json(reference)
+            result.extend(reader.json(manifest["descriptors"]))
+        return result
+
+    if inventory is not None:
+        with inventory.open(compiler, root=root) as (directory, _, _):
+            return descriptors(directory)
     with tempfile.TemporaryDirectory(prefix="hol-guard-descriptors-") as scratch:
         directory = Path(scratch).resolve(strict=True)
         stage(compiler.resolve(strict=True), directory, source_root=root)
-        release = read_object(directory / "release.json", root=directory)
-        reader = PackReader(directory / "objects")
-        descriptors = []
-        for _, reference in entries(reader, release["index"], release["extensions"]):
-            manifest = reader.json(reference)
-            descriptors.extend(reader.json(manifest["descriptors"]))
-        return descriptors
+        return descriptors(directory)
 
 
 def _implementation_files(directory: Path) -> set[Path]:
@@ -128,17 +134,70 @@ def _implementation_files(directory: Path) -> set[Path]:
 def implementation_digest(root) -> str:
     """Mirror the Rust build fingerprint, not its compilation or admission logic."""
     workspace = root / "rust"
+    manifest_path = workspace / "build_support/command_source_inputs.v2.json"
+    if manifest_path.is_symlink():
+        raise ValueError("invalid native implementation input")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("schema") != "guard.command-source-inputs.v2":
+        raise ValueError("invalid command source inputs manifest")
+    domain = manifest.get("identity_domain")
+    if not isinstance(domain, str) or not domain:
+        raise ValueError("invalid command source inputs identity domain")
     paths = {workspace / "Cargo.lock", workspace / "Cargo.toml"}
-    for crate in (workspace / "crates").iterdir():
+    for relative in manifest.get("files", ()):
+        if (
+            not isinstance(relative, str)
+            or not relative
+            or relative.startswith(("/", "\\"))
+            or any(part in ("", ".", "..") for part in relative.split("/"))
+        ):
+            raise ValueError("invalid command source inputs file")
+        path = workspace / relative
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("invalid native implementation input")
+        paths.add(path)
+    for name in manifest.get("crates", ()):
+        if not isinstance(name, str) or not name.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("invalid command source inputs crate")
+        crate = workspace / "crates" / name
         if crate.is_symlink():
             raise ValueError("invalid native implementation input")
-        for name in ("Cargo.toml", "build.rs"):
-            if (crate / name).is_file():
-                paths.add(crate / name)
+        manifest_file = crate / "Cargo.toml"
+        if manifest_file.is_symlink() or not manifest_file.is_file():
+            raise ValueError("invalid native implementation input")
+        paths.add(manifest_file)
+        if (crate / "build.rs").is_file():
+            paths.add(crate / "build.rs")
         if (crate / "src").is_dir():
             paths.update(_implementation_files(crate / "src"))
-    paths.update(_implementation_files(workspace / "build_support"))
-    digest = hashlib.sha256(b"hol-guard.native-source-implementation.v1\0")
+    for name, entries in manifest.get("crate_files", {}).items():
+        if not isinstance(name, str) or not name.replace("-", "").replace("_", "").isalnum():
+            raise ValueError("invalid command source inputs crate")
+        if not isinstance(entries, list):
+            raise ValueError("invalid command source inputs crate_files")
+        crate = workspace / "crates" / name
+        # The listed sources are only part of what builds this crate: its own
+        # manifest and build script decide what the producer compiles to, so
+        # they belong in the identity as they do for a whole-crate entry.
+        manifest_file = crate / "Cargo.toml"
+        if manifest_file.is_symlink() or not manifest_file.is_file():
+            raise ValueError("invalid native implementation input")
+        paths.add(manifest_file)
+        if (crate / "build.rs").is_file():
+            paths.add(crate / "build.rs")
+        for relative in entries:
+            if (
+                not isinstance(relative, str)
+                or not relative
+                or relative.startswith(("/", "\\"))
+                or any(part in ("", ".", "..") for part in relative.split("/"))
+            ):
+                raise ValueError("invalid command source inputs crate_files path")
+            path = crate / relative
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("invalid native implementation input")
+            paths.add(path)
+    digest = hashlib.sha256(domain.encode() + b"\0")
     for path in sorted(paths, key=lambda item: item.relative_to(workspace).as_posix()):
         if path.is_symlink() or not path.is_file():
             raise ValueError("invalid native implementation input")

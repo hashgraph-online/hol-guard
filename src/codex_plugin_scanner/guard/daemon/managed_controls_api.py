@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Protocol
 
 from ..frozen_runtime_commands import frozen_windows_extension_control_commands
+from ..native_extension_control import compose_control_layers
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
 from ..runtime.extension_control_authority import layers_to_json
-from ..runtime.extension_control_resolver import compose_control_layers
 from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from ..store_managed_controls_status import ManagedControlsStatusUnavailableError
 from .extension_control_projection import build_effective_extension_control_projection
@@ -50,7 +50,7 @@ def effective_controls_payload(
     snapshot: ExtensionControlRuntimeSnapshot,
     store: ManagedControlsStatusStore,
 ) -> dict[str, object]:
-    composed = compose_control_layers(snapshot.layers)
+    composed = compose_control_layers(snapshot.layers, guard_home=store.guard_home)
     payload: dict[str, object] = {
         "schema_version": "guard.daemon.extension-controls.v1",
         "health": snapshot.health.value,
@@ -75,7 +75,7 @@ def effective_controls_payload(
             }
             for failure in composed.failures
         ],
-        "projection": build_effective_extension_control_projection(registry, snapshot),
+        "projection": build_effective_extension_control_projection(registry, snapshot, guard_home=store.guard_home),
     }
     terminal_commands = frozen_windows_extension_control_commands(store.guard_home)
     if terminal_commands is not None:

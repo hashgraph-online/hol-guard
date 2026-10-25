@@ -44,6 +44,7 @@ fn input<'a>(vector: &'a Value, environment: &'a BTreeMap<String, String>) -> Re
         approval_center_url: text(vector, "approval_center_url"),
         review_binding: vector["review_binding"].as_str(),
         exact: exact(vector),
+        hint: None,
     }
 }
 
@@ -247,6 +248,23 @@ fn false_and_float_zero_uncertainty_are_hint_candidates() {
         });
         let result = result.as_object().expect("result");
         assert_eq!(allow_hint_candidate(payload, result), Some(true));
+    }
+}
+
+#[test]
+fn the_working_directory_cursor_sends_is_a_hint_candidate() {
+    // Cursor copies the hook's cwd into every shell tool input it forwards,
+    // so rejecting that key left Cursor reviews with no Extension to name.
+    for key in ["working_directory", "workingDirectory"] {
+        let payload = json!({"tool_name": "Bash", "tool_input": {"command": "ls", key: "/w"}});
+        let payload = payload.as_object().expect("payload");
+        let result = json!({
+            "minimum_action": "review",
+            "reason_code": "native_command_review_required",
+            "command_extensions": {"binding": {"uncertainty_count": 0, "observations_digest": "d"}},
+        });
+        let result = result.as_object().expect("result");
+        assert_eq!(allow_hint_candidate(payload, result), Some(true), "{key}");
     }
 }
 

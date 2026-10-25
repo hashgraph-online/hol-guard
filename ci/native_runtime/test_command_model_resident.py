@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.native_command_model import (
 )
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="resident native service is POSIX-only in this wave")
 
@@ -41,7 +42,7 @@ def _stop_native_runtime(runtime: Path, guard_home: Path) -> None:
         (str(runtime), "resident-stop", "--state-dir", str(guard_home / "native-runtime")),
         check=False,
         capture_output=True,
-        timeout=2,
+        timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
     )
 
 

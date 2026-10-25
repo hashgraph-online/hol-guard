@@ -313,6 +313,40 @@ fn known_artifact_doc_path(target: &str, home: &Path) -> Option<PathBuf> {
     real.is_file().then_some(real)
 }
 
+/// Whether any component below the workspace root is a link.
+///
+/// The root's own ancestry belongs to the host, not to the tree under
+/// review: macOS resolves `/tmp` to `/private/tmp`, and a linked home,
+/// `/var` or `/Volumes` behaves the same way, so refusing on those denied
+/// every read in an ordinary checkout. Everything below the root is still
+/// refused, because a link planted in the tree is how a benign-looking name
+/// reaches a file the in-workspace screens would otherwise never see.
+///
+/// The root is the shortest ancestor that resolves to the workspace, so a
+/// link inside the tree that points back at the root cannot stand in for it
+/// and hide the components below itself.
+fn link_below_workspace(lexical: &Path, workspace: &Path) -> bool {
+    let mut ancestors: Vec<&Path> = lexical.ancestors().collect();
+    ancestors.reverse();
+    let Some(root) = ancestors
+        .into_iter()
+        .find(|ancestor| fs::canonicalize(ancestor).is_ok_and(|resolved| resolved == workspace))
+    else {
+        return contains_symlink_component(lexical);
+    };
+    let Ok(relative) = lexical.strip_prefix(root) else {
+        return contains_symlink_component(lexical);
+    };
+    let mut probe = root.to_path_buf();
+    for component in relative.components() {
+        probe.push(component);
+        if fs::symlink_metadata(&probe).is_ok_and(|meta| meta.file_type().is_symlink()) {
+            return true;
+        }
+    }
+    false
+}
+
 pub fn classify_source_path(
     target: &str,
     cwd: &Path,
@@ -370,14 +404,20 @@ pub fn classify_source_path(
         return SourcePathDecision::deny("unresolved_path");
     };
 
-    if contains_symlink_component(&lexical) {
-        return SourcePathDecision::deny("symlink_in_path");
-    }
     let Ok(candidate) = fs::canonicalize(&lexical) else {
         return SourcePathDecision::deny("external_target_not_readable");
     };
 
     let inside_workspace = candidate.starts_with(&workspace);
+    let traversed_link = if inside_workspace {
+        link_below_workspace(&lexical, &workspace)
+    } else {
+        contains_symlink_component(&lexical)
+    };
+    if traversed_link {
+        return SourcePathDecision::deny("symlink_in_path");
+    }
+
     if !inside_workspace {
         if !allow_external || !external_requested {
             return SourcePathDecision::deny("absolute_path_outside_workspace");

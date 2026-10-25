@@ -179,6 +179,39 @@ fn unknown_actions_never_lower_the_composed_action() {
     }
 }
 
+#[test]
+fn a_cli_grant_never_settles_below_a_reapproval_floor() {
+    let settle = |granted: &str, floor: Value| {
+        resident(envelope(
+            HOOK_ARTIFACT_COMPOSE_REQUEST_SCHEMA,
+            json!({
+                "kind": "grant_settle", "current_action": "require-reapproval",
+                "policy_action": "require-reapproval",
+                "approval_context_action": "require-reapproval",
+                "granted_action": granted, "native_floor": floor,
+            }),
+        ))
+        .unwrap()["payload"]
+            .clone()
+    };
+    // An allowed CLI grant does not stand in for re-approving the wrapper.
+    let held = settle("allow", json!("require-reapproval"));
+    for key in [
+        "current_policy_action",
+        "policy_action",
+        "approval_context_policy_action",
+    ] {
+        assert_eq!(held[key], "require-reapproval", "{key}");
+    }
+    // A blocked CLI grant still raises it.
+    assert_eq!(
+        settle("block", json!("require-reapproval"))["policy_action"],
+        "block"
+    );
+    // Without that floor the grant settles the action as before.
+    assert_eq!(settle("allow", Value::Null)["policy_action"], "allow");
+}
+
 fn edge(event: &str, fields: Value) -> NativeEdgeFactsV1 {
     NativeEdgeFactsV1 {
         event_name: Some(event.to_owned()),
@@ -244,6 +277,41 @@ fn a_terminal_pre_tool_edge_cannot_be_relaxed_to_review() {
         native_edge_floor(&edge("PreToolUse", unknown), None),
         Some(GuardAction::Block)
     );
+}
+
+#[test]
+fn a_network_protection_review_floors_before_execution() {
+    for reason_code in ["network_known_bad_host", "network_too_many_destinations"] {
+        let review = json!({
+            "decision": "deny",
+            "policy_action": "review",
+            "minimum_action": "review",
+            "reason_code": reason_code,
+        });
+        assert_eq!(
+            native_edge_floor(&edge("PreToolUse", review), None),
+            Some(GuardAction::Review),
+            "{reason_code}"
+        );
+    }
+    // A higher edge action than the network review keeps its own tier.
+    let reapproval = json!({
+        "policy_action": "require-reapproval",
+        "minimum_action": "review",
+        "reason_code": "network_known_bad_host",
+    });
+    assert_eq!(
+        native_edge_floor(&edge("PreToolUse", reapproval), None),
+        Some(GuardAction::RequireReapproval)
+    );
+    // Any other review-tier edge verdict is still provenance before execution.
+    let unproven = json!({
+        "decision": "deny",
+        "policy_action": "review",
+        "minimum_action": "review",
+        "reason_code": "native_command_unproven",
+    });
+    assert_eq!(native_edge_floor(&edge("PreToolUse", unproven), None), None);
 }
 
 #[test]

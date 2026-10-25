@@ -8,6 +8,7 @@ import {
 } from "react-icons/hi2";
 import type { EvidenceFilterState, EvidenceDecision, EvidenceTimeFilter } from "./evidence-types";
 import { EVIDENCE_TIME_LABELS, EVIDENCE_DECISION_LABELS } from "./evidence-types";
+import { StyledSelect } from "../styled-select";
 import { harnessDisplayName } from "../approval-center-utils";
 
 interface EvidenceFilterBarProps {
@@ -204,11 +205,11 @@ export function EvidenceFilterBar({
       <div className="flex flex-wrap items-center gap-1.5">
         <SearchInput value={filters.search} onChange={handleSearchChange} />
 
-        <select
+        <StyledSelect
           value={filters.time}
           onChange={handleTimeChange}
           aria-label="Time period"
-          className="min-h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          className="min-h-8 rounded-lg py-1 text-xs font-medium"
         >
           {(Object.entries(EVIDENCE_TIME_LABELS) as [EvidenceTimeFilter, string][]).map(
             ([val, label]) => (
@@ -217,13 +218,13 @@ export function EvidenceFilterBar({
               </option>
             )
           )}
-        </select>
+        </StyledSelect>
 
-        <select
+        <StyledSelect
           value={filters.decision}
           onChange={handleDecisionChange}
           aria-label="Decision filter"
-          className="min-h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+          className="min-h-8 rounded-lg py-1 text-xs font-medium"
         >
           {(Object.entries(EVIDENCE_DECISION_LABELS) as [EvidenceDecision, string][]).map(
             ([val, label]) => (
@@ -232,7 +233,7 @@ export function EvidenceFilterBar({
               </option>
             )
           )}
-        </select>
+        </StyledSelect>
 
         <button
           type="button"
@@ -253,11 +254,11 @@ export function EvidenceFilterBar({
       {showMore && (
         <div className="flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-50/60 p-2">
           {!hideHarnessFilter && (
-            <select
+            <StyledSelect
               value={filters.harness}
               onChange={handleHarnessChange}
               aria-label="App filter"
-              className="min-h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+              className="min-h-8 rounded-lg py-1 text-xs font-medium"
             >
               <option value="all">All apps</option>
               {harnesses.map((h) => (
@@ -265,21 +266,21 @@ export function EvidenceFilterBar({
                   {harnessDisplayName(h)}
                 </option>
               ))}
-            </select>
+            </StyledSelect>
           )}
 
-          <select
+          <StyledSelect
             value={filters.category}
             onChange={handleCategoryChange}
             aria-label="Category filter"
-            className="min-h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-medium text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+            className="min-h-8 rounded-lg py-1 text-xs font-medium"
           >
             {CATEGORY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
             ))}
-          </select>
+          </StyledSelect>
 
           <label className="flex items-center gap-1.5 text-xs text-brand-dark">
             <span className="shrink-0 text-xs font-medium text-slate-500">

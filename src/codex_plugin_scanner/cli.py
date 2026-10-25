@@ -409,6 +409,19 @@ def main(argv: list[str] | None = None) -> int:
         from .guard.secrets.cli import main as secrets_main
 
         return secrets_main(requested_argv[1:], program_name=f"{program_name} secrets")
+    if _is_hol_guard_program(program_name) and list(requested_argv[:2]) == ["plugin", "updates"]:
+        from .guard.plugin_telemetry.updates import main as plugin_updates_main
+
+        return plugin_updates_main(requested_argv[2:], program_name=f"{program_name} plugin updates")
+    if _is_hol_guard_program(program_name) and requested_argv and requested_argv[0] == "plugin":
+        from .guard.plugin_kit.cli import main as plugin_kit_main
+
+        return plugin_kit_main(requested_argv[1:], program_name=f"{program_name} plugin")
+
+    if _is_hol_guard_program(program_name) and requested_argv and requested_argv[0] == "telemetry":
+        from .guard.plugin_telemetry.cli import main as plugin_telemetry_main
+
+        return plugin_telemetry_main(requested_argv[1:], program_name=f"{program_name} telemetry")
     if _is_guard_program(program_name):
         program_mode = "guard"
     elif _is_hol_guard_program(program_name):

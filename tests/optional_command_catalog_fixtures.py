@@ -152,8 +152,10 @@ def optional_command_catalog(request, monkeypatch, tmp_path):
         global_lockdown=False,
         managed_global_lockdown=False,
         health=AuthorityHealth.PROTECTED,
+        never_enrolled=False,
     ):
         assert health is AuthorityHealth.PROTECTED
+        assert not never_enrolled
         if not delivery:
             delivery.append(request.getfixturevalue("mcp_policy_delivery"))
             monkeypatch.setattr(mcp_policy_catalog_fixture, "_DELIVERY", delivery)
@@ -218,9 +220,15 @@ def optional_command_catalog(request, monkeypatch, tmp_path):
             assert edge is not None, "authenticated optional command resident unavailable"
             payload = dict(edge["result"])
             # The hook default leaves 250 ms; loaded Windows runners need the full second.
-            model = native_command_model.review_command_model_native(
-                command, guard_home=guard_home, timeout_seconds=1.0
-            )
+            # The call caps itself at that second, which a busy resident on a loaded
+            # runner can still miss, so a miss is retried before the fixture fails.
+            model = None
+            for _attempt in range(3):
+                model = native_command_model.review_command_model_native(
+                    command, guard_home=guard_home, timeout_seconds=1.0
+                )
+                if model is not None:
+                    break
             assert model is not None, "native command model unavailable"
             payload["command_model"] = model
             admitted = _BINDINGS[guard_home]

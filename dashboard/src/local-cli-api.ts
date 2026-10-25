@@ -91,7 +91,7 @@ export type LocalCliListResponse = {
   host_inventory?: import("./codex-host-inventory").CodexHostInventory;
   schema_version: string;
   revision: number;
-  discovery_issue?: "catalog_limit_reached" | "observed_provider_scan_failed" | "configured_host_scan_failed" | "package_catalog_refresh_failed";
+  discovery_issue?: "catalog_limit_reached" | "observed_provider_scan_failed" | "configured_host_scan_failed" | "configured_host_persist_failed" | "package_catalog_refresh_failed";
   native_publication?: {
     state: "acknowledged" | "pending" | "failed" | "unavailable";
     revision: number;
@@ -117,6 +117,8 @@ export type LocalCliMutationPayload = {
   previous_revision: number;
   session_nonce: string;
   commands?: Array<{ command_id: string; state: LocalCliCommandState }>;
+  /** The MCP catalog revision these choices were made against; saving reviews its new and changed tools. */
+  mcp_catalog_revision?: number;
   provider_actions?: Array<{ tool_slug: string; state: "review" | "block"; revision: number }>;
   approval_password?: string;
   approval_totp_code?: string;
@@ -133,6 +135,12 @@ export class LocalCliApiError extends Error {
 
 export function addedCustomExtensions(items: readonly LocalCliItem[]): LocalCliItem[] {
   return items.filter((item) => item.state !== "unset");
+}
+
+/** Tools new or changed since the last listing that no saved choice has reviewed yet. */
+export function unreviewedToolChangeCount(item: LocalCliItem): number {
+  const changes = item.mcp_catalog?.changes;
+  return (changes?.added.length ?? 0) + (changes?.changed.length ?? 0);
 }
 
 /** True when the connector needs a decision: not enrolled yet, stale, or its tool inventory changed. */

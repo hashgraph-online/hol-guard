@@ -61,6 +61,7 @@ Security-conscious consumers should prefer the commit-SHA form, the same guidanc
 | `upload_sarif` | Upload the generated SARIF report to GitHub code scanning when `mode: scan` | `false` |
 | `sarif_category` | SARIF category used during GitHub code scanning upload | `ai-plugin-scanner` |
 | `write_step_summary` | Write a concise markdown summary to the GitHub Actions job summary | `true` |
+| `publish_hint` | On public github.com repositories, add a link to the repository's HOL Plugins listing (claim it free, add a trust badge) to the concise job summary. Makes no network request. | `true` |
 | `registry_payload_output` | Write a machine-readable plugin ecosystem payload JSON file for registry or awesome-list automation | `""` |
 | `min_score` | Fail if score is below this threshold (0-100) | `0` |
 | `fail_on_severity` | Fail on findings at or above this severity: `none`, `critical`, `high`, `medium`, `low`, `info` | `none` |

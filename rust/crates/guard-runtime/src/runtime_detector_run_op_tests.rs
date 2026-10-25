@@ -137,9 +137,11 @@ fn unknown_and_missing_fields_are_rejected() {
 
 const PARITY_ATTEMPTS: u32 = 5;
 
-/// Whether every difference is `safe-decode.content` reporting no signals
-/// where the recorded run found some, with the rest of its result unchanged:
-/// the result of a run that ran out of decode time.
+/// Whether every difference is `safe-decode.content` stopping its decode
+/// early, with the rest of its result unchanged: the result of a run that ran
+/// out of decode time. A run that stops before the first layer reports no
+/// signals; one that stops after a layer but before the layer that held the
+/// payload reports only the obfuscated content it had decoded so far.
 fn only_decode_budget_stalls(actual: &[Value], expected: &[Value]) -> bool {
     actual.len() == expected.len()
         && actual != expected
@@ -150,7 +152,15 @@ fn only_decode_budget_stalls(actual: &[Value], expected: &[Value]) -> bool {
             let mut refilled = got.clone();
             refilled["signals"] = want["signals"].clone();
             want["detector_id"] == "safe-decode.content"
-                && got["signals"].as_array().is_some_and(Vec::is_empty)
+                && want["signals"]
+                    .as_array()
+                    .is_some_and(|signals| !signals.is_empty())
+                && got["signals"].as_array().is_some_and(|signals| {
+                    signals.len() <= 1
+                        && signals
+                            .iter()
+                            .all(|signal| signal["signal_id"] == "encoded.obfuscated-content")
+                })
                 && refilled == *want
         })
 }
@@ -178,9 +188,11 @@ fn parity_vectors_match_the_recorded_python_outputs() {
         };
         let expected = vector["expected"].as_array().unwrap();
         // `safe-decode.content` keeps Python's 50 ms decode budget, and a run
-        // that overshoots it decodes nothing and reports no signals. A loaded
-        // runner can stall one run past it, so that one shape, and only that
-        // one, is tried again. Any other difference fails on the first run.
+        // that overshoots it stops decoding where it is: before any layer it
+        // reports no signals, part-way through it reports only obfuscated
+        // content. A loaded runner can stall one run past it, so those shapes,
+        // and only those, are tried again. Any other difference fails on the
+        // first run, and a stall that persists fails after the last attempt.
         let mut attempts = 0;
         let (code, actual) = loop {
             attempts += 1;

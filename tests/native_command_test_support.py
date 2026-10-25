@@ -362,6 +362,7 @@ def real_native_review_fixture(
     global_lockdown: bool = False,
     managed_global_lockdown: bool = False,
     health: AuthorityHealth = AuthorityHealth.PROTECTED,
+    never_enrolled: bool = False,
 ) -> RealNativeReviewFixture:
     """Return the complete native result and its unchanged control binding.
 
@@ -380,6 +381,7 @@ def real_native_review_fixture(
         global_lockdown=global_lockdown,
         managed_global_lockdown=managed_global_lockdown,
         health=health,
+        never_enrolled=never_enrolled,
     )[0]
 
 
@@ -416,8 +418,14 @@ def real_native_review_fixtures(
     global_lockdown: bool = False,
     managed_global_lockdown: bool = False,
     health: AuthorityHealth = AuthorityHealth.PROTECTED,
+    never_enrolled: bool = False,
 ) -> tuple[RealNativeReviewFixture, ...]:
-    """Return bounded native evaluations with their unmodified offline binding."""
+    """Return bounded native evaluations with their unmodified offline binding.
+
+    ``never_enrolled`` binds the snapshot a fresh install has: unenrolled with no
+    layers at revision zero, where packaged protection still applies. ``health``
+    unenrolled alone models a lost authority instead, which blocks everything.
+    """
 
     if not 1 <= len(commands) <= 256:
         raise ValueError("native review batches must contain between 1 and 256 commands")
@@ -438,6 +446,7 @@ def real_native_review_fixtures(
         # therefore be fixed when the evidence is produced, never swapped on a
         # snapshot afterwards.
         **({"health": health.value} if health is not AuthorityHealth.PROTECTED else {}),
+        **({"never_enrolled": True} if never_enrolled else {}),
         "cases": [{"id": f"case-{index}", "command": command} for index, command in enumerate(commands)],
     }
     if cwd is not None and home_dir is not None:
@@ -460,9 +469,9 @@ def real_native_review_fixtures(
     binding = result["control_binding"]
     assert binding["program_digest"] == BUILT_IN_COMMAND_EXTENSION_REGISTRY.program_digest
     assert binding["catalog_digest"] == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    assert binding["revision"] == 1
+    assert binding["revision"] == int(not never_enrolled)
     assert binding["managed_revision"] == int(bool(managed_controls) or managed_global_lockdown)
-    layer_specs = [(ControlLayerKind.LOCAL_ADMIN, controls, global_lockdown)]
+    layer_specs = [] if never_enrolled else [(ControlLayerKind.LOCAL_ADMIN, controls, global_lockdown)]
     if managed_controls or managed_global_lockdown:
         layer_specs.append((ControlLayerKind.SIGNED_CLOUD, managed_controls, managed_global_lockdown))
     layers = tuple(

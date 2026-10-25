@@ -24,7 +24,7 @@ def test_windows_is_refused_with_a_typed_code_before_any_native_call(monkeypatch
 
 @pytest.mark.parametrize("value", ["\ud83d", float("nan")])
 def test_unencodable_post_tool_body_is_a_typed_denial(monkeypatch: pytest.MonkeyPatch, value: object) -> None:
-    features = {bridge._RESIDENT_PROTOCOL_FEATURE, bridge._FEATURE}
+    features = {bridge._RESIDENT_PROTOCOL_FEATURE, bridge._FEATURE, bridge._POST_TOOL_COMMANDS_FEATURE}
     status = SimpleNamespace(
         available=True,
         compatible=True,

@@ -12,10 +12,7 @@ fn aliased_home_root_allows_ordinary_files_but_not_redirected_targets() {
         .join(format!(
             "{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     std::fs::create_dir_all(&root).unwrap();
     let _cleanup = fixture::FixtureCleanup(root.clone());

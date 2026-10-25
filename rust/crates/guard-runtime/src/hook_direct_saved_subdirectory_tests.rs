@@ -42,6 +42,7 @@ fn answer_in(tag: &str, saved_in: &str, asked_in: &str) -> Result<Value, HookDir
             home_dir: vectors["home_dir"].as_str().unwrap(),
             guard_home: &guard_home,
             binding: &bound,
+            hint: None,
         },
     )
 }

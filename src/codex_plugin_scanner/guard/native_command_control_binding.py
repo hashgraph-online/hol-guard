@@ -162,6 +162,8 @@ def read_native_command_control_binding(
     from .catalog_delivery.projection import capture
     from .native_command_control_projection import read_control_projection
 
-    with store.connection_scope(), lifecycle.session():
+    # The publisher polls this about once a second; the resident authenticates
+    # the pack records so an unchanged store starts no runtime process.
+    with store.connection_scope(), lifecycle.session(), lifecycle.resident(store):
         metadata, registry, record_digest = capture(store)
         return read_control_projection(store, metadata, runtime, registry=registry, record_digest=record_digest)

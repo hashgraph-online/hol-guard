@@ -25,6 +25,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
     ExtensionControlRuntime,
     ExtensionControlRuntimeSnapshot,
+    ExtensionControlSnapshotUnavailableError,
     current_extension_control_binding_digest,
     current_extension_control_snapshot,
     extension_control_policy_version,
@@ -324,6 +325,53 @@ def test_unavailable_authority_blocks_otherwise_valid_native_destructive_evidenc
     )
 
 
+def _resident_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_extension_control
+
+    def unavailable(**_kwargs: object) -> str:
+        raise native_extension_control.NativeExtensionControlError("native_extension_control_unavailable")
+
+    monkeypatch.setattr(native_extension_control, "snapshot_digest", unavailable)
+
+
+def test_resident_outage_keeps_the_installed_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = ExtensionControlRuntime(_view(1))
+    installed = runtime.current()
+    with monkeypatch.context() as patch:
+        _resident_unavailable(patch)
+        with pytest.raises(ExtensionControlSnapshotUnavailableError):
+            runtime.refresh(_view(2))
+    assert runtime.current() is installed
+    assert runtime.refresh(_view(2)).revision == 2
+
+
+def test_runtime_starts_fail_closed_when_the_resident_cannot_digest(monkeypatch: pytest.MonkeyPatch) -> None:
+    with monkeypatch.context() as patch:
+        _resident_unavailable(patch)
+        runtime = ExtensionControlRuntime(_view(4))
+    snapshot = runtime.current()
+    assert snapshot.unread
+    assert snapshot.layers == ()
+    assert snapshot.authority_failure is ResolverFailureCode.AUTHORITY_UNAVAILABLE
+    # The next answered read replaces it, and no protected floor came from it.
+    assert runtime.refresh(_view(1)).health is AuthorityHealth.PROTECTED
+
+
+def test_daemon_starts_fail_closed_without_a_resident_digest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _resident_unavailable(monkeypatch)
+    daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        snapshot = daemon._server.extension_control_runtime.current()
+        assert snapshot.unread
+        assert snapshot.authority_failure is ResolverFailureCode.AUTHORITY_UNAVAILABLE
+    finally:
+        daemon.stop()
+
+
 @pytest.mark.parametrize("installed_bundle", [False, True])
 def test_daemon_starts_fail_closed_with_future_authority_schema(
     tmp_path: Path,
@@ -396,7 +444,7 @@ def test_daemon_rebinds_control_api_when_activated_catalog_changes_after_startup
         monkeypatch.setattr(
             store,
             "read_extension_control_authority_for_registry",
-            lambda registry, *, read_only=False: ExtensionControlAuthorityView(
+            lambda registry, *, read_only=False, **_kwargs: ExtensionControlAuthorityView(
                 AuthorityHealth.PROTECTED, 1, registry.catalog_digest, ()
             ),
         )
@@ -433,7 +481,7 @@ def test_refresh_does_not_roll_back_an_activation_applied_after_its_lease(
         monkeypatch.setattr(
             store,
             "read_extension_control_authority_for_registry",
-            lambda registry, *, read_only=False: ExtensionControlAuthorityView(
+            lambda registry, *, read_only=False, **_kwargs: ExtensionControlAuthorityView(
                 AuthorityHealth.PROTECTED, 1, registry.catalog_digest, ()
             ),
         )
@@ -483,7 +531,7 @@ def test_daemon_refreshes_resident_snapshot_after_external_authority_change(
     monkeypatch.setattr(
         store,
         "read_extension_control_authority_for_registry",
-        lambda registry, *, read_only=False: updated,
+        lambda registry, *, read_only=False, **_kwargs: updated,
     )
     daemon.start()
     try:
@@ -494,3 +542,27 @@ def test_daemon_refreshes_resident_snapshot_after_external_authority_change(
         assert daemon._server.extension_control_runtime.current().revision == 7
     finally:
         daemon.stop()
+
+
+def test_resident_snapshot_digest_matches_the_python_digest() -> None:
+    # The digest the Python snapshot computed for this view before the resident
+    # took it over; policy versions and saved bindings carry it.
+    catalog = "ab" * 32
+    local = ExtensionControlLayer(
+        CONTROL_SCHEMA_VERSION,
+        ControlLayerKind.LOCAL_ADMIN,
+        catalog,
+        False,
+        (
+            ExtensionControl(
+                ControlTarget(ControlTargetKind.PERMISSION, "command.alpha.permission.write"), ControlState.ENABLED
+            ),
+            ExtensionControl(ControlTarget(ControlTargetKind.EXTENSION, "command.alpha"), ControlState.DISABLED),
+        ),
+    )
+    cloud = ExtensionControlLayer(CONTROL_SCHEMA_VERSION, ControlLayerKind.SIGNED_CLOUD, catalog, True, ())
+    view = ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 3, catalog, (local, cloud), managed_revision=2)
+
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(view)
+
+    assert snapshot.effective_digest == "b174519abd9d7b38cd53d4d3a856e60357db724e45a08423a7d1b81a127055bb"

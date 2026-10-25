@@ -16,7 +16,10 @@ for approval** to restore approval prompts. The existing ask-surface setting
 then selects where prompts appear. Hard blocks and sandbox requirements remain
 enforced in either mode. Previously authorized, valid approvals still follow
 the existing scope, expiry, and replay checks. Watch mode keeps recording without
-stopping actions.
+stopping actions, whether it is set for every app or for one app. Tool output
+that Guard's scanner matches as credential-shaped, that comes from a sensitive
+path, or that it could not scan in full stays hidden from the agent in Watch
+too; the action has already run, so hiding the text stops nothing.
 
 The device setting is `blocked_request_mode = "safe-alternative"` (default) or
 `blocked_request_mode = "ask"` in the local Guard configuration. Workspace

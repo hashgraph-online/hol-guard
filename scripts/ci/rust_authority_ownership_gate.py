@@ -232,6 +232,7 @@ def _pretool_gate() -> None:
     if "evaluate_command(" in _read(pretool):
         raise RuntimeError("native PreToolUse transport calls the Python command evaluator")
     _assert_policy_floor_fail_closed(pretool)
+    _assert_containment_routed_by_resident()
     hook = _read(Path("src/codex_plugin_scanner/guard/daemon/hook_worker.py"))
     native_hook = _read(Path("src/codex_plugin_scanner/guard/daemon/hook_worker_native.py"))
     if "return self._review_native_edge(" not in hook:
@@ -255,7 +256,7 @@ def _pretool_gate() -> None:
     runtime = "\n".join(
         _read(path)
         for path in (
-            Path("rust/crates/guard-runtime/src/main.rs"),
+            Path("rust/crates/guard-runtime/src/lib.rs"),
             Path("rust/crates/guard-runtime/src/resident_protocol.rs"),
         )
     )
@@ -306,7 +307,7 @@ def _policy_and_identity_gate() -> None:
     runtime = "\n".join(
         _read(path)
         for path in (
-            Path("rust/crates/guard-runtime/src/main.rs"),
+            Path("rust/crates/guard-runtime/src/lib.rs"),
             Path("rust/crates/guard-runtime/src/resident_protocol.rs"),
         )
     )
@@ -397,12 +398,89 @@ def _assert_policy_floor_fail_closed(path: Path) -> None:
             raise RuntimeError("PreToolUse policy floor still inspects native availability")
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "native_mode":
             raise RuntimeError("PreToolUse policy floor still calls native_mode")
-    returns_block = any(
-        isinstance(node, ast.Return) and isinstance(node.value, ast.Constant) and node.value.value == "block"
+    # The resident answers the floor; Python never picks one. A missing review
+    # is the host outage, raised as ``NativeHookDecisionError``.
+    if any(
+        isinstance(node, ast.Return) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)
+        for node in ast.walk(fn)
+    ):
+        raise RuntimeError("PreToolUse policy floor returns an action Python picked")
+    raises_outage = any(
+        isinstance(node, ast.Raise)
+        and isinstance(node.exc, ast.Call)
+        and isinstance(node.exc.func, ast.Name)
+        and node.exc.func.id == "NativeHookDecisionError"
         for node in ast.walk(fn)
     )
-    if not returns_block:
-        raise RuntimeError("PreToolUse policy floor does not fail closed")
+    if not raises_outage:
+        raise RuntimeError("PreToolUse policy floor does not fail closed to the host outage")
+    if "native_pretool_floor" not in _ordered_call_names(fn):
+        raise RuntimeError("PreToolUse policy floor does not ask the resident for the floor")
+
+
+_CONTAINMENT_ADAPTER = Path("src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py")
+_CONTAINMENT_CLI = Path("src/codex_plugin_scanner/guard/cli/commands_hook_native_containment.py")
+_CONTAINMENT_DAEMON = Path("src/codex_plugin_scanner/guard/daemon/hook_worker_native.py")
+_CONTAINMENT_TRANSPORT = Path("src/codex_plugin_scanner/guard/native_hook_containment_route.py")
+# The routing tables the resident's ``containment_route``/``containment_sink`` replaced.
+_RETIRED_CONTAINMENT_TABLES = frozenset(
+    {"_PROFILES", "_ROUTED_HARNESSES", "_SINK_HARNESSES", "_WINDOWS_PROFILES", "_WINDOWS_SINK_HARNESSES"}
+)
+
+
+def _top_level_function(tree: ast.Module, name: str, path: Path) -> ast.FunctionDef:
+    fn = next((node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name), None)
+    if fn is None:
+        raise RuntimeError(f"{path}: {name} is missing")
+    return fn
+
+
+def _assert_containment_routed_by_resident() -> None:
+    """Containment routing is the resident's answer on both hook paths; Python only does the I/O."""
+
+    adapter = ast.parse(_read(_CONTAINMENT_ADAPTER), filename=str(_CONTAINMENT_ADAPTER))
+    for node in adapter.body:
+        targets = (
+            node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(node, ast.AnnAssign) else []
+        )
+        names = {target.id for target in targets if isinstance(target, ast.Name)}
+        if names & _RETIRED_CONTAINMENT_TABLES:
+            raise RuntimeError(f"containment adapter keeps a Python routing table: {sorted(names)}")
+        if isinstance(node, ast.FunctionDef) and node.name == "platform_contains":
+            raise RuntimeError("containment adapter still decides which host runs a profile")
+    for name in ("route_zcode_containment", "contained_zcode_response"):
+        fn = _top_level_function(adapter, name, _CONTAINMENT_ADAPTER)
+        if "native_containment_sink" not in _ordered_call_names(fn):
+            raise RuntimeError(f"{name} does not ask the resident whether the sink takes the call")
+    cli = ast.parse(_read(_CONTAINMENT_CLI), filename=str(_CONTAINMENT_CLI))
+    emit = _top_level_function(cli, "emit_native_containment_route", _CONTAINMENT_CLI)
+    if "edge_containment_route" not in _ordered_call_names(emit):
+        raise RuntimeError("CLI containment does not ask the resident for the route")
+    if any(isinstance(node, ast.Constant) and node.value == "sandbox-required" for node in ast.walk(emit)):
+        raise RuntimeError("CLI containment still picks the route from the result's action")
+    if "edge_containment_route(" not in _read(_CONTAINMENT_DAEMON):
+        raise RuntimeError("daemon containment does not ask the resident for the route")
+    if "edge_route(" not in _read(Path("rust/crates/guard-runtime/src/edge.rs")):
+        raise RuntimeError("the resident's PreToolUse edge does not carry its containment route")
+    transport = ast.parse(_read(_CONTAINMENT_TRANSPORT), filename=str(_CONTAINMENT_TRANSPORT))
+    # The route stamped on the edge is the resident's; without one the
+    # transport asks, and it never reads the result's action itself.
+    from_edge = _top_level_function(transport, "edge_containment_route", _CONTAINMENT_TRANSPORT)
+    if "native_containment_route" not in _ordered_call_names(from_edge) or any(
+        isinstance(node, ast.Constant) and node.value == "sandbox-required" for node in ast.walk(from_edge)
+    ):
+        raise RuntimeError("the edge route is not the resident's answer")
+    for name in ("native_containment_route", "native_containment_sink"):
+        fn = _top_level_function(transport, name, _CONTAINMENT_TRANSPORT)
+        raises_outage = any(
+            isinstance(node, ast.Raise)
+            and isinstance(node.exc, ast.Call)
+            and isinstance(node.exc.func, ast.Name)
+            and node.exc.func.id == "NativeHookDecisionError"
+            for node in ast.walk(fn)
+        )
+        if not raises_outage:
+            raise RuntimeError(f"{name} does not fail closed to the host outage")
 
 
 def _cli_gate() -> None:

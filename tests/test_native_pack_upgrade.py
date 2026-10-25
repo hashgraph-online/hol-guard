@@ -91,7 +91,7 @@ def release(tmp_path, monkeypatch):
     return authority, install
 
 
-def legacy_store(tmp_path, monkeypatch):
+def legacy_store(tmp_path, monkeypatch, *, revisions=1):
     # The frozen released v4 schema implementation creates the disk fixture.
     from pathlib import Path
 
@@ -106,7 +106,10 @@ def legacy_store(tmp_path, monkeypatch):
             commits, "ensure_extension_control_authority_schema", namespace["ensure_extension_control_authority_schema"]
         )
         store = _store(tmp_path, MemorySecretStore())
-        _commit(store)
+        # Each control commit is one authority revision, so a caller that needs
+        # the migration to walk a chain asks for more than the first one.
+        for revision in range(revisions):
+            _commit(store, revision=revision, key=f"change-{revision + 1}")
     # Pin disposable protected IO while retaining the real control key/anchor.
     seed(store)
     store._policy_integrity_secret_store.values.clear()
@@ -192,11 +195,18 @@ def test_fresh_install_and_retained_floor_after_sqlite_loss(tmp_path, monkeypatc
     seed(store)
     store._policy_integrity_secret_store.values.clear()
     store.migrate_installed_command_pack_authority()
-    assert lifecycle_store.read(store) is None
+    # An install with no legacy controls still gets a floor, derived from the
+    # verified installed release. Without one every later pack-lifecycle read
+    # fails and nothing else ever creates it.
+    enrolled = lifecycle_store.read(store)
+    assert enrolled is not None
     from tests.guard_extension_control_authority_fixtures import _enroll
 
+    # Enrolling the authority afterwards must not be refused by the floor that
+    # startup already wrote, and must leave that floor exactly as it is.
     _enroll(store)
     retained = lifecycle_store.inspect(store)[0]
+    assert retained == enrolled
     with store._connect() as connection:
         connection.execute("delete from extension_control_authority_snapshot")
     store.migrate_installed_command_pack_authority()
@@ -260,3 +270,33 @@ def test_packaged_alpha_offline_upgrade_keeps_remote_floor_and_rejects_replays(t
     for candidate in [{**identity, "version": "3.50.0a1"}, {**remote, "version": "100.6"}]:
         with pytest.raises(ValueError, match="version_rollback"):
             lifecycle.invoke("transition", key=_key(store).hex(), floor=plan["admission_floor"], candidate=candidate)
+
+
+def test_history_past_the_request_bound_migrates_through_a_spilled_chain(tmp_path, monkeypatch, release):
+    """One authority transition per policy save eventually outgrows a request.
+
+    The native walk reads the chain in order, so the daemon hands it a file
+    rather than inlining every predecessor. Forcing the threshold down proves
+    the spilled transport carries a real chain end to end.
+    """
+    from pathlib import Path
+
+    store = legacy_store(tmp_path, monkeypatch, revisions=4)
+    with store._connect() as connection:
+        # Three predecessors under the head: a real chain for the walk to read.
+        assert len(lifecycle_store.legacy_evidence(store, connection)["legacy_history"]) == 3
+    monkeypatch.setattr(lifecycle_store, "LEGACY_HISTORY_INLINE_BYTES", -1)
+    requested: dict = {}
+    invoke = lifecycle.invoke
+
+    def record(kind, **fields):
+        if kind == "migrate":
+            requested.update(fields)
+        return invoke(kind, **fields)
+
+    monkeypatch.setattr(lifecycle, "invoke", record)
+    store.migrate_installed_command_pack_authority()
+    assert requested["legacy_history"] == []
+    # The chain travelled beside the request, and nothing is left behind.
+    assert not Path(requested["legacy_history_path"]).exists()
+    assert lifecycle_store.read(store) is not None

@@ -21,6 +21,7 @@ from ..file_identity import full_stat_identity
 from ..native_resident_client import native_resident_client_request
 from ..native_runtime import _isolated_environment, native_runtime_status
 from ..strict_json_pairs import unique_json_object
+from . import lifecycle
 from .authority import VerifiedDistribution
 
 CAPABILITY = "catalog-prepare-v1"
@@ -136,7 +137,10 @@ def prepare_discovery(guard_home: Path, authority, *, fetch=None) -> DiscoveryHa
     """Forward verified factory bytes; preparation runs outside hook decisions."""
     token = _transport.set([])
     try:
-        return _prepare_discovery(guard_home, authority, fetch=fetch)
+        # A preparation asks for up to 64 members per batch. One session verifies
+        # and copies the runtime once for all of them.
+        with lifecycle.session():
+            return _prepare_discovery(guard_home, authority, fetch=fetch)
     finally:
         _transport.reset(token)
 
@@ -256,6 +260,7 @@ def _prepare_ready(home):
 
 def _refresh(home, store):
     global _handle, _refresh_worker, _failures
+    refresh_error = None
     try:
         from .current_refresh import refresh, restore
 
@@ -265,9 +270,10 @@ def _refresh(home, store):
             store = GuardStore(home)
         try:
             handle = refresh(store)
-        except Exception:
+        except Exception as error:
             # Vetted verifier errors are not all ValueError/OSError. Restore
             # still requires its own factory and native completed-view proof.
+            refresh_error = error
             handle = restore(store)
         with _ready_lock:
             if _home == home:
@@ -280,7 +286,13 @@ def _refresh(home, store):
         # Complete previous view and active protection remain independent, so
         # this stays non-fatal; it is recorded because a publication that never
         # refreshes is otherwise indistinguishable from one that never ran.
-        record_background_event("catalog_publication_refresh_failed", failure_detail(error))
+        if refresh_error is None:
+            record_background_event("catalog_publication_refresh_failed", failure_detail(error))
+        else:
+            # A failed fallback only says no complete view was kept. The
+            # refresh failure is what says why the catalog cannot update.
+            record_background_event("catalog_publication_refresh_failed", failure_detail(refresh_error))
+            record_background_event("catalog_publication_restore_failed", failure_detail(error))
     finally:
         with _ready_lock:
             _refresh_worker = None

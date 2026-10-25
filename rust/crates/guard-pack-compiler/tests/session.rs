@@ -64,6 +64,21 @@ fn bootstrap_tool_cannot_export_or_evaluate_a_packaged_program() {
 }
 
 #[test]
+fn bootstrap_tool_answers_bundle_metadata_for_policy_delivery() {
+    // Policy delivery asks this tool for release defaults; refusing the
+    // operation stopped every catalog publication (#5816).
+    let (status, result) = run(
+        "bundle-metadata",
+        br#"{"operation":"release-defaults","catalogs":[]}"#,
+    );
+    assert_eq!(status, 0);
+    assert_eq!(result["selected_ids"], serde_json::json!([]));
+    let (status, invalid) = run("bundle-metadata", br#"{"operation":"unknown"}"#);
+    assert_eq!(status, 2);
+    assert_eq!(invalid["code"], "installed bundle metadata invalid");
+}
+
+#[test]
 fn bootstrap_build_reports_its_data_free_identity_and_rejects_truncated_input() {
     let (status, info) = run("compiler-info", b"");
     assert_eq!(status, 0);

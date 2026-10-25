@@ -24,7 +24,6 @@ from codex_plugin_scanner.guard.config import (
 from codex_plugin_scanner.guard.mdm.policy import _merge_strongest_actions, _strongest_security_value
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction
 from codex_plugin_scanner.guard.policy.engine import decide_action
-from codex_plugin_scanner.guard.runtime.package_request_evaluation import PackageRequestEvaluation
 
 EXPECTED_LATTICE: tuple[GuardAction, ...] = (
     "allow",
@@ -110,35 +109,6 @@ def test_policy_engine_present_unknown_actions_do_not_fall_through_to_allow(tmp_
 def test_unknown_fallback_must_itself_be_a_known_action() -> None:
     with pytest.raises(ValueError, match="unknown_action is not a GuardAction"):
         normalize_guard_action("future-action", unknown_action="future-fallback")  # type: ignore[arg-type]
-
-
-@pytest.mark.parametrize("cached_action", (None, "", "future-action", 7))
-def test_cached_package_actions_fail_closed_and_keep_diagnostics(cached_action: object) -> None:
-    payload: dict[str, object] = {
-        "decision": "monitor",
-        "policy_action": cached_action,
-        "reasons": [],
-        "packages": [],
-        "risk_summary": "cached evaluation",
-        "user_copy": {
-            "title": "Cached package",
-            "summary": "Cached package evaluation.",
-            "harness_message": "Cached package evaluation.",
-        },
-    }
-
-    evaluation = PackageRequestEvaluation.from_cache_dict(
-        payload,
-        package_intent_hash="sha256:intent",
-        policy_version="policy-v1",
-        bundle_version=None,
-        workspace_fingerprint=None,
-    )
-
-    assert evaluation.policy_action == "require-reapproval"
-    assert evaluation.reasons[-1]["code"] == UNKNOWN_GUARD_ACTION_REASON
-    assert evaluation.reasons[-1]["original_action"] == (cached_action if isinstance(cached_action, str) else None)
-    assert "Review this request in HOL Guard" in evaluation.user_copy.harness_message
 
 
 def test_present_invalid_local_config_actions_do_not_fall_back_to_warn(tmp_path) -> None:

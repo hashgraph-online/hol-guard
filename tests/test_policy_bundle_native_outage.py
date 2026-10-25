@@ -365,7 +365,7 @@ def _managed_activation(store: GuardStore):
     runtime = ExtensionControlRuntime(base)
     device_id, _ = runner._guard_device_metadata(store)
     wire_digest = runner.build_builtin_extension_catalog_wire(
-        guard_version="test", generated_at="2026-08-25T12:00:00Z"
+        guard_version="test", generated_at="2026-08-25T12:00:00Z", guard_home=store.guard_home
     )["catalogDigest"]
     bundle = _bundle()
     rollback = bundle["rollback"]

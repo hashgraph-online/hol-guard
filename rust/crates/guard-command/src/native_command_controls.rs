@@ -66,15 +66,7 @@ impl CompiledNativeCommandControls {
         // It cannot opt in external code or carry any permission override.
         // The snapshot store rejects this baseline after a protected floor has
         // ever been retained, including across expiry, quarantine and restart.
-        let initial_defaults = binding.health == "unenrolled"
-            && binding.revision == 0
-            && binding.managed_revision == 0
-            && binding.layers.is_empty()
-            && binding.authority.as_ref().is_some_and(|authority| {
-                authority.epoch == 1
-                    && authority.authority_key_id == "0".repeat(64)
-                    && authority.recovery.is_none()
-            });
+        let initial_defaults = binding.is_initial_defaults();
         let mut global_block = binding.health != "protected" && !initial_defaults;
         for layer in &binding.layers {
             global_block |= layer.global_lockdown;
@@ -226,6 +218,10 @@ impl CompiledNativeCommandControls {
         context: crate::pretool::PathContext<'_>,
         environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     ) -> PreToolResultV1 {
+        // Record the active set the decision is actually made with. Compiling
+        // a later snapshot on another thread must not change what this
+        // request reports.
+        crate::native_command_program::work_stats::record_active(self.active_extensions.len());
         let observed = match command {
             Some(command) => self.observe_command(command, deadline, context, environment),
             None => Ok((NativeCommandObservationBatchV1::default(), None)),
@@ -472,7 +468,8 @@ mod precedence;
 mod unmodeled;
 use floor::{add_authority_repair_hint, rank, rule_floor, strengthen};
 pub(crate) use unmodeled::{
-    bounds_its_owners, python_is_builtin_only, python_stdin, unread_file_interpreter,
+    bounds_its_owners, launcher_body, prefix_reads_a_program_file, python_is_builtin_only,
+    python_stdin, unread_file_interpreter, Handover,
 };
 
 #[cfg(test)]

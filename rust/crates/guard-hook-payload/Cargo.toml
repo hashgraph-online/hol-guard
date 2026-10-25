@@ -1,0 +1,17 @@
+[package]
+name = "guard-hook-payload"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# Hook payload normalization, ordered JSON/value compatibility and payload
+# preparation. Extracted from guard-command so edits to the payload domain
+# stop recompiling the command facade and the host catalog compiler.
+[dependencies]
+guard-contracts = { path = "../guard-contracts" }
+regex.workspace = true
+fancy-regex.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
+sha2.workspace = true
+hex.workspace = true

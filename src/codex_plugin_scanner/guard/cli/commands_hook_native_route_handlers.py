@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from ..config import load_guard_config, overlay_synced_guard_policy
+from ..native_hook_artifact_compose import NativeHookComposeError
 from ..native_hook_decision import _INVALID, NativeHookDecisionError
 from ..native_hook_route import PASSTHROUGH_HANDLER
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -120,6 +121,8 @@ def edge_unavailable(run: NativeHookRun) -> int | None:
 
 
 def containment(run: NativeHookRun) -> int | None:
+    # A missing route answer raises NativeHookDecisionError; the hook authority
+    # answers it with the host outage response, as the recorded ladder did.
     return emit_native_containment_route(
         run.edge, run.payload, run.context, run.runtime_workspace, run.output_stream, run.store
     )
@@ -207,15 +210,21 @@ def runtime_artifact(run: NativeHookRun) -> int | None:
 
 
 def claude_permission_request(run: NativeHookRun) -> int | None:
-    return run_native_claude_permission_request(
-        run.args,
-        config=run.config,
-        output_stream=run.output_stream,
-        payload=run.payload,
-        runtime_artifact=run.runtime_artifact,
-        runtime_workspace=run.runtime_workspace,
-        store=run.store,
-    )
+    try:
+        return run_native_claude_permission_request(
+            run.args,
+            config=run.config,
+            output_stream=run.output_stream,
+            payload=run.payload,
+            runtime_artifact=run.runtime_artifact,
+            runtime_workspace=run.runtime_workspace,
+            store=run.store,
+        )
+    except (NativeHookComposeError, NativeHookDecisionError) as error:
+        # The resident picks the dialog's verdict and composes the artifact
+        # policy and reason it rests on; without its answer the host gets the
+        # outage response, never a verdict computed here.
+        return run.unavailable(error.code)
 
 
 def claude_permission_prompt(run: NativeHookRun) -> int | None:

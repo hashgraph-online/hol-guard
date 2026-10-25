@@ -444,3 +444,7 @@ fn external_decision(
 pub(crate) fn py_path(path: &Path) -> PyPath {
     PyPath::new(&path.to_string_lossy())
 }
+
+#[cfg(all(test, unix))]
+#[path = "codex_output_source_paths_tests.rs"]
+mod unix_tests;

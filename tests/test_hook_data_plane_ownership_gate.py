@@ -37,6 +37,19 @@ def test_changed_path_gate_maps_native_pack_compiler(monkeypatch: pytest.MonkeyP
     assert MODULE._changed_path_gate(MODULE._manifest(), "base") == (path,)
 
 
+@pytest.mark.parametrize(
+    "suffix",
+    ["Cargo.toml", "src/policy_bundle_op.rs", "tests/fixtures/policy_bundle_timestamp_vectors.json"],
+)
+def test_changed_path_gate_maps_policy_bundle(monkeypatch: pytest.MonkeyPatch, suffix: str) -> None:
+    path = f"rust/crates/guard-policy-bundle/{suffix}"
+    monkeypatch.setattr(MODULE, "_changed_files", lambda _base_ref: (path,))
+    manifest = MODULE._manifest()
+    owners = [node for node in manifest["nodes"] if any(MODULE._matches(path, pattern) for pattern in node["paths"])]
+    assert [(owner["id"], owner["class"]) for owner in owners] == [("native_semantics", "rust_semantic")]
+    assert MODULE._changed_path_gate(manifest, "base") == (path,)
+
+
 def test_changed_path_gate_maps_live_cli_hook_support(monkeypatch: pytest.MonkeyPatch) -> None:
     path = "src/codex_plugin_scanner/guard/cli/commands_support_interaction.py"
     monkeypatch.setattr(MODULE, "_changed_files", lambda _base_ref: (path,))

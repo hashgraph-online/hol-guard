@@ -1,10 +1,13 @@
 //! Rust port of `runtime/supply_chain_package_eval.py` — local package-request
 //! evaluation for HOL Guard supply-chain protection.
 //!
-//! TODO(deps): several Python dependencies are not yet ported to this crate.
-//! They are modeled as injected seams (`SupplyChainEvalDeps`) or small local
-//! ports kept byte-parity where cheap:
-//!   - `supply_chain_support.ecosystem_support_metadata` — local port.
+//! The Python dependencies below are reached either through the injected seams
+//! of `SupplyChainEvalDeps` or through a module this crate already owns. A seam
+//! is not evidence that the module behind it is unported — several of these are
+//! injected precisely so the evaluator can be tested without its runtime — so
+//! each entry says which it is, and names the Rust module when one exists.
+//!   - `supply_chain_support.ecosystem_support_metadata` — reused from
+//!     `supply_chain_support`.
 //!   - `text.ensure_terminal_punctuation` — local port.
 //!   - `workspace_path_guard.{read_bytes_within_workspace,read_text_within_workspace,
 //!     resolve_path_within_workspace}` — `resolve_path_within_workspace` reused
@@ -18,24 +21,38 @@
 //!   - `store.GuardStore` — `local_supply_chain::SupplyChainStore` seam.
 //!   - `store_evidence.EvidenceRecord` — `Value`-dict seam.
 //!   - `js_semver.{highest_js_version_for_selector,version_matches_js_selector}` —
-//!     seam (per-package policy resolution; not yet ported).
-//!   - `lockfile_evaluation_support.*` / `lockfile_parse_result.*` — seam via
-//!     `LockfileEvaluationApi`.
-//!   - `manifest_dependency_targets.evaluation_targets` — seam.
-//!   - `npm_policy_range.*` — seam via `NpmPolicyRangeApi`.
+//!     ported in `js_semver`; still reached here through the `JsSemverApi`
+//!     seam, which is what per-package policy resolution is injected on.
+//!   - `lockfile_evaluation_support.*` / `lockfile_parse_result.*` — ported in
+//!     `lockfile_parse`, with the callers in `lockfile_evidence`,
+//!     `lockfile_helpers` and `lockfile_validate`; the evaluator reaches them
+//!     through the `LockfileParseApi` seam.
+//!   - `manifest_dependency_targets.evaluation_targets` — ported in
+//!     `manifest_dependency_targets`. `ManifestDepsApi` carries the two
+//!     `package_manifest_diff` entry points, not this one: the resident seam
+//!     for it was a stub that never produced `manifest_unsynced`.
+//!   - `npm_policy_range.*` — ported in `package_resolution`; called directly,
+//!     with no seam.
 //!   - `npm_source_spec.NpmSourceSpec`/`parse_npm_source_spec` — reused from
-//!     `npm_source_spec` module.
-//!   - `restricted_archive_download.*` — `RestrictedArchiveDownload` seam +
-//!     `ExternalArchiveDownloadApi` for the network path.
-//!   - `supply_chain_bundle*.*` — `SupplyChainBundleResponse`/`…Package` seams +
-//!     `SupplyChainBundleApi` for freshness/cached evaluation.
-//!   - `supply_chain_package_identity.*` — local port (pure logic).
+//!     the `npm_source_spec` module.
+//!   - `restricted_archive_download.*` — that module only re-exports
+//!     `native_archive_acquisition` and `restricted_archive_contract`, both
+//!     ported in `restricted_archive`; the network path is reached here
+//!     through the `RestrictedArchiveApi` seam.
+//!   - `supply_chain_bundle*.*` — ported in `supply_chain_bundle`; reached
+//!     here through the `SupplyChainBundleResponse`/`…Package` shapes and the
+//!     `SupplyChainBundleApi` seam for freshness/cached evaluation.
+//!   - `supply_chain_package_identity.*` — reused from
+//!     `supply_chain_package_identity`.
 //!   - `subprocess` (bundled pip audit fallback) — `// TODO(deps): subprocess`
 //!     fail-closed stub.
-//!   - `urllib.request.urlopen` (cloud validation) — `CloudValidationApi` seam.
-//!   - `importlib.metadata` (bundled pip detection) — `PipAuditShims` seam.
-//!   - `guard_sync`/`resolved_receipt`/`evidence_store` — seams on the store or
-//!     via `SupplyChainRuntimeApi`.
+//!   - `urllib.request.urlopen` (cloud validation) — reached through
+//!     `GuardSyncRunnerApi::urlopen_json_with_timeout_retry`.
+//!   - `importlib.metadata` (bundled pip detection) — not a seam: there is no
+//!     interpreter to ask, so `package_outcomes::installed_project_version`
+//!     resolves the guard's own distribution and reports not-found otherwise.
+//!   - `guard_sync` — `GuardSyncRunnerApi` seam. `evidence_store` — the
+//!     `StoreExtrasApi::add_evidence` seam.
 //!
 //! serde_json::Map is a BTreeMap, so all emitted JSON maps are key-sorted by
 //! construction — matching Python `dict` literal order only where byte-parity
@@ -66,9 +83,9 @@ use contracts::{
     ensure_terminal_punctuation, json_obj, optional_string, registry_default_ranges,
     severity_rank_map, string_tuple, value_str, CLOUD_INBOX_URL_RE,
     EXTERNAL_ARCHIVE_MAX_AGGREGATE_BYTES, EXTERNAL_ARCHIVE_MAX_TARGETS,
-    LOCAL_APPROVAL_INSTRUCTION_RE, LOCAL_APPROVAL_REQUEST_URL_RE, LOCAL_REVIEW_INSTRUCTION_RE,
-    LOCKFILE_PARSE_BUDGET_SECONDS, NAMED_SOURCE_SEPARATOR_RE, RETRY_TIMEOUT_SECONDS,
-    TARBALL_SCAN_MAX_BYTES, TIMEOUT_SECONDS,
+    LEGACY_LOCAL_APPROVAL_INSTRUCTION_RE, LOCAL_APPROVAL_INSTRUCTION_RE,
+    LOCAL_APPROVAL_REQUEST_URL_RE, LOCAL_REVIEW_INSTRUCTION_RE, LOCKFILE_PARSE_BUDGET_SECONDS,
+    NAMED_SOURCE_SEPARATOR_RE, RETRY_TIMEOUT_SECONDS, TARBALL_SCAN_MAX_BYTES, TIMEOUT_SECONDS,
 };
 pub use contracts::{
     EXTERNAL_ARCHIVE_REQUEST_TIMEOUT_SECONDS, TARBALL_SCAN_MAX_FILES,
@@ -104,7 +121,7 @@ mod evaluation;
 pub(crate) use empty_material::{empty_package_material_result, hold_unresolved_package_cwd};
 use evaluation::{
     artifact_has_flag, artifact_has_package_material, cache_reusable_cloud_validation_error,
-    decision_rank, decision_to_guard_action_variant, normalize_package_name,
+    decision_rank, decision_to_guard_action_variant, guard_action_variant, normalize_package_name,
     parse_evaluation_timestamp, reason_severity, severity_rank_value,
 };
 pub use evaluation::{

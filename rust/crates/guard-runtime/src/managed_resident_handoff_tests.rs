@@ -6,16 +6,13 @@ use crate::resident_state::{
     discover_states, process_start_marker, publish_state, runtime_digest, ResidentState,
 };
 use std::fs;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 fn test_root(label: &str) -> std::path::PathBuf {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-handoff-{label}-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     fs::create_dir(&root).unwrap();
     root

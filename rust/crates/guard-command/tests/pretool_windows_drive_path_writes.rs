@@ -110,6 +110,7 @@ fn action(session: &Session, command: &str) -> String {
             shell_home_matches: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),
+            creates_nothing: false,
         },
         Some(&environment),
     );

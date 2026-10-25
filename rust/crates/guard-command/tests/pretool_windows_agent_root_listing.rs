@@ -17,10 +17,7 @@ fn windows_agent_root_listings_accept_backslash_home_spellings() {
         .join(format!(
             "{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let _cleanup = fixture::FixtureCleanup(root.clone());
     std::fs::create_dir_all(&root).unwrap();
@@ -76,10 +73,7 @@ fn windows_missing_git_marker_probe_accepts_backslash_home_spellings() {
         .join(format!(
             "{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let _cleanup = fixture::FixtureCleanup(root.clone());
     std::fs::create_dir_all(&root).unwrap();

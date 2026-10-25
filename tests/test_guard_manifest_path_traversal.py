@@ -1,4 +1,8 @@
-"""Regression tests for workspace-contained manifest and lockfile reads."""
+"""Regression tests for workspace-contained manifest and lockfile reads.
+
+The resolver itself is pinned in guard-command's workspace_path_guard_tests;
+what is left here is the request path that depends on it.
+"""
 
 from __future__ import annotations
 
@@ -10,37 +14,9 @@ import pytest
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
-from codex_plugin_scanner.guard.runtime.workspace_path_guard import (
-    existing_paths_within_workspace,
-    read_text_within_workspace,
-    resolve_path_within_workspace,
-)
 from codex_plugin_scanner.guard.store import GuardStore
 
 pytestmark = pytest.mark.usefixtures("package_intent_native")
-
-
-def test_resolve_path_within_workspace_rejects_parent_traversal(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    workspace.mkdir()
-    (outside / "requirements.txt").write_text("leakpkg==1.0.0\n", encoding="utf-8")
-
-    assert resolve_path_within_workspace(workspace, "../outside/requirements.txt") is None
-    assert read_text_within_workspace(workspace, "../outside/requirements.txt") is None
-    assert existing_paths_within_workspace(workspace, ("../outside/requirements.txt",)) == ()
-
-
-def test_resolve_path_within_workspace_rejects_symlink_escape(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    secret = tmp_path / "secret.env"
-    workspace.mkdir()
-    secret.write_text("AWS_SECRET_ACCESS_KEY=super-secret\n", encoding="utf-8")
-    (workspace / "requirements.txt").symlink_to(secret)
-
-    assert resolve_path_within_workspace(workspace, "requirements.txt") is None
-    assert read_text_within_workspace(workspace, "requirements.txt") is None
 
 
 def test_parse_pip_intent_ignores_requirements_outside_workspace(tmp_path: Path, package_intent_native: Path) -> None:

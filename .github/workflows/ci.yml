@@ -23,7 +23,7 @@ env:
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
   # Balance the complete suite across parallel runners. Keep this independent
   # of a fixed organization-wide runner count; scheduling capacity can change.
-  CI_PYTEST_COVERAGE_SHARDS: "64"
+  CI_PYTEST_COVERAGE_SHARDS: "128"
   UV_HTTP_TIMEOUT: "300"
   CI_UV_CACHE_DEPENDENCY_GLOB: |
     pyproject.toml
@@ -155,6 +155,12 @@ jobs:
     name: Rust workspace (${{ matrix.check }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Required main consumers are the archive producers. Only the two runtime
+    # shards share an archive; core/command and PR/Clippy work stay independent.
+    concurrency:
+      group: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.check != 'clippy' && format('trusted-rust-tests-{0}-{1}', github.sha, matrix.check == 'test-command' && 'command' || (matrix.check == 'test-core' && 'core' || 'runtime')) || format('rust-workspace-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.check) }}
+      queue: max
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix:
@@ -184,7 +190,13 @@ jobs:
         with:
           cache-key: ci-workspace-${{ matrix.check }}
           cache-fallback-key: ${{ matrix.check != 'clippy' && 'ci-workspace-test' || '' }}
-          components: clippy
+          components: ${{ matrix.check == 'clippy' && 'clippy rustfmt' || 'clippy' }}
+          normalize-toolchains: "true"
+      - name: Check native formatting in the required Clippy job
+        if: matrix.check == 'clippy'
+        run: |
+          toolchain="$(python3 -c 'import tomllib; print(tomllib.load(open("rust/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')"
+          cargo +"$toolchain" fmt --manifest-path rust/Cargo.toml --all --check
       - name: Install content-addressed compiler cache
         if: matrix.check != 'clippy' && steps.runtime-archive.outputs.cache-hit != 'true'
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
@@ -210,36 +222,29 @@ jobs:
           } >> "$GITHUB_ENV"
         env:
           SCCACHE_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+      - name: Check compiler cache readiness
+        if: matrix.check != 'clippy' && steps.runtime-archive.outputs.cache-hit != 'true'
+        run: |
+          # --zero-stats connects to an existing daemon or starts one. Startup
+          # storage failures precede SCCACHE_IGNORE_SERVER_IO_ERROR's fallback.
+          # Diagnostics can include signed cache URLs; keep them runner-local.
+          if ! sccache --zero-stats > "$RUNNER_TEMP/sccache-readiness.log" 2>&1; then
+            echo "::warning::Compiler cache unavailable; compiling directly."
+            echo "HOL_GUARD_CI_SCCACHE=off" >> "$GITHUB_ENV"
+          fi
       - name: Provision the Linux test linker
         if: matrix.check != 'clippy' && steps.runtime-archive.outputs.cache-hit != 'true'
-        # The checked test wrapper links with lld. Reuse the runner's linker
-        # when present instead of refreshing apt for an installed tool.
-        run: |
-          if ! command -v ld.lld >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y --no-install-recommends lld
-          fi
+        run: bash scripts/ci/setup_test_linker.sh
       - uses: ./.github/actions/setup-bubblewrap
         if: matrix.check != 'clippy'
       - name: Archive the complete runtime test build
         if: >-
           matrix.check != 'clippy' &&
-          matrix.check != 'test-runtime-2' &&
           steps.runtime-archive.outputs.cache-hit != 'true' &&
           github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           CARGO_CHECK: ${{ matrix.check }}
-        run: |
-          case "$CARGO_CHECK" in
-            test-core) archive_packages=(--locked --workspace --exclude guard-command --exclude hol-guard-runtime --all-targets) ;;
-            test-command) archive_packages=(--locked --package guard-command --all-targets) ;;
-            test-runtime-1) archive_packages=(--locked --package hol-guard-runtime --all-targets) ;;
-            *) echo "Unsupported archive check" >&2; exit 64 ;;
-          esac
-          nextest_bin="$(python3 scripts/ci/install_nextest.py)"
-          PATH="$nextest_bin:$PATH" cargo nextest archive --manifest-path rust/Cargo.toml \
-            "${archive_packages[@]}" \
-            --archive-file "$RUNNER_TEMP/runtime-test-archive.tar.zst" --zstd-level 1
+        run: bash scripts/ci/archive_rust_tests.sh "$CARGO_CHECK"
       - name: Validate the locked Rust workspace
         env:
           CARGO_CHECK: ${{ matrix.check }}
@@ -280,17 +285,25 @@ jobs:
                   --workspace-remap "$GITHUB_WORKSPACE/rust" "${nextest_args[@]}" \
                   --test-threads 4 --retries 0 --no-fail-fast
               else
+                # Main's archive step already timed this compilation. Preserve
+                # its HTML instead of replacing it with incremental run timings.
+                timing_args=()
+                if [[ "${GITHUB_EVENT_NAME:-}" != push || "${GITHUB_REF:-}" != refs/heads/main ]]; then
+                  timing_args=(--timings)
+                fi
                 PATH="$nextest_bin:$PATH" cargo nextest run --manifest-path rust/Cargo.toml --locked --all-targets "${packages[@]}" \
-                  "${nextest_args[@]}" \
+                  "${nextest_args[@]}" "${timing_args[@]}" \
                   --test-threads 4 --retries 0 --no-fail-fast
               fi
               ;;
             *) echo "Unsupported workspace check" >&2; exit 64 ;;
           esac
       - name: Save successful runtime test compilation
+        # Publish only after this consumer passes. Compared with an independent
+        # compile-only warmer, availability waits for tests and failed consumers
+        # publish nothing; either successful runtime shard can seed its archive.
         if: >-
           matrix.check != 'clippy' &&
-          matrix.check != 'test-runtime-2' &&
           steps.runtime-archive.outputs.cache-hit != 'true' &&
           github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -300,6 +313,14 @@ jobs:
       - name: Report compiler cache statistics
         if: always() && matrix.check != 'clippy'
         run: '"$SCCACHE_PATH" --show-stats || true'
+      - name: Retain Rust test compilation timings
+        if: always() && matrix.check != 'clippy' && steps.runtime-archive.outputs.cache-hit != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: rust-test-compilation-timings-${{ matrix.check }}-${{ github.run_attempt }}
+          path: rust/target/cargo-timings/cargo-timing.html
+          if-no-files-found: ignore
+          retention-days: 1
       - name: Bind successful strict Clippy report
         if: matrix.check == 'clippy'
         run: python3 -m scripts.ci.clippy_report bind
@@ -336,9 +357,11 @@ jobs:
           cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
           save-cache: "true"
       - name: Prepare current public directory before pytest collection
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
         run: |
-          uv run --no-sync python scripts/prepare_extension_directory.py --compiler rust/target/release/guard-command-source
-          uv run --no-sync python scripts/prepare_extension_directory.py --compiler rust/target/release/guard-command-source --check
+          uv run --no-sync python scripts/prepare_extension_directory.py --compiler rust/target/release/guard-command-source --write-and-check
       - name: Upload native command evaluators
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -527,7 +550,10 @@ jobs:
     name: native-gates (${{ matrix.shard-index }})
     needs: native-command-evaluators
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Includes checkout/setup plus the shard. Shards ran 195-293s of the old
+    # five-minute cap, and the gate gains cases with each false-positive fix,
+    # so a slower runner cancelled shards whose tests had all passed.
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -649,10 +675,12 @@ jobs:
             export GUARD_PYTEST_UNDER_COVERAGE=1
             coverage_args=(--cov --cov-branch --cov-report=)
           fi
+          # One existing shard runs the fixed-deadline checks serially; the
+          # verified plan assigns four workers to each ordinary shard.
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json \
-            uv run --no-sync python scripts/ci/run_projection_shard.py "$shard_file" -- \
+            uv run --no-sync python scripts/ci/run_projection_shard.py --coverage-resources "$shard_file" -- \
             -p pytest_duration_report "@$shard_file" --tb=short --durations=10 \
-            -n 2 --dist loadfile --max-worker-restart 0 \
+            --dist loadfile --max-worker-restart 0 \
             --reruns 1 --reruns-delay 2 \
             --deselect tests/test_guard_benign_false_positive_gate.py \
             --deselect tests/test_guard_gauntlet_replay_gate.py \
@@ -859,40 +887,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-  ci-python-312:
-    name: ci (3.12)
-    if: always()
-    needs: [plan, native-workspace, quality, native-command-evaluators, coverage, compatibility, scheduling-sensitive]
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions:
-      actions: read
-      contents: read
-      pull-requests: read
-      statuses: read
-    steps:
-      - name: Verify Python CI dependencies
-        env:
-          NATIVE_WORKSPACE_RESULT: ${{ needs.native-workspace.result }}
-          QUALITY_RESULT: ${{ needs.quality.result }}
-          NATIVE_PRODUCER_RESULT: ${{ needs.native-command-evaluators.result }}
-          COVERAGE_RESULT: ${{ needs.coverage.result }}
-          COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
-          SCHEDULING_SENSITIVE_RESULT: ${{ needs.scheduling-sensitive.result }}
-          PLAN_DATA_ONLY: ${{ needs.plan.outputs.data_only }}
-        run: |
-          # Plan-aware: a lane-eligible job that the planner skipped is acceptable
-          # only on a data-only plan. On a full plan skipped still fails.
-          if [ "$PLAN_DATA_ONLY" = "true" ]; then
-            ok_set='success skipped'
-          else
-            ok_set='success'
-          fi
-          for r in "$NATIVE_WORKSPACE_RESULT" "$QUALITY_RESULT" "$NATIVE_PRODUCER_RESULT" \
-                   "$COVERAGE_RESULT" "$COMPATIBILITY_RESULT" "$SCHEDULING_SENSITIVE_RESULT"; do
-            case " $ok_set " in *" $r "*) : ;; *) echo "dependency result not OK: $r"; exit 1;; esac
-          done
-
   pi-exact-continuation:
     needs: [plan, native-command-evaluators]
     if: >-
@@ -937,6 +931,146 @@ jobs:
           js_size=$(du -sh ../src/codex_plugin_scanner/guard/daemon/static/assets/guard-dashboard.js | cut -f1)
           css_size=$(du -sh ../src/codex_plugin_scanner/guard/daemon/static/assets/index.css | cut -f1)
           echo "Bundle JS: ${js_size:-unknown}, CSS: ${css_size:-unknown}"
+
+  dashboard-integration-wheel:
+    # Guard serves its extension catalog only from an installed release: a
+    # native wheel whose runtime, command-pack bundle and manifests name one
+    # source commit. The evaluator binaries are shared across commits and carry
+    # no such identity, so build a runtime stamped with this checkout and seal
+    # it into a wheel, in parallel with the evaluator build.
+    needs: [plan]
+    if: >-
+      !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci-python
+        with:
+          python-version: ${{ env.CI_PYTHON_VERSION }}
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: pytest-native-command
+      - name: Install content-addressed compiler cache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.18.0
+      - name: Build the source compiler and a runtime stamped with this checkout
+        env:
+          RUSTC_WORKSPACE_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: "on"
+          SCCACHE_GHA_VERSION: pytest-native-command
+          SCCACHE_GHA_RW_MODE: READ_ONLY
+          SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+        run: |
+          set -euo pipefail
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          # The bundle build names `git rev-parse HEAD`; the runtime must match it.
+          SOURCE_SHA=$(git rev-parse HEAD)
+          HOL_GUARD_PACKAGE_VERSION="$VERSION" HOL_GUARD_BUILD_SHA="$SOURCE_SHA" \
+            cargo build --manifest-path rust/Cargo.toml --locked --release \
+            -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "SOURCE_SHA=$SOURCE_SHA" >> "$GITHUB_ENV"
+      - name: Seal the native wheel
+        env:
+          HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source
+        run: |
+          set -euo pipefail
+          runtime=rust/target/release/hol-guard-runtime
+          compiler=rust/target/release/guard-command-source
+          work="$RUNNER_TEMP/dashboard-wheel"
+          mkdir -p "$work"
+          # Derive the compiler identities the release assembly binds into the
+          # source-compiler manifest.
+          "$compiler" export-trust > contracts/extensions/build-trust-class-map.v1.json
+          "$compiler" export-built > "$work/source-built.json"
+          jq -n \
+            --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
+            --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
+            --slurpfile built "$work/source-built.json" \
+            '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged",validation_base:{catalog:$built[0].catalog,programs:[]}}' \
+            > "$work/source-build.json"
+          "$compiler" compile < "$work/source-build.json" > "$work/source-compiled.json"
+          uv build --wheel --out-dir "$work/pure"
+          uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
+            --wheel "$work/pure/hol_guard-${VERSION}-py3-none-any.whl" \
+            --runtime "$runtime" \
+            --output-dir dashboard-integration-wheel \
+            --version "$VERSION" \
+            --platform-tag manylinux_2_17_x86_64 \
+            --target "$(rustc -vV | awk '/^host:/{print $2}')" \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$("$runtime" capabilities --json | jq -r '.rule_digest')" \
+            --implementation-digest "$(jq -r '.implementation_digest' "$work/source-compiled.json")" \
+            --base-program-digest "$(jq -r '.base_program_digest' "$work/source-compiled.json")"
+          test "$(find dashboard-integration-wheel -maxdepth 1 -name 'hol_guard-*.whl' | wc -l)" -eq 1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dashboard-integration-wheel
+          path: dashboard-integration-wheel/hol_guard-*.whl
+          if-no-files-found: error
+          retention-days: 1
+
+  dashboard-integration:
+    # Drives the committed dashboard bundle against a real, seeded Guard daemon
+    # in Chrome. No API mocks: every screen reads and writes through the daemon,
+    # installed from this checkout's native wheel the way a user installs it.
+    needs: [plan, dashboard-integration-wheel]
+    if: >-
+      !cancelled() &&
+      needs.dashboard-integration-wheel.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          version: "0.9.26"
+          enable-cache: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: dashboard-integration-wheel
+          path: ${{ runner.temp }}/dashboard-integration-wheel
+      - name: Install the wheel into an isolated interpreter
+        run: |
+          set -euo pipefail
+          venv="$RUNNER_TEMP/guard-venv"
+          # Any 3.12 patch release; this uv predates CI_PYTHON_VERSION.
+          uv venv --python 3.12 "$venv"
+          uv pip install --python "$venv/bin/python" "$RUNNER_TEMP"/dashboard-integration-wheel/hol_guard-*.whl
+          PYTHONPATH= "$venv/bin/python" -c 'import pathlib, codex_plugin_scanner as p; native = pathlib.Path(p.__file__).parent / "_native"; assert (native / "runtime-manifest.json").is_file(), native'
+          echo "DASHBOARD_E2E_PYTHON=$venv/bin/python" >> "$GITHUB_ENV"
+          # The wheel carries its own runtime. Force mode fails the run on a
+          # degraded native route instead of quietly testing a weaker one.
+          echo "HOL_GUARD_NATIVE=force" >> "$GITHUB_ENV"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.3.14"
+      - run: cd dashboard && bun install --frozen-lockfile
+      # Uses the runner's preinstalled Google Chrome, so no browser download.
+      - name: Dashboard integration suite
+        run: cd dashboard && bun run test:e2e:integration
+      # Each failure's page snapshot shows what the browser actually rendered.
+      # Sidebar links carry the session in the URL fragment, so strip fragments.
+      - name: Print failed page snapshots
+        if: failure()
+        run: |
+          find dashboard/e2e/proofs/integration-output -name error-context.md -print0 2>/dev/null |
+            while IFS= read -r -d '' file; do
+              echo "::group::$file"
+              sed -E 's/#[^ "'\'')]*//g' "$file"
+              echo "::endgroup::"
+            done
 
   cisco-full:
     needs: [plan, native-command-evaluators]
@@ -1050,7 +1184,12 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: macos-latest
-    timeout-minutes: 15
+    # Raised 15 -> 25 for the one-time cold crate-graph compile on this branch:
+    # the new catalog-data/host-build crates have no main-seeded sccache
+    # entries and PR runs read the compiler cache read-only, so a PR build
+    # measures ~19 min until main seeds the namespace. The cap stays a hang
+    # guard at roughly 2x the warm duration.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -1088,8 +1227,8 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: macos-latest
-    # Bound runner fan-out while retaining the full gate catalog, two workers
-    # per runner and the existing five-minute job budget.
+    # Use the three allocated CPU cores while retaining twelve runners,
+    # the full gate catalog and the existing five-minute job budget.
     timeout-minutes: 5
     strategy:
       fail-fast: false
@@ -1114,7 +1253,7 @@ jobs:
   required:
     name: hol-guard / required
     if: always()
-    needs: [plan, native-workspace, native-command-evaluators, native-offline-previous, native-offline-upgrade, native-gates, quality, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
+    needs: [plan, native-workspace, native-command-evaluators, native-offline-previous, native-offline-upgrade, native-gates, quality, coverage, compatibility, scheduling-sensitive, dashboard, dashboard-integration-wheel, dashboard-integration, cisco-full, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -1144,11 +1283,11 @@ jobs:
           # data-only plan coast through on surviving lane-gated residue.
           always_on = ["plan","native-workspace","native-command-evaluators","native-offline-previous",
                        "native-offline-upgrade","native-gates",
-                       "quality","ci-python-312"]
+                       "quality"]
           # Lane-gated required set: skipped is acceptable only on a data-only
           # plan; failure/cancelled always fails.
           required = ["coverage","compatibility","scheduling-sensitive",
-                      "dashboard","cisco-full","pi-exact-continuation","cross-platform",
+                      "dashboard","dashboard-integration-wheel","dashboard-integration","cisco-full","pi-exact-continuation","cross-platform",
                       "windows-native-runtime","windows-shim-admin","windows-packaged-daemon",
                       "macos-native-runtime","macos-skill-identity","macos-gates"]
           missing = [j for j in always_on + required if j not in needs]
@@ -1192,12 +1331,33 @@ jobs:
               print("::error::required jobs skipped on a full-lane plan: "+", ".join(skipped))
               sys.exit(1)
           # Evidence residue is already enforced: `always_on` (plan, quality,
-          # ci-python-312, plus the native providers) must succeed,
+          # plus the native providers) must succeed,
           # so a data-only plan cannot coast with no green evidence. Lane-gated
           # jobs are all skipped on data-only by design — counting them as
           # residue would fail every valid fast lane.
           print("required aggregate: all planned required results green")
           PY
+      - name: Verify Python CI dependencies
+        env:
+          NATIVE_WORKSPACE_RESULT: ${{ needs.native-workspace.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          NATIVE_PRODUCER_RESULT: ${{ needs.native-command-evaluators.result }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+          COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
+          SCHEDULING_SENSITIVE_RESULT: ${{ needs.scheduling-sensitive.result }}
+          PLAN_DATA_ONLY: ${{ needs.plan.outputs.data_only }}
+        run: |
+          # Plan-aware: a lane-eligible job that the planner skipped is acceptable
+          # only on a data-only plan. On a full plan skipped still fails.
+          if [ "$PLAN_DATA_ONLY" = "true" ]; then
+            ok_set='success skipped'
+          else
+            ok_set='success'
+          fi
+          for r in "$NATIVE_WORKSPACE_RESULT" "$QUALITY_RESULT" "$NATIVE_PRODUCER_RESULT" \
+                   "$COVERAGE_RESULT" "$COMPATIBILITY_RESULT" "$SCHEDULING_SENSITIVE_RESULT"; do
+            case " $ok_set " in *" $r "*) : ;; *) echo "dependency result not OK: $r"; exit 1;; esac
+          done
       # Merge freeze: while the repository variable MERGE_FREEZE is true, this
       # aggregate (a required check in the main-status-checks ruleset) fails for
       # every pull request except MERGE_FREEZE_ALLOW entries, and for a dispatched

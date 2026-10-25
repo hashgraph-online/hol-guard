@@ -16,6 +16,7 @@ from .models import GuardAction
 from .native_context import _canonical_request_sha256, ensure_resident_prerequisite
 from .native_execution import _resident_request
 from .native_guard_store import _raise_for_code
+from .native_hook_decision import NativeHookDecisionError
 from .sqlite_tuning import sqlite_connect_timeout_seconds, sqlite_operation_deadline_monotonic
 
 if TYPE_CHECKING:
@@ -83,7 +84,13 @@ def local_cli_grant_action(
     reason_code: str | None = None,
     path: str | None = None,
 ) -> GuardAction:
-    """Record the CLI the command launches and refine the action with its grant."""
+    """Record the CLI the command launches and refine the action with its grant.
+
+    The resident decides the refined action. No bound answer is a resident
+    outage: this raises ``NativeHookDecisionError`` and the hook answers with
+    the host outage response, as the direct hook path does, instead of an
+    action picked here.
+    """
 
     if command is None:
         return current_action
@@ -97,9 +104,9 @@ def local_cli_grant_action(
         reason_code=reason_code,
         path=path,
     )
-    if action is not None:
-        return action
-    return unverified_local_cli_action(store, current_action) if grant_allowed else current_action
+    if action is None:
+        raise NativeHookDecisionError("native_local_cli_hook_unavailable")
+    return action
 
 
 def observe_unlisted_cli(
@@ -350,16 +357,3 @@ def _raise_store_failure(store: GuardStore, code: str) -> None:
         except Exception as recovery_error:
             raise recovery_error from failure
         raise
-
-
-def unverified_local_cli_action(store: object, current_action: GuardAction) -> GuardAction:
-    """Hold an otherwise allowed command for review while a block rule might apply."""
-
-    if current_action not in {"allow", "warn"}:
-        return current_action
-    probe = getattr(store, "has_local_cli_block_rules", None)
-    try:
-        has_blocks = bool(probe()) if callable(probe) else False
-    except Exception:
-        has_blocks = True
-    return "review" if has_blocks else current_action

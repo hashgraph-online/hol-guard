@@ -36,7 +36,7 @@ from tests.benign_fp_gate_connectors import allow_ready_cli, assert_connector_se
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_codex
 from tests.benign_fp_gate_mcp import McpCase, mcp_cases, mcp_failure, replay
 from tests.benign_fp_gate_projects import host_tool_path
-from tests.gauntlet_replay import OMP_CONTAINED, cursor_hook_fields
+from tests.gauntlet_replay import OMP_CONTAINED, cursor_hook_fields, source_ref_payload
 from tests.native_gate_retry import BUDGET_MISS_REASONS, review_with_unavailable_retry
 
 pytestmark = pytest.mark.usefixtures("native_hook_force")
@@ -81,6 +81,12 @@ _RENDERED_SPECIFIC_KEYS = ("permissionDecisionReason", "additionalContext")
 # Pending markers record the Linux CI result. macOS sends some Oh My Pi and Z Code reads
 # through protected read-only execution, so local macOS runs do not judge marker staleness.
 _ENFORCE_STALE_PENDING = bool(os.environ.get("CI")) and sys.platform != "darwin"
+# The workspace sandbox the contained route runs in exists on macOS, and on
+# Linux only where the host offers it. A gate that accepts either a contained
+# route or a plain quiet allow cannot tell the two apart, so the cases that
+# depend on containment assert it where the host has a sandbox and fall back to
+# the quiet allow, never to a review, where it does not.
+_SANDBOX_HOST = sys.platform == "darwin"
 _PENDING_PR: dict[str, str] = _DOCUMENT["pending_pr"]
 _PENDING_ALWAYS: dict[str, str] = _DOCUMENT["pending_always"]
 
@@ -97,6 +103,9 @@ class GateCase:
     expect: str
     event: str = "PreToolUse"
     tool_response: object = None
+    # Attach the source-file proof Oh My Pi's extension sends with a
+    # PostToolUse read, which routes the review through the source path.
+    source_ref: bool = False
     # Variables the agent shell inherits, such as a user's RIPGREP_CONFIG_PATH.
     environment: tuple[tuple[str, str], ...] = ()
 
@@ -117,6 +126,7 @@ def _expand() -> list[GateCase]:
                     expect=entry["expect"],
                     event=entry.get("event", "PreToolUse"),
                     tool_response=entry.get("tool_response"),
+                    source_ref=bool(entry.get("source_ref", False)),
                     environment=tuple(sorted(entry.get("environment", {}).items())),
                 )
             )
@@ -215,6 +225,11 @@ def _review(case: GateCase, fixture: BenignFixture, worker: HookWorker) -> tuple
     }
     if case.tool_response is not None:
         payload["tool_response"] = case.tool_response
+    if case.source_ref:
+        tool_input = payload["tool_input"]
+        assert isinstance(tool_input, dict)
+        spelled = str(tool_input.get("path") or tool_input["file_path"])
+        payload["guard_source_ref"] = source_ref_payload(spelled, fixture.cwd(case.cwd))
     if case.harness == "cursor":
         payload.update(cursor_hook_fields(case.tool, payload))
     # Approval baselines stay from before the first attempt, so a retry never hides a row.
@@ -292,10 +307,19 @@ def _decision(result: dict[str, object]) -> str:
 
 
 def _rendered_text(result: dict[str, object]) -> bool:
-    """True when the harness response carries text the agent or user would see."""
+    """True when the harness response carries text the agent or user would see.
+
+    ``notice`` is the PostToolUse display mode, not a message: every allowed
+    output review carries one, and ``none`` is the value that says the harness
+    shows nothing at all.
+    """
     specific = result.get("hookSpecificOutput")
     specific = specific if isinstance(specific, dict) else {}
-    return any(result.get(key) for key in _RENDERED_KEYS) or any(specific.get(key) for key in _RENDERED_SPECIFIC_KEYS)
+    if any(result.get(key) for key in _RENDERED_KEYS if key != "notice"):
+        return True
+    if result.get("notice") not in (None, "", "none"):
+        return True
+    return any(specific.get(key) for key in _RENDERED_SPECIFIC_KEYS)
 
 
 def _quiet_allow(result: dict[str, object], approvals: int) -> bool:
@@ -374,6 +398,14 @@ def test_benign_agent_work_is_allowed_and_negative_controls_are_not(
         )
         return
     gap = always_gap(_ROWS.get(case.case_id, [])) if _always_expected(case) else []
+    if case.expect == "allow_or_review":
+        # A named child can require approval, but must not lose its executable
+        # review path merely because a literal argument resembles a program.
+        assert _quiet_allow(result, approvals) or (approvals > 0 and not _hard_denied(result, approvals)), description
+        assert _reason(result) not in BUDGET_MISS_REASONS, description
+        review_gap = always_gap(_ROWS.get(case.case_id, [])) if approvals > 0 else []
+        assert not review_gap, f"named child review offers no Always allow: {description}"
+        return
     if case.case_id in _PENDING_FIX:
         _assert_pending(case.case_id, _PENDING_FIX[case.case_id], result, approvals, description)
     else:
@@ -451,6 +483,67 @@ def test_an_environment_dump_is_reviewed_rather_than_refused(
         assert _decision(result) != "allow", f"environment dump was allowed: {description}"
         assert approvals == 1, f"environment dump left no approval to give: {description}"
         assert not always_gap(_ROWS[case.case_id]), f"environment dump offers no Always allow: {description}"
+
+
+def test_jvm_build_goals_run_without_an_approval_prompt(
+    gate_environment: tuple[BenignFixture, HookWorker],
+) -> None:
+    """Compiling or testing a Maven project is ordinary work, not a package fetch.
+
+    The JVM package firewall owns ``mvn`` and ``gradle`` by executable name and
+    carries no rule that tells a dependency operation from a lifecycle goal, so
+    every invocation but a bare ``--version`` queued a review row, ``mvn -q
+    test`` included. A Maven lifecycle goal now routes to the workspace sandbox
+    instead: it runs offline against a local repository of its own, linked to
+    the groups the host already fetched, so it compiles and tests without
+    reaching a registry. The goals that fetch or publish artifacts keep their
+    review, and so does Gradle, whose cache wants a writable home and takes
+    locks inside it, which the read-only link the sandbox grants cannot give.
+    """
+    fixture, worker = gate_environment
+    goals = ("mvn -q test", "mvn clean verify", "./mvnw test-compile", "mvn clean package -DskipTests")
+    for index, command in enumerate(goals):
+        case = GateCase(
+            case_id=f"jvm-build-{index}@claude-code",
+            base_id=f"jvm-build-{index}",
+            fix_area="package",
+            harness="claude-code",
+            tool="shell",
+            tool_input={"command": command},
+            cwd="worktree",
+            expect="allow",
+        )
+        result, approvals = _review(case, fixture, worker)
+        description = _describe(case, result, approvals)
+        assert approvals == 0, f"JVM build goal queued a review: {description}"
+        if _SANDBOX_HOST:
+            assert _contained(result), f"JVM build goal was not routed to the workspace sandbox: {description}"
+        else:
+            assert _quiet_allow(result, approvals), f"JVM build goal was reviewed: {description}"
+    fetches = (
+        "mvn dependency:copy-dependencies",
+        "mvn deploy",
+        "mvn -U test",
+        "gradle build",
+        "./gradlew :app:test",
+        "gradle --refresh-dependencies build",
+    )
+    for index, command in enumerate(fetches):
+        case = GateCase(
+            case_id=f"jvm-fetch-{index}@claude-code",
+            base_id=f"jvm-fetch-{index}",
+            fix_area="package",
+            harness="claude-code",
+            tool="shell",
+            tool_input={"command": command},
+            cwd="worktree",
+            expect="not_allow",
+        )
+        result, approvals = _review(case, fixture, worker)
+        description = _describe(case, result, approvals)
+        assert _decision(result) != "allow", f"package fetch was allowed: {description}"
+        assert approvals == 1, f"package fetch left no approval to give: {description}"
+        assert not always_gap(_ROWS[case.case_id]), f"package fetch offers no Always allow: {description}"
 
 
 @pytest.mark.parametrize("case", mcp_cases(_DOCUMENT), ids=lambda case: case.case_id)

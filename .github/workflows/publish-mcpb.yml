@@ -45,17 +45,10 @@ jobs:
           ref: ${{ needs.verify.outputs.sha }}
       - name: Validate Python wrapper
         run: python -m compileall -q distributions/mcpb/server
-      - name: Validate and pack with pinned MCPB CLI
-        env:
-          NPM_CONFIG_IGNORE_SCRIPTS: "true"
+      - name: Pack the MCP bundle
         run: |
           set -euo pipefail
-          npm ci --ignore-scripts --prefix .github/tools/mcpb-cli
-          node .github/tools/mcpb-cli/harden-forge.cjs
-          MCPB_CLI="$GITHUB_WORKSPACE/.github/tools/mcpb-cli/node_modules/.bin/mcpb"
-          "$MCPB_CLI" validate distributions/mcpb
-          "$MCPB_CLI" pack distributions/mcpb "$RUNNER_TEMP/hol-guard.mcpb"
-          "$MCPB_CLI" info "$RUNNER_TEMP/hol-guard.mcpb"
+          python3 scripts/ci/pack_mcpb.py distributions/mcpb "$RUNNER_TEMP/hol-guard.mcpb"
           test -s "$RUNNER_TEMP/hol-guard.mcpb"
 
   publish:
@@ -165,19 +158,13 @@ jobs:
           echo "dir=$bundle_dir" >> "$GITHUB_OUTPUT"
           echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
 
-      - name: Validate and pack immutable bundle
+      - name: Pack the immutable bundle
         env:
-          NPM_CONFIG_IGNORE_SCRIPTS: "true"
           BUNDLE_DIR: ${{ steps.bundle.outputs.dir }}
           ARTIFACT: ${{ steps.bundle.outputs.artifact }}
         run: |
           set -euo pipefail
-          npm ci --ignore-scripts --prefix .github/tools/mcpb-cli
-          node .github/tools/mcpb-cli/harden-forge.cjs
-          MCPB_CLI="$GITHUB_WORKSPACE/.github/tools/mcpb-cli/node_modules/.bin/mcpb"
-          "$MCPB_CLI" validate "$BUNDLE_DIR"
-          "$MCPB_CLI" pack "$BUNDLE_DIR" "$ARTIFACT"
-          "$MCPB_CLI" info "$ARTIFACT"
+          python3 scripts/ci/pack_mcpb.py "$BUNDLE_DIR" "$ARTIFACT"
           sha256sum "$ARTIFACT" > "${ARTIFACT}.sha256"
 
       - name: Attach bundle and checksum to canonical release

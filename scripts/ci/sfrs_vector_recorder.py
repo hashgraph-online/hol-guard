@@ -52,7 +52,6 @@ _ENTRY_POINTS: tuple[tuple[str, str, int], ...] = (
     (f"{_SERVICES}.source_edit_context", "low_risk_compound_developer_execution_context", 0),
     (f"{_SERVICES}.shell_quote_parsing", "literal_cd_execution_context", 0),
     (f"{_SERVICES}.docker_requests", "shell_execution_context_starts_with_literal_cd", 0),
-    (f"{_SERVICES}.read_only_filters", "_read_only_lookup_target_is_safe", 0),
     (f"{_SRC}.cli.commands_support_runtime_artifacts", "_hook_runtime_artifact", 1),
 )
 _OVERRIDE_GUARDS: tuple[tuple[str, str, str, str], ...] = (

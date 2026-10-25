@@ -1369,11 +1369,20 @@ def sync_supply_chain_cloud_state(
     workspace_dir: Path | None = None,
 ) -> dict[str, object]:
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    bundle_summary = _call_sync_with_optional_auth_context(
-        sync_supply_chain_bundle,
-        store=store,
-        auth_context=resolved_auth_context,
-    )
+    try:
+        bundle_summary = _call_sync_with_optional_auth_context(
+            sync_supply_chain_bundle,
+            store=store,
+            auth_context=resolved_auth_context,
+        )
+    except Exception:
+        # The network bundle has its own endpoint; refresh it before the
+        # supply-chain failure propagates.
+        _runtime_runner_module().sync_network_protection_bundle_best_effort(
+            store,
+            auth_context=resolved_auth_context,
+        )
+        raise
     payload = dict(bundle_summary) if isinstance(bundle_summary, dict) else {}
     workspace_audits = sync_managed_workspace_audits(
         store,
@@ -1382,6 +1391,10 @@ def sync_supply_chain_cloud_state(
     )
     payload["workspace_audits"] = workspace_audits
     payload.setdefault("synced_at", workspace_audits.get("synced_at"))
+    payload["network_protection"] = _runtime_runner_module().sync_network_protection_bundle_best_effort(
+        store,
+        auth_context=resolved_auth_context,
+    )
     return payload
 
 

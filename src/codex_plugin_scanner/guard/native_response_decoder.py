@@ -53,7 +53,12 @@ def response_from_payload(payload: object) -> HookReviewResponse | None:
             "result",
             "receipt",
         }
-        if not required <= set(decoded) or set(decoded) - (required | {"request_id", "harness_response"}):
+        if not required <= set(decoded) or set(decoded) - (
+            required | {"request_id", "harness_response", "containment_route"}
+        ):
+            return None
+        # A PostToolUse answer is never routed into the containment sink.
+        if decoded.get("containment_route", "none") != "none":
             return None
         harness = decoded.get("harness")
         if (

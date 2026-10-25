@@ -4,6 +4,8 @@ mod command_sequences;
 mod jq_filter;
 #[path = "read_globs.rs"]
 mod read_globs;
+#[path = "test_predicates.rs"]
+mod test_predicates;
 pub(super) use super::directory_targets::verified_cwd_target;
 pub(super) use super::read_paths::{
     bounded_file_read_target, bounded_omp_directory_read_target, bounded_omp_file_read_target,
@@ -22,9 +24,13 @@ pub(super) use read_globs::glob_file_matches;
 
 pub(super) fn safe_file_predicate_arguments(
     arguments: &[String],
+    text: &str,
     context: super::PathContext<'_>,
 ) -> bool {
-    let [predicate, target] = arguments else {
+    if test_predicates::answers_from_operands(arguments, text) {
+        return true;
+    }
+    let [predicate, target] = test_predicates::without_negation(arguments) else {
         return false;
     };
     // Each predicate reads only the target's metadata: its type, permission
@@ -120,6 +126,17 @@ pub(super) fn command_read_target(
             // guessed inside the workspace.
             || (!allow_directory
                 && super::search::sibling_repository_named_file(value, context, true))
+            // A read of an absolute path with nothing at it prints the same
+            // error the workspace-relative spelling already prints, as long
+            // as no step of the command can put a file or a link there
+            // first.
+            || (!allow_directory
+                && context.creates_nothing
+                && super::read_paths::bounded_missing_absolute_read_target(
+                    value,
+                    context.home_dir,
+                    context.cwd,
+                ))
     } else {
         safe_read_target(value)
     }

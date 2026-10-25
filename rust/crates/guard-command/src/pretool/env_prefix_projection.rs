@@ -13,7 +13,10 @@ use crate::pretool::PathContext;
 mod reviewed;
 #[path = "env_prefix_search_path.rs"]
 mod search_path;
+#[path = "env_prefix_values.rs"]
+mod values;
 pub(super) use reviewed::join_reviewed;
+pub(super) use values::removes_values;
 
 const MAX_PROJECTED_CHARS: usize = 32_768;
 
@@ -202,6 +205,31 @@ fn strip_prefixes(
 ) -> Option<usize> {
     let mut stripped = false;
     let mut required = Vec::new();
+    // A bare `exec` hands the shell's process to the command that follows, so
+    // the program the rest of the words run, and the arguments it runs with,
+    // are the ones the bare spelling runs. Read past it so a setting behind it
+    // is projected the way the bare spelling's is; without this the loop below
+    // stops at the first word and `exec env -u NODE_OPTIONS npm test` carries
+    // a floor that `env -u NODE_OPTIONS npm test` does not. `exec -c` runs
+    // with an empty environment and `exec -a` renames the program, so only the
+    // option-less spelling is transparent.
+    //
+    // Only an `env` wrapper may follow. A shell recognizes an assignment word
+    // only in front of the command word, and here `exec` is that word, so the
+    // `LC_ALL=C` of `exec LC_ALL=C ls src` is the program `exec` is asked to
+    // run, not a setting in front of `ls`. Reading past `exec` there would
+    // strip the word the shell actually executes and hand the reviewer a
+    // command the caller never wrote.
+    let launcher = (tokens[index].value == "exec"
+        && literal_word(chars, &tokens[index])
+        && index + 1 < tokens.len()
+        && !tokens[index + 1].is_control
+        && matches!(tokens[index + 1].value.as_str(), "env" | "/usr/bin/env"))
+    .then(|| {
+        let at = index;
+        index += 1;
+        at
+    });
     while index < tokens.len() && !tokens[index].is_control {
         let token = &tokens[index];
         if let Some((name, value)) = shell_assignment(chars, token) {
@@ -209,7 +237,9 @@ fn strip_prefixes(
             if !(literal_word(chars, token) || reviewed && private_temp_word(chars, token)) {
                 return None;
             }
-            if !inert_assignment(name, value) {
+            if !(inert_assignment(name, value)
+                || !reviewed && ordinary_project_setting(name, value))
+            {
                 search_path::review(setting.as_deref_mut(), &mut required, name, value, context)?;
             }
         } else if token.value == "env" || token.value == "/usr/bin/env" {
@@ -244,6 +274,11 @@ fn strip_prefixes(
     }
     if !required.is_empty() && !search_path::admits(&required, &tokens[index].value) {
         return None;
+    }
+    // The launcher only leaves the text when a setting behind it did. On its
+    // own it is the command the caller wrote, and nothing here has read it.
+    if let (Some(at), true) = (launcher, stripped) {
+        removed[at] = true;
     }
     Some(index)
 }
@@ -298,7 +333,9 @@ fn strip_env_options(
         } else if value.starts_with('-') {
             return None;
         } else if let Some((name, assigned)) = assignment(token) {
-            if !inert_assignment(name, assigned) {
+            if !(inert_assignment(name, assigned)
+                || setting.is_none() && ordinary_project_setting(name, assigned))
+            {
                 search_path::review(setting.as_deref_mut(), required, name, assigned, context)?;
             }
         } else {
@@ -407,6 +444,16 @@ fn inert_assignment(name: &str, value: &str) -> bool {
     // Any program may read any other name, so other settings are reviewed
     // through the projection instead of passing as inert.
     false
+}
+
+/// An ordinary project setting carries a value the command reads for itself.
+/// The shared screen keeps every family that can redirect what runs — lookup,
+/// loading, configuration, a home, a credential, the trust anchor and the
+/// endpoint — out of this branch, and a plain scalar cannot spell a path or
+/// an option for the program to act on. A reviewed projection still names
+/// such a setting, so this widening belongs to the proof side alone.
+fn ordinary_project_setting(name: &str, value: &str) -> bool {
+    plain_scalar(value) && crate::command_compatibility::environment::ordinary_setting_name(name)
 }
 
 fn plain_scalar(value: &str) -> bool {

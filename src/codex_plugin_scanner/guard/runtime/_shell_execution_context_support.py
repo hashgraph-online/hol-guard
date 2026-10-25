@@ -1,4 +1,10 @@
-"""Private lexer and path helpers for shell execution-context modeling."""
+"""Reason codes and path helpers the shell execution-context caller reads.
+
+The resident models the shell itself: which segment runs a directory
+command, what its operand is and which reason code explains one it cannot
+resolve. What is left here is the vocabulary that answer is read with and
+the filesystem identity this process captures for it.
+"""
 
 from __future__ import annotations
 
@@ -19,21 +25,12 @@ SHELL_CWD_UNRESOLVED_PARENT_SHELL = "shell_cwd_unresolved_parent_shell_effect"
 SHELL_CWD_UNRESOLVED_SYNTAX = "shell_cwd_unresolved_syntax"
 SHELL_CWD_PATH_CHANGED = "shell_cwd_path_changed"
 
-DIRECTORY_COMMANDS = frozenset({"cd", "pushd", "popd"})
-_UNMODELED_SHELL_CONTROL_WORDS = frozenset({"do", "elif", "else", "if", "then", "until", "while"})
 FLOW_OPERATORS = frozenset({"&&", "||", ";", "\n", "|", "|&", "&"})
-_NEWLINE_SENTINEL = "__HOL_GUARD_SHELL_NEWLINE__"
-_FD_AMPERSAND_SENTINEL = "__HOL_GUARD_SHELL_FD_AMPERSAND__"
-_NOCLOBBER_PIPE_SENTINEL = "__GUARD_SHELL_NOCLOBBER_PIPE__"
-_FIND_PLACEHOLDER_SENTINEL = "__HOL_GUARD_FIND_PLACEHOLDER__"
-_ESCAPED_SEMICOLON_SENTINEL = "__HOL_GUARD_ESCAPED_SEMICOLON__"
-_SHELL_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=.*$")
 SHELL_DIRECTORY_COMMAND = re.compile(
     r"(?:^|(?:&&|\|\||[;|&(){}\n]))\s*"
     r"(?:(?:builtin|command|time)\s+(?:-[^\s]+\s+)*|function\s+|!\s+)?"
     r"(?:cd|pushd|popd)\b"
 )
-_REDIRECTION_TOKEN = re.compile(r"^(?:[012]?(?:>|>>|<|<<|<>).*)$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,98 +65,6 @@ class ShellPathProof:
     lexical_path: Path
     resolved_path: Path
     identity: ShellPathIdentity
-
-
-@dataclass(frozen=True, slots=True)
-class DirectoryOperation:
-    name: str
-    operand: str | None
-    reason_code: str | None = None
-
-
-def directory_operation(tokens: tuple[str, ...]) -> DirectoryOperation | None:
-    index = 0
-    while index < len(tokens) and _SHELL_ASSIGNMENT.match(tokens[index]):
-        index += 1
-    if index >= len(tokens):
-        return None
-    command = tokens[index]
-    if command in _UNMODELED_SHELL_CONTROL_WORDS:
-        embedded_command = next((token for token in tokens[index + 1 :] if token in DIRECTORY_COMMANDS), None)
-        if embedded_command is not None:
-            return DirectoryOperation(embedded_command, None, SHELL_CWD_UNRESOLVED_CONTROL_FLOW)
-    if command in {"!", "builtin", "command", "function", "time"}:
-        wrapped_index = next(
-            (candidate for candidate in range(index + 1, len(tokens)) if tokens[candidate] in DIRECTORY_COMMANDS),
-            None,
-        )
-        if wrapped_index is None:
-            return None
-        if command in {"command", "time"} and wrapped_index == index + 1:
-            index = wrapped_index
-            command = tokens[index]
-        else:
-            return DirectoryOperation(tokens[wrapped_index], None, SHELL_CWD_UNRESOLVED_EXPRESSION)
-    if command not in DIRECTORY_COMMANDS:
-        return None
-    arguments = _directory_arguments(tokens[index + 1 :])
-    if arguments is None:
-        return DirectoryOperation(command, None, SHELL_CWD_UNRESOLVED_EXPRESSION)
-    if command == "popd":
-        if arguments:
-            return DirectoryOperation(command, None, SHELL_CWD_AMBIGUOUS_STACK)
-        return DirectoryOperation(command, None)
-    if command == "cd" and arguments[:1] == ("--",):
-        arguments = arguments[1:]
-    elif arguments and arguments[0].startswith("-"):
-        return DirectoryOperation(command, None, SHELL_CWD_UNRESOLVED_EXPRESSION)
-    if len(arguments) != 1 or _operand_is_dynamic(arguments[0]):
-        return DirectoryOperation(command, None, SHELL_CWD_UNRESOLVED_EXPRESSION)
-    if command == "pushd" and re.fullmatch(r"[+-]\d+", arguments[0]):
-        return DirectoryOperation(command, None, SHELL_CWD_AMBIGUOUS_STACK)
-    return DirectoryOperation(command, arguments[0])
-
-
-def _directory_arguments(tokens: tuple[str, ...]) -> tuple[str, ...] | None:
-    arguments: list[str] = []
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if _REDIRECTION_TOKEN.match(token):
-            if token in {">", ">>", "<", "<<", "0>", "1>", "2>"}:
-                if index + 1 >= len(tokens):
-                    return None
-                index += 2
-            else:
-                index += 1
-            continue
-        arguments.append(token)
-        index += 1
-    return tuple(arguments)
-
-
-def _operand_is_dynamic(value: str) -> bool:
-    if not value or "\x00" in value or (value.startswith("~") and not value.startswith("~/")):
-        return True
-    return any(character in value for character in ("$", "`", "*", "?", "[", "]", "{", "}", "<", ">"))
-
-
-def _path_contains_symlink(path: Path, *, workspace_root: Path) -> bool:
-    try:
-        relative = path.relative_to(workspace_root)
-    except ValueError:
-        relative = path
-    current = workspace_root if not relative.is_absolute() else Path(relative.anchor)
-    for part in relative.parts:
-        if part in {relative.anchor, "", ".", ".."}:
-            continue
-        current = current / part
-        try:
-            if current.is_symlink():
-                return True
-        except OSError:
-            return True
-    return False
 
 
 def last_flow_operator(controls: tuple[str, ...]) -> str | None:

@@ -2,7 +2,15 @@
 
 use crate::{assignment_name, executable_basename, CommandSegmentV1, RawSegment};
 
-/// Strips `sudo` wrappers and `timeout`/`command`/`time`/`env` prefixes.
+#[path = "parser_env_prefix.rs"]
+mod env_prefix;
+#[path = "parser_launchers.rs"]
+mod launchers;
+
+pub(crate) use launchers::launcher_program;
+
+/// Strips `sudo` wrappers and `timeout`/`command`/`time`/`env` prefixes, and
+/// the scheduling prefixes `launchers` reads.
 ///
 /// `sudo` changes who runs the program, so it stays in the wrapper chain.
 /// A bare `timeout 30 pytest -q` runs the program this text already names,
@@ -12,10 +20,11 @@ use crate::{assignment_name, executable_basename, CommandSegmentV1, RawSegment};
 /// clock. They stay in the wrapper chain, and the duration is still skipped
 /// so the program they name stays the executable. `command` and `time` run
 /// the next word as the program.
-/// `env` does that only when every assignment is inert; those names join
-/// `environment_names`. A non-inert name leaves `env` as the executable.
-/// Any option on a prefix leaves it as the executable, which keeps
-/// `command -v`, `time -p` and `env -i` on their existing paths.
+/// `env` does that for the assignments it carries, whatever they name, and for
+/// the names it removes; all of them join `environment_names`. An operand
+/// `env` would take as an assignment of its own leaves `env` as the executable.
+/// Any option on `command` or `time` leaves that prefix as the executable,
+/// which keeps `command -v` and `time -p` on their existing paths.
 pub(super) fn unwrap_wrappers(
     tokens: &[String],
     mut index: usize,
@@ -30,6 +39,14 @@ pub(super) fn unwrap_wrappers(
             }
             prefixes += 1;
             environment_names.extend(names);
+            index = next;
+            continue;
+        }
+        if let Some(next) = launchers::launcher_program(tokens, index) {
+            if wrappers.len() + prefixes == 4 {
+                return Err("command_wrapper_limit_exceeded");
+            }
+            prefixes += 1;
             index = next;
             continue;
         }
@@ -103,32 +120,56 @@ pub(super) fn unwrap_wrappers(
     Ok((index, wrappers))
 }
 
+/// The spellings of `env` this parser reads as a prefix rather than as the
+/// program itself. `./env` and `/opt/bin/env` are files of the user's own that
+/// share the name and do whatever they were written to do, so neither is one.
+pub(crate) fn env_spelling(token: &str) -> bool {
+    matches!(token, "env" | "/usr/bin/env" | "/bin/env")
+}
+
 /// `command X`, `time X` and `env NAME=value... X` run `X` with no other
 /// change. Bare `env X` is left alone: it only bypasses shell functions, and
-/// extension floors key on that spelling. An `env` prefix is transparent only
-/// when every assignment is inert. Any other name can retarget the program,
-/// so the `env` executable stays in place and the command remains uncertain.
-fn transparent_prefix(tokens: &[String], index: usize) -> Option<(usize, Vec<String>)> {
+/// extension floors key on that spelling.
+///
+/// An `env` prefix carries its names the way the shell's own prefix does.
+/// `env FOO=1 npm test` and `FOO=1 npm test` run the same program with the
+/// same environment, and the second models exactly, so the first reading as a
+/// wrapper this parser does not model left ordinary work refused outright
+/// with no approval to give it. Each name joins `environment_names`, where
+/// `PATH` already marks the command as pointing the program elsewhere and the
+/// compatibility layer reads the rest; an `env` that names no program at all,
+/// or whose next operand `env` would take as an assignment of its own, is
+/// still the environment dump, and keeps its own spelling.
+///
+/// `env_prefix` reads the controls that only decide which names the program
+/// starts with; each name it collects joins `environment_names` as a written
+/// one does, so `-u PATH` keeps the review a written `PATH=` keeps.
+pub(crate) fn transparent_prefix(tokens: &[String], index: usize) -> Option<(usize, Vec<String>)> {
     let mut next = index + 1;
     let mut names = Vec::new();
+    let mut is_env = false;
     match tokens.get(index)?.as_str() {
         "command" | "time" => {}
-        "env" | "/usr/bin/env" | "/bin/env" => {
-            while let Some(name) = tokens.get(next).and_then(|value| assignment_name(value)) {
-                if !crate::command_compatibility::inert_environment_name(name) {
-                    return None;
-                }
-                names.push(name.to_owned());
-                next += 1;
-            }
-            if names.is_empty() {
-                return None;
-            }
+        token if env_spelling(token) => {
+            is_env = true;
+            let (position, decided) = env_prefix::env_names(tokens, next)?;
+            next = position;
+            names = decided;
         }
         _ => return None,
     }
     let program = tokens.get(next)?;
-    (!program.is_empty() && !program.starts_with('-') && assignment_name(program).is_none())
+    // `env` consumes every operand holding an `=`, not only the ones that
+    // spell a shell name, so `env FOO=1 A-B=1 rm -rf ~` sets `A-B` and runs
+    // `rm`. The bare prefix `FOO=1 A-B=1 rm -rf ~` really does run a program
+    // named `A-B=1`, so reading the two alike would model the wrong program.
+    // A word the shell would not take as an assignment ends the prefix and
+    // leaves `env` itself to be judged.
+    let consumed_by_env = is_env && program.contains('=');
+    (!program.is_empty()
+        && !program.starts_with('-')
+        && assignment_name(program).is_none()
+        && !consumed_by_env)
         .then_some((next, names))
 }
 
@@ -185,9 +226,44 @@ pub(super) fn is_file_shell_invocation(executable: Option<&str>, arguments: &[St
     };
     // This represents the interpreter invocation, not the script's contents.
     // It keeps native execution review; shell options and inline code stay opaque.
-    arguments.first().is_some_and(|script| {
-        !script.starts_with('-') && script.ends_with(".sh") && script.len() > 3
-    })
+    arguments
+        .first()
+        .is_some_and(|script| names_a_script_file(script))
+}
+
+/// Whether a first operand names a file this interpreter opens and runs.
+///
+/// A shell runs the file the word names, whatever the name ends in, so the
+/// suffix is not what makes a run readable: `sh ./gradlew test`,
+/// `bash ./mvnw -q test` and `sh ./configure` are the same shape as
+/// `sh ./build.sh`, and a wrapper an ecosystem ships without an extension is
+/// the ordinary way those builds are driven. Requiring `.sh` left every one of
+/// them unmodelled, which is a command no owner can approve rather than a
+/// stricter reading of it.
+///
+/// A word carrying shell syntax is not a file name: what `sh $PLAN`,
+/// `sh "$(pick)"` or `sh build-*` runs is settled by expansion the text does
+/// not fix, so those keep the uncertainty they arrive with, and so does a home
+/// path the shell expands. A directory is not a script either, and a leading
+/// `-` is an option. A space is none of that: the word reaches here already
+/// split, so `sh -- './pre flight.sh'` names one file the shell opens.
+///
+/// Braces and a leading `=` are expansions the word carries inside itself, so
+/// they are refused with the rest of the syntax rather than read as part of a
+/// name. `sh ./build{,}` runs `sh ./build ./build` and `sh =make` runs whatever
+/// `make` resolves to on this `PATH`; reading either as one file would bind an
+/// approval, and the credential scan behind it, to a path that is never opened.
+fn names_a_script_file(script: &str) -> bool {
+    !script.is_empty()
+        && !script.starts_with('-')
+        && !script.starts_with('~')
+        && !script.starts_with('=')
+        && !script.ends_with('/')
+        && script != "."
+        && script != ".."
+        && !script.contains([
+            '$', '*', '?', '[', ']', '{', '}', '`', '"', '\'', '\\', '\n', '\t', '\r', '\0',
+        ])
 }
 
 pub(super) fn is_encoded_stdin_shell(
@@ -292,6 +368,12 @@ mod tests {
             "bash ./preflight.sh fixture",
             "sh -- './pre flight.sh'",
             "zsh ./fixtures/preflight.sh",
+            // The wrappers an ecosystem ships without an extension, which a
+            // suffix test left unmodelled and therefore unapprovable.
+            "sh ./gradlew test",
+            "bash ./mvnw -q test",
+            "sh ./configure --prefix=/tmp/fixture",
+            "zsh scripts/bootstrap",
         ] {
             let model = parse(command);
             assert_eq!(model.confidence, "exact", "{command}");
@@ -302,8 +384,49 @@ mod tests {
                 Some("bash" | "sh" | "zsh")
             ));
         }
-        for command in ["bash -s", "bash -e ./preflight.sh", "sh --", "bash .sh"] {
+        for command in ["bash -s", "bash -e ./preflight.sh", "sh --"] {
             assert_eq!(parse(command).confidence, "uncertain", "{command}");
+        }
+    }
+
+    #[test]
+    fn only_a_plain_file_name_is_read_as_the_script_this_shell_runs() {
+        for script in [
+            "./gradlew",
+            "mvnw",
+            "scripts/bootstrap",
+            "./build.sh",
+            ".sh",
+            "/tmp/fixture/run",
+            "a+b",
+            // Quoting is resolved before this word is read, so a name holding
+            // a space arrives whole.
+            "./pre flight.sh",
+        ] {
+            assert!(super::names_a_script_file(script), "{script}");
+        }
+        // Expansion, quoting and globbing settle what runs after the text is
+        // written, and a directory is not a script.
+        for script in [
+            "",
+            "-c",
+            "$PLAN",
+            "${PLAN}",
+            "\"$(pick)\"",
+            "build-*",
+            "~/run",
+            "scripts/",
+            ".",
+            "..",
+            // Brace expansion rewrites the word into several, so `sh ./build{,}`
+            // runs `./build` twice and never opens the name as written.
+            "build{,}",
+            "./ok{a,b}.sh",
+            "./ok{,.sh}",
+            // zsh resolves a leading `=` against `PATH`.
+            "=make",
+        ] {
+            assert!(!super::names_a_script_file(script), "{script}");
         }
     }
 
@@ -380,15 +503,20 @@ mod tests {
     }
 
     #[test]
-    fn posix_embedded_braces_are_arguments_but_brace_groups_are_unsupported() {
+    fn posix_embedded_braces_are_arguments_and_only_a_whole_brace_group_is_read() {
         let model = parse("aws s3api put-object-tagging --tagging TagSet=[{Key=env,Value=prod}]");
         assert_eq!(model.confidence, "exact");
         assert_eq!(
             model.segments[0].arguments.last().unwrap(),
             "TagSet=[{Key=env,Value=prod}]"
         );
+        // A command that is nothing but one brace group is the list inside it,
+        // so the list is what the command owns and what decides it.
+        let model = parse("{ rm -rf /tmp/x; }");
+        assert_eq!(model.confidence, "exact");
+        assert_eq!(model.segments.len(), 1);
+        assert_eq!(model.segments[0].executable.as_deref(), Some("rm"));
         for source in [
-            "{ rm -rf /tmp/x; }",
             "true;{ rm -rf /tmp/x;}",
             "true&&{ rm -rf /tmp/x;}",
             "printf x|{ rm -rf /tmp/x;}",
@@ -423,11 +551,34 @@ mod tests {
             assert_eq!(segment.executable.as_deref(), Some(executable), "{command}");
             assert_eq!(segment.environment_names, names, "{command}");
         }
-        for command in ["env PATH=/tmp/x bun run build", "env NODE_PATH=x bun s.ts"] {
-            let model = parse(command);
-            assert_eq!(model.confidence, "uncertain", "{command}");
-            assert!(!model.path_overridden, "{command}");
+        // The `env` spelling of a prefix is the shell's own prefix written
+        // another way, so it models to the same thing, down to the names it
+        // carries and the `PATH` mark on them. Reading it as a wrapper this
+        // parser does not model refused `env FOO=1 npm test` outright while
+        // `FOO=1 npm test` ran silently.
+        for (prefixed, bare) in [
+            ("env FOO=1 npm test", "FOO=1 npm test"),
+            (
+                "env GIT_AUTHOR_NAME=x git commit -m y",
+                "GIT_AUTHOR_NAME=x git commit -m y",
+            ),
+            ("env PATH=/tmp/x bun run build", "PATH=/tmp/x bun run build"),
+            ("env NODE_PATH=x bun s.ts", "NODE_PATH=x bun s.ts"),
+        ] {
+            let model = parse(prefixed);
+            let plain = parse(bare);
+            assert_eq!(model.confidence, plain.confidence, "{prefixed}");
+            assert_eq!(model.path_overridden, plain.path_overridden, "{prefixed}");
+            assert_eq!(
+                model.segments[0].executable, plain.segments[0].executable,
+                "{prefixed}"
+            );
+            assert_eq!(
+                model.segments[0].environment_names, plain.segments[0].environment_names,
+                "{prefixed}"
+            );
         }
+        assert!(parse("env PATH=/tmp/x bun run build").path_overridden);
         let model = parse("sudo env CI=1 rm -rf build");
         assert_eq!(model.confidence, "exact");
         assert_eq!(model.wrapper_chain, ["sudo"]);
@@ -538,9 +689,21 @@ mod tests {
             "command -p bun run build",
             "time -p bun run build",
             "env bun run build",
+            // Clearing the environment takes the search path with it, so the
+            // program this text names is not the program that runs.
             "env -i bun run build",
+            "env --ignore-environment bun run build",
+            "env - bun run build",
             "env -u HOME -i bun run build",
             "env -S 'bun run build'",
+            "env -Sbun",
+            "env --split-string='bun run build'",
+            // `-C` runs the program somewhere else, which is not the
+            // directory the rest of this evaluation reads.
+            "env -C /tmp bun run build",
+            // An assignment ends option parsing, so the program here is a
+            // file named `-u`, not `bun`.
+            "env CI=1 -u DEBUG bun run build",
             "env CI=1 sh -c 'rm -rf x'",
             "command sh -c 'rm -rf x'",
             "command env",
@@ -554,6 +717,36 @@ mod tests {
                         && model.segments[0].executable.as_deref() != Some("rm"),
                 "{command}: {:?}",
                 model.segments.first().map(|segment| &segment.executable)
+            );
+        }
+    }
+
+    /// `env` takes any operand holding an `=`, so the word after the names it
+    /// collected may still be an assignment rather than the program. Modelling
+    /// it as the program would name a file the command never runs while the
+    /// program it does run became an argument.
+    #[test]
+    fn an_env_operand_that_is_not_a_shell_name_leaves_the_prefix_unread() {
+        for command in [
+            // An inert name reached this shape before the prefix carried
+            // every name, so this spelling fails on the base too.
+            "env CI=1 A-B=1 rm -rf ~",
+            "env FOO=1 A-B=1 rm -rf ~",
+            "env FOO=1 2BAD=1 curl https://example.invalid",
+            "env FOO=1 a.b=1 npm test",
+        ] {
+            let model = parse(command);
+            let executable = model
+                .segments
+                .first()
+                .and_then(|segment| segment.executable.as_deref());
+            assert!(
+                !matches!(executable, Some("rm" | "curl" | "npm")),
+                "{command}: {executable:?}"
+            );
+            assert!(
+                executable.is_none_or(|program| !program.contains('=')),
+                "{command}: {executable:?}"
             );
         }
     }

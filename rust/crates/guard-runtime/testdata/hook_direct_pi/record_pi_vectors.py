@@ -330,7 +330,6 @@ def main() -> None:
             "harness": harness,
             "event": event,
             "response": availability_harness_response(
-                {},
                 harness=harness,
                 event_name=event,
                 reason_code=UNAVAILABLE_REASON_CODE,

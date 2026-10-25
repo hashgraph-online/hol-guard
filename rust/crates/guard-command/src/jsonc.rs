@@ -98,6 +98,20 @@ where
     strip_trailing_commas_checked(&stripped, deadline_check)
 }
 
+/// `json.JSONDecodeError` reports the 1-based line and column of `position`,
+/// counted in characters: the line is how many breaks precede it, and the
+/// column is the distance from the break before it (`doc.rfind` answering -1
+/// when there is none).
+fn line_and_column(chars: &[char], position: usize) -> (usize, usize) {
+    let preceding = &chars[..position.min(chars.len())];
+    let line = preceding.iter().filter(|c| **c == '\n').count() + 1;
+    let column = match preceding.iter().rposition(|c| *c == '\n') {
+        Some(last_break) => position - last_break,
+        None => position + 1,
+    };
+    (line, column)
+}
+
 /// `_strip_comments` (:27-81).
 fn strip_comments(text: &str) -> Result<String, JsoncError> {
     let mut none: Option<&mut dyn FnMut() -> Result<(), JsoncError>> = None;
@@ -172,16 +186,20 @@ fn strip_comments_dyn(
                     check()?;
                 }
             }
-            output[index] = ' ';
+            // :71-72 — a line break inside a block comment survives, so the
+            // line numbers a later decode error reports are the ones the
+            // reader sees in the file.
+            if !matches!(chars[index], '\r' | '\n') {
+                output[index] = ' ';
+            }
             index += 1;
         }
         if index + 1 >= chars.len() {
             // :75 — Python raises JSONDecodeError("Unterminated block
             // comment", text, comment_start); keep the message verbatim.
+            let (line, column) = line_and_column(&chars, comment_start);
             return Err(JsoncError::Decode(format!(
-                "Unterminated block comment: line 1 column {} (char {})",
-                comment_start + 1,
-                comment_start
+                "Unterminated block comment: line {line} column {column} (char {comment_start})"
             )));
         }
         output[index] = ' ';
@@ -279,10 +297,10 @@ fn parse_pairs(text: &str) -> Result<JsoncPairs, JsoncError> {
     let value = parser.value()?;
     parser.skip_ws();
     if parser.index != chars.len() {
+        let position = parser.index;
+        let (line, column) = line_and_column(&chars, position);
         return Err(JsoncError::Decode(format!(
-            "Extra data: line 1 column {} (char {})",
-            parser.index + 1,
-            parser.index
+            "Extra data: line {line} column {column} (char {position})"
         )));
     }
     Ok(value)
@@ -295,11 +313,10 @@ struct PairParser<'a> {
 
 impl<'a> PairParser<'a> {
     fn fail<T>(&self, message: &str) -> Result<T, JsoncError> {
+        let position = self.index;
+        let (line, column) = line_and_column(self.chars, position);
         Err(JsoncError::Decode(format!(
-            "{}: line 1 column {} (char {})",
-            message,
-            self.index + 1,
-            self.index
+            "{message}: line {line} column {column} (char {position})"
         )))
     }
 

@@ -1,0 +1,3218 @@
+{
+  "canonical_content_hash": [
+    {
+      "canonical": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "canonical": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "value": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "canonical": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "value": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "canonical": "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "value": "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    },
+    {
+      "canonical": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "canonical": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "canonical": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
+      "value": "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg"
+    },
+    {
+      "canonical": "",
+      "value": ""
+    },
+    {
+      "canonical": "  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "value": "  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "capabilities": [
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {},
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "transport": "stdio"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "transport": "http"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": false
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": "no"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": ""
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 1
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": []
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {}
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {
+          "a": 1
+        }
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": null
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": "false"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "has_auth_headers": 0.0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true,
+        "transport": "stdio"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public"
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "endpointHostClass": "loopback"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "instruction",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {},
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "transport": "stdio"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "transport": "http"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": false
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": "no"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": ""
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 1
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": []
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {}
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {
+          "a": 1
+        }
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": null
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": "false"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "has_auth_headers": 0.0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true,
+        "transport": "stdio"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public"
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "endpointHostClass": "loopback"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "overlay",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {},
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "transport": "stdio"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "transport": "http"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": false
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": "no"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": ""
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 1
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": []
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {}
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {
+          "a": 1
+        }
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "envConfigurationPresent": null
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": "false"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "has_auth_headers": 0.0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true,
+        "transport": "stdio"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public"
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "endpointHostClass": "loopback"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "command",
+      "capabilities": [
+        "reads_files"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress"
+      ],
+      "metadata": {},
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress",
+        "runs_shell"
+      ],
+      "metadata": {
+        "transport": "stdio"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress"
+      ],
+      "metadata": {
+        "transport": "http"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress"
+      ],
+      "metadata": {
+        "envConfigurationPresent": false
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": "no"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress"
+      ],
+      "metadata": {
+        "envConfigurationPresent": ""
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 1
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress"
+      ],
+      "metadata": {
+        "envConfigurationPresent": []
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {}
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {
+          "a": 1
+        }
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress"
+      ],
+      "metadata": {
+        "envConfigurationPresent": null
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": "false"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress"
+      ],
+      "metadata": {
+        "has_auth_headers": 0.0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress",
+        "reads_secrets",
+        "runs_shell"
+      ],
+      "metadata": {
+        "has_auth_headers": true,
+        "transport": "stdio"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public"
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress"
+      ],
+      "metadata": {
+        "endpointHostClass": "loopback"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "capabilities": [
+        "network_egress"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages"
+      ],
+      "metadata": {},
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages"
+      ],
+      "metadata": {
+        "transport": "stdio"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages"
+      ],
+      "metadata": {
+        "transport": "http"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages"
+      ],
+      "metadata": {
+        "envConfigurationPresent": false
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": "no"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages"
+      ],
+      "metadata": {
+        "envConfigurationPresent": ""
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 1
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages"
+      ],
+      "metadata": {
+        "envConfigurationPresent": []
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {}
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {
+          "a": 1
+        }
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages"
+      ],
+      "metadata": {
+        "envConfigurationPresent": null
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": "false"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages"
+      ],
+      "metadata": {
+        "has_auth_headers": 0.0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true,
+        "transport": "stdio"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public"
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages"
+      ],
+      "metadata": {
+        "endpointHostClass": "loopback"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages",
+        "reads_secrets"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "channel",
+      "capabilities": [
+        "network_ingress",
+        "posts_messages",
+        "reads_messages"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {},
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "transport": "stdio"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "transport": "http"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": false
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": "no"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": ""
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 1
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": []
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {}
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {
+          "a": 1
+        }
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": null
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": "false"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "has_auth_headers": 0.0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true,
+        "transport": "stdio"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public"
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "endpointHostClass": "loopback"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {},
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "transport": "stdio"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "transport": "http"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": false
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": "no"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": ""
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 1
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": []
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {}
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {
+          "a": 1
+        }
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": null
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": "false"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "has_auth_headers": 0.0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true,
+        "transport": "stdio"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public"
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "endpointHostClass": "loopback"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "skill_file",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {},
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "transport": "stdio"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "transport": "http"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": false
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": "no"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": ""
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": 1
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": []
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {}
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "envConfigurationPresent": {
+          "a": 1
+        }
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "envConfigurationPresent": null
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": "false"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "has_auth_headers": 0.0
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": [
+          0
+        ]
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "has_auth_headers": true,
+        "transport": "stdio"
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public"
+      },
+      "risk_level": "medium"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "endpointHostClass": "loopback"
+      },
+      "risk_level": "info"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "reads_secrets"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "has_auth_headers": true
+      },
+      "risk_level": "high"
+    },
+    {
+      "artifact_type": "plugin",
+      "capabilities": [
+        "unknown"
+      ],
+      "metadata": {
+        "endpointHostClass": "remote_public",
+        "envConfigurationPresent": 0
+      },
+      "risk_level": "medium"
+    }
+  ],
+  "item_kind": [
+    {
+      "artifact_type": "skill",
+      "kind": "skill"
+    },
+    {
+      "artifact_type": "skill_file",
+      "kind": "skill"
+    },
+    {
+      "artifact_type": "mcp_server",
+      "kind": "mcp_server"
+    },
+    {
+      "artifact_type": "mcp_tool",
+      "kind": "mcp_tool"
+    },
+    {
+      "artifact_type": "channel",
+      "kind": "channel"
+    },
+    {
+      "artifact_type": "gateway_config",
+      "kind": "agent"
+    },
+    {
+      "artifact_type": "config",
+      "kind": "agent"
+    },
+    {
+      "artifact_type": "agent",
+      "kind": "agent"
+    },
+    {
+      "artifact_type": "hook",
+      "kind": "hook"
+    },
+    {
+      "artifact_type": "instruction",
+      "kind": "overlay"
+    },
+    {
+      "artifact_type": "overlay",
+      "kind": "overlay"
+    },
+    {
+      "artifact_type": "command",
+      "kind": "prompt_pack"
+    },
+    {
+      "artifact_type": "extension",
+      "kind": "plugin"
+    },
+    {
+      "artifact_type": "plugin",
+      "kind": "plugin"
+    },
+    {
+      "artifact_type": "plugin-file",
+      "kind": "plugin"
+    },
+    {
+      "artifact_type": "repository",
+      "kind": "repository"
+    },
+    {
+      "artifact_type": "container_image",
+      "kind": "container_image"
+    },
+    {
+      "artifact_type": "policy",
+      "kind": "policy"
+    },
+    {
+      "artifact_type": "secret_reference",
+      "kind": "secret_reference"
+    },
+    {
+      "artifact_type": "network_endpoint",
+      "kind": "network_endpoint"
+    },
+    {
+      "artifact_type": "guard_launcher_shim",
+      "kind": "harness"
+    },
+    {
+      "artifact_type": "package",
+      "kind": "package"
+    },
+    {
+      "artifact_type": "daemon_plugin",
+      "kind": "daemon_plugin"
+    },
+    {
+      "artifact_type": "model_provider",
+      "kind": "model_provider"
+    },
+    {
+      "artifact_type": "prompt_pack",
+      "kind": "prompt_pack"
+    },
+    {
+      "artifact_type": "mcp-server",
+      "kind": "plugin"
+    },
+    {
+      "artifact_type": "Skill",
+      "kind": "plugin"
+    },
+    {
+      "artifact_type": "",
+      "kind": "plugin"
+    },
+    {
+      "artifact_type": "unknown_future_category",
+      "kind": "plugin"
+    }
+  ],
+  "note": "Generated by scripts/ci/generate_inventory_item_metadata_parity.py. Each entry records what the retired CPython in scripts/ci/inventory_item_metadata_reference.py returned, so the Rust port is pinned to observed behaviour.",
+  "python_version": "3.12.12",
+  "resolve_content_hash": [
+    {
+      "metadata": {
+        "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "resolved": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "semantic_text": "semantic"
+    },
+    {
+      "metadata": {
+        "content_hash": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      },
+      "resolved": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "semantic_text": "semantic"
+    },
+    {
+      "metadata": {
+        "content_hash": ""
+      },
+      "resolved": "semantic",
+      "semantic_text": "semantic"
+    },
+    {
+      "metadata": {
+        "content_hash": null,
+        "directory_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "resolved": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "semantic_text": "semantic"
+    },
+    {
+      "metadata": {
+        "content_hash": 7,
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "resolved": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "semantic_text": "semantic"
+    },
+    {
+      "metadata": {
+        "directory_hash": "not-a-digest"
+      },
+      "resolved": "not-a-digest",
+      "semantic_text": "semantic"
+    },
+    {
+      "metadata": {
+        "versionInfo": {
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "resolved": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "semantic_text": "semantic"
+    },
+    {
+      "metadata": {
+        "versionInfo": {
+          "contentHash": ""
+        }
+      },
+      "resolved": "semantic",
+      "semantic_text": "semantic"
+    },
+    {
+      "metadata": {
+        "versionInfo": {
+          "contentHash": 7
+        }
+      },
+      "resolved": "semantic",
+      "semantic_text": "semantic"
+    },
+    {
+      "metadata": {
+        "versionInfo": [
+          {
+            "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      },
+      "resolved": "semantic",
+      "semantic_text": "semantic"
+    },
+    {
+      "metadata": {
+        "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "directory_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "resolved": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "semantic_text": "semantic"
+    },
+    {
+      "metadata": {},
+      "resolved": "semantic:fallback",
+      "semantic_text": "semantic:fallback"
+    }
+  ],
+  "skill_document_evidence": [
+    {
+      "bound": {
+        "primaryContentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "metadata": {},
+      "primary_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "bound": {},
+      "metadata": {},
+      "primary_content_hash": null
+    },
+    {
+      "bound": {},
+      "metadata": {
+        "primaryContentHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "primary_content_hash": null
+    },
+    {
+      "bound": {
+        "primaryContentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "metadata": {
+        "primaryContentHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "primary_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "bound": {
+        "contentEvidence": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "documentedCapabilities": [
+          "reads_files"
+        ],
+        "primaryContentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "metadata": {
+        "contentEvidence": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "documentedCapabilities": [
+          "reads_files"
+        ]
+      },
+      "primary_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "bound": {
+        "primaryContentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "metadata": {
+        "contentEvidence": {
+          "contentHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "documentedCapabilities": [
+          "reads_files"
+        ]
+      },
+      "primary_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "bound": {
+        "contentEvidence": {
+          "byteLength": 12
+        },
+        "primaryContentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "metadata": {
+        "contentEvidence": {
+          "byteLength": 12
+        },
+        "documentedCapabilities": [
+          "reads_files"
+        ]
+      },
+      "primary_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "bound": {
+        "contentEvidence": {
+          "byteLength": 12
+        }
+      },
+      "metadata": {
+        "contentEvidence": {
+          "byteLength": 12
+        },
+        "documentedCapabilities": [
+          "reads_files"
+        ]
+      },
+      "primary_content_hash": null
+    },
+    {
+      "bound": {},
+      "metadata": {
+        "contentEvidence": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "documentedCapabilities": [
+          "reads_files"
+        ]
+      },
+      "primary_content_hash": null
+    },
+    {
+      "bound": {
+        "primaryContentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "metadata": {
+        "contentEvidence": "sha256",
+        "documentedCapabilities": [
+          "reads_files"
+        ]
+      },
+      "primary_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "bound": {
+        "primaryContentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "metadata": {
+        "documentedCapabilities": [
+          "reads_files"
+        ]
+      },
+      "primary_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "bound": {
+        "primaryContentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "metadata": {
+        "contentEvidence": {
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "primary_content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ],
+  "validated_directory_hash": [
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "incomplete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "incomplete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": false,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": false,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": 1,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": 1,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v2",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v2",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reason": "max_entries_exceeded",
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reason": "max_entries_exceeded",
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "reuseNonce": "nonce",
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "reuseNonce": "nonce",
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "incompleteStateHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "incompleteStateHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 0,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 0,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": true,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": true,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": "3",
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": "3",
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 1180591620717411303424,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 1180591620717411303424,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 1180591620717411303424
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 1180591620717411303424
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 1.0,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 1.0,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": -1
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": -1
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": false
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": false
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "file-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "file-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": "skill-directory-v1"
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": "skill-directory-v1"
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryCount": 3,
+          "reusable": true,
+          "schemaVersion": "guard.skill-directory-identity.v1",
+          "status": "complete",
+          "totalBytes": 0
+        },
+        "versionInfo": {
+          "contentHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "hashBasis": "skill-directory-v1"
+        }
+      },
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "sanitized": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "validated": null
+    },
+    {
+      "metadata": {},
+      "sanitized": {},
+      "validated": null
+    },
+    {
+      "metadata": {
+        "directory_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillDirectoryIdentity": "complete"
+      },
+      "sanitized": {
+        "skillDirectoryIdentity": "complete"
+      },
+      "validated": null
+    }
+  ]
+}

@@ -50,7 +50,6 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
     for command in [
         "./todo.py add x",
         "python3 app.py",
-        "mkdir -p src && touch src/a.js",
         "git add -A && git commit -m x",
         "git commit -m init",
         "npm run build && git diff",
@@ -259,7 +258,7 @@ fn commands_with_network_privilege_or_escape_stay_at_review() {
         "npm init vite",
         "npm publish",
         "npm run build && npm install zod",
-        "pip list",
+        "pip install requests",
         "cargo build",
     ] {
         assert_ne!(reason("omp", command, &ws, true), CONTAINED, "{command}");
@@ -410,8 +409,11 @@ fn path_with_node(_home: &Path) -> String {
     std::env::var("PATH").unwrap()
 }
 
+/// A linked worktree keeps its index, `HEAD`, refs and objects in the main
+/// checkout's shared Git directory, which `workspace-contained-v1` grants the
+/// run, so ordinary Git there is bounded exactly as it is in a main checkout.
 #[test]
-fn a_linked_worktree_contains_everything_but_git() {
+fn a_linked_worktree_contains_git_with_its_shared_directory() {
     let root = std::env::temp_dir().join(format!("guard-ws-{}-linked", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let (main, tree) = (root.join("main"), root.join("tree"));
@@ -437,8 +439,33 @@ fn a_linked_worktree_contains_everything_but_git() {
             && got == "native_node_build_output_containment_required";
         assert_eq!(got == CONTAINED || narrower, host(), "{command}");
     }
-    // Its index and objects live in the shared Git directory, out of reach.
-    for command in ["git add -A", "git rm -q src/a.ts", "npm test && git status"] {
+    // Its index, reflog and objects are the shared Git directory's, which the
+    // sandbox grants the run, so these are bounded as in a main checkout.
+    for command in [
+        "git add -A && git commit -m x",
+        "git commit -m init",
+        "git stash",
+    ] {
+        assert_eq!(
+            reason("omp", command, &tree, true) == CONTAINED,
+            host(),
+            "{command}"
+        );
+    }
+    // The shared configuration, hooks and the other worktrees' entries stay
+    // write-denied, so Git that has to write one keeps its review.
+    for command in [
+        "git worktree remove --force ../other",
+        "git config user.email agent@example.com",
+        "git push origin HEAD",
+        // Rebase, sequencer, bisect and squash state are outside the grant.
+        "git rebase main",
+        "git cherry-pick HEAD~1",
+        "git revert --no-edit HEAD",
+        "git bisect start",
+        "git am -3 fix.patch",
+        "git merge --squash main",
+    ] {
         assert_ne!(reason("omp", command, &tree, true), CONTAINED, "{command}");
     }
     let _ = std::fs::remove_dir_all(&root);
@@ -568,10 +595,18 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
         )
         .reason_code
     };
+    // Git answers for a lone recursive removal of a missing target on every
+    // platform, before the sandbox is asked. Git cannot restore ignored
+    // files, so `dist` is left to the sandbox.
+    let missing = "rm -rf coverage";
+    assert_eq!(
+        reason(missing),
+        "native_exact_safe_recoverable_removal",
+        "{missing}"
+    );
     for command in [
         "rm -rf dist",
         "rm -rf dist && npm run build",
-        "rm -rf coverage",
         "rm src/a.ts",
         "rm -f src/a.ts dist/out.js",
         "sed --in-place=.orig -n 'p' src/a.ts && rm -f src/a.ts.orig",

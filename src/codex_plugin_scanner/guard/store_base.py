@@ -197,6 +197,7 @@ _GUARD_CLOUD_RESET_STATE_KEYS = (
     "headless_app_sync_summary",
     "managed_controls_active",
     "managed_controls_negotiated_capabilities",
+    "network_protection_bundle",
     *_GUARD_CLOUD_COMMAND_STATE_KEYS,
 )
 

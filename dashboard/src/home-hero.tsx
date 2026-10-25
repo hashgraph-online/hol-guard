@@ -4,7 +4,7 @@ import { HiMiniChevronRight } from "react-icons/hi2";
 import { SectionLabel } from "./approval-center-primitives";
 import { formatNumber, formatRelativeTime, harnessDisplayName } from "./approval-center-utils";
 import type { GuardApprovalRequest, GuardReceipt, GuardReceiptAnalytics } from "./guard-types";
-import { HeroParticleLogo } from "./home-hero-particle-logo";
+import { BrandHero, BrandHeroBadge, BrandHeroFacts } from "./brand-hero";
 import type { HeroParticleMood } from "./home-hero-particles";
 
 export type HomeHeroStatus = "clear" | "needs_review" | "setup_gap" | "partial" | "degraded" | "checking";
@@ -193,13 +193,7 @@ export function heroToneForStatus(status: HomeHeroStatus): "clear" | "review" | 
 }
 
 function HeroStatusBadge(props: { status: HomeHeroStatus }) {
-  const tone = heroToneForStatus(props.status);
-  return (
-    <span className={`guard-hero-badge guard-hero-badge--${tone}`}>
-      <i aria-hidden="true" />
-      {HERO_BADGE_LABELS[props.status]}
-    </span>
-  );
+  return <BrandHeroBadge tone={heroToneForStatus(props.status)}>{HERO_BADGE_LABELS[props.status]}</BrandHeroBadge>;
 }
 
 export function heroMoodForStatus(status: HomeHeroStatus): HeroParticleMood {
@@ -217,79 +211,53 @@ export function HomeHero(props: {
   secondaryCta?: ReactNode;
   onOpenRequest?: (requestId: string) => void;
 }) {
-  const dataStatus = heroToneForStatus(props.status);
-
   return (
-    <section
-      className="guard-hero guard-surface-in relative overflow-hidden rounded-2xl border border-white/10 p-5 text-white sm:p-6 lg:p-8"
-      data-status={dataStatus}
-      role="region"
-      aria-label="Protection status"
-    >
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-center">
-        <div className="relative min-w-0 space-y-5">
-          <div className="guard-hero-label flex flex-wrap items-center gap-2">
-            <SectionLabel>Protection status</SectionLabel>
-            <HeroStatusBadge status={props.status} />
-          </div>
-          <div className="max-w-2xl">
-            <h1 className="guard-hero-title text-3xl font-semibold tracking-tight text-white sm:text-4xl">{props.headline}</h1>
-            <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-white/75">{props.subheadline}</p>
-          </div>
-          {props.queue.length > 0 ? (
-            <ul className="rounded-xl border border-white/15 bg-white/[0.08] p-1" aria-label="Actions waiting for review">
-              {props.queue.map((item) => {
-                const content = (
-                  <>
-                    <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-[#ffd58a]" aria-hidden="true" />
-                    <span className="min-w-0 flex-1 truncate text-sm text-white">
-                      <strong className="font-semibold">{item.app}</strong> {item.what}
-                    </span>
-                    <span className="shrink-0 text-xs text-white/65">{item.when}</span>
-                  </>
-                );
-                const onOpenRequest = props.onOpenRequest;
-                return (
-                  <li key={item.requestId}>
-                    {onOpenRequest ? (
-                      <button
-                        type="button"
-                        onClick={() => onOpenRequest(item.requestId)}
-                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-                      >
-                        {content}
-                        <HiMiniChevronRight className="h-4 w-4 shrink-0 text-white/50" aria-hidden="true" />
-                      </button>
-                    ) : (
-                      <div className="flex w-full items-center gap-3 rounded-lg px-3 py-2">{content}</div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
-          <div className="guard-hero-ctas flex flex-wrap gap-3">
-            {props.cta}
-            {props.secondaryCta}
-          </div>
-          {props.facts.length > 0 ? (
-            <ul className="flex flex-wrap gap-x-6 gap-y-2 pt-1 text-sm text-white/75">
-              {props.facts.map((fact) => (
-                <li key={fact} className="guard-hero-fact">
-                  {fact}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-        <div className="relative mx-auto w-full max-w-[380px] lg:max-w-none">
-          <HeroParticleLogo mood={heroMoodForStatus(props.status)} finish="white" />
-          <p className="guard-hero-live" aria-hidden="true">
-            <i />
-            <span>{props.liveLabel}</span>
-          </p>
-        </div>
+    <BrandHero tone={heroToneForStatus(props.status)} liveLabel={props.liveLabel} ariaLabel="Protection status">
+      <div className="guard-hero-label flex flex-wrap items-center gap-2">
+        <SectionLabel>Protection status</SectionLabel>
+        <HeroStatusBadge status={props.status} />
       </div>
-    </section>
+      <div className="max-w-2xl">
+        <h1 className="guard-hero-title text-3xl font-semibold tracking-tight text-white sm:text-4xl">{props.headline}</h1>
+        <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-white/75">{props.subheadline}</p>
+      </div>
+      {props.queue.length > 0 ? (
+        <ul className="rounded-xl border border-white/15 bg-white/[0.08] p-1" aria-label="Actions waiting for review">
+          {props.queue.map((item) => {
+            const content = (
+              <>
+                <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-[#ffd58a]" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate text-sm text-white">
+                  <strong className="font-semibold">{item.app}</strong> {item.what}
+                </span>
+                <span className="shrink-0 text-xs text-white/65">{item.when}</span>
+              </>
+            );
+            const onOpenRequest = props.onOpenRequest;
+            return (
+              <li key={item.requestId}>
+                {onOpenRequest ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenRequest(item.requestId)}
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                  >
+                    {content}
+                    <HiMiniChevronRight className="h-4 w-4 shrink-0 text-white/50" aria-hidden="true" />
+                  </button>
+                ) : (
+                  <div className="flex w-full items-center gap-3 rounded-lg px-3 py-2">{content}</div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+      <div className="guard-hero-ctas flex flex-wrap gap-3">
+        {props.cta}
+        {props.secondaryCta}
+      </div>
+      <BrandHeroFacts facts={props.facts} />
+    </BrandHero>
   );
 }

@@ -14,10 +14,7 @@ fn home(name: &str) -> PathBuf {
         .join(format!(
             "{name}-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     let home = root.join("home");
     for directory in [
@@ -278,10 +275,7 @@ fn a_skills_link_to_home_stays_closed_when_home_is_spelled_through_a_symlink() {
     std::os::unix::fs::symlink(&canonical, canonical.join(".agents/skills")).unwrap();
     let alias = canonical.parent().unwrap().join(format!(
         "home-alias-{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     std::os::unix::fs::symlink(&canonical, &alias).unwrap();
     assert_ne!(alias.canonicalize().unwrap(), alias);

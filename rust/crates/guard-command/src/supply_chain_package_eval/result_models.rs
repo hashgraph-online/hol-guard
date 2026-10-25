@@ -208,8 +208,13 @@ impl PackageEvalResult {
             .into_iter()
             .map(|item| with_support_metadata(&item))
             .collect();
-        let (policy_action, recognized, reason_code, original_action) =
+        // The cached row names a policy action, not a decision. Reading it back
+        // through the decision map would answer `allow` for every spelling the
+        // map has no key for, so the user copy for a review would lose its local
+        // instruction. Keep the variant the normalization already settled on.
+        let (policy_action_variant, recognized, reason_code, original_action) =
             normalize_guard_action_result_for_cache(payload.get("policy_action"));
+        let policy_action = policy_action_variant.as_str().to_string();
         let mut cached_reasons = dict_items(payload.get("reasons"));
         if !recognized {
             let mut normalization_reason = Map::new();
@@ -243,7 +248,7 @@ impl PackageEvalResult {
                     .or_else(|| optional_string(payload.get("risk_summary")))
                     .unwrap_or_default(),
             },
-            decision_to_guard_action_variant(&policy_action),
+            policy_action_variant,
         );
         let external_archive_source_hashes = payload
             .get("external_archive_source_hashes")
@@ -301,11 +306,11 @@ impl PackageEvalResult {
 /// returns `(action, recognized, reason_code, original_action)`.
 pub(super) fn normalize_guard_action_result_for_cache(
     raw: Option<&Value>,
-) -> (String, bool, String, Option<String>) {
+) -> (GuardAction, bool, String, Option<String>) {
     let input = raw.cloned().unwrap_or(Value::Null);
     let normalized = normalize_guard_action_result(&input, GuardAction::RequireReapproval);
     (
-        normalized.action.as_str().to_string(),
+        normalized.action,
         normalized.recognized(),
         normalized
             .reason_code
@@ -313,4 +318,55 @@ pub(super) fn normalize_guard_action_result_for_cache(
             .to_string(),
         normalized.original_action,
     )
+}
+
+#[cfg(test)]
+mod cache_copy_tests {
+    use super::*;
+    use serde_json::json;
+
+    /// Rehydrate a held evaluation from the cache the way a second request does.
+    fn rehydrate(policy_action: Option<&str>) -> PackageEvalResult {
+        let mut payload = Map::new();
+        if let Some(action) = policy_action {
+            payload.insert("policy_action".into(), Value::String(action.to_string()));
+        }
+        payload.insert(
+            "user_copy".into(),
+            json!({
+                "title": "Package request held",
+                "summary": "Guard held this install.",
+                "dashboard_url": "https://hol.org/guard/workspace/abc",
+                "harness_message": "Approve this request in HOL Guard, then retry.",
+            }),
+        );
+        PackageEvalResult::from_cache_dict(&payload, "intent", "policy", None, None)
+    }
+
+    #[test]
+    fn a_cached_terminal_action_drops_the_dashboard_and_the_approval_prompt() {
+        let result = rehydrate(Some("sandbox-required"));
+        assert!(
+            result.user_copy.dashboard_url.is_none(),
+            "{:?}",
+            result.user_copy.dashboard_url
+        );
+        let message = result.user_copy.harness_message.to_ascii_lowercase();
+        assert!(!message.contains("approve this request"), "{message}");
+    }
+
+    /// A cached action this scan does not recognize -- a missing one included --
+    /// normalizes to `require-reapproval`, which is a guard action rather than a
+    /// decision. Reading it as a decision would hand back the copy of an allow.
+    #[test]
+    fn a_cached_action_that_needs_review_keeps_the_local_review_instruction() {
+        for action in [None, Some("review"), Some("require-reapproval")] {
+            let result = rehydrate(action);
+            let message = result.user_copy.harness_message.to_ascii_lowercase();
+            assert!(
+                message.contains("review this request in hol guard, then retry."),
+                "{action:?}: {message}"
+            );
+        }
+    }
 }

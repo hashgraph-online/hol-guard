@@ -9,6 +9,7 @@ import stat
 import subprocess
 import sys
 import sysconfig
+import threading
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,7 @@ from typing import NamedTuple, TextIO, TypedDict
 
 from ..cli.update_commands import build_guard_update_status_payload
 from ..windows_paths import windows_process_is_running
+from .atomic_replace import replace_file
 
 _DASHBOARD_UPDATE_LOCK = "dashboard-update.lock"
 _DASHBOARD_UPDATE_OUTCOME = "dashboard-update-outcome.json"
@@ -75,6 +77,49 @@ class _UpdateLockSnapshot(NamedTuple):
     payload: dict[str, object] | None
     identity: tuple[int, int] | None
     modified_at: float | None
+
+
+DESKTOP_UPDATE_REQUEST_FILE = "desktop-update-request.json"
+DESKTOP_UPDATE_REQUEST_SCHEMA = "hol-guard-desktop-update-request.v1"
+
+
+def desktop_update_request_path(guard_home: Path) -> Path:
+    return guard_home.expanduser().resolve() / DESKTOP_UPDATE_REQUEST_FILE
+
+
+def write_desktop_update_request(guard_home: Path, *, latest_version: str) -> Path:
+    """Ask HOL Guard Desktop to open its updater, via one small request file.
+
+    The dashboard inside the Desktop window has no native bridge, so it
+    cannot call the app updater directly. Desktop polls for this file and
+    treats it as a hint only: its visible update flow re-checks both feeds
+    and re-verifies signatures before anything installs. The write is
+    atomic (temporary file plus replace) and private to the user.
+    """
+
+    request_path = desktop_update_request_path(guard_home)
+    request_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema": DESKTOP_UPDATE_REQUEST_SCHEMA,
+        "requestedAt": datetime.now(timezone.utc).isoformat(),
+        "latestVersion": latest_version,
+    }
+    # Unique per invocation: concurrent handoff requests in one daemon
+    # process must not share, truncate, or replace each other's temp file.
+    temporary = request_path.with_name(
+        f"{request_path.name}.tmp-{os.getpid()}-{threading.get_ident()}-{secrets.token_hex(4)}"
+    )
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    file_descriptor = os.open(temporary, flags, 0o600)
+    try:
+        with os.fdopen(file_descriptor, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload))
+        # Waits out a concurrent writer or reader holding the file on Windows.
+        replace_file(temporary, request_path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+    return request_path
 
 
 def dashboard_update_lock_path(guard_home: Path) -> Path:

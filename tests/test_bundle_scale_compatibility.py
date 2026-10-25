@@ -12,11 +12,11 @@ import pytest
 
 from codex_plugin_scanner.guard.catalog_delivery import installed_bundle as installed
 from codex_plugin_scanner.guard.catalog_delivery.installed_bundle import descriptor, validate
-from codex_plugin_scanner.guard.catalog_delivery.located_store import LocatedStore
 from codex_plugin_scanner.guard.extension_builder.repository_edits import edit_pyproject
 from codex_plugin_scanner.guard.runtime import extension_contribution as commands
 from codex_plugin_scanner.guard.runtime import mcp_server_contribution as mcp
 from tests.extension_builder_support import metadata
+from tests.installed_bundle_layout import installed_layout
 from tests.test_command_projection_build_hook import hook as hook
 from tests.test_installed_command_pack_bundle import ENGINE, SOURCE, encoded, root
 from tests.test_installed_command_pack_bundle import package as package
@@ -26,9 +26,10 @@ from tests.test_installed_command_pack_bundle import package as package
 def compatibility(package, monkeypatch, tmp_path, request):
     monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "scripts"))
     assets = importlib.import_module("extension_delivery_assets")
+    located = importlib.import_module("extension_delivery_located_store")
     directory, native = package
     plan = assets.AssetPlan(directory / "assets", SOURCE)
-    store = LocatedStore(tmp_path / "metadata", publisher=plan)
+    store = located.LocatedStore(tmp_path / "metadata", publisher=plan)
     payloads = {
         "commands": {"schemaVersion": "guard.extension-contribution.v2", "id": "command.example"},
         "mcp": {"schemaVersion": "guard.mcp-server-contribution.v1", "id": "mcp.example"},
@@ -42,6 +43,7 @@ def compatibility(package, monkeypatch, tmp_path, request):
         for family, payload in payloads.items()
     }
     plan.finish()
+    installed_layout(directory / "assets")
 
     def publish(value):
         data = encoded(value)

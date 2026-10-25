@@ -89,7 +89,18 @@ pub(super) fn critical_floor(
         return Some((GuardAction::Block, "critical.remote-destructive"));
     }
     if executable == "rm" && destructive_remove(arguments) {
-        return Some((GuardAction::Block, "critical.destructive-filesystem"));
+        // A root (the filesystem root, a system directory, a home or a direct
+        // child of one) is never removed, nor is a target the command does not
+        // show. Any other tree asks for approval; a removal Git can restore is
+        // proven benign before this floor runs.
+        let action = if hidden_remove_targets(arguments)
+            || crate::pretool::removes_a_root(&command.normalized_text)
+        {
+            GuardAction::Block
+        } else {
+            GuardAction::Review
+        };
+        return Some((action, "critical.destructive-filesystem"));
     }
     if executable == "timeout" && destructive_timeout_shell(arguments) {
         return Some((GuardAction::Block, "critical.destructive-filesystem"));
@@ -209,17 +220,7 @@ pub(super) fn destructive_remove(arguments: &[String]) -> bool {
     if !recursive_force(arguments) {
         return false;
     }
-    let option_end = arguments
-        .iter()
-        .position(|a| a == "--")
-        .unwrap_or(arguments.len());
-    let mut targets: Vec<&String> = arguments[..option_end]
-        .iter()
-        .filter(|item| !item.starts_with('-'))
-        .collect();
-    if option_end < arguments.len() {
-        targets.extend(arguments[option_end + 1..].iter());
-    }
+    let targets = remove_targets(arguments);
     const ROUTINE_OUTPUTS: &[&str] = &[
         ".cache",
         ".pytest_cache",
@@ -233,6 +234,43 @@ pub(super) fn destructive_remove(arguments: &[String]) -> bool {
             let trimmed = target.trim_end_matches('/');
             let trimmed = trimmed.strip_prefix("./").unwrap_or(trimmed);
             !ROUTINE_OUTPUTS.contains(&trimmed)
+        })
+}
+
+/// The operands of an `rm` argument list.
+fn remove_targets(arguments: &[String]) -> Vec<&String> {
+    let option_end = arguments
+        .iter()
+        .position(|a| a == "--")
+        .unwrap_or(arguments.len());
+    let mut targets: Vec<&String> = arguments[..option_end]
+        .iter()
+        .filter(|item| !item.starts_with('-'))
+        .collect();
+    if option_end < arguments.len() {
+        targets.extend(arguments[option_end + 1..].iter());
+    }
+    targets
+}
+
+/// The removal names no target the command shows: `xargs` or `find -exec`
+/// supplies them, or an expansion the shell has not run yet. Whether one of
+/// them is a root cannot be read. A brace list, `.`, a `..` step or a glob in
+/// the first component can likewise reach a root or the home from wherever
+/// the session stands.
+fn hidden_remove_targets(arguments: &[String]) -> bool {
+    let targets = remove_targets(arguments);
+    targets.is_empty()
+        || targets.iter().any(|target| {
+            let mut components = target
+                .split(['/', '\\'])
+                .filter(|part| !part.is_empty() && *part != ".");
+            target.contains(['{', '$', '`'])
+                || target.trim_end_matches(['/', '\\']) == "."
+                || target.split(['/', '\\']).any(|part| part == "..")
+                || components
+                    .next()
+                    .is_some_and(|first| first.contains(['*', '?', '[']))
         })
 }
 

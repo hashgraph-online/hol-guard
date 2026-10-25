@@ -347,6 +347,7 @@ pub(super) fn binding() -> DirectLaneBinding {
         key: Zeroizing::new(KEY.to_vec()),
         key_id: KEY_ID.to_owned(),
     });
+    binding.connector_setup_notice = Some(true);
     binding
 }
 

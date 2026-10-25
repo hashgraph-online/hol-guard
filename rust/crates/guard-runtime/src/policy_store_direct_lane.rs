@@ -78,6 +78,8 @@ pub(crate) struct DirectLaneBinding {
     pub(crate) structured_output_config: Option<serde_json::Value>,
     /// The tool-call view the daemon decides a relayed MCP tool call with.
     pub(crate) mcp_relay: Option<serde_json::Value>,
+    /// Whether the daemon's drain raises a queued connector review's notice.
+    pub(crate) connector_setup_notice: Option<bool>,
 }
 
 /// The daemon's policy-integrity key, held only in memory.
@@ -124,6 +126,7 @@ impl DirectLaneBinding {
             review: DirectLaneReviewFacts::default(),
             structured_output_config: None,
             mcp_relay: None,
+            connector_setup_notice: None,
         }
     }
 }
@@ -197,6 +200,7 @@ impl PolicySnapshotStore {
                 ),
                 structured_output_config: binding.structured_output_config,
                 mcp_relay: binding.mcp_relay,
+                connector_setup_notice: binding.connector_setup_notice,
             })
         });
         match self.direct_lane.lock() {

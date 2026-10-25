@@ -1,0 +1,185 @@
+{
+  "schema": "hol-guard.hook-fail-closed-envelopes.v1",
+  "defaults": {
+    "reason": "HOL Guard could not complete native review safely.",
+    "reason_code": "native_hook_render_unavailable",
+    "prompt_reason": "HOL Guard could not complete native prompt review safely."
+  },
+  "events": {
+    "userpromptsubmit": "prompt",
+    "userpromptsubmitted": "prompt",
+    "copilotpermissionrequest": "permission",
+    "permissionrequest": "permission",
+    "permissionrequestv2": "permission",
+    "pretool": "pre_tool",
+    "pretoolcall": "pre_tool",
+    "pretooluse": "pre_tool"
+  },
+  "event_prefixes": {
+    "before": "pre_tool"
+  },
+  "envelopes": {
+    "pre_tool": {
+      "grok": {
+        "decision": "deny",
+        "reason": "$reason",
+        "policy_action": "block",
+        "reason_code": "$reason_code"
+      },
+      "hermes": {
+        "decision": "block",
+        "reason": "$reason",
+        "policy_action": "block",
+        "reason_code": "$reason_code"
+      },
+      "openclaw": {
+        "decision": "deny",
+        "reason": "$reason",
+        "policy_action": "block",
+        "reason_code": "$reason_code"
+      },
+      "omp": {
+        "decision": "deny",
+        "reason": "$reason",
+        "policy_action": "block",
+        "reason_code": "$reason_code"
+      },
+      "pi": {
+        "decision": "deny",
+        "reason": "$reason",
+        "policy_action": "block",
+        "reason_code": "$reason_code"
+      },
+      "*": {
+        "policy_action": "block",
+        "reason_code": "$reason_code",
+        "hookSpecificOutput": {
+          "hookEventName": "PreToolUse",
+          "permissionDecision": "deny",
+          "permissionDecisionReason": "$reason"
+        }
+      }
+    },
+    "permission": {
+      "copilot": {
+        "behavior": "deny",
+        "message": "$reason",
+        "interrupt": false,
+        "reason_code": "$reason_code"
+      },
+      "grok": {
+        "decision": "deny",
+        "reason": "$reason",
+        "policy_action": "block",
+        "reason_code": "$reason_code"
+      },
+      "hermes": {
+        "decision": "block",
+        "reason": "$reason",
+        "policy_action": "block",
+        "reason_code": "$reason_code"
+      },
+      "openclaw": {
+        "decision": "deny",
+        "reason": "$reason",
+        "policy_action": "block",
+        "reason_code": "$reason_code"
+      },
+      "omp": {
+        "decision": "deny",
+        "reason": "$reason",
+        "policy_action": "block",
+        "reason_code": "$reason_code"
+      },
+      "pi": {
+        "decision": "deny",
+        "reason": "$reason",
+        "policy_action": "block",
+        "reason_code": "$reason_code"
+      },
+      "*": {
+        "reason_code": "$reason_code",
+        "hookSpecificOutput": {
+          "hookEventName": "PermissionRequest",
+          "decision": {
+            "behavior": "deny",
+            "message": "$reason"
+          }
+        }
+      }
+    },
+    "prompt": {
+      "copilot": {
+        "behavior": "deny",
+        "message": "$reason",
+        "interrupt": false,
+        "policy_action": "block",
+        "reason_code": "native_prompt_unavailable"
+      },
+      "*": {
+        "decision": "block",
+        "reason": "$reason",
+        "systemMessage": "$reason",
+        "policy_action": "block",
+        "reason_code": "native_prompt_unavailable",
+        "hookSpecificOutput": {
+          "hookEventName": "UserPromptSubmit"
+        }
+      }
+    },
+    "lifecycle": {
+      "grok": {},
+      "hermes": {
+        "decision": "allow",
+        "policy_action": "allow",
+        "reason_code": "$reason_code"
+      },
+      "openclaw": {
+        "decision": "allow",
+        "policy_action": "allow",
+        "reason_code": "$reason_code"
+      },
+      "omp": {
+        "decision": "allow",
+        "policy_action": "allow",
+        "reason_code": "$reason_code"
+      },
+      "pi": {
+        "decision": "allow",
+        "policy_action": "allow",
+        "reason_code": "$reason_code"
+      },
+      "*": {
+        "continue": true,
+        "policy_action": "allow",
+        "reason_code": "$reason_code",
+        "hookSpecificOutput": {
+          "hookEventName": "$event_name"
+        }
+      }
+    },
+    "unmanaged": {
+      "grok": {},
+      "hermes": {
+        "decision": "allow",
+        "reason_code": "harness_not_managed"
+      },
+      "openclaw": {
+        "decision": "allow",
+        "reason_code": "harness_not_managed"
+      },
+      "omp": {
+        "decision": "allow",
+        "reason_code": "harness_not_managed"
+      },
+      "pi": {
+        "decision": "allow",
+        "reason_code": "harness_not_managed"
+      },
+      "*": {
+        "continue": true,
+        "reason_code": "harness_not_managed"
+      }
+    }
+  }
+}

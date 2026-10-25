@@ -20,8 +20,6 @@ from codex_plugin_scanner.guard.adapters.cursor_hooks import (
     _MANAGED_HOOK_TIMEOUT_SECONDS,
     HOOK_SCRIPT_NAME,
     _strip_managed_hook_entries,
-    cursor_hook_response_from_guard,
-    cursor_hook_should_block,
     cursor_hooks_path,
     cursor_native_hook_state,
     install_cursor_hooks,
@@ -1172,35 +1170,6 @@ def test_prepare_cursor_hook_payload_maps_after_mcp_execution() -> None:
     assert tool_input["command"] == "pnpm test"
 
 
-def test_cursor_hook_response_from_guard_maps_read_ask_to_deny() -> None:
-    response = cursor_hook_response_from_guard(
-        policy_action="require-reapproval",
-        guard_payload={"review_hint": "Approve in Guard"},
-        hook_event_name="beforeReadFile",
-    )
-    assert response["permission"] == "deny"
-    assert response["user_message"] == "Approve in Guard"
-
-
-def test_cursor_hook_response_from_guard_allows_shell() -> None:
-    response = cursor_hook_response_from_guard(
-        policy_action="allow",
-        guard_payload={},
-        hook_event_name="beforeShellExecution",
-    )
-    assert response["permission"] == "allow"
-
-
-@pytest.mark.parametrize("policy_action", ["", "future-action", "ALLOW"])
-def test_cursor_hook_response_from_guard_fails_closed_for_unknown_action(policy_action: str) -> None:
-    response = cursor_hook_response_from_guard(
-        policy_action=policy_action,
-        guard_payload={"risk_summary": "Malformed Guard response."},
-        hook_event_name="beforeShellExecution",
-    )
-    assert response["permission"] == "deny"
-
-
 def test_cursor_hook_warn_with_risk_remains_allowed_without_a_prompt() -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_would_prompt_user
 
@@ -1209,12 +1178,6 @@ def test_cursor_hook_warn_with_risk_remains_allowed_without_a_prompt() -> None:
         policy_action="warn",
         guard_payload=payload,
     )
-    response = cursor_hook_response_from_guard(
-        policy_action="warn",
-        guard_payload=payload,
-        hook_event_name="beforeShellExecution",
-    )
-    assert response == {"permission": "allow"}
     assert not cursor_hook_would_prompt_user(policy_action="allow", guard_payload={})
     assert cursor_hook_would_prompt_user(policy_action="review", guard_payload={})
     assert cursor_hook_would_prompt_user(policy_action="require-reapproval", guard_payload={})
@@ -1344,11 +1307,6 @@ def test_cursor_after_shell_refuses_pending_state_that_expires_during_load(
     )
     assert saved is False
     assert guard_commands_module._load_cursor_native_shell_allowance(store, payload) is None
-
-
-def test_cursor_hook_should_block() -> None:
-    assert cursor_hook_should_block(policy_action="block") is True
-    assert cursor_hook_should_block(policy_action="allow") is False
 
 
 def test_cursor_hook_script_source_infers_event_before_prepare(tmp_path: Path) -> None:
@@ -1692,10 +1650,7 @@ def test_cursor_tampered_pending_shell_cannot_bootstrap_signed_native_allow(tmp_
 
     assert saved is False
     assert store.get_sync_payload(pending_key) is None
-    assert (
-        store.get_sync_payload(_cursor_native_shell_allow_key(conversation_id, command))
-        is None
-    )
+    assert store.get_sync_payload(_cursor_native_shell_allow_key(conversation_id, command)) is None
     events = store.list_events(event_name="rule.ignored.local_integrity")
     event_payloads = [event_payload for event in events if isinstance(event_payload := event.get("payload"), dict)]
     assert any(

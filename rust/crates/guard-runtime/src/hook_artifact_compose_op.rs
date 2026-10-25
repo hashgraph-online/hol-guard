@@ -186,6 +186,7 @@ fn native_edge_floor(
                 policy_action: edge.policy_action.clone(),
                 minimum_action: edge.minimum_action.clone(),
                 decision: Value::Null,
+                reason_code: edge.reason_code.clone(),
             };
             edge_floor(Some(&explicit), event)
         }
@@ -194,6 +195,7 @@ fn native_edge_floor(
                 policy_action: edge.policy_action.clone(),
                 minimum_action: edge.minimum_action.clone(),
                 decision: edge.decision.clone(),
+                reason_code: edge.reason_code.clone(),
             };
             if default_action == Some("warn") && is_hard(edge_action(&typed)) {
                 // The edge still masks output already priced as warn-tier evidence.
@@ -369,7 +371,16 @@ fn risk_copy(
 
 fn grant_settle(query: &GrantSettleQueryV1) -> Value {
     let current = act(&query.current_action);
-    let granted = act(&query.granted_action);
+    let floor = present(&query.native_floor);
+    // A CLI grant vouches for the CLI a command launches, not for the
+    // privileged wrapper around it: a require-reapproval floor asks for this
+    // exact command to be approved again, so a grant never settles below it.
+    let granted = match floor {
+        Some(GuardAction::RequireReapproval) => {
+            stricter(act(&query.granted_action), GuardAction::RequireReapproval)
+        }
+        _ => act(&query.granted_action),
+    };
     let (mut current, mut policy, mut context) = (
         current,
         act(&query.policy_action),
@@ -384,7 +395,7 @@ fn grant_settle(query: &GrantSettleQueryV1) -> Value {
     // context is re-floored: it binds the identity of the review the floor
     // demanded so saved approvals still match exactly, while re-flooring the
     // policy action would re-flag a settled request forever.
-    if let Some(floor) = present(&query.native_floor) {
+    if let Some(floor) = floor {
         context = stricter(context, floor);
     }
     let mut result = Map::new();

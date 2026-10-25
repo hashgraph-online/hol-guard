@@ -2,13 +2,8 @@
 
 from __future__ import annotations
 
-import pytest
-
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-)
-from codex_plugin_scanner.guard.runtime.command_permission_catalog import (
-    CommandPermissionCatalog,
     CommandPermissionSpec,
 )
 
@@ -93,52 +88,3 @@ def test_github_merge_family_groups_the_three_merge_variants() -> None:
     assert examples["command.github.permission.routine-merge-remote"] == "gh pr merge 123 --squash"
     assert examples["command.github.permission.merge-remote"] == "gh pr merge 123 --merge"
     assert examples["command.github.permission.merge-admin"] == "gh pr merge 123 --admin"
-
-
-def _spec(
-    permission_id: str,
-    *,
-    configurable: bool = True,
-    family: str | None = None,
-    example: str | None = "x y",
-) -> CommandPermissionSpec:
-    return CommandPermissionSpec(
-        permission_id=permission_id,
-        schema_version=1,
-        extension_id=permission_id.split(".permission.")[0],
-        implementation_version="1.0.0",
-        label=permission_id,
-        description="test",
-        risk_tier="high",
-        baseline_floor="review",
-        default_enabled=True,
-        configurable=configurable,
-        fixed_reason=None if configurable else "immutable for test",
-        typed_capabilities=(),
-        action_classes=(),
-        rule_ids=(),
-        dependencies=(),
-        conflicts=(),
-        implied_permissions=(),
-        introduced_version="2.2.0",
-        deprecated=False,
-        replacement_permission_id=None,
-        safer_guidance=("safer",),
-        example_command=example,
-        family=family,
-    )
-
-
-def test_configurable_permission_without_example_is_rejected() -> None:
-    with pytest.raises(ValueError, match="example command"):
-        CommandPermissionCatalog((_spec("command.demo.permission.missing", example=None),))
-
-
-def test_family_cannot_span_extensions() -> None:
-    with pytest.raises(ValueError, match="spans extensions"):
-        CommandPermissionCatalog(
-            (
-                _spec("command.demo.permission.one", family="shared"),
-                _spec("command.other.permission.two", family="shared"),
-            )
-        )

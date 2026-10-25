@@ -11,6 +11,7 @@ Covers:
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -836,3 +837,17 @@ class TestBuildReceipt:
         ]
         ids = {r.receipt_id for r in receipts}
         assert len(ids) == 5, "Each receipt must have a unique receipt_id"
+
+
+def test_recorded_artifact_hash_parity_corpus_matches_the_python_hash() -> None:
+    # The Rust port replays this corpus, so a Python hash change that skips
+    # regenerating it would leave the Rust parity test green on stale digests.
+    fixture = Path(__file__).parent / "fixtures" / "artifact-hash-parity.v1.json"
+    corpus = json.loads(fixture.read_text(encoding="utf-8"))
+    stale = []
+    for case in corpus["cases"]:
+        fields = dict(case["artifact"])
+        fields["args"] = tuple(fields.get("args", ()))
+        if compute_artifact_hash(GuardArtifact(**fields)) != case["expected_sha256"]:
+            stale.append(case["case"])
+    assert stale == [], "regenerate with scripts/ci/generate_artifact_hash_parity.py"

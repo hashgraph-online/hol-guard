@@ -32,7 +32,8 @@ import { harnessDisplayName, normalizeHarnessSlug } from "./approval-center-util
 import { ErrorBoundary } from "./error-boundary";
 import { lazyWorkspace } from "./lazy-workspace";
 import { runAutomaticProtectionRepair } from "./protection-repair-flow";
-import { selectNextAfterResolution } from "./queue-state";
+import { selectNextAfterResolution, type QueueGroup } from "./queue-state";
+import { BulkBlockError, blockRequestsOnce, bulkBlockFailureMessage, bulkBlockSummary } from "./bulk-block-requests";
 import { useRouteFocus } from "./use-route-focus";
 import { commitDashboardLocation, useDashboardPathname } from "./dashboard-location";
 
@@ -53,6 +54,9 @@ const PolicyWorkspacePage = lazyWorkspace("policy-workspace-page", () =>
 );
 const AboutWorkspace = lazyWorkspace("about-workspace", () =>
   import("./about/about-workspace").then((m) => ({ default: m.AboutWorkspace }))
+);
+const ReleasesWorkspace = lazyWorkspace("releases-workspace", () =>
+  import("./releases/releases-workspace").then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace("protection-repair-page", () =>
   import("./protection-repair-page").then((m) => ({ default: m.ProtectionRepairPage }))
@@ -155,7 +159,9 @@ export function viewTitle(view: AppView): string {
   if (view === "audit") return "Audit";
   if (view === "policy") return "Rules & exceptions";
   if (view === "feed-health") return "Feed Health";
+  if (view === "workspaces") return "Workspaces";
   if (view === "about") return "About";
+  if (view === "releases") return "Releases";
   if (view === "extensions") return "Extensions";
   if (view === "protection-repair") return "Repair protection";
   return "App detail";
@@ -207,8 +213,14 @@ export function resolveView(pathname: string): AppView {
   if (pathname === "/feed-health") {
     return "feed-health";
   }
+  if (pathname === "/workspaces") {
+    return "workspaces";
+  }
   if (pathname === "/about") {
     return "about";
+  }
+  if (pathname === "/releases") {
+    return "releases";
   }
   if (
     pathname === "/inbox" ||
@@ -475,7 +487,7 @@ export function App() {
         }
       })
       .catch(() => {});
-    if (view === "about") {
+    if (view === "about" || view === "releases") {
       fetchGuardUpdateStatus()
         .then((status) => {
           if (!cancelled && status.current_version) {
@@ -861,6 +873,29 @@ export function App() {
     }
   }, [refreshApprovalGate, refreshStateAfterAction, setResolutionMessage]);
 
+  const handleBulkBlock = useCallback(async (selected: QueueGroup[]) => {
+    // A decision already being saved could resolve one of these requests
+    // under the batch and make it look like a failure.
+    if (bulkApproveInFlight.current || resolutionInFlight.current) {
+      throw new Error("Another decision is still being saved. Try again in a moment.");
+    }
+    bulkApproveInFlight.current = true;
+    resolutionInFlight.current = true;
+    const queued = new Map((requests.kind === "ready" ? requests.items : []).map((item) => [item.request_id, item]));
+    try {
+      const outcome = await blockRequestsOnce(selected, (id) => queued.get(id), resolveRequestWithQueueResult);
+      resolutionInFlight.current = false;
+      await refreshStateAfterAction();
+      if (outcome.failed > 0) {
+        throw new BulkBlockError(bulkBlockFailureMessage(outcome), outcome.failedIds);
+      }
+      setResolutionMessage(bulkBlockSummary(outcome));
+    } finally {
+      resolutionInFlight.current = false;
+      bulkApproveInFlight.current = false;
+    }
+  }, [refreshStateAfterAction, requests, setResolutionMessage]);
+
   const handleRetry = useCallback(() => {
     setRuntime({ kind: "loading" });
     setRequests({ kind: "loading" });
@@ -1037,6 +1072,7 @@ export function App() {
       onOpenRequest={handleOpenRequest}
       onResolve={handleResolve}
       onBulkApprove={handleBulkApprove}
+      onBulkBlock={handleBulkBlock}
       onRetry={handleRetry}
       onRetryDetail={() => setDetailRefreshKey((key) => key + 1)}
       onRepair={handleRepair}
@@ -1104,6 +1140,13 @@ export function App() {
         ) : null
       }
       policyContent={policyContent}
+      releasesContent={
+        view === "releases" ? (
+          <Suspense fallback={<LazyFallback />}>
+            <ReleasesWorkspace installedVersion={guardVersion} />
+          </Suspense>
+        ) : null
+      }
       aboutContent={
         <Suspense fallback={<LazyFallback />}>
           <AboutWorkspace runtimeSummary={
@@ -1115,6 +1158,7 @@ export function App() {
                   cloudState: runtime.snapshot.cloud_state ?? "unknown",
                   cloudStateLabel: runtime.snapshot.cloud_state_label ?? "Unknown",
                   syncConfigured: runtime.snapshot.sync_configured ?? false,
+                  syncHealth: runtime.snapshot.cloud_sync_health?.state ?? null,
                   pendingCount: runtime.snapshot.pending_count ?? 0,
                   receiptCount: runtime.snapshot.receipt_count ?? 0,
                   protectedAppCount: 0,

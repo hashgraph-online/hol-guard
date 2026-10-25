@@ -39,6 +39,7 @@ from tests.gauntlet_replay import (
     failure_reasons,
     judge,
     payload_input,
+    source_ref_payload,
     write_global_gitconfig,
 )
 from tests.native_gate_retry import review_with_unavailable_retry
@@ -119,6 +120,9 @@ def _replay(case: ReplayCase, fixture: BenignFixture, worker: HookWorker) -> tup
     }
     if case.tool_response is not None:
         payload["tool_response"] = case.tool_response
+    if case.source_ref:
+        spelled = str(resolved.get("path") or resolved["file_path"])
+        payload["guard_source_ref"] = source_ref_payload(spelled, fixture.cwd(case.cwd))
     if case.harness == "cursor":
         payload.update(cursor_hook_fields(case.tool, payload))
     # Approval baselines stay from before the first attempt, so a retry never hides a row.

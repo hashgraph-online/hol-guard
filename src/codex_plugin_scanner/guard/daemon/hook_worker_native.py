@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Protocol
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
+from ..native_hook_containment_route import edge_containment_route
+from ..native_hook_decision import NativeHookDecisionError
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_policy_snapshot_harness_postures import recording_only_for_binding
 from ..native_resident_client import (
@@ -215,6 +217,27 @@ def _record_native_pre_activity(
     return response
 
 
+def _containment_outage(
+    host: _HookWorkerNativeHost,
+    payload: dict[str, object],
+    harness: str,
+    error: NativeHookDecisionError,
+    guard_home: Path,
+    deadline: float | None,
+) -> tuple[dict[str, object], bool]:
+    """The host outage answer when the resident does not route a PreToolUse call."""
+    response = _record_unavailable_native(
+        host,
+        payload,
+        harness=harness,
+        event_name="PreToolUse",
+        reason_code=error.code,
+        guard_home=guard_home,
+        deadline=deadline,
+    )
+    return (response, False)
+
+
 def _record_unavailable_native(
     host: _HookWorkerNativeHost,
     payload: dict[str, object],
@@ -222,17 +245,13 @@ def _record_unavailable_native(
     harness: str,
     event_name: str,
     reason_code: str,
-    workspace: Path | None,
-    home_dir: Path,
     guard_home: Path,
-    recording_only: bool,
     watch_continue: bool = False,
     deadline: float | None = None,
     reason: str | None = None,
 ) -> dict[str, object]:
     failure_code = native_resident_client_failure_code()
     response = availability_harness_response(
-        payload,
         harness=harness,
         event_name=event_name,
         reason_code=reason_code,
@@ -241,10 +260,6 @@ def _record_unavailable_native(
             failure_code,
             "HOL Guard could not complete the native hook decision safely.",
         ),
-        workspace=workspace,
-        home_dir=home_dir,
-        guard_home=guard_home,
-        recording_only=recording_only,
         prompt_reason=reason or native_unavailable_reason(failure_code, "") or None,
     )
     if watch_continue and event_name == "PreToolUse":
@@ -527,10 +542,7 @@ class HookWorkerNativeMixin:
                         harness=harness,
                         event_name=event_name,
                         reason_code=reason_code,
-                        workspace=workspace,
-                        home_dir=home_dir,
                         guard_home=guard_home,
-                        recording_only=recording_only,
                     ),
                     harness=harness,
                     event_name=event_name,
@@ -561,10 +573,7 @@ class HookWorkerNativeMixin:
                         harness=harness,
                         event_name=event_name,
                         reason_code="native_hook_edge_invalid_response",
-                        workspace=workspace,
-                        home_dir=home_dir,
                         guard_home=guard_home,
-                        recording_only=recording_only,
                     ),
                     harness=harness,
                     event_name=event_name,
@@ -587,10 +596,7 @@ class HookWorkerNativeMixin:
                         harness=native_harness,
                         event_name=native_event,
                         reason_code="native_hook_edge_invalid_response",
-                        workspace=workspace,
-                        home_dir=home_dir,
                         guard_home=guard_home,
-                        recording_only=recording_only,
                     ),
                     False,
                 )
@@ -611,16 +617,31 @@ class HookWorkerNativeMixin:
                         ),
                         True,
                     )
-            contained = granted_containment_response(
-                self.store,
-                native_result,
-                harness=native_harness,
-                payload=payload,
-                guard_home=guard_home,
-                home_dir=home_dir,
-                workspace=workspace,
-                deadline=deadline,
-            )
+            try:
+                # The resident routes the call, as on the CLI path; without its
+                # answer the host gets the outage shape, never a route picked here.
+                containment = edge_containment_route(
+                    edge,
+                    native_result,
+                    event_name=native_event,
+                    recording_only=recording_only,
+                    guard_home=guard_home,
+                    deadline=deadline,
+                )
+                contained = None
+                if containment == "grant":
+                    contained = granted_containment_response(
+                        self.store,
+                        native_result,
+                        harness=native_harness,
+                        payload=payload,
+                        guard_home=guard_home,
+                        home_dir=home_dir,
+                        workspace=workspace,
+                        deadline=deadline,
+                    )
+            except NativeHookDecisionError as error:
+                return _containment_outage(self, payload, native_harness, error, guard_home, deadline)
             if contained is not None:
                 return (_record_native_pre_activity(self, native_harness, payload, contained, accepted_receipt), True)
             action = str(native_result.get("minimum_action") or "")
@@ -674,16 +695,24 @@ class HookWorkerNativeMixin:
                 )
             from ..adapters.zcode_contained_tests import route_zcode_containment
 
-            rendered = route_zcode_containment(
+            rendered = (
                 render_pre_tool(native_harness, native_result, guard_home=guard_home, deadline=deadline)
                 if native_result and not isinstance(edge.get("harness_response"), dict)
-                else _edge_harness_response(edge),
-                harness=native_harness,
-                payload=payload,
-                guard_home=guard_home,
-                home_dir=home_dir,
-                workspace=workspace,
+                else _edge_harness_response(edge)
             )
+            if containment == "sink":
+                try:
+                    rendered = route_zcode_containment(
+                        rendered,
+                        harness=native_harness,
+                        payload=payload,
+                        guard_home=guard_home,
+                        home_dir=home_dir,
+                        workspace=workspace,
+                        deadline=deadline,
+                    )
+                except NativeHookDecisionError as error:
+                    return _containment_outage(self, payload, native_harness, error, guard_home, deadline)
             return (
                 _record_native_pre_activity(
                     self,
@@ -756,10 +785,7 @@ class HookWorkerNativeMixin:
                 harness=harness,
                 event_name=event_name,
                 reason_code=reason_code,
-                workspace=workspace,
-                home_dir=home_dir,
                 guard_home=guard_home,
-                recording_only=recording_only,
             )
             return {
                 "event_name": event_name,
@@ -851,6 +877,7 @@ class HookWorkerNativeMixin:
             "result": native_result,
             "receipt": dict(receipt) if isinstance(receipt, Mapping) else None,
             "recording_only": recording_only,
+            "containment_route": edge.get("containment_route"),
             "failure_reason_code": None,
         }
 

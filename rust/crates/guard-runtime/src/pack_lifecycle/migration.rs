@@ -3,6 +3,14 @@
 use super::*;
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
+use std::fs::File;
+use std::io::{BufRead, BufReader, Read};
+
+// A spilled chain is read one record at a time, so only the line bound and the
+// existing per-record bound have to hold. The ceilings exist to stop a damaged
+// file from being read forever, not to limit how long an install may live.
+const MAX_SPILLED_LINE_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_SPILLED_RECORDS: usize = 4_000_000;
 
 fn authenticated(envelope: &Value, key: &[u8], purpose: &str) -> Result<Value, String> {
     let data = envelope["record"]
@@ -63,6 +71,63 @@ fn pack(envelope: &Value, key: &[u8]) -> Result<Option<Identity>, String> {
     };
     identity.validate()?;
     Ok(Some(identity))
+}
+
+fn step(snapshot: &mut Value, previous: &Value, legacy_key: &[u8]) -> Result<bool, String> {
+    if snapshot["previous_digest"] != previous["digest"] {
+        return Err("pack_lifecycle_legacy_anchor_mismatch".into());
+    }
+    let prior = authenticated(previous, legacy_key, "extension-control.snapshot")?;
+    if prior["revision"].as_u64().and_then(|n| n.checked_add(1)) != snapshot["revision"].as_u64() {
+        return Err("pack_lifecycle_legacy_anchor_mismatch".into());
+    }
+    *snapshot = prior;
+    Ok(!snapshot["command_pack_record_digest"].is_null())
+}
+
+/// Walk a chain the caller spilled to a file, one authenticated record per
+/// line, newest first. The caller is the same writer that would otherwise have
+/// inlined the records, and each one still has to authenticate and link, so the
+/// file is a transport for evidence rather than a source of authority.
+fn spilled(path: &str, snapshot: &mut Value, legacy_key: &[u8]) -> Result<(), String> {
+    let file = File::open(path).map_err(|_| "pack_lifecycle_legacy_invalid")?;
+    if !file
+        .metadata()
+        .map_err(|_| "pack_lifecycle_legacy_invalid")?
+        .is_file()
+    {
+        return Err("pack_lifecycle_legacy_invalid".into());
+    }
+    let mut reader = BufReader::new(file);
+    let mut line = String::new();
+    let mut records = 0usize;
+    loop {
+        line.clear();
+        let read = reader
+            .by_ref()
+            .take(MAX_SPILLED_LINE_BYTES)
+            .read_line(&mut line)
+            .map_err(|_| "pack_lifecycle_legacy_invalid")?;
+        if read == 0 {
+            return Ok(());
+        }
+        if read as u64 == MAX_SPILLED_LINE_BYTES && !line.ends_with('\n') {
+            return Err("pack_lifecycle_legacy_invalid".into());
+        }
+        let record = line.trim_end_matches(['\n', '\r']);
+        if record.is_empty() {
+            continue;
+        }
+        records += 1;
+        if records > MAX_SPILLED_RECORDS {
+            return Err("pack_lifecycle_legacy_invalid".into());
+        }
+        let previous: Value =
+            serde_json::from_str(record).map_err(|_| "pack_lifecycle_legacy_invalid")?;
+        if step(snapshot, &previous, legacy_key)? {
+            return Ok(());
+        }
+    }
 }
 
 // All authority comes from the retained anchor, never the SQL phase column.
@@ -146,22 +211,17 @@ fn evidence(input: &Value, key: &[u8]) -> Result<Vec<Identity>, String> {
     // Packless control edits retain the last pack. Walk authenticated
     // snapshot predecessors to the most recent pack-bearing commit.
     if snapshot["command_pack_record_digest"].is_null() {
-        for previous in input["legacy_history"]
-            .as_array()
-            .ok_or("pack_lifecycle_legacy_invalid")?
-        {
-            if snapshot["previous_digest"] != previous["digest"] {
-                return Err("pack_lifecycle_legacy_anchor_mismatch".into());
-            }
-            let prior = authenticated(previous, &legacy_key, "extension-control.snapshot")?;
-            if prior["revision"].as_u64().and_then(|n| n.checked_add(1))
-                != snapshot["revision"].as_u64()
-            {
-                return Err("pack_lifecycle_legacy_anchor_mismatch".into());
-            }
-            snapshot = prior;
-            if !snapshot["command_pack_record_digest"].is_null() {
-                break;
+        match input["legacy_history_path"].as_str() {
+            Some(path) => spilled(path, &mut snapshot, &legacy_key)?,
+            None => {
+                for previous in input["legacy_history"]
+                    .as_array()
+                    .ok_or("pack_lifecycle_legacy_invalid")?
+                {
+                    if step(&mut snapshot, previous, &legacy_key)? {
+                        break;
+                    }
+                }
             }
         }
     }
@@ -248,7 +308,20 @@ pub(super) fn migrate(input: &Value, key: &[u8]) -> Result<Value, String> {
         return Err("pack_lifecycle_protected_floor_missing".into());
     }
     if input["legacy_anchor"].is_null() && input["legacy_snapshot"].is_null() {
-        return Ok(json!({"record":null,"stamp":null}));
+        // An install with no legacy controls still needs a floor. Discovery,
+        // activation and every publication refresh read it, and once the
+        // authority is enrolled nothing else ever creates one, so returning
+        // no record here left those installs failing the floor gate forever.
+        // Deriving it from the verified installed release is exactly what
+        // enrollment itself writes: it admits nothing beyond that release,
+        // and it cannot lower a retained floor, because this is reached only
+        // when neither the record nor its enrollment stamp is present. A
+        // caller that carries no release evidence is a retained-floor probe
+        // rather than a startup, and keeps the previous no-op.
+        if input["release_data"].is_null() {
+            return Ok(json!({"record":null,"stamp":null}));
+        }
+        return super::enrolled(release::identity(input)?, key);
     }
     let candidate = release::identity(input)?;
     admit(input, key, candidate)

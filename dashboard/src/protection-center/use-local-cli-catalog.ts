@@ -29,6 +29,8 @@ function discoveryIssueMessage(issue: LocalCliListResponse["discovery_issue"]): 
       return "Some connectors have more tools than Guard can catalog safely. Existing choices were kept.";
     case "configured_host_scan_failed":
       return "Guard could not read configured host connections. Check the host app and retry.";
+    case "configured_host_persist_failed":
+      return "Guard read your host connections but could not save them. Existing choices were kept; retry discovery, and restart Guard if it keeps failing.";
     case "observed_provider_scan_failed":
       return "Guard could not merge observed provider tools. Existing choices were kept; retry discovery.";
     case "package_catalog_refresh_failed":

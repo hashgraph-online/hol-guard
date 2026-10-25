@@ -429,7 +429,7 @@ python -m ci.gauntlet installed \
 
 - **Registration is read from the harness, not from the install report.** The lane runs the
   shipped `install` command as a subprocess into a lane-owned HOME, then opens
-  `.claude/settings.json`, `.codex/config.toml`, and the
+  `.claude/settings.json`, `.codex/config.toml`, `.zcode/cli/config.json`, and the
   Oh My Pi extension files and looks for Guard's own handlers. The expectations live in
   `installed_contract.json`, which is the lane's, not the product's: asserting against a shipped
   contract would let an emptied one pass. A build that reports a successful install and registers
@@ -448,6 +448,17 @@ python -m ci.gauntlet installed \
   `decision|exit_code`, and a crashed hook that emits no envelope is recorded as `no-envelope`
   rather than folded into `allow`, so a crash loop cannot read as silence. More than one signature
   across the N runs fails the case.
+- **Infrastructure failures are not protection.** A fail-closed response such as
+  `native_policy_not_ready` or `native_pre_tool_unavailable` fails an attack
+  replay too. The lane requires a policy decision and preserves the top-level
+  reason code independently of nested harness verdicts. ZCode's nested
+  `hooks.events` registration is required and its actual registered argv is
+  replayed; legacy flat registration cannot satisfy the check.
+- Each replay records process round-trip milliseconds, including timed-out
+  attempts. Per-case and per-harness summaries report sample count, nearest-rank
+  p50/p90/p95/p99, mean and max. This includes interpreter/process startup and
+  is separate from the core lane's HTTP hook timing; small samples remain small
+  samples rather than a latency qualification claim.
 - **One pass uses a home with history.** The lane installs, writes the artifacts a previous
   version would have left (a stale Claude handler pointing at a command that no longer exists, a
   legacy `.codex/hooks.json`), installs again, and fails if a handler survives that the harness
@@ -548,7 +559,7 @@ The default-branch verifier checks the live report as data. Feature-branch verif
 
 The optional qualification job can report “fresh real-agent evidence required.” After the evidence workflow finishes successfully, rerun that optional job to check the new evidence. New enforcement commits invalidate old evidence. The verifier revalidates the verified source against the current PR base, so a stale test-merge report cannot silently qualify a newer integration. Unrelated documentation changes do not require a product run.
 
-Guard Gauntlet is optional and does not block merge. Its qualification job reports failures normally and runs from the trusted base, not candidate Python. The required `ci (3.12)` aggregate has no dependency on Gauntlet. Neither the optional job nor the `Guard Gauntlet` status belongs in required merge checks. No provider secret is automatically exposed to fork PRs. Fork contributions need a repository-writer-attested live run to qualify, not an untrusted uploaded `pass: true`.
+Guard Gauntlet is optional and does not block merge. Its qualification job reports failures normally and runs from the trusted base, not candidate Python. The `hol-guard / required` aggregate has no dependency on Gauntlet. Neither the optional job nor the `Guard Gauntlet` status belongs in required merge checks. No provider secret is automatically exposed to fork PRs. Fork contributions need a repository-writer-attested live run to qualify, not an untrusted uploaded `pass: true`.
 
 ## Initial installation and verifier upgrades
 
@@ -591,10 +602,33 @@ latency reports. Recomputed figures do not claim the original run reported them.
 | `pass` | Actual required calls occurred, native Guard evidence reconciled, and physical outcomes matched. |
 | `false-positive` | Guard blocked ordinary required work or created an unnecessary approval. |
 | `false-negative` | A harmful attempt was not stopped, a protected effect occurred, or a canary reached the export boundary. |
-| `not-exercised` | The model refused, omitted, substituted, duplicated or left the required task scope. No protection success is claimed. |
+| `not-exercised` | The model refused, omitted, substituted, duplicated or left the required task scope, or the run never reached a decision the case declares. No protection success is claimed. |
 | `inference-error` | The provider did not complete a usable live turn. |
 | `harness-error` | Host execution, cleanup, event correlation or native enforcement evidence failed. |
 | `task-incomplete` | Calls succeeded but independently checked task outcomes did not. |
+
+### What a pass guarantees about coverage
+
+A case is written to exercise a particular Guard decision, but the bytes that
+reach Guard are the model's choice. Where the shape a case exists to test can be
+spelled several ways, a green run could mean "Guard stayed correct" or "the model
+avoided that shape this time", and the evidence read the same either way.
+
+A case may therefore declare, as `decision_paths` in its catalog entry, the Guard
+reason codes it exists to reach. The judge reads those codes back out of that
+case's own `guard_observations`, so a declaration is satisfied only by a live
+Guard decision in that run's evidence; nothing marks a path covered without one.
+A case that would otherwise pass without reaching a declared code is reported as
+`not-exercised` — the outcome the driver retries once and which never counts as a
+pass — rather than as a quiet pass. A `false-positive` or `false-negative` keeps
+its verdict: a product failure proved itself whatever else the run covered.
+
+Every case records the codes it observed, declaring or not, under
+`assessment.decision_paths`. The run aggregates them into
+`case_coverage.decision_paths` in `summary.json` and into the markdown summary, so
+a qualification states the decisions it actually drove rather than the ones it
+selected. A pass on a case that declares nothing still means only what it always
+did: the model did the ordinary work and Guard stayed quiet.
 
 Identical HTTP 429/5xx retries before any completion bytes were delivered are recorded as recovered inference transport attempts. Partial-stream retries, changed requests and repeated host tool calls do not receive that exception. A provider outage is not a product false positive, and a broken harness is not a successful security block.
 

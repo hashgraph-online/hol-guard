@@ -406,7 +406,7 @@ impl CloudContext<'_> {
                     dashboard_url: evaluation.user_copy.dashboard_url.clone(),
                     harness_message: harness_parts.join(" "),
                 };
-                let policy_action = decision_to_guard_action_variant(&evaluation.policy_action);
+                let policy_action = guard_action_variant(&evaluation.policy_action);
                 evaluation.user_copy = normalize_package_user_copy(&candidate, policy_action);
             }
         }

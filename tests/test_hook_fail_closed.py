@@ -106,3 +106,73 @@ def test_queued_review_deny_keeps_the_approval_link_when_render_fails(monkeypatc
     )
     assert rendered["decision"] == "deny"
     assert "http://127.0.0.1/a" in str(rendered["reason"])
+
+
+@pytest.mark.parametrize("harness", ["omp", "codex"])
+def test_blocking_verdict_keeps_its_reason_when_render_fails(monkeypatch: pytest.MonkeyPatch, harness: str) -> None:
+    monkeypatch.setattr(hook_fail_closed, "native_render_pre_tool", lambda *_a, **_k: None)
+    verdict = {
+        "decision": "deny",
+        "minimum_action": "require-reapproval",
+        "reason": "Copying .env needs a fresh approval.",
+        "reason_code": "native_policy_reapproval_required",
+    }
+    rendered = render_pre_tool(harness, verdict)
+    assert rendered["policy_action"] == "block"
+    assert rendered["reason_code"] == "native_policy_reapproval_required"
+    assert "Copying .env needs a fresh approval." in str(rendered)
+
+
+def test_review_render_failure_keeps_the_verdict_reason_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(hook_fail_closed, "native_render_pre_tool_review", lambda *_a, **_k: None)
+    verdict = {"decision": "deny", "reason": "Needs review.", "reason_code": "native_pre_tool_review"}
+    rendered = render_pre_tool_review("omp", verdict, approval=None)
+    assert rendered["decision"] == "deny"
+    assert rendered["reason_code"] == "native_pre_tool_review"
+    assert rendered["reason"] == "Needs review."
+
+
+def test_allow_verdict_that_failed_to_render_keeps_the_unavailable_code(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(hook_fail_closed, "native_render_pre_tool", lambda *_a, **_k: None)
+    rendered = render_pre_tool(
+        "omp", {"decision": "allow", "minimum_action": "allow", "reason_code": "native_allow", "reason": "fine"}
+    )
+    assert rendered["decision"] == "deny"
+    assert rendered["reason_code"] == "native_hook_render_unavailable"
+    assert rendered["reason"] == "HOL Guard could not complete native review safely."
+
+
+def test_allow_decision_over_a_blocking_floor_keeps_the_verdict_reason(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(hook_fail_closed, "native_render_pre_tool", lambda *_a, **_k: None)
+    verdict = {
+        "decision": "allow",
+        "minimum_action": "require-reapproval",
+        "reason_code": "native_policy_reapproval_required",
+        "reason": "Copying .env needs a fresh approval.",
+    }
+    rendered = render_pre_tool("omp", verdict)
+    assert rendered["decision"] == "deny"
+    assert rendered["reason_code"] == "native_policy_reapproval_required"
+    assert rendered["reason"] == "Copying .env needs a fresh approval."
+
+
+def test_a_reason_that_looks_like_a_placeholder_is_sent_verbatim() -> None:
+    rendered = fail_closed_pre_tool("pi", reason="$reason_code", reason_code="$reason")
+    assert rendered["reason"] == "$reason_code"
+    assert rendered["reason_code"] == "$reason"
+
+
+def test_every_event_kind_answers_from_the_shared_contract() -> None:
+    assert hook_fail_closed.fail_closed_response("grok", "Stop") == {}
+    assert hook_fail_closed.fail_closed_response("codex", "beforeShellExecution")["policy_action"] == "block"
+    assert hook_fail_closed.fail_closed_response("copilot", "userPromptSubmitted", prompt_reason="Paused.") == {
+        "behavior": "deny",
+        "message": "Paused.",
+        "interrupt": False,
+        "policy_action": "block",
+        "reason_code": "native_prompt_unavailable",
+    }
+    assert hook_fail_closed.fail_closed_response("claude_code", "Notification")["hookSpecificOutput"] == {
+        "hookEventName": "Notification"
+    }
+    assert hook_fail_closed.unmanaged_passthrough("OMP") == {"decision": "allow", "reason_code": "harness_not_managed"}

@@ -2,6 +2,10 @@
 //! `_codex_post_tool_output_artifact`, replayed through the resident
 //! `codex_tool_output` request path with the real inspection host.
 //!
+//! Each case replays twice: with the command texts the retired Python derived,
+//! as an older client sends them, and without, so the resident derives them
+//! from the payload itself.
+//!
 //! A fingerprint or metadata value that names the fixture root is compared
 //! after substituting this run's root; a fingerprint over an absolute
 //! execution context or a Git pathspec identity depends on the recording
@@ -79,10 +83,13 @@ fn scoped(root: &Path, value: &Value) -> Value {
         .map_or(Value::Null, |name| json!(root.join(name).to_string_lossy()))
 }
 
-fn review(case: &Value, root: &Path, git: Option<String>) -> Value {
+fn review(case: &Value, root: &Path, git: Option<String>, derived: bool) -> Value {
     let root_text = root.to_string_lossy();
     let mut body = substitute(&case["body"], &root_text);
     let fields = body.as_object_mut().unwrap();
+    if derived {
+        fields.remove("command_texts");
+    }
     fields.insert("cwd".to_owned(), scoped(root, &case["cwd"]));
     fields.insert("home_dir".to_owned(), scoped(root, &case["home_dir"]));
     fields.insert("deadline_ms".to_owned(), json!(30_000));
@@ -184,12 +191,18 @@ fn post_tool_output_matches_the_retired_python_vectors() {
             continue;
         }
         checked += 1;
-        let actual = review(case, &root, git.clone());
-        if let Some(reason) = mismatch(expected, &actual, &root_text) {
-            failures.push(format!(
-                "{} cwd={}: {reason}",
-                case["body"]["command_texts"], case["cwd"]
-            ));
+        let forms = [("derived", true), ("client list", false)];
+        for (form, derived) in forms {
+            if !derived && case["body"].get("command_texts").is_none() {
+                continue;
+            }
+            let actual = review(case, &root, git.clone(), derived);
+            if let Some(reason) = mismatch(expected, &actual, &root_text) {
+                failures.push(format!(
+                    "{form} {} cwd={}: {reason}",
+                    case["body"]["tool_input"], case["cwd"]
+                ));
+            }
         }
     }
     let _ = fs::remove_dir_all(&root);

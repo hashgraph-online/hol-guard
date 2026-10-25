@@ -3,14 +3,10 @@ use fixture::*;
 use serde_json::json;
 use std::io::Write;
 use std::process::{Command, Stdio};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 fn unique_fixture_root() -> std::path::PathBuf {
     let base = std::env::temp_dir();
-    let stamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock is after the Unix epoch")
-        .as_nanos();
+    let stamp = crate::unique_nanos::unique_nanos();
     for attempt in 0..32 {
         let root = base.join(format!(
             "guard-filter-batches-{}-{stamp}-{attempt}",

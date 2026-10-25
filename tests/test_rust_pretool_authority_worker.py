@@ -13,6 +13,7 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.daemon.hook_native_exact_action import native_exact_action
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_route_receipt import (
     native_hook_route,
@@ -116,10 +117,14 @@ def test_hook_worker_native_review_does_not_escape_to_python_semantics(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         review_with_resident_receipt,
     )
+
     # The approval wait is offered only for a review the agent's retry can match.
+    def evidence(**kwargs: Any) -> tuple[str | None, str | None, str | None]:
+        return (f"native-review-v4:{'ab' * 32}:ask:review:review:r", *native_exact_action(**kwargs))
+
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.native_review_binding",
-        lambda *_args, **_kwargs: f"native-review-v4:{'ab' * 32}:ask:review:review:r",
+        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.native_review_evidence",
+        evidence,
     )
     reset_native_hook_route()
     store = GuardStore(tmp_path / "guard-home")

@@ -1,6 +1,17 @@
-# node-forge 1.4.0 via @anthropic-ai/mcpb 2.1.2 (CI bundle tooling only).
-# Signature-forgery advisory; the tool creates signatures for our own
-# artifacts and never verifies untrusted input, so the exposure does not
-# apply. No fixed node-forge release exists yet (latest is the affected
-# 1.4.0); revisit on the next dependency refresh.
-CVE-2026-85393 exp:2027-01-01
+# undici 8.10.2 and zod 3.25.76 via ci/pi-exact-continuation/package-lock.json.
+# That lock pins the Oh My Pi SDK the Gauntlet lane runs; it is CI-only tooling
+# and ships in no release artifact. Both advisories are denial of service
+# reached through attacker-chosen input, and the lane feeds the SDK only our own
+# catalog and fixtures. Neither has a fix that keeps the pinned major: zod's is
+# 4.x against a ^3 requirement, and undici's 8.12.2 arrives with the next SDK
+# refresh. Revisit when that pin moves.
+CVE-2026-109869 exp:2027-01-01
+CVE-2023-54404 exp:2027-01-01
+
+# filelock 3.25.2 via huggingface-hub in the evaluation dependency group.
+# Nothing in the published wheel depends on it, so the insecure temporary file
+# is only reachable on a developer or CI machine that already runs our own
+# evaluation code. The fixed 4.2.1 cannot be locked for every supported
+# interpreter: filelock 4.2.x requires Python 3.11, and the lock still resolves
+# 4.1.0 for 3.10. Revisit when the floor rises to 3.11.
+CVE-2026-112940 exp:2027-01-01

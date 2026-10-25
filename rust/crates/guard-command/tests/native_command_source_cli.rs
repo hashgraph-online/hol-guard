@@ -29,11 +29,7 @@ fn invoke(arguments: &[&str], input: &[u8]) -> Output {
 fn request() -> Vec<u8> {
     let source: Value =
         serde_json::from_slice(include_bytes!("fixtures/command-source-example.v1.json")).unwrap();
-    let trust: Value = serde_json::from_slice(include_bytes!(concat!(
-        env!("OUT_DIR"),
-        "/trust-class-map.v1.json"
-    )))
-    .unwrap();
+    let trust: Value = serde_json::from_slice(guard_command_catalog_data::TRUST_MAP_JSON).unwrap();
     let built: Value = serde_json::from_slice(&invoke(&["export-built"], &[]).stdout).unwrap();
     serde_json::to_vec(&json!({
         "schema":"guard.command-extension-build.v1",

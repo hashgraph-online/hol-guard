@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from dataclasses import replace
 from hashlib import sha256
 from pathlib import Path
@@ -20,6 +19,7 @@ from ..shims import (
     prepare_guard_shim_shell_profile,
     remove_guard_shim,
 )
+from ..stable_guard_cli import guard_cli_launcher
 from .base import (
     HarnessAdapter,
     HarnessContext,
@@ -603,7 +603,7 @@ class CursorHarnessAdapter(HarnessAdapter):
             home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
             workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
         )
-        command, launch_args = mcp_proxy_launch(sys.executable, args)
+        command, launch_args = mcp_proxy_launch(guard_cli_launcher(), args)
         entry: dict[str, object] = {
             "command": command,
             "args": launch_args,
@@ -620,7 +620,7 @@ class CursorHarnessAdapter(HarnessAdapter):
         raw_args = server_config.get("args")
         args = tuple(str(value) for value in raw_args if isinstance(value, str)) if isinstance(raw_args, list) else ()
         _, python_args = python_proxy_launch(None, args)
-        refreshed["command"], refreshed["args"] = mcp_proxy_launch(sys.executable, python_args)
+        refreshed["command"], refreshed["args"] = mcp_proxy_launch(guard_cli_launcher(), python_args)
         return refreshed
 
     @staticmethod

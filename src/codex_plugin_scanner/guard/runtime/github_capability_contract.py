@@ -5,14 +5,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Final, Literal
+from typing import Final, Literal
 
 from codex_plugin_scanner.guard.action_lattice import guard_action_severity
 
 from ..models import GuardAction
 
-if TYPE_CHECKING:
-    from .command_permission_catalog import PermissionRiskTier
+PermissionRiskTier = Literal["critical", "high", "medium", "low"]
 
 GitHubCommandCapability = Literal[
     "read_local",

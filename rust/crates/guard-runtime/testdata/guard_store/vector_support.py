@@ -99,6 +99,7 @@ def schema_sql_for_tables(path: Path, tables: Iterable[str]) -> list[str]:
             row[0]
             for row in connection.execute(
                 f"select sql from sqlite_master where sql is not null and tbl_name in ({','.join('?' * len(names))}) "
+                "and name not glob 'trg_extension_control_epoch_*' and name != 'extension_control_authority_epoch' "
                 "order by case type when 'table' then 0 when 'index' then 1 else 2 end, rowid",
                 names,
             )

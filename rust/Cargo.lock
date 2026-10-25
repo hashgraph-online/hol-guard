@@ -640,6 +640,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4eba85ea1d0a966a983acd07deee566e67395d2d96b6fb39e62b5a833f1eb0b"
 
 [[package]]
+name = "guard-adapter-detection"
+version = "0.1.0"
+dependencies = [
+ "guard-runtime-pyjson",
+ "serde_json",
+]
+
+[[package]]
 name = "guard-alloc-probe"
 version = "0.1.0"
 
@@ -670,9 +678,10 @@ dependencies = [
  "flate2",
  "fs2",
  "getrandom 0.3.4",
- "guard-command-build",
+ "guard-command-catalog-data",
  "guard-contained-process",
  "guard-contracts",
+ "guard-hook-payload",
  "guard-runtime-windows-process",
  "guard-scanner",
  "guard-secure-fs",
@@ -704,7 +713,6 @@ dependencies = [
  "unicode-normalization",
  "ureq",
  "url",
- "zstd",
 ]
 
 [[package]]
@@ -718,6 +726,7 @@ dependencies = [
  "fs2",
  "getrandom 0.3.4",
  "guard-contracts",
+ "guard-hook-payload",
  "guard-runtime-windows-process",
  "guard-scanner",
  "guard-secure-fs",
@@ -745,6 +754,18 @@ dependencies = [
  "unicode-normalization",
  "ureq",
  "url",
+]
+
+[[package]]
+name = "guard-command-catalog-data"
+version = "0.1.0"
+dependencies = [
+ "guard-command-build",
+ "hex",
+ "ruzstd",
+ "serde_json",
+ "sha2",
+ "zstd",
 ]
 
 [[package]]
@@ -807,11 +828,58 @@ dependencies = [
 ]
 
 [[package]]
+name = "guard-hook-payload"
+version = "0.1.0"
+dependencies = [
+ "fancy-regex 0.19.2",
+ "guard-contracts",
+ "hex",
+ "regex",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "guard-pack-compiler"
 version = "0.1.0"
 dependencies = [
  "guard-command-build",
  "serde_json",
+]
+
+[[package]]
+name = "guard-plugin-kit"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "guard-plugin-telemetry"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "hmac",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "guard-policy-bundle"
+version = "0.1.0"
+dependencies = [
+ "base64ct",
+ "flate2",
+ "guard-contracts",
+ "guard-policy-snapshot",
+ "hex",
+ "rsa",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -844,6 +912,13 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "sha2",
+]
+
+[[package]]
+name = "guard-runtime-pyjson"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -943,14 +1018,19 @@ dependencies = [
  "flate2",
  "fs2",
  "getrandom 0.3.4",
+ "guard-adapter-detection",
  "guard-archive",
  "guard-command",
  "guard-contained-process",
  "guard-contracts",
  "guard-google-identity",
  "guard-hook-core",
+ "guard-plugin-kit",
+ "guard-plugin-telemetry",
+ "guard-policy-bundle",
  "guard-policy-snapshot",
  "guard-rule-contract",
+ "guard-runtime-pyjson",
  "guard-runtime-windows-process",
  "guard-scanner",
  "guard-seatbelt",
@@ -1906,9 +1986,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.45"
+version = "0.23.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
+checksum = "48e13bd8c0e9365c43cfa5c9e8f9ad49d3c8444926c9aac819e0e4dc503c8fdf"
 dependencies = [
  "log",
  "once_cell",
@@ -1930,9 +2010,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.15"
+version = "0.103.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
+checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
 dependencies = [
  "ring",
  "rustls-pki-types",
@@ -1947,9 +2027,9 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "ruzstd"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a252f5e20f038fe7b4ea53e073e65398d652c864cc162fc77c56c2f13717b888"
+checksum = "69e4ce4a039f42bf25920b95667e4d789e98749ab11bbb8d2c2936f788421bb5"
 
 [[package]]
 name = "salsa20"
@@ -2656,9 +2736,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.9"
+version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
+checksum = "1c1c8e20c8a38fc7d65abfe74eb7280e4aa667e8eec8bc84996d2874810748d9"
 dependencies = [
  "rustls-pki-types",
 ]

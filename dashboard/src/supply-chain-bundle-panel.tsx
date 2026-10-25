@@ -1,13 +1,14 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, type ReactNode } from "react";
 import {
   HiMiniExclamationTriangle,
   HiMiniBugAnt,
   HiMiniArrowTopRightOnSquare,
 } from "react-icons/hi2";
-import { SectionLabel, Badge, Tag, EmptyState } from "./approval-center-primitives";
+import { Badge } from "./approval-center-primitives";
 import { formatRelativeTime } from "./approval-center-utils";
 import { fetchSupplyChainBundle } from "./guard-api";
 import type { SupplyChainBundle, SupplyChainBundleAdvisory } from "./guard-types";
+import { SupplyChainDetailSection } from "./supply-chain-detail-section";
 
 function SeverityBadge({ severity }: { severity: string }) {
   const tone =
@@ -21,7 +22,7 @@ function SeverityBadge({ severity }: { severity: string }) {
 
 function AdvisoryRow({ advisory }: { advisory: SupplyChainBundleAdvisory }) {
   return (
-    <div className="flex items-start gap-3 px-4 py-3 border-b border-slate-100 last:border-b-0 hover:bg-slate-50/40 transition-colors">
+    <li className="flex items-start gap-3 py-3">
       <div className="mt-0.5 shrink-0">
         {advisory.knownExploited ? (
           <HiMiniExclamationTriangle className="h-4 w-4 text-red-500" aria-hidden="true" />
@@ -47,7 +48,29 @@ function AdvisoryRow({ advisory }: { advisory: SupplyChainBundleAdvisory }) {
           </p>
         )}
       </div>
-    </div>
+    </li>
+  );
+}
+
+const SEVERITY_LEVELS = ["critical", "high", "medium", "low"] as const;
+
+const SEVERITY_TEXT_CLASS: Record<(typeof SEVERITY_LEVELS)[number], string> = {
+  critical: "text-brand-purple",
+  high: "text-brand-purple",
+  medium: "text-brand-attention-text",
+  low: "text-brand-dark",
+};
+
+function IntelSection({ action, children }: { action?: ReactNode; children: ReactNode }) {
+  return (
+    <SupplyChainDetailSection
+      id="supply-chain-intel-heading"
+      title="Supply chain intel"
+      lead="The signed advisory feed Guard checks each install against."
+      action={action}
+    >
+      {children}
+    </SupplyChainDetailSection>
   );
 }
 
@@ -111,152 +134,102 @@ export function SupplyChainBundlePanel() {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <SectionLabel>Supply chain intel</SectionLabel>
-        </div>
-        <div className="px-4 py-8">
-          <div className="guard-skeleton h-4 w-32 mb-3" />
-          <div className="guard-skeleton h-4 w-48 mb-2" />
+      <IntelSection>
+        <div className="space-y-2 py-1" aria-hidden="true">
+          <div className="guard-skeleton h-4 w-48" />
           <div className="guard-skeleton h-4 w-40" />
         </div>
-      </div>
+      </IntelSection>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <SectionLabel>Supply chain intel</SectionLabel>
-        </div>
-        <div className="px-4 py-6">
-          <EmptyState
-            title="Could not load intel"
-            body={error}
-          />
-        </div>
-      </div>
+      <IntelSection>
+        <p className="text-sm text-slate-600">
+          <span className="font-medium text-brand-dark">Could not load intel.</span> {error}
+        </p>
+      </IntelSection>
     );
   }
 
   if (!bundle) {
     return (
-      <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <SectionLabel>Supply chain intel</SectionLabel>
-        </div>
-        <div className="px-4 py-6">
-          <EmptyState
-            title="No intel available"
-            body="Guard has not synced a supply chain bundle yet. Connect to Guard Cloud for live advisory data."
-            tone="teach"
-          />
-        </div>
-      </div>
+      <IntelSection>
+        <p className="text-sm text-slate-600">
+          <span className="font-medium text-brand-dark">No intel available.</span> Guard has not synced a
+          supply chain bundle yet. Connect to Guard Cloud for live advisory data.
+        </p>
+      </IntelSection>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Bundle metadata */}
-      <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <div className="flex items-center justify-between">
-            <SectionLabel>Supply chain bundle</SectionLabel>
-            <button
-              type="button"
-              onClick={handleOpenCloud}
-              className="inline-flex items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-blue/30 rounded px-1.5 py-0.5"
-            >
-              View in cloud
-              <HiMiniArrowTopRightOnSquare className="h-3 w-3" aria-hidden="true" />
-            </button>
-          </div>
-          <p className="mt-1 text-sm text-slate-500">
-            Signed advisory feed and package risk data.
-          </p>
+    <IntelSection
+      action={
+        <button
+          type="button"
+          onClick={handleOpenCloud}
+          className="inline-flex items-center gap-1 rounded text-xs font-medium text-brand-blue hover:text-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+        >
+          View in cloud
+          <HiMiniArrowTopRightOnSquare className="h-3 w-3" aria-hidden="true" />
+        </button>
+      }
+    >
+      <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+        <div className="flex items-baseline gap-2">
+          <dt className="text-slate-600">Bundle</dt>
+          <dd className="font-mono font-medium text-brand-dark">{bundle.bundleVersion}</dd>
         </div>
-        <div className="px-4 py-4 space-y-3">
-          <div className="flex flex-wrap gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-[0.15em]">Version:</span>
-              <Tag tone="blue">{bundle.bundleVersion}</Tag>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-[0.15em]">Advisories:</span>
-              <Tag tone="slate">{bundle.advisories.length}</Tag>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-[0.15em]">Packages:</span>
-              <Tag tone="slate">{bundle.packages.length}</Tag>
-            </div>
-          </div>
-          {bundle.expiresAt && (
-            <p className="text-xs text-slate-400">
-              Expires {formatRelativeTime(bundle.expiresAt)}
-            </p>
-          )}
+        <div className="flex items-baseline gap-2">
+          <dt className="text-slate-600">Advisories</dt>
+          <dd className="font-medium tabular-nums text-brand-dark">{bundle.advisories.length}</dd>
         </div>
-      </div>
+        <div className="flex items-baseline gap-2">
+          <dt className="text-slate-600">Packages</dt>
+          <dd className="font-medium tabular-nums text-brand-dark">{bundle.packages.length}</dd>
+        </div>
+        {bundle.expiresAt && (
+          <div className="flex items-baseline gap-2">
+            <dt className="text-slate-600">Expires</dt>
+            <dd className="font-medium text-brand-dark">{formatRelativeTime(bundle.expiresAt)}</dd>
+          </div>
+        )}
+      </dl>
 
-      {/* Severity breakdown */}
       {severityCounts && Object.keys(severityCounts).length > 0 && (
-        <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <SectionLabel>Severity breakdown</SectionLabel>
-          </div>
-          <div className="px-4 py-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {["critical", "high", "medium", "low"].map((sev) => {
-                const count = severityCounts[sev] ?? 0;
-                const tone =
-                  sev === "critical" || sev === "high"
-                    ? "destructive"
-                    : sev === "medium"
-                    ? "attention"
-                    : "default";
-                return (
-                  <div key={sev} className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-400">{sev}</p>
-                    <p className="mt-1 text-xl font-bold tabular-nums">
-                      <Badge tone={tone}>{count}</Badge>
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm" aria-label="Advisories by severity">
+          {SEVERITY_LEVELS.map((sev) => (
+            <li key={sev} className="flex items-baseline gap-1.5">
+              <span className={`font-semibold tabular-nums ${SEVERITY_TEXT_CLASS[sev]}`}>
+                {severityCounts[sev] ?? 0}
+              </span>
+              <span className="text-slate-600">{sev}</span>
+            </li>
+          ))}
+        </ul>
       )}
 
-      {/* Top advisories */}
       {topAdvisories.length > 0 && (
-        <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <SectionLabel>Top advisories</SectionLabel>
-            <p className="mt-1 text-sm text-slate-500">
-              Highest severity and confidence advisories in this bundle.
-            </p>
-          </div>
-          <div>
+        <div className="mt-4">
+          <h4 className="text-xs font-medium text-slate-600">Top advisories by severity and confidence</h4>
+          <ul className="mt-1 divide-y divide-slate-100">
             {topAdvisories.map((advisory) => (
               <AdvisoryRow key={advisory.advisoryId} advisory={advisory} />
             ))}
-          </div>
+          </ul>
           {bundle.advisories.length > 10 && (
-            <div className="border-t border-slate-100 px-4 py-2.5">
-              <button
-                type="button"
-                onClick={handleOpenCloud}
-                className="text-xs font-medium text-brand-blue hover:text-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-blue/30 rounded px-1.5 py-0.5"
-              >
-                View all {bundle.advisories.length} advisories in Guard Cloud
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleOpenCloud}
+              className="mt-1 rounded text-xs font-medium text-brand-blue hover:text-brand-blue-dark focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+            >
+              View all {bundle.advisories.length} advisories in Guard Cloud
+            </button>
           )}
         </div>
       )}
-    </div>
+    </IntelSection>
   );
 }

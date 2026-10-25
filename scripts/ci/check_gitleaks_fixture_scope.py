@@ -38,6 +38,21 @@ def verify_fixture_scope(root: Path, executable: str) -> None:
         ("extra credential on private-key fixture line", pem_relative, pem_fixture + " " + unexpected, True),
         ("extra credential in private-key fixture file", pem_relative, pem_fixture + "\n" + unexpected, True),
     )
+    digest = hashlib.sha256(b"authoring-record-scope-control").hexdigest()
+    record = Path("contributions/authoring/command.secret-example/record.json")
+    digest_line = f'    "contributions/command-sources/command.secret-example.json": "{digest}",'
+    credential_line = f'  "apiSecret": "{digest}"'
+    cases += (
+        ("authoring managed-file digest", record, digest_line, False),
+        ("authoring revision digest", record, f'  "revisionDigest": "{digest}"', False),
+        ("hex credential in authoring record", record, credential_line, True),
+        ("client secret in authoring record", record, f'  "client_secret": "{digest}"', True),
+        ("digest line outside authoring record", Path("src/record.json"), digest_line, True),
+        ("digest line in nested record", record.parent / "nested/record.json", digest_line, True),
+        ("non-digest managed-file value", record, digest_line.replace(digest, digest + "a"), True),
+        ("credential beside authoring digest", record, digest_line + " " + credential_line, True),
+        ("credential after authoring digest", record, digest_line + "\n" + credential_line, True),
+    )
     with tempfile.TemporaryDirectory(prefix="gitleaks-fixture-scope-") as temporary:
         base = Path(temporary)
         for index, (name, path, content, expect_leak) in enumerate(cases):

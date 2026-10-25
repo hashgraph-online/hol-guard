@@ -15,7 +15,10 @@ const KEPT = "Guard could not save this protection change, so your current prote
 const UNCERTAIN =
   "Guard could not confirm this protection change, so it may or may not have been saved. Reload the page to see the settings Guard is holding now.";
 
-type Recovery = { command: string; terminal: string };
+// `reloaded` records whether the page has already read Guard's current state
+// since the refusal. Only then may a sentence say the page shows it; otherwise
+// the reload is still the operator's to do.
+type Recovery = { command: string; terminal: string; reloaded: boolean };
 
 function preparationSentence(cause: string | undefined, recovery: Recovery): string {
   switch (cause) {
@@ -33,6 +36,13 @@ function preparationSentence(cause: string | undefined, recovery: Recovery): str
       return `${KEPT} A protection pack it needs was withdrawn. Reload this page to pick up the current catalog, then try again.`;
     case "local_storage":
       return `${KEPT} Guard could not read its local protection cache. Try again; if it keeps failing, run \`${recovery.command}\` in ${recovery.terminal}.`;
+    // Not a broken install and not transient: the request is rebuilt from the
+    // same local data every time, so neither reinstalling nor retrying moves
+    // it. Saying "try again" here is what left operators in a loop, and so
+    // would naming a recovery command, because none of them prune the state
+    // the request is built from. The log is the one place that says what grew.
+    case "native_request_too_large":
+      return `${KEPT} Guard's local protection data has grown past what its runtime accepts in one request. Retrying sends the same request again and reinstalling Guard will not change it; the Guard daemon log records the request that grew and how far past the bound it got.`;
     default:
       return `${KEPT} Try again; if it keeps failing, the Guard daemon log records the exact cause.`;
   }
@@ -48,7 +58,9 @@ function codeSentence(code: string, recovery: Recovery): string | undefined {
     case "authority_conflict":
     case "revision_conflict":
     case "invalid_previous_revision":
-      return `${KEPT} Your protection settings changed while this page was open. Reload the page and make the change again.`;
+      return `${KEPT} Your protection settings changed while this page was open. ${
+        recovery.reloaded ? "This page now shows the current settings; make the change again." : "Reload the page and make the change again."
+      }`;
     case "authority_unavailable":
     case "authority_unread":
     case "authority_history_unavailable":
@@ -62,7 +74,9 @@ function codeSentence(code: string, recovery: Recovery): string | undefined {
       return `Guard could not finish recovering the protection authority. ${repairAuthority}`;
     case "catalog_conflict":
     case "catalog_payload_limit_exceeded":
-      return `${KEPT} Guard's protection catalog moved underneath this page. Reload the page and make the change again.`;
+      return `${KEPT} Guard's protection catalog moved underneath this page. ${
+        recovery.reloaded ? "This page now shows the current catalog; make the change again." : "Reload the page and make the change again."
+      }`;
     case "control_limit_exceeded":
     case "layer_control_limit_exceeded":
     case "layer_limit_exceeded":
@@ -79,7 +93,9 @@ function codeSentence(code: string, recovery: Recovery): string | undefined {
     case "invalid_extension":
     case "unknown_extension":
     case "unknown_permission":
-      return `${KEPT} Guard no longer recognizes the setting this page asked to change. Reload the page and try again.`;
+      return `${KEPT} Guard no longer recognizes the setting this page asked to change. ${
+        recovery.reloaded ? "This page now shows what Guard recognizes; try again." : "Reload the page and try again."
+      }`;
     case "invalid_layers":
     case "invalid_mutation":
       return `${KEPT} Guard rejected the change as malformed. Reload the page and make the change again; if it keeps failing, the Guard daemon log records the exact cause.`;
@@ -111,6 +127,25 @@ const RETRYABLE_PREPARATION_CAUSES = new Set([
   "release_unavailable",
 ]);
 
+// The daemon is the authority on which catalog and which revision a mutation
+// is allowed to carry, and it refuses one that does not match. A refusal on
+// those grounds is not a dead end: the page reloads itself onto what the daemon
+// holds now, so the operator's next attempt is made against current data rather
+// than against a page they have to know to reload by hand.
+const STALE_DATA_CODES = new Set([
+  "authority_conflict",
+  "catalog_conflict",
+  "invalid_extension",
+  "invalid_previous_revision",
+  "revision_conflict",
+  "unknown_extension",
+  "unknown_permission",
+]);
+
+export function isStaleProtectionDataError(error: unknown): boolean {
+  return error instanceof ExtensionControlApiError && STALE_DATA_CODES.has(error.code ?? "");
+}
+
 export function isRetryableProtectionChangeError(error: unknown): boolean {
   return (
     error instanceof ExtensionControlApiError &&
@@ -123,10 +158,12 @@ export function protectionChangeErrorMessage(
   error: unknown,
   recoveryCommand?: string,
   recoveryShell?: "powershell",
+  options: { reloaded?: boolean } = {},
 ): string {
   const recovery: Recovery = {
     command: recoveryCommand ?? "hol-guard command controls recover-authority",
     terminal: recoveryShell === "powershell" ? "PowerShell" : "your terminal",
+    reloaded: options.reloaded === true,
   };
   if (error instanceof ExtensionControlApiError) {
     if (error.code === "pack_preparation_unavailable") return preparationSentence(error.cause, recovery);

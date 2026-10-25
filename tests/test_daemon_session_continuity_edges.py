@@ -25,7 +25,6 @@ def test_permission_denied_lifecycle_is_not_canonicalized_to_permission_request(
     assert runtime_hook_event_name({"hook_event_name": "PermissionDenied"}) == "PermissionDenied"
     assert runtime_hook_event_name({"hook_name": "permissionRequestV2"}) == "PermissionRequest"
     denied = availability_harness_response(
-        {"hook_event_name": "PermissionDenied"},
         harness="claude-code",
         event_name="PermissionDenied",
         reason_code="native_hook_event_unavailable",
@@ -45,17 +44,13 @@ def test_old_cursor_hooks_deny_empty_stdin_without_baked_event() -> None:
 
 def test_native_unavailable_pretool_denies_without_watch(tmp_path: Path) -> None:
     payload = availability_harness_response(
-        {"hook_event_name": "PreToolUse", "tool_input": {"command": "curl https://example.test"}},
         harness="grok",
         event_name="PreToolUse",
         reason_code="native_pre_tool_unavailable",
         reason="native unavailable",
-        workspace=tmp_path,
-        home_dir=tmp_path / "home",
     )
     assert payload["decision"] == "deny"
     permission = availability_harness_response(
-        {"hook_event_name": "PermissionRequest"},
         harness="claude-code",
         event_name="PermissionRequest",
         reason_code="native_pre_tool_unavailable",
@@ -63,26 +58,20 @@ def test_native_unavailable_pretool_denies_without_watch(tmp_path: Path) -> None
     )
     assert permission["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     daemon_miss = availability_harness_response(
-        {"hook_event_name": "PreToolUse", "tool_input": {"command": "curl https://example.test"}},
         harness="grok",
         event_name="PreToolUse",
         reason_code="native_pre_tool_unavailable",
         reason="native unavailable",
-        workspace=tmp_path,
-        home_dir=tmp_path / "home",
     )
     assert daemon_miss["decision"] == "deny"
 
 
 def test_native_policy_not_ready_pretool_denies_without_interrupting_session(tmp_path: Path) -> None:
     payload = availability_harness_response(
-        {"hook_event_name": "PreToolUse", "tool_input": {"command": "curl https://example.test"}},
         harness="claude-code",
         event_name="PreToolUse",
         reason_code="native_policy_not_ready",
         reason="native policy was not ready",
-        workspace=tmp_path,
-        home_dir=tmp_path / "home",
     )
     assert payload.get("continue") is not False
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
@@ -92,7 +81,6 @@ def test_cursor_write_denies_when_native_unavailable() -> None:
     from codex_plugin_scanner.guard.daemon.hook_availability_policy import cursor_fallback_permission
 
     deny, code = cursor_fallback_permission(
-        {"hook_event_name": "beforeWriteFile", "file_path": "src/app.ts", "tool_name": "Write"},
         hook_event_name="beforeWriteFile",
     )
     assert code == 2
@@ -129,7 +117,6 @@ def test_copilot_permission_request_v2_uses_behavior_deny_shape() -> None:
     assert payload["interrupt"] is False
     assert "permissionDecision" not in payload
     availability = availability_harness_response(
-        {"hook_event_name": "PermissionRequestV2"},
         harness="copilot",
         event_name="PermissionRequestV2",
         reason_code="native_hook_event_unavailable",
@@ -150,99 +137,34 @@ def test_missing_native_fail_safe_codes_continue_mutating_pretool(tmp_path: Path
         "native_degraded_emergency_safe",
         "unlisted_native_miss",
     ):
-        for payload, event_name in (
-            (
-                {"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": "src/app.ts"}},
-                "PreToolUse",
-            ),
-            (
-                {"hook_event_name": "PreToolUse", "tool_input": {"command": "git push"}},
-                "PreToolUse",
-            ),
-            (
-                {"hook_event_name": "PreToolUse", "tool_name": "Task", "tool_input": {"prompt": "implement"}},
-                "PreToolUse",
-            ),
-            (
-                {"hook_event_name": "PreToolUse", "tool_name": "StrReplace", "tool_input": {"path": "src/app.ts"}},
-                "PreToolUse",
-            ),
-            (
-                {"hook_event_name": "PreToolUse", "tool_input": {"command": "python -c 'print(1)'"}},
-                "PreToolUse",
-            ),
-            (
-                {"hook_event_name": "PreToolUse", "tool_input": {"command": "mkdir src/generated"}},
-                "PreToolUse",
-            ),
-        ):
-            response = availability_harness_response(
-                payload,
-                harness="cursor",
-                event_name=event_name,
-                reason_code=reason_code,
-                reason=reason,
-                workspace=tmp_path,
-                home_dir=tmp_path / "home",
-            )
-            output = response["hookSpecificOutput"]
-            assert isinstance(output, dict)
-            assert output["permissionDecision"] == "deny"
-            assert response["policy_action"] == "block"
+        response = availability_harness_response(
+            harness="cursor",
+            event_name="PreToolUse",
+            reason_code=reason_code,
+            reason=reason,
+        )
+        output = response["hookSpecificOutput"]
+        assert isinstance(output, dict)
+        assert output["permissionDecision"] == "deny"
+        assert response["policy_action"] == "block"
 
 
-def test_cursor_maps_cannot_finish_block_to_allow() -> None:
-    from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_payload import (
-        cursor_hook_response_from_guard,
-        prepare_cursor_hook_payload,
-    )
+def test_cursor_maps_before_write_file_to_a_write_pretooluse() -> None:
+    from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_payload import prepare_cursor_hook_payload
 
     mapped = prepare_cursor_hook_payload(
         {"hook_event_name": "beforeWriteFile", "file_path": "src/app.ts", "tool_name": "Read"}
     )
     assert mapped["hook_event_name"] == "PreToolUse"
     assert mapped["tool_name"] == "Write"
-    response = cursor_hook_response_from_guard(
-        policy_action="block",
-        guard_payload={
-            "reason_code": "native_hook_edge_invalid_response",
-            "hookSpecificOutput": {
-                "permissionDecisionReason": "HOL Guard could not complete the native hook decision safely.",
-            },
-        },
-        hook_event_name="beforeWriteFile",
-    )
-    assert response["permission"] == "allow"
-
-
-def test_cursor_completed_block_ignores_stale_allow_permission() -> None:
-    from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_payload import cursor_hook_response_from_guard
-
-    response = cursor_hook_response_from_guard(
-        policy_action="block",
-        guard_payload={
-            "reason_code": "secret_pattern",
-            "decision": "allow",
-            "hookSpecificOutput": {"permissionDecision": "allow"},
-        },
-        hook_event_name="beforeShellExecution",
-    )
-    assert response["permission"] == "deny"
 
 
 def test_invalid_hook_payload_reference_stays_fail_closed(tmp_path: Path) -> None:
     response = availability_harness_response(
-        {
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Write",
-            "tool_input": {"file_path": "src/app.ts"},
-        },
         harness="cursor",
         event_name="PreToolUse",
         reason_code="invalid_hook_payload_reference",
         reason="HOL Guard could not authenticate the local hook payload.",
-        workspace=tmp_path,
-        home_dir=tmp_path / "home",
     )
     output = response["hookSpecificOutput"]
     assert isinstance(output, dict)
@@ -252,17 +174,10 @@ def test_invalid_hook_payload_reference_stays_fail_closed(tmp_path: Path) -> Non
 
 def test_retained_byte_limit_stays_fail_closed(tmp_path: Path) -> None:
     response = availability_harness_response(
-        {
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": "curl https://example.test"},
-        },
         harness="pi",
         event_name="PreToolUse",
         reason_code="daemon_hook_queue_bytes",
         reason="HOL Guard rejected this hook because the payload exceeded the retained-byte limit.",
-        workspace=tmp_path,
-        home_dir=tmp_path / "home",
     )
     assert response["decision"] == "deny"
     assert response["policy_action"] == "block"
@@ -270,17 +185,10 @@ def test_retained_byte_limit_stays_fail_closed(tmp_path: Path) -> None:
 
 def test_queue_byte_limit_denies_unverified_repair(tmp_path: Path) -> None:
     response = availability_harness_response(
-        {
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": "hol-guard install claude-code"},
-        },
         harness="claude-code",
         event_name="PreToolUse",
         reason_code="daemon_hook_queue_bytes",
         reason="HOL Guard rejected this hook because the payload exceeded the retained-byte limit.",
-        workspace=tmp_path,
-        home_dir=tmp_path / "home",
     )
     assert response.get("policy_action") == "block"
     output = response["hookSpecificOutput"]
@@ -290,18 +198,10 @@ def test_queue_byte_limit_denies_unverified_repair(tmp_path: Path) -> None:
 
 def test_invalid_payload_reference_still_denies_a_repair_command(tmp_path: Path) -> None:
     response = availability_harness_response(
-        {
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": "hol-guard install cursor"},
-            "guard_payload_ref": {"version": 1},
-        },
         harness="cursor",
         event_name="PreToolUse",
         reason_code="invalid_hook_payload_reference",
         reason="HOL Guard could not authenticate the local hook payload.",
-        workspace=tmp_path,
-        home_dir=tmp_path / "home",
     )
     output = response["hookSpecificOutput"]
     assert isinstance(output, dict)

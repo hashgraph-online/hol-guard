@@ -56,6 +56,15 @@ regexes = [
 ]
 
 [[rules.allowlists]]
+description = "Recorded replay key of the synthetic end-to-end trust attestation, a SHA-256 digest rather than a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/fixtures/guard\-trust\-attestation\-verify\.v1\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"replay_key": "4dc4ac25a65316869993be1c719cb6e479bfb71c6e79e7eae822f786cc1082d0",?[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
 description = "Synthetic capture keys recorded in the binding-capture parity vectors, not credentials"
 condition = "AND"
 regexTarget = "line"
@@ -63,6 +72,13 @@ paths = ['''(?:^|/)rust/crates/guard\-runtime/testdata/binding_capture/vectors\.
 regexes = [
   '''^[\t\r\n ]*"capture_key_b64": "(?:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=?|a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tr|a2tra2tra2tra2tra2tra2tra2tra2tra2tra2traw==|\-_v7(?:\-_v7){9}\-_s=|\+/v7(?:\+/v7){9}\+/s=)",?[\t\r\n ]*$''',
 ]
+
+[[rules.allowlists]]
+description = "Synthetic masked-value vector in the command-token redaction tests, not a credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ['''(?:^|/)rust/crates/guard\-command/src/redacted_command_tokens\.rs$''']
+regexes = ['''^abcdefgh12345678$''']
 
 [[rules.allowlists]]
 description = "Synthetic API key in the approval-queue redaction parity vectors, not a credential"
@@ -291,6 +307,28 @@ paths = [
 ]
 regexes = [
   '''^sk\-live\-0123456789abcdef0123456789abcdef$''',
+]
+
+[[rules.allowlists]]
+description = "SHA-256 digests of public contribution files recorded in authoring record.json, not credentials"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)contributions/authoring/[^/]+/record\.json$''']
+regexes = [
+  '''^[\t ]*"(?:contributions|tests)/[A-Za-z0-9._/\-]+": "[0-9a-f]{64}",?[\t\r ]*$''',
+  '''^[\t ]*"revisionDigest": "[0-9a-f]{64}",?[\t\r ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Recorded trust-attestation replay key, a SHA-256 digest of the claim rather than a credential"
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''(?:^|/)tests/fixtures/guard\-trust\-claim\.v1\.json$''',
+  '''(?:^|/)tests/fixtures/guard\-attestation\-verification\.v1\.json$''',
+]
+regexes = [
+  '''^[\t\r\n ]*"(?:replayKey|replay_key)": "[0-9a-f]{64}",?[\t\r\n ]*$''',
 ]
 
 [[rules]]

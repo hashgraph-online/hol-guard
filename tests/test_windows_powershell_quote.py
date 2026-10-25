@@ -1,4 +1,4 @@
-"""PowerShell quoting of the contained sink command for Windows Codex."""
+"""Quoting of the contained sink command for Windows Codex."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from codex_plugin_scanner.guard.windows_powershell_quote import powershell_join
+from codex_plugin_scanner.guard.windows_powershell_quote import powershell_join, sink_command_line
 
 _LITERAL = re.compile(r"'((?:[^'\u2018\u2019\u201a\u201b]|(?P<q>['\u2018\u2019\u201a\u201b])(?P=q))*)'")
 
@@ -71,3 +71,50 @@ def test_nothing_to_run_is_refused() -> None:
 def test_the_command_is_a_single_call_operator_statement() -> None:
     command = powershell_join(["C:\\py thon\\python.exe", "-I", "-c", "import sys;print(1)", "guard"])
     assert command == "& 'C:\\py thon\\python.exe' '-I' '-c' 'import sys;print(1)' 'guard'"
+
+
+_BOOTSTRAP = (
+    "import sys;sys.path.insert(0, {root!r});from codex_plugin_scanner.cli import main;"
+    "raise SystemExit(main(sys.argv[1:]))"
+)
+_ARGV_BOOTSTRAP = (
+    "import sys;sys.path.insert(0,sys.argv.pop(1));from codex_plugin_scanner.cli import main;"
+    "raise SystemExit(main(sys.argv[1:]))"
+)
+
+
+def test_the_sink_line_is_one_powershell_and_git_bash_read_the_same_way() -> None:
+    argv = [
+        "C:\\Python\\python.exe",
+        "-I",
+        "-c",
+        _BOOTSTRAP.format(root="C:/Guard/site-packages"),
+        "guard",
+        "C:\\Users\\a b\\x;$y&`z`",
+    ]
+    assert sink_command_line(argv) == (
+        f"C:/Python/python.exe '-I' '-c' '{_ARGV_BOOTSTRAP}' 'C:/Guard/site-packages' 'guard' "
+        "'C:\\Users\\a b\\x;$y&`z`'"
+    )
+    assert sink_command_line(["C:\\Guard\\hol-guard.exe", "run"]) == "C:/Guard/hol-guard.exe 'run'"
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["C:\\Program Files\\py.exe", "x"],
+        ["C:\\Guard\\hol-guard.exe", "it's"],
+        ["C:\\Guard\\hol-guard.exe", "it\u2019s"],
+        ["\\\\server\\py.exe", "x"],
+        ["C:\\Python\\python.exe", "-I", "-c", _BOOTSTRAP.format(root="C:\\Guard"), "guard"],
+        ["C:\\Python\\python.exe", "-I", "-c", "print(1)", "guard"],
+    ],
+)
+def test_an_argv_only_powershell_can_carry_falls_back_to_its_form(argv: list[str]) -> None:
+    assert sink_command_line(argv) == powershell_join(argv)
+    assert sink_command_line(argv).startswith("& ")
+
+
+def test_an_argv_neither_shell_can_carry_is_refused() -> None:
+    assert sink_command_line(["C:\\Python\\python.exe", 'say "hi"']) is None
+    assert sink_command_line([]) is None

@@ -12,10 +12,7 @@ fn workspace_writes_do_not_follow_hard_links_to_protected_files() {
         .join(format!(
             "case-{}-{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
+            crate::unique_nanos::unique_nanos()
         ));
     std::fs::create_dir_all(&root).unwrap();
     let _cleanup = fixture::FixtureCleanup(root.clone());

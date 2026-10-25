@@ -7,13 +7,8 @@ import time
 from ..native_command_control_authority_io import require_exclusive_command_control_mutation_lease
 from ..native_command_control_authority_store import _key
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
-from ..runtime.extension_control_authority import (
-    TRANSITION_PURPOSE,
-    ExtensionControlAuthorityError,
-    authenticated_record,
-    verify_authenticated_record,
-)
-from . import activation_baseline, lifecycle_store
+from ..runtime.extension_control_authority import ExtensionControlAuthorityError
+from . import activation_baseline, lifecycle, lifecycle_store
 from .activation_record import SCHEMA_V2, admission_is_current, verify_header
 from .activation_store import _row, directory_for_store, write_in_transaction
 from .activation_transition import ActivationDraft
@@ -34,6 +29,7 @@ def _exists(connection):
     )
 
 
+@lifecycle.one_runtime
 def reserve(store, connection, draft, *, control_revision, snapshot_digest, catalog_digest, recorded_at, now=None):
     """Reserve with PREPARED controls, before the private anchor is advanced."""
     require_exclusive_command_control_mutation_lease(store.guard_home)
@@ -82,8 +78,11 @@ def reserve(store, connection, draft, *, control_revision, snapshot_digest, cata
         raise NativePolicySnapshotError("native_command_pack_reservation_conflict")
     # The link is authenticated separately from both the data and control
     # records. Copying a draft to another approved transition cannot reuse it.
-    data, digest, mac = authenticated_record(
-        {
+    link = lifecycle.record(
+        "seal",
+        "link",
+        key=key,
+        payload={
             "control_revision": control_revision,
             "snapshot_digest": snapshot_digest,
             "catalog_digest": catalog_digest,
@@ -93,31 +92,25 @@ def reserve(store, connection, draft, *, control_revision, snapshot_digest, cata
             "lifecycle_after": draft.lifecycle_after,
             **({"security_digest": draft.security_digest} if draft.security_digest is not None else {}),
         },
-        key=key,
-        purpose=PURPOSE,
     )
     connection.execute(
         "insert into extension_command_pack_pending values (?,?,?,?,?,?,?)",
-        (control_revision, draft.data, draft.digest, draft.mac, data, digest, mac),
+        (control_revision, draft.data, draft.digest, draft.mac, link["record"], link["digest"], link["mac"]),
     )
 
 
-def finish(store, connection, transition):
+@lifecycle.one_runtime
+def finish(store, connection, transition, *, expected_pack):
     """Install packs in the same transaction as the anchored control snapshot.
+
+    ``expected_pack`` is the command-pack record digest the authenticated
+    transition binds, as the resident verified it (None when it binds none).
 
     A recovered anchored transition was approved and admitted while fresh.
     It may finish offline after expiry, just as an already committed active
     snapshot remains usable offline. Unanchored reservations grant no authority.
     """
     authority_key = store._authority_key(required=True)
-    control = verify_authenticated_record(
-        transition["transition_json"],
-        expected_digest=transition["transition_digest"],
-        expected_mac=transition["transition_mac"],
-        key=authority_key,
-        purpose=TRANSITION_PURPOSE,
-    )
-    expected_pack = control.get("command_pack_record_digest")
     row = (
         None
         if not _exists(connection)
@@ -143,14 +136,15 @@ def finish(store, connection, transition):
     if "lifecycle_before" not in link:
         from . import lifecycle
 
-        link.update(
-            lifecycle.invoke(
-                "legacy-pending",
-                key=key.hex(),
-                floor=lifecycle_store.read(store),
-                **lifecycle_store.legacy_evidence(store, connection),
+        with lifecycle_store.legacy_transport(store, connection) as evidence:
+            link.update(
+                lifecycle.invoke(
+                    "legacy-pending",
+                    key=key.hex(),
+                    floor=lifecycle_store.read(store),
+                    **evidence,
+                )
             )
-        )
     draft = object.__new__(ActivationDraft)
     for name, value in {
         "directory": directory_for_store(store),
@@ -175,30 +169,32 @@ def _verified_pending(row, transition, key):
     # recovery reset. Key access, lineage checks and storage errors stay retryable.
     try:
         return _verify_pending(row, transition, key)
+    except lifecycle.NativePackLifecycleUnavailableError:
+        # A runtime that could not answer has said nothing about this record. A
+        # missing executable, a timeout or a crash would otherwise discard an
+        # authenticated pending transition, so the outage propagates and the
+        # transition is resumed on the next attempt.
+        raise
     except (ExtensionControlAuthorityError, ValueError) as error:
         raise UnverifiablePackTransitionError("native_command_pack_transition_mismatch") from error
 
 
 def _verify_pending(row, transition, key):
-    link = verify_authenticated_record(
-        row["link_json"], expected_digest=row["link_digest"], expected_mac=row["link_mac"], key=key, purpose=PURPOSE
-    )
-    expected = {
-        "control_revision": transition["revision"],
-        "snapshot_digest": transition["snapshot_digest"],
-        "catalog_digest": transition["catalog_digest"],
-        "pack_record_digest": row["record_digest"],
-    }
-    lifecycle_fields = {"lifecycle_before", "lifecycle_after"} if "lifecycle_before" in link else set()
-    if set(link) != {
-        "authority_schema_version",
-        "purpose",
-        "admitted_at",
-        *lifecycle_fields,
-        *({"security_digest"} if "security_digest" in link else set()),
-        *expected,
-    } or any(link[name] != value for name, value in expected.items()):
-        raise UnverifiablePackTransitionError("native_command_pack_transition_mismatch")
+    # The runtime refuses a link that binds any other transition or pack record.
+    link = lifecycle.record(
+        "verify",
+        "link",
+        key=key,
+        record=row["link_json"],
+        digest=row["link_digest"],
+        mac=row["link_mac"],
+        expected={
+            "control_revision": transition["revision"],
+            "snapshot_digest": transition["snapshot_digest"],
+            "catalog_digest": transition["catalog_digest"],
+            "pack_record_digest": row["record_digest"],
+        },
+    )["value"]
     header = verify_header(row["record_json"], row["record_digest"], row["record_mac"], key=key)
     if header["catalog_digest"] != transition["catalog_digest"]:
         raise UnverifiablePackTransitionError("native_command_pack_transition_mismatch")

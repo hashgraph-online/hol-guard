@@ -251,7 +251,26 @@ def test_node_requires_its_own_fresh_profile(
         (["CI=1"], [], {"CI": "1"}),
     ],
 )
-def test_command_prefixes_and_inert_assignments_peel_to_the_named_program(words, expected, assignments):
+def test_command_prefixes_and_inert_assignments_peel_to_the_named_program(
+    monkeypatch: pytest.MonkeyPatch, words, expected, assignments
+):
+    # Where native authority reads the program behind each prefix; the grammar
+    # itself is tested in `guard-command` (`parser_wrappers.rs`). The
+    # sink holds no list of the names, so it is asked about every command.
+    program = {
+        ("command", "bun", "run", "build"): 1,
+        ("time", "command", "bun", "test"): 1,
+        ("command", "bun", "test"): 1,
+        ("env", "CI=1", "bun"): 2,
+        ("time", "bun"): 1,
+    }
+    from codex_plugin_scanner.guard import native_restricted_pytest
+
+    monkeypatch.setattr(
+        native_restricted_pytest,
+        "restricted_native",
+        lambda operation, fields, _expected: program.get(tuple(fields["command"])),
+    )
     assert sink._split_command_prefix(words) == (expected, assignments)
 
 

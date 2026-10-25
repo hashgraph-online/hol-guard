@@ -36,11 +36,15 @@ export function SectionShell({
   className = "",
   threshold = 0.08,
   id,
+  labelledBy,
 }: {
   children: ReactNode;
   className?: string;
   threshold?: number;
   id?: string;
+  /** The id of the heading this section is named by, so the landmark is
+   * announced by its own title rather than as one more unlabelled region. */
+  labelledBy?: string;
 }) {
   const { ref, revealed } = useEditorialVisibility(threshold);
 
@@ -48,6 +52,7 @@ export function SectionShell({
     <section
       id={id}
       ref={ref}
+      aria-labelledby={labelledBy}
       className={[
         className,
         "opacity-100 translate-y-0",

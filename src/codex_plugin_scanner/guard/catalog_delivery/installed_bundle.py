@@ -6,25 +6,27 @@ must be bound by both installed native manifests to the same executable bytes.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import os
 import re
 import sys
 import threading
-import zipfile
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, cast
 
-from ..extension_builder.io import read_bytes
+from ..extension_builder.io import checked_path, read_bytes
 from ..extension_builder.native_source_compiler import NativeSourceCompilerError, run_source_compiler
+from . import lifecycle
 from .authority import decode
-from .containers import location, maximum, member
+from .object_native import CONTAINER_STRUCTURE, addressed
+from .object_native import call as call_object
 
 MANIFEST = "command-pack-bundle.v1.json"
 PREFIX = "codex_plugin_scanner/guard/contracts/data/extensions/command-pack-bundle/"
 ROOT = PREFIX + MANIFEST
+ASSETS = "guard/contracts/data/extensions/command-pack-bundle/assets"
 MAX_BYTES = 512 * 1024 * 1024
 MAX_FILES = 8192
 
@@ -41,26 +43,10 @@ def validate_compatibility(value, extensions, *, compiler=None):
     _native_metadata("compatibility", value=value, extensions=extensions, compiler=compiler)
 
 
-def target(value, *, source_sha):
-    # These checks constrain local IO paths; Root and policy admission are native.
-    if not isinstance(value, dict):
-        raise ValueError("installed bundle location invalid")
-    name = value.get("member", value.get("asset", ""))
-    match = re.fullmatch(r"(object|pack)-([0-9a-f]{64})\.(json|zip)", name) if isinstance(name, str) else None
-    if match is None or match[3] != ("json" if match[1] == "object" else "zip"):
-        raise ValueError("installed bundle asset invalid")
-    location(value, match[2], match[1])
-    if not value["tag"].startswith("extension-data-" + source_sha + "-0.0-"):
-        raise ValueError("installed bundle asset source differs")
-    return name, match[2], match[1]
-
-
-def asset_path(relative, *, source_sha):
+def asset_path(relative):
     if (
         re.fullmatch(
-            r"assets/extension-data-"
-            + re.escape(source_sha)
-            + r"-0\.0-[0-9]{6}/(?:(?:objects|packs)-[0-9]{6}\.zip|object-[0-9a-f]{64}\.json|pack-[0-9a-f]{64}\.zip)",
+            r"assets/[0-9]{6}/(?:(?:objects|packs)-[0-9]{6}\.zip|object-[0-9a-f]{64}\.json|pack-[0-9a-f]{64}\.zip)",
             relative,
         )
         is None
@@ -75,6 +61,23 @@ def _package() -> Path:
     return Path(__file__).absolute().parents[2]
 
 
+def _installation_root() -> Path:
+    """The directory the installer or the frozen runtime chose for this package.
+
+    A frozen build extracts under the per-user temporary directory, which macOS
+    reaches through the ``/var`` symlink and several Linux distributions through
+    a symlinked ``/tmp``; a packaged install can sit behind a Windows junction.
+    None of those are caller-controlled, so reads of the program's own data
+    files resolve that prefix once and keep rejecting symlinks below it.
+    """
+
+    return _package()
+
+
+def _read_installed(path: Path, *, limit: int) -> bytes:
+    return read_bytes(path, limit=limit, anchor=_installation_root())
+
+
 def compatibility_payloads(family: str) -> tuple[dict[str, Any], ...] | None:
     """Explicit offline legacy API; never load the library on decision paths.
 
@@ -87,28 +90,25 @@ def compatibility_payloads(family: str) -> tuple[dict[str, Any], ...] | None:
         return None
     bundle = load_installed_bundle()
 
-    @lru_cache(maxsize=2)
-    def read_asset(path: Path, *, limit: int) -> bytes:
-        # Offline traversals commonly read thousands of members in one bounded
-        # container. Keep at most two containers, scoped to this explicit read.
-        return read_bytes(path, limit=limit)
-
-    try:
-        result = run_source_compiler(
-            "bundle-compatibility",
-            {
-                "family": family,
-                "source_sha": bundle.source_sha,
-                "engine": bundle.engine,
-                "data": bundle.data.decode("utf-8"),
-                "max_bytes": MAX_BYTES,
-            },
-            fetch=lambda reference: bundle._fetch(
-                cast(dict[str, Any], reference["location"]), cast(int, reference["length"]), read_asset
-            ),
-        )
-    except NativeSourceCompilerError as error:
-        raise ValueError(f"installed compatibility metadata unavailable: {error}") from error
+    # Offline traversals commonly read thousands of members; one session verifies
+    # and copies the runtime once for all of them.
+    with lifecycle.session():
+        try:
+            result = run_source_compiler(
+                "bundle-compatibility",
+                {
+                    "family": family,
+                    "source_sha": bundle.source_sha,
+                    "engine": bundle.engine,
+                    "data": bundle.data.decode("utf-8"),
+                    "max_bytes": MAX_BYTES,
+                },
+                fetch=lambda reference: bundle._fetch(
+                    cast(dict[str, Any], reference["location"]), cast(int, reference["length"])
+                ),
+            )
+        except NativeSourceCompilerError as error:
+            raise ValueError(f"installed compatibility metadata unavailable: {error}") from error
     return tuple(cast(list[dict[str, Any]], result["payloads"])) if result["available"] else None
 
 
@@ -173,7 +173,7 @@ def _advertised() -> bool:
     for name in ("runtime-manifest.json", "source-compiler-manifest.json"):
         path = package / "_native" / name
         present = path.exists() or path.is_symlink()
-        manifests.append(decode(read_bytes(path, limit=65536)) if present else None)
+        manifests.append(decode(_read_installed(path, limit=65536)) if present else None)
     answer = _native_metadata(
         "installed-presence", bundle=directory.exists() or directory.is_symlink(), manifests=manifests
     )
@@ -195,51 +195,75 @@ class VerifiedInstalledBundle:
         return cast(dict[str, Any], decode(self.data))
 
     def fetch(self, target_location: dict[str, Any], max_bytes: int) -> bytes:
-        return self._fetch(target_location, max_bytes, read_bytes)
+        return self._fetch(target_location, max_bytes)
 
     def preparation_fetch(self):
-        """Keep one bounded container for the current native preparation."""
-        reader = lru_cache(maxsize=1)(read_bytes)
-        return lambda location, maximum: self._fetch(location, maximum, reader)
+        """Fetch for the current native preparation; each member is checked natively."""
+        return lambda location, maximum: self._fetch(location, maximum)
 
-    def _fetch(self, target_location: dict[str, Any], max_bytes: int, read_asset) -> bytes:
-        name, _, kind = target(target_location, source_sha=self.source_sha)
-        limit = 65536 if kind == "object" else 32 * 1024 * 1024
-        if type(max_bytes) is not int or not 0 < max_bytes <= limit:
-            raise ValueError("installed bundle fetch bounds invalid")
-        path = (
-            _package()
-            / "guard/contracts/data/extensions/command-pack-bundle/assets"
-            / target_location["tag"]
-            / target_location["asset"]
-        )
-        if not path.exists() and not path.is_symlink() and kind == "pack" and "member" not in target_location:
+    def fetch_objects(self, references):
+        """Transport bounded native object batches; archive fetches stay separate."""
+        for start in range(0, len(references), 64):
+            batch = references[start : start + 64]
+            root = checked_path(_package() / ASSETS, anchor=_installation_root())
+            try:
+                reply = call_object(
+                    "installed-batch",
+                    root=str(root),
+                    source=self.source_sha,
+                    items=[{"target": location, "length": length} for location, length in batch],
+                )
+            except ValueError as error:
+                if str(error) == CONTAINER_STRUCTURE:
+                    raise ValueError("installed bundle container invalid") from error
+                raise
+            for (location, maximum), item in zip(batch, reply["items"], strict=True):
+                if "data" in item:
+                    yield base64.b64decode(item["data"], validate=True)
+                else:
+                    # Whole assets still use the existing checked read path.
+                    yield self.fetch(location, maximum)
+
+    def _fetch(self, target_location: dict[str, Any], max_bytes: int) -> bytes:
+        base = _package() / ASSETS
+        root = checked_path(base, anchor=_installation_root())
+        try:
+            # The runtime validates the location, bounds the request and reads a
+            # container member by its digest; a whole asset is only resolved.
+            reply = addressed(
+                "installed",
+                sources=lambda reply: [root / reply["directory"] / target_location["asset"]],
+                root=str(root),
+                target=target_location,
+                source=self.source_sha,
+                length=max_bytes,
+                invalid="installed bundle location invalid",
+            )
+        except ValueError as error:
+            if str(error) == CONTAINER_STRUCTURE:
+                raise ValueError("installed bundle container invalid") from error
+            raise
+        if "data" in reply:
+            return base64.b64decode(reply["data"], validate=True)
+        # Native validated the tag and names its directory.
+        path = base / reply["directory"] / target_location["asset"]
+        if not path.exists() and not path.is_symlink() and reply["kind"] == "pack":
             # The fixed native factory checks the installed release/executable
             # binding and constructs the public URL. No selector, caller URL,
             # remote Root or new publisher authority enters this path.
-            from . import lifecycle
             from .transport import download
 
             request = lifecycle.invoke(
                 "installed-asset", **lifecycle.release_evidence(self), location=target_location, length=max_bytes
             )
             try:
-                data = download(request["url"], max_bytes)
+                return download(request["url"], max_bytes)
             except OSError as error:
                 raise ValueError("Optional protection data is unavailable; existing controls were retained.") from error
-        elif "member" in target_location:
-            try:
-                data = member(
-                    read_asset(path, limit=maximum(target_location["asset"])), target_location["asset"], name, max_bytes
-                )
-            except zipfile.BadZipFile as error:
-                raise ValueError("installed bundle container invalid") from error
-        else:
-            data = read_asset(path, limit=max_bytes)
         # Integrity belongs to whoever consumes these bytes: the native blob
         # reader for the authoring transport, the object store for a located
         # reference. Both reject a member that misses its length or digest.
-        return data
+        return _read_installed(path, limit=max_bytes)
 
 
 def load_installed_bundle() -> VerifiedInstalledBundle:
@@ -251,12 +275,12 @@ def load_installed_bundle() -> VerifiedInstalledBundle:
 def _load_installed_bundle() -> VerifiedInstalledBundle:
     package = _package()
     native = package / "_native"
-    runtime = decode(read_bytes(native / "runtime-manifest.json", limit=65536))
-    compiler = decode(read_bytes(native / "source-compiler-manifest.json", limit=65536))
+    runtime = decode(_read_installed(native / "runtime-manifest.json", limit=65536))
+    compiler = decode(_read_installed(native / "source-compiler-manifest.json", limit=65536))
     evidence = {"runtime_manifest": runtime, "compiler_manifest": compiler}
     plan = _native_metadata("installed-plan", **evidence)
-    binary = read_bytes(native / cast(str, plan["executable"]), limit=cast(int, plan["size"]))
-    data = read_bytes(package / "guard/contracts/data/extensions/command-pack-bundle" / MANIFEST, limit=65536)
+    binary = _read_installed(native / cast(str, plan["executable"]), limit=cast(int, plan["size"]))
+    data = _read_installed(package / "guard/contracts/data/extensions/command-pack-bundle" / MANIFEST, limit=65536)
     identity = _native_metadata(
         "installed",
         **evidence,

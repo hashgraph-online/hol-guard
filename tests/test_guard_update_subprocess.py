@@ -26,6 +26,7 @@ from codex_plugin_scanner.guard.cli.update_subprocess import (
     UpdateSubprocessError,
     build_trusted_update_context,
 )
+from tests.windows_descendant_support import assert_descendant_contained, windows_descendant_parent_script
 
 
 def _write_executable(path: Path, body: str = "raise SystemExit(0)\n") -> Path:
@@ -113,37 +114,6 @@ def _build_manager_context(
 
 def _error_reason(error: pytest.ExceptionInfo[UpdateSubprocessError]) -> str:
     return error.value.reason_code
-
-
-def _windows_descendant_parent_script(mode: str) -> str:
-    descendant_script = (
-        "import sys,time; "
-        "from pathlib import Path; "
-        "time.sleep(float(sys.argv[1])); "
-        "Path(sys.argv[2]).write_text('escaped', encoding='utf-8')"
-    )
-    lines = [
-        "import subprocess",
-        "import sys",
-        "import time",
-        "from pathlib import Path",
-        f"descendant_script = {descendant_script!r}",
-        "subprocess.Popen([sys.executable, '-I', '-S', '-c', descendant_script, sys.argv[1], sys.argv[2]])",
-        "Path(sys.argv[3]).write_text('spawned', encoding='utf-8')",
-    ]
-    if mode == "timeout":
-        lines.append("time.sleep(30)")
-    elif mode == "overflow":
-        lines.extend(
-            [
-                "sys.stdout.write('x' * (1024 * 1024))",
-                "sys.stdout.flush()",
-                "time.sleep(30)",
-            ]
-        )
-    elif mode != "parent_exit":
-        raise ValueError(f"unsupported process-tree test mode: {mode}")
-    return "\n".join(lines)
 
 
 def test_update_context_scrubs_hostile_ambient_environment(
@@ -1822,12 +1792,13 @@ def test_windows_job_timeout_terminates_delayed_descendant(
     context = _build_pip_context(tmp_path, monkeypatch)
     descendant_marker = tmp_path / "timeout-descendant-escaped"
     spawned_marker = tmp_path / "timeout-descendant-spawned"
+    release_marker = tmp_path / "timeout-descendant-release"
 
     with pytest.raises(UpdateSubprocessError) as error:
         context.run(
             context.python_command(
-                _windows_descendant_parent_script("timeout"),
-                "1.25",
+                windows_descendant_parent_script("timeout"),
+                str(release_marker),
                 str(descendant_marker),
                 str(spawned_marker),
             ),
@@ -1835,9 +1806,11 @@ def test_windows_job_timeout_terminates_delayed_descendant(
         )
 
     assert _error_reason(error) == "update_installer_timeout"
-    assert spawned_marker.read_text(encoding="utf-8") == "spawned"
-    time.sleep(0.75)
-    assert descendant_marker.exists() is False
+    assert_descendant_contained(
+        spawned_marker=spawned_marker,
+        escape_marker=descendant_marker,
+        release_marker=release_marker,
+    )
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows Job Object process-tree regression")
@@ -1848,11 +1821,12 @@ def test_windows_job_output_overflow_terminates_delayed_descendant(
     context = _build_pip_context(tmp_path, monkeypatch)
     descendant_marker = tmp_path / "overflow-descendant-escaped"
     spawned_marker = tmp_path / "overflow-descendant-spawned"
+    release_marker = tmp_path / "overflow-descendant-release"
 
     result = context.run(
         context.python_command(
-            _windows_descendant_parent_script("overflow"),
-            "0.75",
+            windows_descendant_parent_script("overflow"),
+            str(release_marker),
             str(descendant_marker),
             str(spawned_marker),
         ),
@@ -1862,9 +1836,11 @@ def test_windows_job_output_overflow_terminates_delayed_descendant(
 
     assert result.returncode != 0
     assert result.output_limited is True
-    assert spawned_marker.read_text(encoding="utf-8") == "spawned"
-    time.sleep(1.0)
-    assert descendant_marker.exists() is False
+    assert_descendant_contained(
+        spawned_marker=spawned_marker,
+        escape_marker=descendant_marker,
+        release_marker=release_marker,
+    )
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows Job Object process-tree regression")
@@ -1875,11 +1851,12 @@ def test_windows_job_reaps_descendant_pipe_after_direct_parent_exit(
     context = _build_pip_context(tmp_path, monkeypatch)
     descendant_marker = tmp_path / "pipe-descendant-escaped"
     spawned_marker = tmp_path / "pipe-descendant-spawned"
+    release_marker = tmp_path / "pipe-descendant-release"
 
     result = context.run(
         context.python_command(
-            _windows_descendant_parent_script("parent_exit"),
-            "0.75",
+            windows_descendant_parent_script("parent_exit"),
+            str(release_marker),
             str(descendant_marker),
             str(spawned_marker),
         ),
@@ -1887,9 +1864,11 @@ def test_windows_job_reaps_descendant_pipe_after_direct_parent_exit(
     )
 
     assert result.returncode == 0
-    assert spawned_marker.read_text(encoding="utf-8") == "spawned"
-    time.sleep(1.0)
-    assert descendant_marker.exists() is False
+    assert_descendant_contained(
+        spawned_marker=spawned_marker,
+        escape_marker=descendant_marker,
+        release_marker=release_marker,
+    )
 
 
 def _context_with_distribution_result(

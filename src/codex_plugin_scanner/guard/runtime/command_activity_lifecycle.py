@@ -27,7 +27,7 @@ from .command_activity_contract import (
 )
 from .command_evaluation import CompositeCommandEvaluation, OwnedCommandRuleMatch
 from .command_risk_effects import command_risk_effects
-from .effect_contract import UncertaintyKind
+from .effect_contract import EffectKind, UncertaintyKind
 from .extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
 from .generated_command_catalog import CommandRuleMode
 
@@ -73,6 +73,14 @@ _SEVERITY: Final = {
     "high": EvidenceSeverity.HIGH,
     "critical": EvidenceSeverity.CRITICAL,
 }
+
+# The decision plane claims `process-execution` for a risk class the effect
+# vocabulary does not name (`effect_claims`, command_decision_adapter.rs), and
+# this record says what that plane decided. Raising here instead dropped the
+# whole activity: the only caller records best effort, so an unmapped class on
+# a shipped rule left a `pre_record_failed` count and no evidence at all.
+_UNMAPPED_RISK_CLASS_EFFECTS: Final = frozenset({EffectKind.PROCESS_EXECUTION})
+
 _UNCERTAINTY_REASON: Final = MappingProxyType(
     {
         "command_byte_limit_exceeded": UncertaintyKind.PARSER_BUDGET_EXHAUSTED,
@@ -241,7 +249,10 @@ def build_unpaired_post_evidence(
 
 
 def _activity_match(activity_id: str, ordinal: int, owned: OwnedCommandRuleMatch) -> CommandActivityMatch:
-    effects = command_risk_effects(owned.match.rule.risk_classes)
+    effects = command_risk_effects(
+        owned.match.rule.risk_classes,
+        unknown_fallback=_UNMAPPED_RISK_CLASS_EFFECTS,
+    )
     rule = owned.match.rule
     default_floor = _RULE_MODE_FLOOR[rule.default_mode]
     if owned.extension.required:

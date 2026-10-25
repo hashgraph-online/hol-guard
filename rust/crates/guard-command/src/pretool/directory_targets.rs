@@ -321,6 +321,49 @@ pub(crate) fn exact_existing_drive_target(target: &str) -> bool {
     std::fs::canonicalize(target).is_ok_and(|canonical| exact_drive_spelling(target, &canonical))
 }
 
+/// `exact_drive_spelling` for a drive-absolute target whose deepest names
+/// need not be there yet.
+///
+/// Exact spelling exists to keep a differently cased name, an 8.3 short name
+/// and a junction from standing in for the directory the route proved. None
+/// of those is a name that is not there: a path Windows cannot resolve has no
+/// canonical spelling to differ from, and it names nothing until whoever owns
+/// the directory above it creates it. So the part that exists is held to its
+/// canonical spelling, and the names below it only have to be ordinary ones.
+#[cfg(windows)]
+pub(crate) fn exact_drive_target_with_absent_tail(target: &str) -> bool {
+    let spelled = drive_separators(target);
+    let mut probe = std::path::Path::new(&spelled);
+    let mut absent = 0usize;
+    loop {
+        if let Ok(canonical) = std::fs::canonicalize(probe) {
+            return probe
+                .to_str()
+                .is_some_and(|text| exact_drive_spelling(text, &canonical));
+        }
+        // A name Windows cannot resolve is still read as a name, so only a
+        // plain one may stand below the part that was proved.
+        let Some(name) = probe.components().next_back() else {
+            return false;
+        };
+        if !matches!(name, std::path::Component::Normal(_)) {
+            return false;
+        }
+        absent += 1;
+        if absent > MAX_ABSENT_NAMES {
+            return false;
+        }
+        let Some(parent) = probe.parent() else {
+            return false;
+        };
+        probe = parent;
+    }
+}
+
+/// A `-C` to a directory names the one above it, not a tree to create.
+#[cfg(windows)]
+const MAX_ABSENT_NAMES: usize = 32;
+
 impl<'a> super::PathContext<'a> {
     /// `cdpath_unset` is set only from a harness-stamped environment that
     /// declares no CDPATH, so a bare relative `cd` operand cannot be
@@ -372,22 +415,12 @@ impl<'a> super::PathContext<'a> {
                     && !super::npm_environment::inert_npm_config_name(&name)
             }),
         };
-        // pip reads `PIP_<OPTION>` for every option the running subcommand
-        // takes, so an inherited variable can add the index query or the log
-        // file the command itself leaves out. `XDG_CONFIG_HOME` moves the
-        // user configuration file that does the same, out of the directory
-        // the file check below can see.
-        let pip_config_inert = match execution_environment {
-            Some(environment) => {
-                environment.has_valid_shape()
-                    && !environment
-                        .environment_names
-                        .iter()
-                        .any(|name| pip_selector(name))
-            }
-            None => !std::env::vars_os()
-                .any(|(name, value)| !value.is_empty() && pip_selector(&name.to_string_lossy())),
-        };
+        // pip reads a configuration file and a variable for every option
+        // the running subcommand takes, each of which can add the index query
+        // or the log file the command itself leaves out. What counts as inert
+        // is pip's own surface, so [`super::pip_reads`] reads it.
+        let pip_config_inert =
+            super::pip_reads::environment_configuration_inert(execution_environment);
         // ripgrep reads RIPGREP_CONFIG_PATH unless the command passes
         // `--no-config`, and ignores it only when it is empty. A stamped
         // environment carries names without values, so any name counts.
@@ -428,6 +461,10 @@ impl<'a> super::PathContext<'a> {
             pip_config_inert,
             shell_home_matches,
             ripgrep_config_absent,
+            // A session knows its environment, not the command, so the
+            // proof that no step creates a filesystem entry is set where a
+            // command model is in hand.
+            creates_nothing: false,
             psql_environment,
         }
     }
@@ -446,35 +483,6 @@ fn rustup_selector(name: &str) -> bool {
 /// usually for a company's TLS-inspecting proxy that already sees all of the
 /// user's traffic; it leaves the registry where it was, and the agent's own
 /// command cannot set the hook's environment.
-/// Variables pip reads before any option on the command line, beyond the ones
-/// that only change how it prints.
-///
-/// pip asks platformdirs where its user and global configuration files live,
-/// so the four names platformdirs resolves those directories from move a
-/// `pip.conf` out of the directories the file check reads: the config names
-/// on Linux, and the data names on macOS, where a configuration directory is
-/// a data directory. The remaining `XDG_` names, `XDG_RUNTIME_DIR` among
-/// them, name no directory pip reads configuration from.
-fn pip_selector(name: &str) -> bool {
-    let upper = name.to_ascii_uppercase();
-    if matches!(
-        upper.as_str(),
-        "XDG_CONFIG_HOME" | "XDG_CONFIG_DIRS" | "XDG_DATA_HOME" | "XDG_DATA_DIRS"
-    ) {
-        return true;
-    }
-    upper.starts_with("PIP_")
-        && !matches!(
-            upper.as_str(),
-            "PIP_DISABLE_PIP_VERSION_CHECK"
-                | "PIP_REQUIRE_VIRTUALENV"
-                | "PIP_NO_COLOR"
-                | "PIP_NO_INPUT"
-                | "PIP_QUIET"
-                | "PIP_VERBOSE"
-        )
-}
-
 fn npm_selector(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     upper.starts_with("NPM_CONFIG_")
@@ -511,6 +519,53 @@ mod tests {
             drive_separators(r"c:\\users\\..\\PROGRA~1"),
             r"c:\users\..\PROGRA~1"
         );
+    }
+
+    /// A `git -C` into a directory that is not there can only print
+    /// `fatal:`, so the route is admitted, but the drive-absolute proof used
+    /// to demand a canonical spelling the path cannot have while it does not
+    /// exist. Every such route was reviewed on Windows and allowed on unix.
+    /// The part that does exist is still held to its canonical spelling.
+    #[cfg(windows)]
+    #[test]
+    fn an_absent_tail_keeps_the_proof_on_the_part_that_exists() {
+        use super::exact_drive_target_with_absent_tail as absent_tail;
+
+        let root = std::env::temp_dir().join(format!(
+            "guard-absent-tail-{}-{}",
+            std::process::id(),
+            crate::unique_nanos::unique_nanos()
+        ));
+        std::fs::create_dir_all(root.join("Code")).unwrap();
+        let canonical = std::fs::canonicalize(&root).unwrap();
+        let spelled = canonical
+            .to_str()
+            .unwrap()
+            .strip_prefix(r"\\?\")
+            .unwrap()
+            .to_owned();
+
+        assert!(absent_tail(&format!(r"{spelled}\Code")));
+        // The directory that is not there, which is the whole point.
+        assert!(absent_tail(&format!(r"{spelled}\Code\not-cloned-yet")));
+        assert!(absent_tail(&format!("{spelled}/Code/not-cloned-yet")));
+        assert!(absent_tail(&format!(r"{spelled}\Code\not-cloned-yet\web")));
+        // A name that is not there is still a name: nothing but a plain one
+        // may stand below the part that was proved.
+        assert!(!absent_tail(&format!(r"{spelled}\Code\..\Code")));
+        assert!(!absent_tail(&format!(r"{spelled}\Code\absent\..")));
+        // The part that does exist keeps its exact spelling.
+        assert!(!absent_tail(&format!(
+            r"{}\CODE\not-cloned-yet",
+            spelled.to_uppercase()
+        )));
+        // A `-C` names one directory, not a tree to create.
+        let deep = "\\absent".repeat(super::MAX_ABSENT_NAMES + 1);
+        assert!(!absent_tail(&format!("{spelled}{deep}")));
+        // A relative target never reaches this proof; it answers for nothing.
+        assert!(!absent_tail("Code/not-cloned-yet"));
+
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]

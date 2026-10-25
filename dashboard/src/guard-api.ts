@@ -96,6 +96,7 @@ import {
   demoPresentationSettings,
   isGuardDemoMode
 } from "./guard-demo";
+import { normalizeApprovalExtensionCoverage } from "./approval-extension-coverage";
 import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
 import { observeDashboardBuild } from "./dashboard-build";
 
@@ -131,8 +132,10 @@ type RawGuardApprovalRequest = Omit<
   | "scope_restrictions"
   | "task_capability_eligibility"
   | "extension_recommendation"
+  | "extension_coverage"
 > & {
   extension_recommendation?: unknown;
+  extension_coverage?: unknown;
   action_envelope_json?: unknown;
   decision_v2_json?: unknown;
   policy_action?: unknown;
@@ -1100,6 +1103,21 @@ export async function fetchExtensionDiscoveryApi(input: RequestInfo, init?: Requ
   return fetchWithGuardAuth(input, init);
 }
 
+/**
+ * Release archive: the daemon projects hol.org's published feed through the
+ * native runtime and serves it locally. The browser never reaches hol.org
+ * (connect-src stays 'self'), and these two paths are the whole allowlist.
+ */
+export async function fetchReleaseFeedApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    typeof input === "string" &&
+    /^\/v1\/releases\/(?:index|release)(?:\?[A-Za-z0-9=&_.-]*)?$/.test(input);
+  if (!approvedPath) {
+    throw new Error("Invalid release feed API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
 function guardAuthHeaders(): HeadersInit {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
@@ -1496,9 +1514,11 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
   const {
     decision_contract_error: rawContractError,
     extension_recommendation: rawExtensionRecommendation,
+    extension_coverage: rawExtensionCoverage,
     ...baseItem
   } = item;
   const extensionRecommendation = normalizeApprovalExtensionRecommendation(rawExtensionRecommendation);
+  const extensionCoverage = normalizeApprovalExtensionCoverage(rawExtensionCoverage);
   const policyAction = normalizeGuardAction(item.policy_action);
   const decisionV2 = parseDecisionV2(item.decision_v2_json);
   const actionEnvelope = parseActionEnvelope(item.action_envelope_json);
@@ -1599,6 +1619,7 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
     ...(extensionRecommendation !== null && !hasDecisionContractError
       ? { extension_recommendation: extensionRecommendation }
       : {}),
+    ...(extensionCoverage !== null && !hasDecisionContractError ? { extension_coverage: extensionCoverage } : {}),
     ...(hasDecisionContractError
       ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT }
       : {}),
@@ -3512,6 +3533,51 @@ export async function scheduleGuardUpdate(
     scheduled: booleanValue(payload.scheduled),
     message: stringValue(payload.message) ?? undefined,
     error: stringValue(payload.error) ?? undefined,
+  };
+}
+
+export type GuardDesktopHandoffResult = {
+  handoff_requested: boolean;
+  latest_version: string | null;
+};
+
+/**
+ * Asks the daemon to record an update request for the HOL Guard app. The
+ * dashboard inside the Desktop window cannot call the app updater itself;
+ * Desktop watches for the request and opens its own visible update flow,
+ * which re-verifies the release before installing anything.
+ */
+export async function requestGuardDesktopHandoff(): Promise<GuardDesktopHandoffResult> {
+  if (isGuardDemoMode()) {
+    return { handoff_requested: false, latest_version: null };
+  }
+  // Bounded: an unanswered request must release the banner into its
+  // failure state instead of disabling its actions forever.
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 10_000);
+  let response: Response;
+  try {
+    response = await fetchWithGuardAuth("/v1/update", {
+      method: "POST",
+      redirect: "error",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ handoff_to_desktop: true }),
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    const message =
+      stringValue(payload.message) ??
+      stringValue(payload.error) ??
+      `Guard update failed with ${response.status}`;
+    throw new Error(message);
+  }
+  return {
+    handoff_requested: payload.handoff_requested === true,
+    latest_version: stringValue(payload.latest_version),
   };
 }
 

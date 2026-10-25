@@ -21,7 +21,6 @@ from .test_native_policy_snapshot_cache_binding import _write_resident_authority
 
 def test_hermes_pre_tool_worker_failure_never_allows_execution() -> None:
     response = availability_harness_response(
-        {"hook_event_name": "pre_tool_call", "tool_name": "terminal", "tool_input": {"command": "rm -rf ./build"}},
         harness="hermes",
         event_name="pre_tool_call",
         reason_code="native_hook_worker_exception",
@@ -68,7 +67,6 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
     if failure == "capacity":
         handler = object.__new__(daemon._GuardDaemonHandler)
         handler.server = Mock(store=store)
-        monkeypatch.setattr(handler, "_validated_fail_safe_hook_paths", lambda _params, **_kwargs: (None, None))
         response = handler._runtime_hook_capacity_response(payload, {}, default_harness="codex")
     else:
         worker = Mock()

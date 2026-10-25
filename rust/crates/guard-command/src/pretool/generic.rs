@@ -76,6 +76,21 @@ pub fn venv_activation_target(command: &str, context: super::PathContext<'_>) ->
     venv_activation_projection::project(command, context)
 }
 
+/// The command the pre-tool pass answered for, when it read through the
+/// call's own wrapping, or `None` when the call is its own answer. A trailing
+/// subshell or brace group runs exactly the command list inside it and is
+/// decided as that list, and an activation hands its verdict to the command
+/// after it. A sink that plans the call again from its snapshot plans this
+/// text: the group's own text models no command, so `(.venv/bin/pytest -q)`
+/// reached the pytest planner with its parenthesis still attached. A group
+/// whose flattened list would run more than the group does, such as
+/// `false && (a; b)`, keeps its own text: the sink executes what it plans.
+pub fn contained_target(command: &str, context: super::PathContext<'_>) -> Option<String> {
+    let ungrouped = super::runnable_ungrouped_command_list(command);
+    let text = ungrouped.as_deref().unwrap_or(command);
+    venv_activation_target(text, context).or(ungrouped)
+}
+
 /// Bounded caller-supplied context, never authenticated provider facts.
 pub struct UntrustedCommandContext {
     pub command: Option<String>,
@@ -92,6 +107,31 @@ pub fn extract_untrusted_command_context(
         command: signals.command,
         business_action_present: signals.business_action_present,
     })
+}
+
+/// Destinations a tool call names: URL-valued arguments plus explicit
+/// `http(s)://` URLs in its command text. Empty when the payload cannot be
+/// read; that payload already gets the extraction failure's own decision.
+pub fn network_targets(payload: &Value, limit: usize) -> Vec<String> {
+    let Ok(signals) = extract_generic_signals(payload) else {
+        return Vec::new();
+    };
+    let mut targets = Vec::new();
+    for target in signals.url_values.into_iter().chain(
+        signals
+            .command
+            .as_deref()
+            .map(|command| crate::network_url::urls_in_text(command, limit))
+            .unwrap_or_default(),
+    ) {
+        if targets.len() >= limit {
+            break;
+        }
+        if !targets.contains(&target) {
+            targets.push(target);
+        }
+    }
+    targets
 }
 
 #[path = "agent_metadata.rs"]
@@ -185,6 +225,7 @@ pub fn evaluate_pre_tool_envelope_with_context(
             shell_home_matches: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),
+            creates_nothing: false,
         },
         None,
     )
@@ -469,7 +510,7 @@ fn evaluate_envelope(
         .command
         .as_deref()
         .filter(|_| !search_scope_proven && !apply_patch_proven)
-        .and_then(|command| venv_activation_projection::project(command, context))
+        .and_then(|command| venv_activation_projection::verdict_target(command, context))
     {
         let projected_payload = payload_with_command(
             payload,
@@ -523,8 +564,15 @@ fn evaluate_envelope(
             );
             // Inert settings cannot widen what an extension rule already
             // allows, but a rule that gates the plain form keeps its own
-            // fail-closed answer for wrapped forms.
-            if projected.minimum_action == "allow" || !extension_rule_matched(&projected) {
+            // fail-closed answer for wrapped forms. An ordinary value rides
+            // only an exact proof; contained execution would drop it, so the
+            // reviewed projection below judges every other verdict.
+            if projected.minimum_action == "allow"
+                || (!extension_rule_matched(&projected)
+                    && !env_prefix_projection::removes_values(
+                        signals.command.as_deref().unwrap_or_default(),
+                    ))
+            {
                 return projected;
             }
         }
@@ -899,23 +947,21 @@ fn evaluate_envelope(
     // build and the read-only Node tools (lint, typecheck and format checks)
     // in an AppContainer, for harnesses whose shell runs a sink command
     // written for it: Claude Code (Git Bash) and the Pi family (a bash
-    // implementation) take the POSIX-quoted one for all of them, Codex a
-    // PowerShell one for the Python profile only. Only harnesses that rewrite
-    // into the contained sink get the receipt; others would see a bare deny.
-    let windows_contained = match contained_test_reason {
-        Some("native_python_eval_readonly_containment_required") => {
-            matches!(harness, "claude-code" | "codex" | "omp" | "oh-my-pi" | "pi")
-        }
-        Some(
-            "native_node_build_output_containment_required"
-            | "native_node_tool_readonly_containment_required"
-            | "native_node_eval_readonly_containment_required"
-            | "native_pytest_readonly_containment_required",
-        ) => {
-            matches!(harness, "claude-code" | "omp" | "oh-my-pi" | "pi")
-        }
-        _ => false,
-    };
+    // implementation) take the POSIX-quoted one, Codex a PowerShell one. The
+    // sink command names only the profile, so every profile routes the same
+    // way. Only harnesses that rewrite into the contained sink get the
+    // receipt; others would see a bare deny.
+    let windows_contained =
+        matches!(
+            contained_test_reason,
+            Some(
+                "native_python_eval_readonly_containment_required"
+                    | "native_node_build_output_containment_required"
+                    | "native_node_tool_readonly_containment_required"
+                    | "native_node_eval_readonly_containment_required"
+                    | "native_pytest_readonly_containment_required"
+            )
+        ) && matches!(harness, "claude-code" | "codex" | "omp" | "oh-my-pi" | "pi");
     if (cfg!(target_os = "macos") || (cfg!(windows) && windows_contained))
         && event == "PreToolUse"
         && matches!(

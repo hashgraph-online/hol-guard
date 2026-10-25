@@ -35,13 +35,19 @@ from codex_plugin_scanner.guard.cli import commands_hook_native_pipeline as pipe
 from codex_plugin_scanner.guard.cli import commands_hook_native_policy_tail as tail
 from codex_plugin_scanner.guard.cli import commands_hook_native_route as route_run
 from codex_plugin_scanner.guard.cli import commands_hook_native_route_handlers as handlers
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifact_policy import artifact_fact_skip_native_floor
+from codex_plugin_scanner.guard.cli.commands_support_runtime_artifact_policy import (
+    artifact_fact_content_hash,
+    artifact_fact_skip_native_floor,
+)
+from codex_plugin_scanner.guard.consumer.service import artifact_hash
+from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.native_hook_artifact_compose import (
     HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE,
     NativeHookComposeError,
     native_hook_compose,
 )
 from codex_plugin_scanner.guard.native_hook_artifact_facts import (
+    HOOK_ARTIFACT_FACTS_CONTENT_HASH_FEATURE,
     HookArtifactFactsUnavailableError,
     native_hook_artifact_facts,
 )
@@ -311,6 +317,23 @@ def test_a_resident_without_the_tail_feature_is_refused(monkeypatch: pytest.Monk
     assert required == [HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE]
 
 
+def test_a_digest_request_is_asked_under_the_content_hash_feature(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A runtime that answers the facts but not the digest must not look available."""
+
+    required: list[object] = []
+
+    def refuse(**kwargs: object) -> dict[str, object]:
+        required.append(kwargs.get("required_feature"))
+        raise RuntimeError("required feature missing")
+
+    monkeypatch.setattr(facts_bridge, "_resolve_digest_home", lambda _home: Path("/tmp/policy-tail-home"))
+    monkeypatch.setattr(facts_bridge, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(facts_bridge, "_resident_request", refuse)
+    with pytest.raises(HookArtifactFactsUnavailableError):
+        native_hook_artifact_facts([{"artifact_type": "tool_action_request", "metadata": {}, "hash_metadata": {}}])
+    assert required == [HOOK_ARTIFACT_FACTS_CONTENT_HASH_FEATURE]
+
+
 # --- The pipeline turns a missing answer into the host outage ----------------
 
 
@@ -422,3 +445,107 @@ def test_resident_answers_the_recorded_compositions(native_approval_reuse_runtim
         if answer != vector["expected"]:
             mismatches.append(vector["inputs"])
     assert mismatches == []
+
+
+# --- The resident hashes the artifact the way the approval store keyed it ----
+
+
+def _hashed_artifacts() -> tuple[GuardArtifact, ...]:
+    """One artifact per shape ``consumer.service.artifact_hash`` treats apart."""
+
+    return (
+        GuardArtifact(
+            artifact_id="shell:git",
+            name="git",
+            harness="claude-code",
+            artifact_type="tool_action_request",
+            source_scope="workspace",
+            config_path="/workspace/.claude/settings.json",
+            metadata={"action_class": "git status", "env_keys": ["PATH"], "reason_code": "r"},
+        ),
+        GuardArtifact(
+            artifact_id="shell:curl",
+            name="curl",
+            harness="codex",
+            artifact_type="tool_action_request",
+            source_scope="workspace",
+            config_path="/workspace/.codex/config.toml",
+            command="curl",
+            args=("--header", "authorization: Bearer abc"),
+            url="https://example.test/fetch?token=abc&page=2",
+            transport="http",
+            publisher="local",
+            metadata={"action_class": "network fetch", "api_token": "abc", "env_keys": []},
+        ),
+        GuardArtifact(
+            artifact_id="codex:hook:pre",
+            name="pre",
+            harness="codex",
+            artifact_type="hook",
+            source_scope="user",
+            config_path="/home/user/.codex/hooks.toml",
+            metadata={"codex_hook_identity": "pre:sha256:abc"},
+        ),
+        GuardArtifact(
+            artifact_id="prompt:plan",
+            name="plan",
+            harness="claude-code",
+            artifact_type="prompt_request",
+            source_scope="workspace",
+            config_path="/workspace/.claude/commands/plan.md",
+            metadata={
+                "normalized_path": "/workspace/.claude/commands/plan.md",
+                "prompt_intent_hash": " abc ",
+                "prompt_display_text": "changes between runs",
+                "request_summary": "changes between runs",
+            },
+        ),
+    )
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_the_resident_hashes_every_artifact_shape_the_way_python_did(
+    native_approval_reuse_runtime: Path,
+) -> None:
+    """A different digest would silently invalidate every saved approval."""
+
+    artifacts = _hashed_artifacts()
+    answers = native_hook_artifact_facts(
+        [
+            {
+                "artifact_type": artifact.artifact_type,
+                "metadata": artifact.metadata,
+                "hash_metadata": artifact.metadata,
+                "artifact_id": artifact.artifact_id,
+                "name": artifact.name,
+                "harness": artifact.harness,
+                "source_scope": artifact.source_scope,
+                "config_path": artifact.config_path,
+                "command": artifact.command,
+                "args": list(artifact.args),
+                "url": artifact.url,
+                "transport": artifact.transport,
+                "publisher": artifact.publisher,
+            }
+            for artifact in artifacts
+        ],
+        guard_home=native_approval_reuse_runtime,
+    )
+    assert [artifact_fact_content_hash(facts) for facts in answers] == [
+        artifact_hash(artifact) for artifact in artifacts
+    ]
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_an_artifact_asked_about_without_an_identity_carries_no_digest(
+    native_approval_reuse_runtime: Path,
+) -> None:
+    """The facts the hook already read cost it nothing it did not ask for."""
+
+    (facts,) = native_hook_artifact_facts(
+        [{"artifact_type": "tool_action_request", "metadata": {"action_class": "git status"}}],
+        guard_home=native_approval_reuse_runtime,
+    )
+    assert "content_sha256" not in facts
+    with pytest.raises(HookArtifactFactsUnavailableError):
+        artifact_fact_content_hash(facts)

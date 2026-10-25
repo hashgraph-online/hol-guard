@@ -10,6 +10,10 @@ pub use interpreter_options::shell_interpreter_command_payload;
 mod paths;
 pub use paths::is_trusted_absolute_command_path;
 
+#[cfg(test)]
+#[path = "shell_command_wrappers_tests.rs"]
+mod wrapper_tests;
+
 use crate::command_launcher_floors::shlex_quote;
 use crate::env_wrapper::parse_env_wrapper;
 

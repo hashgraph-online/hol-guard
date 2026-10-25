@@ -13,9 +13,9 @@ import time
 from collections.abc import Mapping
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast, get_args
 
-from .models import GuardArtifact
+from .models import GuardAction, GuardArtifact
 from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
 from .native_resident_client import native_resident_client_request
 from .native_runtime import _isolated_environment, native_runtime_status
@@ -33,6 +33,21 @@ _MAX_REQUEST_BYTES = 256 * 1024
 _ARTIFACT_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _PACKAGE_AUTHORITY_FEATURE = "package-authority-v1"
+_PACKAGE_INTENT_EXTRACT_FEATURE = "package-intent-extract-v1"
+# Mirrors PACKAGE_INTENT_EXTRACT_MAX_BYTES: the tool arguments ride in the
+# request whole, so the bound matches the MCP tool-call identity request that
+# carries the same arguments.
+_EXTRACT_MAX_REQUEST_BYTES = 6 * 1024 * 1024 - 64 * 1024
+# Room the operation envelope adds around the request on the wire.
+_EXTRACT_ENVELOPE_RESERVE_BYTES = 1024
+# The resident reads commands five levels into the arguments and its decoder
+# refuses deeper nesting than 128, so anything past this depth is sent as null
+# rather than failing the whole request.
+_EXTRACT_MAX_DEPTH = 16
+_PACKAGE_EVALUATION_VIEW_FEATURE = "package-evaluation-view-v1"
+# Mirrors PACKAGE_EVALUATION_VIEW_MAX_REQUEST_BYTES: the view reads back rows the
+# resident answered inside one reply, so its request takes the reply budget.
+_EVALUATION_VIEW_MAX_REQUEST_BYTES = 2 * 1024 * 1024
 _REQUEST_SCHEMA = "guard-package-authority-request.v1"
 _RESULT_SCHEMA = "guard-package-authority-result.v1"
 _request_counter = 0
@@ -162,8 +177,6 @@ def package_intent_parse_native(
     ``require_answer``, a missing or malformed answer raises instead of reading
     as no intent, so a caller can fail closed.
     """
-    from .runtime.package_intent_common import PackageIntent
-
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": _request_id(),
@@ -180,6 +193,133 @@ def package_intent_parse_native(
         timeout_seconds=timeout_seconds,
         deadline_monotonic=deadline_monotonic,
     )
+    return _intent_from_response(response, require_answer=require_answer)
+
+
+def package_intent_extract_native(
+    tool_name: object,
+    arguments: object,
+    *,
+    action_envelope_command: str | None,
+    workspace: Path | None = None,
+    home_dir: Path | None = None,
+    environment: Mapping[str, str] | None = None,
+    guard_home: Path,
+    timeout_seconds: float = 5.0,
+) -> PackageIntent | None:
+    """The first package intent a tool call's commands name, or ``None``.
+
+    The resident walks a shell tool's arguments for command texts, parses each
+    until one names a package intent, and otherwise parses the action
+    envelope's command, all in one request.
+    """
+
+    request: dict[str, object] = {
+        "schema": _REQUEST_SCHEMA,
+        "request_id": _request_id(),
+        "tool_name": tool_name if isinstance(tool_name, str) and _transportable(tool_name) else None,
+        "arguments": _command_tree(arguments, depth=0),
+        "action_envelope_command": (
+            action_envelope_command if action_envelope_command and _transportable(action_envelope_command) else None
+        ),
+        "workspace": str(workspace) if workspace is not None else None,
+        "home_dir": str(home_dir) if home_dir is not None else None,
+        "environment": _resident_environment(environment),
+    }
+    deadline = time.monotonic() + timeout_seconds
+    if _fits(request):
+        return _extract_once(request, guard_home=guard_home, deadline=deadline)
+    # The arguments and the envelope command do not fit together. The resident
+    # walks the arguments before it reads the envelope command, so asking for
+    # each in turn gives the answer one request would have.
+    walked = {**request, "action_envelope_command": None}
+    if _fits(walked):
+        intent = _extract_once(walked, guard_home=guard_home, deadline=deadline)
+        if intent is not None:
+            return intent
+    if request["action_envelope_command"] is None:
+        return None
+    return _extract_once(
+        {**request, "request_id": _request_id(), "arguments": None}, guard_home=guard_home, deadline=deadline
+    )
+
+
+def _fits(request: dict[str, object]) -> bool:
+    return _encoded_size(request) <= _EXTRACT_MAX_REQUEST_BYTES - _EXTRACT_ENVELOPE_RESERVE_BYTES
+
+
+def _extract_once(request: dict[str, object], *, guard_home: Path, deadline: float) -> PackageIntent | None:
+    response = _resident_request(
+        operation="package_intent_extract",
+        request=request,
+        guard_home=guard_home,
+        timeout_seconds=max(0.0, deadline - time.monotonic()),
+        deadline_monotonic=deadline,
+        required_features=(_PACKAGE_AUTHORITY_FEATURE, _PACKAGE_INTENT_EXTRACT_FEATURE),
+        max_request_bytes=_EXTRACT_MAX_REQUEST_BYTES,
+    )
+    return _intent_from_response(response, require_answer=False)
+
+
+def _command_tree(value: object, *, depth: int) -> object:
+    """Project tool arguments onto the values the resident reads commands from.
+
+    Only strings, lists and objects can hold a command, so every other value is
+    sent as null: it never spends request budget, and a value JSON cannot carry
+    (a NaN, a lone surrogate) never fails the whole request.
+    """
+
+    if depth > _EXTRACT_MAX_DEPTH:
+        return None
+    if isinstance(value, str):
+        return value if _transportable(value) else None
+    if isinstance(value, list):
+        return [_command_tree(item, depth=depth + 1) for item in value]
+    if isinstance(value, dict):
+        tree: dict[str, object] = {}
+        renamed: list[tuple[str, object]] = []
+        for key, item in value.items():
+            if not isinstance(key, str):
+                continue
+            if _transportable(key):
+                tree[key] = _command_tree(item, depth=depth + 1)
+            else:
+                # A key JSON cannot carry never names a command, but the
+                # value under it is still walked; repr() escapes it and its
+                # quotes keep it from colliding with a key the resident reads.
+                renamed.append((repr(key), item))
+        for key, item in renamed:
+            if key not in tree:
+                tree[key] = _command_tree(item, depth=depth + 1)
+        return tree
+    return None
+
+
+def _encoded_size(value: object) -> int:
+    """The ASCII-escaped wire length of ``value``; past any bound when unencodable."""
+
+    try:
+        return len(json.dumps(value))
+    except (TypeError, ValueError):
+        return _EXTRACT_MAX_REQUEST_BYTES + 1
+
+
+def _transportable(text: str) -> bool:
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+def _intent_from_response(response: dict[str, object] | None, *, require_answer: bool) -> PackageIntent | None:
+    """Hydrate the intent a parse or extract answer carries.
+
+    ``None`` is the resident's "no package intent" answer. With
+    ``require_answer``, a missing or malformed answer raises instead.
+    """
+    from .runtime.package_intent_common import PackageIntent
+
     if response is None:
         if require_answer:
             raise NativePackageIntentUnavailableError("native_package_intent_unavailable")
@@ -316,23 +456,186 @@ def package_request_artifact_native(
     return _artifact_from_wire(response.get("payload"))
 
 
-def evaluation_from_native_payload(payload: Mapping[str, object]) -> Any:
-    """Reconstruct ``PackageRequestEvaluation`` from the resident's dict.
+class NativePackageEvaluationViewUnavailableError(RuntimeError):
+    """The resident gave no usable view of a stored package evaluation."""
+
+
+def _view_malformed() -> NativePackageEvaluationViewUnavailableError:
+    return NativePackageEvaluationViewUnavailableError("native_package_evaluation_view_malformed")
+
+
+# Every field of the view wire. The caller reads this reply as a settled
+# evaluation, so a field missing here is not a field to default: filling one in
+# would put a second answer beside the resident's, which is the duplication
+# this route exists to remove.
+_EVALUATION_VIEW_WIRE_FIELDS = frozenset(
+    {
+        "decision",
+        "policy_action",
+        "enforcement",
+        "entitlement_state",
+        "cache_status",
+        "package_intent_hash",
+        "policy_version",
+        "bundle_version",
+        "workspace_fingerprint",
+        "reasons",
+        "packages",
+        "matched_rule_id",
+        "exception_id",
+        "risk_summary",
+        "record_monitor_evidence",
+        "refresh_required",
+        "evidence_ids",
+        "external_archive_source_hashes",
+        "user_copy",
+    }
+)
+
+_EVALUATION_VIEW_USER_COPY_FIELDS = frozenset({"title", "summary", "next_step", "dashboard_url", "harness_message"})
+
+_EVALUATION_VIEW_TEXT_FIELDS = (
+    "decision",
+    "policy_action",
+    "enforcement",
+    "entitlement_state",
+    "cache_status",
+    "package_intent_hash",
+    "policy_version",
+    "risk_summary",
+)
+
+
+def _view_optional_text(value: object) -> str | None:
+    if value is None or isinstance(value, str):
+        return value
+    raise _view_malformed()
+
+
+def _view_text_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise _view_malformed()
+    return tuple(value)
+
+
+def _view_row_tuple(value: object) -> tuple[dict[str, object], ...]:
+    if not isinstance(value, list) or any(not isinstance(item, Mapping) for item in value):
+        raise _view_malformed()
+    return tuple(dict(item) for item in value)
+
+
+def _evaluation_from_view(payload: object) -> Any:
+    """Rebuild the typed shape from the resident's view, or raise.
 
     Local import keeps the module importable without the eval dep.
     """
-    from .runtime.package_request_evaluation import PackageRequestEvaluation
+
+    from .runtime.package_request_evaluation import PackageRequestEvaluation, SupplyChainUserCopy
+
+    if not isinstance(payload, Mapping) or set(payload) != _EVALUATION_VIEW_WIRE_FIELDS:
+        raise _view_malformed()
+    user_copy = payload["user_copy"]
+    if not isinstance(user_copy, Mapping) or set(user_copy) != _EVALUATION_VIEW_USER_COPY_FIELDS:
+        raise _view_malformed()
+    if any(not isinstance(payload[key], str) for key in _EVALUATION_VIEW_TEXT_FIELDS):
+        raise _view_malformed()
+    if any(not isinstance(payload[key], bool) for key in ("record_monitor_evidence", "refresh_required")):
+        raise _view_malformed()
+    if any(not isinstance(user_copy[key], str) for key in ("title", "summary", "harness_message")):
+        raise _view_malformed()
+    policy_action = payload["policy_action"]
+    # The resident already settled the action; a value outside the lattice means
+    # this is not the view it decided, so the reply is refused rather than read.
+    if policy_action not in get_args(GuardAction):
+        raise _view_malformed()
+    return PackageRequestEvaluation(
+        decision=str(payload["decision"]),
+        policy_action=cast(GuardAction, policy_action),
+        enforcement=str(payload["enforcement"]),
+        entitlement_state=str(payload["entitlement_state"]),
+        cache_status=str(payload["cache_status"]),
+        package_intent_hash=str(payload["package_intent_hash"]),
+        policy_version=str(payload["policy_version"]),
+        bundle_version=_view_optional_text(payload["bundle_version"]),
+        workspace_fingerprint=_view_optional_text(payload["workspace_fingerprint"]),
+        reasons=_view_row_tuple(payload["reasons"]),
+        packages=_view_row_tuple(payload["packages"]),
+        risk_summary=str(payload["risk_summary"]),
+        user_copy=SupplyChainUserCopy(
+            title=str(user_copy["title"]),
+            summary=str(user_copy["summary"]),
+            next_step=_view_optional_text(user_copy["next_step"]),
+            dashboard_url=_view_optional_text(user_copy["dashboard_url"]),
+            harness_message=str(user_copy["harness_message"]),
+        ),
+        matched_rule_id=_view_optional_text(payload["matched_rule_id"]),
+        exception_id=_view_optional_text(payload["exception_id"]),
+        refresh_required=bool(payload["refresh_required"]),
+        record_monitor_evidence=bool(payload["record_monitor_evidence"]),
+        evidence_ids=_view_text_tuple(payload["evidence_ids"]),
+        external_archive_source_hashes=_view_text_tuple(payload["external_archive_source_hashes"]),
+    )
+
+
+def evaluation_from_native_payload(
+    payload: Mapping[str, object],
+    *,
+    guard_home: Path | None = None,
+    timeout_seconds: float = 5.0,
+) -> Any:
+    """Read a stored or replayed package evaluation back into its typed shape.
+
+    The payload a caller holds is whatever was written at evaluation time, so
+    turning it into the view a harness shows means knowing every default, which
+    policy actions are recognised, what an unrecognised one costs, and how the
+    user copy reads once the local route has no cloud inbox to send anyone to.
+    That grammar is the resident's. The caller sends the payload and the four
+    identity fields the stored row does not carry, and reads the answer.
+
+    Every outcome other than a well-formed, request-bound ``ok`` reply raises.
+    A view composed here instead would be a second reading of a verdict the
+    resident already decided.
+    """
 
     data = dict(payload)
     bundle_version = data.get("bundle_version")
     raw_workspace_fingerprint = data.get("workspace_fingerprint")
-    workspace_fingerprint: str | None = (
-        raw_workspace_fingerprint if isinstance(raw_workspace_fingerprint, str) else None
+    home = _resolve_digest_home(guard_home)
+    if not ensure_resident_prerequisite(home):
+        raise NativePackageEvaluationViewUnavailableError("native_package_evaluation_view_unavailable")
+    request: dict[str, object] = {
+        "schema": _REQUEST_SCHEMA,
+        "request_id": _request_id(),
+        "payload": data,
+        "package_intent_hash": str(data.get("package_intent_hash") or ""),
+        "policy_version": str(data.get("policy_version") or ""),
+        # Absent identity travels as an explicit null. The reply is bound by the
+        # canonical digest of this request, and a key one side omits and the
+        # other fills in would unbind every request without a bundle version.
+        "bundle_version": bundle_version if isinstance(bundle_version, str) else None,
+        "workspace_fingerprint": (raw_workspace_fingerprint if isinstance(raw_workspace_fingerprint, str) else None),
+    }
+    try:
+        request_sha256 = "sha256:" + _canonical_request_sha256(request)
+    except (TypeError, ValueError) as error:
+        raise NativePackageEvaluationViewUnavailableError("native_package_evaluation_view_unavailable") from error
+    response = _resident_request(
+        operation="package_evaluation_view",
+        request=request,
+        guard_home=home,
+        timeout_seconds=timeout_seconds,
+        required_features=(_PACKAGE_EVALUATION_VIEW_FEATURE,),
+        max_request_bytes=_EVALUATION_VIEW_MAX_REQUEST_BYTES,
     )
-    return PackageRequestEvaluation.from_cache_dict(
-        data,
-        package_intent_hash=str(data.get("package_intent_hash") or ""),
-        policy_version=str(data.get("policy_version") or ""),
-        bundle_version=bundle_version if isinstance(bundle_version, str) else None,
-        workspace_fingerprint=workspace_fingerprint,
-    )
+    if response is None or response.get("code") != "ok":
+        # A reply whose code is not ``ok`` did not answer with a view, whatever
+        # its status and payload look like.
+        raise NativePackageEvaluationViewUnavailableError("native_package_evaluation_view_unavailable")
+    if response.get("request_id") != request["request_id"] or response.get("request_sha256") != request_sha256:
+        # Another request's view would describe a package this caller never
+        # evaluated.
+        identity = native_runtime_status().identity
+        if identity is not None:
+            native_record_resident_failure(identity.sha256, home, reason="native_package_evaluation_view_unbound")
+        raise NativePackageEvaluationViewUnavailableError("native_package_evaluation_view_unbound")
+    return _evaluation_from_view(response.get("payload"))

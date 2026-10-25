@@ -151,7 +151,7 @@ def test_unrequested_or_missing_classifier_fails_closed() -> None:
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_finalize_and_post_claim_round_trip() -> None:
-    action, reason = decision.native_post_claim_reuse(
+    action, reason, _ = decision.native_post_claim_decision(
         {
             "current_policy_action": "allow",
             "reuse_action": "allow",
@@ -225,7 +225,7 @@ _CLAIM = {
 def test_unbound_or_malformed_answers_raise(monkeypatch: pytest.MonkeyPatch, overrides: dict[str, object]) -> None:
     _resident_returning(monkeypatch, lambda request: _good(request, **overrides))
     with pytest.raises(decision.NativeHookDecisionError):
-        decision.native_post_claim_reuse(_CLAIM)
+        decision.native_post_claim_decision(_CLAIM)
 
 
 def test_resident_error_code_is_surfaced(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -234,20 +234,20 @@ def test_resident_error_code_is_surfaced(monkeypatch: pytest.MonkeyPatch) -> Non
         lambda request: _good(request, status="error", code="native_hook_decision_action_invalid", payload=None),
     )
     with pytest.raises(decision.NativeHookDecisionError) as error:
-        decision.native_post_claim_reuse(_CLAIM)
+        decision.native_post_claim_decision(_CLAIM)
     assert error.value.code == "native_hook_decision_action_invalid"
 
 
 def test_missing_resident_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
     _resident_returning(monkeypatch, lambda _request: None)
     with pytest.raises(decision.NativeHookDecisionError) as error:
-        decision.native_post_claim_reuse(_CLAIM)
+        decision.native_post_claim_decision(_CLAIM)
     assert error.value.code == "native_hook_decision_unavailable"
 
 
 def test_bound_answer_is_decoded(monkeypatch: pytest.MonkeyPatch) -> None:
     _resident_returning(monkeypatch, lambda request: _good(request))
-    assert decision.native_post_claim_reuse(_CLAIM) == ("allow", None)
+    assert decision.native_post_claim_decision(_CLAIM)[:2] == ("allow", None)
 
 
 def test_composition_inputs_forward_raw_tool_call_without_verdicts(tmp_path: Path) -> None:
@@ -433,7 +433,7 @@ def test_a_context_that_moved_after_the_claim_never_reuses_it() -> None:
 def test_a_claim_that_settles_the_context_neither_way_is_refused() -> None:
     incomplete = {key: value for key, value in _CLAIM.items() if key != "context_changed"}
     with pytest.raises(decision.NativeHookDecisionError) as error:
-        decision.native_post_claim_reuse(incomplete)
+        decision.native_post_claim_decision(incomplete)
     assert error.value.code == "native_hook_decision_facts_missing"
 
 
@@ -479,7 +479,7 @@ def test_an_uncomposed_request_answered_with_a_decision_raises(monkeypatch: pyte
         ),
     )
     with pytest.raises(decision.NativeHookDecisionError):
-        decision.native_post_claim_reuse(_CLAIM)
+        decision.native_post_claim_decision(_CLAIM)
 
 
 def test_a_composed_request_demands_the_compose_capability(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -504,5 +504,27 @@ def test_a_composed_request_demands_the_compose_capability(monkeypatch: pytest.M
     _resident_returning(monkeypatch, lambda _request: None)
     monkeypatch.setattr(decision, "_resident_request", transport)
     decision.native_post_claim_decision(_claim_with_tokens(_SAVED_TOKEN))
-    decision.native_post_claim_reuse(_CLAIM)
+    decision.native_post_claim_decision(_CLAIM)
     assert asked == [decision.HOOK_DECISION_POST_CLAIM_COMPOSE_FEATURE, decision.HOOK_DECISION_FEATURE]
+
+
+def test_an_edge_bearing_request_demands_the_edge_reason_capability(monkeypatch: pytest.MonkeyPatch) -> None:
+    # `native_edge` now names the reason the edge result reached its action, and
+    # the edge denies unknown fields, so a resident built before the field has
+    # to be replaced rather than asked. The demanded feature is what this test
+    # reads off the transport; the reply itself is rejected.
+    asked: list[str] = []
+
+    def transport(*, request: dict[str, Any], required_feature: str, **_kwargs: object) -> dict[str, Any]:
+        asked.append(required_feature)
+        return _good(request)
+
+    _resident_returning(monkeypatch, lambda _request: None)
+    monkeypatch.setattr(decision, "_resident_request", transport)
+    for ask in (
+        lambda: decision.native_compose_current(_BASE_INPUTS, {}),
+        lambda: decision.native_finalize(_BASE_INPUTS, {}),
+    ):
+        with pytest.raises(decision.NativeHookDecisionError):
+            ask()
+    assert asked == [decision.HOOK_DECISION_NATIVE_EDGE_REASON_FEATURE] * 2

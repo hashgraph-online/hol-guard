@@ -43,6 +43,18 @@ pub(in crate::pretool) fn mkdir_chain(model: &CanonicalCommandV1) -> bool {
         && named("mkdir")
 }
 
+/// A chain whose writers only bring a path into being. `mkdir` creates a
+/// directory and `touch` creates an empty file or bumps a timestamp; neither
+/// changes directory, renames, links or removes anything. Every segment is
+/// still proven on its own against the files on disk, so the only thing an
+/// earlier segment can settle for a later one is whether a parent directory
+/// exists, and `mkdir` makes real directories rather than links. Plain peers
+/// may read alongside them: `mkdir -p build && touch build/.keep`,
+/// `touch src/new.ts && ls src`.
+pub(in crate::pretool) fn creation_chain(model: &CanonicalCommandV1) -> bool {
+    model.segments.len() > 1 && super::plain_chain(model, &["mkdir", "touch"])
+}
+
 /// Git subcommands that read the repository or update only refs and
 /// metadata, never files in the work tree.
 const WORK_TREE_READERS: &[&str] = &[
@@ -174,4 +186,41 @@ fn resolved(value: &str, context: super::super::PathContext<'_>) -> Option<PathB
         canonical.push(name);
     }
     Some(canonical)
+}
+
+#[cfg(test)]
+mod tests {
+    fn model(command: &str) -> crate::CanonicalCommandV1 {
+        crate::parse_command(&crate::CommandModelRequestV1 {
+            command: command.to_owned(),
+            dialect: "posix".to_owned(),
+            transport: "shell_string".to_owned(),
+            extraction_provenance: "test".to_owned(),
+        })
+        .unwrap()
+    }
+
+    /// Only writers that bring a path into being, beside peers that read,
+    /// share a creation chain. A segment that changes directory, renames,
+    /// links or removes can put a different file under the name a later
+    /// `touch` was screened against, so it keeps the chain out.
+    #[test]
+    fn only_creating_writers_and_plain_peers_share_a_creation_chain() {
+        for (command, shared) in [
+            ("mkdir -p build && touch build/.keep", true),
+            ("mkdir -p build; touch build/.keep", true),
+            ("touch a.txt && touch b.txt", true),
+            ("ls && touch a.txt", true),
+            ("touch build/.keep && ls build", true),
+            // One segment is proven on its own, never as a chain.
+            ("touch a.txt", false),
+            ("ln -s /etc link && touch link/hosts", false),
+            ("cd /etc && touch hosts", false),
+            ("mv notes.md a.txt && touch notes.md", false),
+            ("rm -rf build && touch build", false),
+            ("git checkout main && touch a.txt", false),
+        ] {
+            assert_eq!(super::creation_chain(&model(command)), shared, "{command}");
+        }
+    }
 }

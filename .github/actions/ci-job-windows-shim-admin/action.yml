@@ -47,6 +47,15 @@ runs:
         "SCCACHE_GHA_RW_MODE=$($env:SCCACHE_MODE)" >> $env:GITHUB_ENV
         "SCCACHE_IGNORE_SERVER_IO_ERROR=1" >> $env:GITHUB_ENV
         "CARGO_INCREMENTAL=0" >> $env:GITHUB_ENV
+    - name: Check Windows shim compiler cache readiness
+      shell: bash
+      run: |
+        # Storage initialization can fail before the server's I/O fallback.
+        # Keep diagnostics with signed cache URLs out of public job output.
+        if ! sccache --zero-stats > "$RUNNER_TEMP/sccache-readiness.log" 2>&1; then
+          echo "::warning::Compiler cache unavailable; compiling directly."
+          echo "RUSTC_WORKSPACE_WRAPPER=" >> "$GITHUB_ENV"
+        fi
     - name: Replay the recorded Windows shim vectors
       if: inputs.shim-gate == 'vectors'
       shell: pwsh
@@ -64,24 +73,40 @@ runs:
         $PSNativeCommandUseErrorActionPreference = $true
         cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test pretool_windows_drive_path_writes
         cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test pretool_windows_sibling_repository_writes
+        cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test pretool_windows_git_toplevel
     - name: Install and report shims through the native op on Windows
       if: inputs.shim-gate == 'native-op'
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
-        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime shim_op
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib shim_op
+    - name: Export fresh offline data through the native Windows fallback
+      if: inputs.shim-gate == 'native-op'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib fresh_non_unix_export_preserves_native_exclusive_creation
     - name: Observe direct-lane policy inputs as CPython stats them
       if: inputs.shim-gate == 'native-op'
       shell: pwsh
       run: |
         $ErrorActionPreference = 'Stop'
         $PSNativeCommandUseErrorActionPreference = $true
-        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime direct_lane_input_tests
-        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime storage_gate
-        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime daemon_storage_hold
-        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime windows_expanded_home
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib direct_lane_input_tests
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib storage_gate
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib daemon_storage_hold
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib windows_expanded_home
         cargo test --manifest-path rust/Cargo.toml --locked -p guard-runtime-windows-process --test process_liveness
+    - name: Wait out an exiting resident owner on Windows
+      if: inputs.shim-gate == 'native-op'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib managed_owner_lock
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --lib owner_release
     - name: Contain MCP server process trees in a JobObject on Windows
       if: inputs.shim-gate == 'mcp'
       shell: pwsh

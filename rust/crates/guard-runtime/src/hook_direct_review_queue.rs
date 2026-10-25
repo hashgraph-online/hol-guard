@@ -26,6 +26,12 @@
 //! `add_silent_native_review_approval_request`, and the hook answers with the
 //! `render_pre_tool` block whose reason `safe_alternative_reason` writes.
 //!
+//! A review due only to non-recognition of a launch of a local CLI this
+//! device has not set up is queued as a connector-setup review
+//! (`hook_direct_review_connector.rs`): grouped under the connector with its
+//! setup hint, and shown to the agent with the setup reason. The desktop setup
+//! notice for it travels to the evidence drain with the hook's evidence.
+//!
 //! A package review is queued only when `native_package_review_response`
 //! provably leaves it to the queue (`hook_direct_review_package.rs`).
 //!
@@ -41,10 +47,9 @@
 use super::consume::{repair_store_permissions, storage_gate};
 use super::review_request::{build, ExactKeys, RequestInput};
 use super::{Context, HookDirectDefer, ENVELOPE_BYTES, ESCAPE_FACTOR};
-use crate::blocked_request_mode::safe_alternative_reason_with_retry;
 use crate::guard_store_approval_request::rewrite_approval_url;
 use crate::local_store_read::STORE_FILE_NAME;
-use guard_command::hook_responses::{pre_tool, pre_tool_review, Object};
+use guard_command::hook_responses::{pre_tool_review, Object};
 use guard_contracts::{
     GuardStoreRequestV1, NativeExactActionQueryV1, GUARD_STORE_REQUEST_SCHEMA,
     HOOK_RENDER_MAX_BYTES,
@@ -62,8 +67,6 @@ const ASK_MODE: &str = "ask";
 const CLAUDE_CODE: &str = "claude-code";
 /// The harness whose hook client rewrites the approval link itself.
 const CURSOR: &str = "cursor";
-/// The harness whose extension resumes after a safe-alternative approval.
-const OMP: &str = "omp";
 /// The mode the daemon records a silent block with.
 const SAFE_ALTERNATIVE_MODE: &str = "safe-alternative";
 /// The silent block's reason when the review gave none.
@@ -83,14 +86,15 @@ struct Facts<'a> {
     environment: &'a std::collections::BTreeMap<String, String>,
 }
 
-/// The paused review response for an action the resident queued itself.
+/// The paused review response for an action the resident queued itself, and
+/// the connector-setup notice the evidence drain raises for it, if any.
 pub(super) fn answer(
     context: &Context<'_>,
     result: &Object,
     receipt: Option<&Value>,
     exact: &NativeExactActionQueryV1,
     token: &Result<String, &'static str>,
-) -> Result<Value, HookDirectDefer> {
+) -> Result<(Value, Option<Value>), HookDirectDefer> {
     let facts = facts(context, result).ok_or(HookDirectDefer::ReviewQueue)?;
     let review_binding = crate::native_exact_action_op::review_binding_for(
         exact,
@@ -114,16 +118,23 @@ pub(super) fn answer(
             Ok(token) => ExactKeys::Token(token),
             Err(reason) => ExactKeys::OnceOnly(reason),
         },
+        hint: context.hint,
     };
     let request = build(&input, result, receipt).ok_or(HookDirectDefer::ReviewQueue)?;
-    if !facts.ask || (review_binding.is_none() && token.is_err()) {
+    let lookup = connector::prepare(context, result, facts.environment, facts.oauth_source)?;
+    let bound = review_binding.is_some();
+    if !facts.ask || (!bound && token.is_err()) {
         return silent(
             context,
             result,
             facts.oauth_source,
             request,
-            review_binding.is_some(),
-            token.is_ok(),
+            Flags {
+                ask: facts.ask,
+                retry_reuses_approval: bound,
+                exact_action_allowable: token.is_ok(),
+            },
+            lookup,
         );
     }
     let approval_url = request
@@ -142,13 +153,24 @@ pub(super) fn answer(
     {
         return Err(HookDirectDefer::ReviewQueue);
     }
-    let reason = match result.get("reason") {
-        Some(Value::String(text)) if !text.is_empty() => text.as_str(),
-        _ => DEFAULT_REASON,
-    };
+    let exact_action_allowable = token.is_ok();
     let auth_token =
         crate::daemon_policy_authority::load_guard_daemon_auth_token(Path::new(context.guard_home));
-    let pause = |request_id: &str, approval_url: &str| {
+    // `render_pre_tool_review` with the agent text: the review's own reason,
+    // or the connector-setup reason in its place.
+    let pause = |setup_reason: Option<&str>, request_id: &str, approval_url: &str| {
+        let shown = match setup_reason {
+            Some(text) => {
+                let mut shown = result.clone();
+                shown.insert("reason".to_owned(), json!(text));
+                std::borrow::Cow::Owned(shown)
+            }
+            None => std::borrow::Cow::Borrowed(result),
+        };
+        let reason = match shown.get("reason") {
+            Some(Value::String(text)) if !text.is_empty() => text.as_str(),
+            _ => DEFAULT_REASON,
+        };
         let linked = crate::native_review_link::native_review_reason(
             &canonical_harness(context.harness),
             reason,
@@ -158,7 +180,7 @@ pub(super) fn answer(
         )?;
         respond(
             context.harness,
-            result,
+            &shown,
             request_id,
             approval_url,
             &linked,
@@ -166,14 +188,74 @@ pub(super) fn answer(
         )
     };
     // Render the pause before writing, so a pause the resident cannot render
-    // leaves the queue to the daemon rather than recording the hook twice.
-    pause(&request_id, &approval_url).ok_or(HookDirectDefer::ReviewQueue)?;
+    // leaves the queue to the daemon rather than recording the hook twice. A
+    // review the lookup may give a connector also renders with the longest
+    // setup reason it could get.
+    pause(None, &request_id, &approval_url).ok_or(HookDirectDefer::ReviewQueue)?;
+    if lookup.is_some() {
+        if let Some(longest) = connector::longest_reason(true, bound, exact_action_allowable) {
+            pause(Some(longest.as_str()), &request_id, &approval_url)
+                .ok_or(HookDirectDefer::ReviewQueue)?;
+        }
+    }
     let (method, extra) = store_method(context, result, review_binding.as_deref())?;
+    let setup = run_lookup(context, lookup)?;
+    let request = queued_request(context, result, request, setup.as_ref());
     let stored_id = write(context, method, facts.oauth_source, request, extra)?;
+    let notice = setup
+        .as_ref()
+        .map(|setup| setup.stored(context, facts.oauth_source, &stored_id));
+    let setup_reason = setup
+        .as_ref()
+        .and_then(|setup| setup.reason(true, bound, exact_action_allowable));
     // A pending request for the same action keeps its id, so a pause the
     // resident still cannot render leaves the daemon to queue the same request.
     let approval_url = rewrite_approval_url(&approval_url, &stored_id);
-    pause(&stored_id, &approval_url).ok_or(HookDirectDefer::ReviewQueue)
+    let response = pause(setup_reason.as_deref(), &stored_id, &approval_url)
+        .ok_or(HookDirectDefer::ReviewQueue)?;
+    Ok((response, notice))
+}
+
+/// How a silent block may point at its row.
+struct Flags {
+    /// `asks_for_approval`.
+    ask: bool,
+    retry_reuses_approval: bool,
+    exact_action_allowable: bool,
+}
+
+/// The connector a prepared lookup names. It records the launch, so it runs
+/// only once nothing but the write and the evidence offer can defer, and only
+/// while the evidence queue has room for the hook's record: a record the
+/// queue refuses hands the hook to the daemon, which would look it up again.
+fn run_lookup(
+    context: &Context<'_>,
+    lookup: Option<connector::Lookup>,
+) -> Result<Option<connector::Setup>, HookDirectDefer> {
+    let Some(lookup) = lookup else {
+        return Ok(None);
+    };
+    if context
+        .hint
+        .is_some_and(|scope| !scope.policy_store.direct_evidence().has_headroom())
+    {
+        return Err(HookDirectDefer::EvidenceFull);
+    }
+    lookup.run(context.guard_home)
+}
+
+/// The request as it is stored: grouped under its connector with the setup
+/// hint, or with the extension hints the review settles.
+fn queued_request(
+    context: &Context<'_>,
+    result: &Object,
+    request: Value,
+    setup: Option<&connector::Setup>,
+) -> Value {
+    match setup {
+        Some(setup) => setup.apply(request),
+        None => super::review_hint::settle(context, result, request),
+    }
 }
 
 /// The store operation that queues an `ask` review, with its other
@@ -196,93 +278,6 @@ fn store_method(
         CLAUDE_WRITE_METHOD
     };
     Ok((method, extra))
-}
-
-/// The silent block for a request queued with its `approval.created` event.
-fn silent(
-    context: &Context<'_>,
-    result: &Object,
-    oauth_source: &str,
-    request: Value,
-    retry_reuses_approval: bool,
-    exact_action_allowable: bool,
-) -> Result<Value, HookDirectDefer> {
-    let reason = falsy_or_text(result.get("reason"), BLOCKED_REASON)?;
-    let reason_code = falsy_or_text(result.get("reason_code"), "unknown")?;
-    let reason = safe_alternative_reason_with_retry(
-        reason,
-        Some(reason_code),
-        Some(true),
-        retry_reuses_approval,
-        exact_action_allowable,
-    );
-    // Approving a row that is neither bound to the retry nor eligible for an
-    // exact-action Always cannot let the agent run the action, so the reason
-    // does not send the user to approve it.
-    let approval_url = request
-        .get("approval_url")
-        .and_then(Value::as_str)
-        .filter(|_| retry_reuses_approval || exact_action_allowable)
-        .map(str::to_owned);
-    // The unlinked block renders before the write, so a block the resident
-    // cannot render leaves the queue to the daemon.
-    let unlinked =
-        silent_block(context.harness, result, &reason).ok_or(HookDirectDefer::ReviewQueue)?;
-    let stored_id = write(
-        context,
-        SILENT_WRITE_METHOD,
-        oauth_source,
-        request,
-        Map::new(),
-    )?;
-    // The request is queued now, so a link that cannot be added keeps the
-    // unlinked block rather than handing the hook back.
-    let linked = approval_url.and_then(|url| {
-        let url = rewrite_approval_url(&url, &stored_id);
-        let auth_token = crate::daemon_policy_authority::load_guard_daemon_auth_token(Path::new(
-            context.guard_home,
-        ));
-        let reason = crate::native_review_link::native_review_reason(
-            &canonical_harness(context.harness),
-            &reason,
-            &url,
-            auth_token.as_deref(),
-            now_micros()?,
-        )?;
-        silent_block(context.harness, result, &reason)
-    });
-    let mut blocked = linked.unwrap_or(unlinked);
-    // The OMP extension waits for this approval in the background and then
-    // asks the agent to run the identical call again. Only a review bound to
-    // that retry gets the handle: approving any other row cannot let it run.
-    if retry_reuses_approval && canonical_harness(context.harness) == OMP {
-        blocked.insert(
-            "approval_resume".to_owned(),
-            json!({"request_id": stored_id, "poll_path": format!("/v1/requests/{stored_id}")}),
-        );
-    }
-    Ok(Value::Object(blocked))
-}
-
-/// The `safe-alternative` block for `reason`, or `None` when the daemon's
-/// render request could exceed its size limit.
-fn silent_block(harness: &str, result: &Object, reason: &str) -> Option<Object> {
-    let mut blocked = result.clone();
-    blocked.insert("decision".to_owned(), json!("deny"));
-    blocked.insert("minimum_action".to_owned(), json!("block"));
-    blocked.insert("policy_action".to_owned(), json!("block"));
-    blocked.insert("reason".to_owned(), json!(reason));
-    let encoded = serde_json::to_vec(&blocked).ok()?.len() + harness.len();
-    if encoded * ESCAPE_FACTOR + ENVELOPE_BYTES > HOOK_RENDER_MAX_BYTES {
-        return None;
-    }
-    let mut response = pre_tool(harness, &blocked);
-    response.insert("prompted".to_owned(), json!(false));
-    response.insert(
-        "blocked_request_mode".to_owned(),
-        json!(SAFE_ALTERNATIVE_MODE),
-    );
-    Some(response)
 }
 
 /// `str(value or fallback)` for the values the resident reproduces: a string,
@@ -424,6 +419,13 @@ fn now_micros() -> Option<i64> {
         .as_micros();
     i64::try_from(micros).ok()
 }
+
+#[path = "hook_direct_review_silent.rs"]
+mod blocked;
+use blocked::silent;
+
+#[path = "hook_direct_review_connector.rs"]
+mod connector;
 
 #[path = "hook_direct_review_notice.rs"]
 mod notice;

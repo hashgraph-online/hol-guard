@@ -136,7 +136,12 @@ def test_sink_runs_an_anchored_script_from_the_sibling_root(monkeypatch: pytest.
     assert runs == [(sibling.resolve(), sibling.resolve())]
 
 
-def test_plain_data_settings_are_dropped_and_others_stay() -> None:
+def test_plain_data_settings_are_dropped_and_others_stay(monkeypatch: pytest.MonkeyPatch) -> None:
+    # No command here stands behind a transparent prefix, and the parser owns
+    # that answer; the settings themselves are this module's subject.
+    from codex_plugin_scanner.guard import native_restricted_pytest
+
+    monkeypatch.setattr(native_restricted_pytest, "restricted_native", lambda *_args: None)
     assert _split_command_prefix(["REPORT_DIR=/tmp/report", "CI=1", "vitest", "run"], drop_data=True) == (
         ["vitest", "run"],
         {"CI": "1"},

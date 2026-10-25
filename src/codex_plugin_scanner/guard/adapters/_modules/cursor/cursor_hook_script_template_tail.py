@@ -248,17 +248,10 @@ def _cursor_availability_response(
 ) -> tuple[dict[str, object], int]:
     if deadline_monotonic is not None and _remaining_seconds(deadline_monotonic) <= 0:
         return _cursor_unavailable_response(hook_event_name)
-    workspace_path = Path(workspace) if workspace else None
     try:
         from codex_plugin_scanner.guard.daemon.hook_availability_policy import cursor_fallback_permission
 
-        return cursor_fallback_permission(
-            payload,
-            hook_event_name=hook_event_name,
-            workspace=workspace_path,
-            guard_home=Path(GUARD_HOME),
-            recording_only=False,
-        )
+        return cursor_fallback_permission(hook_event_name=hook_event_name)
     except ModuleNotFoundError:
         # The isolated hook cannot load the policy package. Deny without guessing.
         return _cursor_unavailable_response(hook_event_name)

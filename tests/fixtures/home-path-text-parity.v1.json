@@ -1,0 +1,1827 @@
+{
+  "schema": "home-path-text-parity.v1",
+  "note": "Recorded from pathlib and os.path with the POSIX and Windows flavours substituted, so both halves are recordable from any host. Regenerate with scripts/ci/generate_home_path_text_parity.py.",
+  "posix": {
+    "expand_home": [
+      {
+        "home": "/home/u",
+        "value": "~",
+        "expected": "/home/u"
+      },
+      {
+        "home": "/home/u",
+        "value": "~/",
+        "expected": "/home/u"
+      },
+      {
+        "home": "/home/u",
+        "value": "~/.",
+        "expected": "/home/u"
+      },
+      {
+        "home": "/home/u",
+        "value": "~/..",
+        "expected": "/home/u/.."
+      },
+      {
+        "home": "/home/u",
+        "value": "~/x",
+        "expected": "/home/u/x"
+      },
+      {
+        "home": "/home/u",
+        "value": "~/a/",
+        "expected": "/home/u/a"
+      },
+      {
+        "home": "/home/u",
+        "value": "~/a//b",
+        "expected": "/home/u/a/b"
+      },
+      {
+        "home": "/home/u",
+        "value": "~//x",
+        "expected": "/x"
+      },
+      {
+        "home": "/home/u",
+        "value": "~///x",
+        "expected": "//x"
+      },
+      {
+        "home": "/home/u",
+        "value": "~/a/./b",
+        "expected": "/home/u/a/b"
+      },
+      {
+        "home": "/home/u",
+        "value": "~/a/../b",
+        "expected": "/home/u/a/../b"
+      },
+      {
+        "home": "/home/u",
+        "value": "~\\",
+        "expected": "/home/u"
+      },
+      {
+        "home": "/home/u",
+        "value": "~\\a",
+        "expected": "/home/u/a"
+      },
+      {
+        "home": "/home/u",
+        "value": "~\\a\\b",
+        "expected": "/home/u/a\\b"
+      },
+      {
+        "home": "/home/u",
+        "value": "~/é/ü",
+        "expected": "/home/u/é/ü"
+      },
+      {
+        "home": "/home/u",
+        "value": "~/ ",
+        "expected": "/home/u/ "
+      },
+      {
+        "home": "/home/u",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": "/home/u",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": "/home/u",
+        "value": "/abs/path",
+        "expected": "/abs/path"
+      },
+      {
+        "home": "/home/u",
+        "value": "",
+        "expected": ""
+      },
+      {
+        "home": "/home/u",
+        "value": "~~",
+        "expected": "~~"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~",
+        "expected": "/home/u"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~/",
+        "expected": "/home/u"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~/.",
+        "expected": "/home/u"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~/..",
+        "expected": "/home/u/.."
+      },
+      {
+        "home": "/home/u/",
+        "value": "~/x",
+        "expected": "/home/u/x"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~/a/",
+        "expected": "/home/u/a"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~/a//b",
+        "expected": "/home/u/a/b"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~//x",
+        "expected": "/x"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~///x",
+        "expected": "//x"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~/a/./b",
+        "expected": "/home/u/a/b"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~/a/../b",
+        "expected": "/home/u/a/../b"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~\\",
+        "expected": "/home/u"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~\\a",
+        "expected": "/home/u/a"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~\\a\\b",
+        "expected": "/home/u/a\\b"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~/é/ü",
+        "expected": "/home/u/é/ü"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~/ ",
+        "expected": "/home/u/ "
+      },
+      {
+        "home": "/home/u/",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": "/home/u/",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": "/home/u/",
+        "value": "/abs/path",
+        "expected": "/abs/path"
+      },
+      {
+        "home": "/home/u/",
+        "value": "",
+        "expected": ""
+      },
+      {
+        "home": "/home/u/",
+        "value": "~~",
+        "expected": "~~"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~",
+        "expected": "//srv/share"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~/",
+        "expected": "//srv/share"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~/.",
+        "expected": "//srv/share"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~/..",
+        "expected": "//srv/share/.."
+      },
+      {
+        "home": "//srv/share",
+        "value": "~/x",
+        "expected": "//srv/share/x"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~/a/",
+        "expected": "//srv/share/a"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~/a//b",
+        "expected": "//srv/share/a/b"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~//x",
+        "expected": "/x"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~///x",
+        "expected": "//x"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~/a/./b",
+        "expected": "//srv/share/a/b"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~/a/../b",
+        "expected": "//srv/share/a/../b"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~\\",
+        "expected": "//srv/share"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~\\a",
+        "expected": "//srv/share/a"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~\\a\\b",
+        "expected": "//srv/share/a\\b"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~/é/ü",
+        "expected": "//srv/share/é/ü"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~/ ",
+        "expected": "//srv/share/ "
+      },
+      {
+        "home": "//srv/share",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": "//srv/share",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": "//srv/share",
+        "value": "/abs/path",
+        "expected": "/abs/path"
+      },
+      {
+        "home": "//srv/share",
+        "value": "",
+        "expected": ""
+      },
+      {
+        "home": "//srv/share",
+        "value": "~~",
+        "expected": "~~"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~",
+        "expected": "/srv/share"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~/",
+        "expected": "/srv/share"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~/.",
+        "expected": "/srv/share"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~/..",
+        "expected": "/srv/share/.."
+      },
+      {
+        "home": "///srv/share",
+        "value": "~/x",
+        "expected": "/srv/share/x"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~/a/",
+        "expected": "/srv/share/a"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~/a//b",
+        "expected": "/srv/share/a/b"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~//x",
+        "expected": "/x"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~///x",
+        "expected": "//x"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~/a/./b",
+        "expected": "/srv/share/a/b"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~/a/../b",
+        "expected": "/srv/share/a/../b"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~\\",
+        "expected": "/srv/share"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~\\a",
+        "expected": "/srv/share/a"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~\\a\\b",
+        "expected": "/srv/share/a\\b"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~/é/ü",
+        "expected": "/srv/share/é/ü"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~/ ",
+        "expected": "/srv/share/ "
+      },
+      {
+        "home": "///srv/share",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": "///srv/share",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": "///srv/share",
+        "value": "/abs/path",
+        "expected": "/abs/path"
+      },
+      {
+        "home": "///srv/share",
+        "value": "",
+        "expected": ""
+      },
+      {
+        "home": "///srv/share",
+        "value": "~~",
+        "expected": "~~"
+      },
+      {
+        "home": "/",
+        "value": "~",
+        "expected": "/"
+      },
+      {
+        "home": "/",
+        "value": "~/",
+        "expected": "/"
+      },
+      {
+        "home": "/",
+        "value": "~/.",
+        "expected": "/"
+      },
+      {
+        "home": "/",
+        "value": "~/..",
+        "expected": "/.."
+      },
+      {
+        "home": "/",
+        "value": "~/x",
+        "expected": "/x"
+      },
+      {
+        "home": "/",
+        "value": "~/a/",
+        "expected": "/a"
+      },
+      {
+        "home": "/",
+        "value": "~/a//b",
+        "expected": "/a/b"
+      },
+      {
+        "home": "/",
+        "value": "~//x",
+        "expected": "/x"
+      },
+      {
+        "home": "/",
+        "value": "~///x",
+        "expected": "//x"
+      },
+      {
+        "home": "/",
+        "value": "~/a/./b",
+        "expected": "/a/b"
+      },
+      {
+        "home": "/",
+        "value": "~/a/../b",
+        "expected": "/a/../b"
+      },
+      {
+        "home": "/",
+        "value": "~\\",
+        "expected": "/"
+      },
+      {
+        "home": "/",
+        "value": "~\\a",
+        "expected": "/a"
+      },
+      {
+        "home": "/",
+        "value": "~\\a\\b",
+        "expected": "/a\\b"
+      },
+      {
+        "home": "/",
+        "value": "~/é/ü",
+        "expected": "/é/ü"
+      },
+      {
+        "home": "/",
+        "value": "~/ ",
+        "expected": "/ "
+      },
+      {
+        "home": "/",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": "/",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": "/",
+        "value": "/abs/path",
+        "expected": "/abs/path"
+      },
+      {
+        "home": "/",
+        "value": "",
+        "expected": ""
+      },
+      {
+        "home": "/",
+        "value": "~~",
+        "expected": "~~"
+      },
+      {
+        "home": ".",
+        "value": "~",
+        "expected": "."
+      },
+      {
+        "home": ".",
+        "value": "~/",
+        "expected": "."
+      },
+      {
+        "home": ".",
+        "value": "~/.",
+        "expected": "."
+      },
+      {
+        "home": ".",
+        "value": "~/..",
+        "expected": ".."
+      },
+      {
+        "home": ".",
+        "value": "~/x",
+        "expected": "x"
+      },
+      {
+        "home": ".",
+        "value": "~/a/",
+        "expected": "a"
+      },
+      {
+        "home": ".",
+        "value": "~/a//b",
+        "expected": "a/b"
+      },
+      {
+        "home": ".",
+        "value": "~//x",
+        "expected": "/x"
+      },
+      {
+        "home": ".",
+        "value": "~///x",
+        "expected": "//x"
+      },
+      {
+        "home": ".",
+        "value": "~/a/./b",
+        "expected": "a/b"
+      },
+      {
+        "home": ".",
+        "value": "~/a/../b",
+        "expected": "a/../b"
+      },
+      {
+        "home": ".",
+        "value": "~\\",
+        "expected": "."
+      },
+      {
+        "home": ".",
+        "value": "~\\a",
+        "expected": "a"
+      },
+      {
+        "home": ".",
+        "value": "~\\a\\b",
+        "expected": "a\\b"
+      },
+      {
+        "home": ".",
+        "value": "~/é/ü",
+        "expected": "é/ü"
+      },
+      {
+        "home": ".",
+        "value": "~/ ",
+        "expected": " "
+      },
+      {
+        "home": ".",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": ".",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": ".",
+        "value": "/abs/path",
+        "expected": "/abs/path"
+      },
+      {
+        "home": ".",
+        "value": "",
+        "expected": ""
+      },
+      {
+        "home": ".",
+        "value": "~~",
+        "expected": "~~"
+      },
+      {
+        "home": "",
+        "value": "~",
+        "expected": "."
+      },
+      {
+        "home": "",
+        "value": "~/",
+        "expected": "."
+      },
+      {
+        "home": "",
+        "value": "~/.",
+        "expected": "."
+      },
+      {
+        "home": "",
+        "value": "~/..",
+        "expected": ".."
+      },
+      {
+        "home": "",
+        "value": "~/x",
+        "expected": "x"
+      },
+      {
+        "home": "",
+        "value": "~/a/",
+        "expected": "a"
+      },
+      {
+        "home": "",
+        "value": "~/a//b",
+        "expected": "a/b"
+      },
+      {
+        "home": "",
+        "value": "~//x",
+        "expected": "/x"
+      },
+      {
+        "home": "",
+        "value": "~///x",
+        "expected": "//x"
+      },
+      {
+        "home": "",
+        "value": "~/a/./b",
+        "expected": "a/b"
+      },
+      {
+        "home": "",
+        "value": "~/a/../b",
+        "expected": "a/../b"
+      },
+      {
+        "home": "",
+        "value": "~\\",
+        "expected": "."
+      },
+      {
+        "home": "",
+        "value": "~\\a",
+        "expected": "a"
+      },
+      {
+        "home": "",
+        "value": "~\\a\\b",
+        "expected": "a\\b"
+      },
+      {
+        "home": "",
+        "value": "~/é/ü",
+        "expected": "é/ü"
+      },
+      {
+        "home": "",
+        "value": "~/ ",
+        "expected": " "
+      },
+      {
+        "home": "",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": "",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": "",
+        "value": "/abs/path",
+        "expected": "/abs/path"
+      },
+      {
+        "home": "",
+        "value": "",
+        "expected": ""
+      },
+      {
+        "home": "",
+        "value": "~~",
+        "expected": "~~"
+      }
+    ],
+    "normpath": [
+      {
+        "value": ".",
+        "expected": "."
+      },
+      {
+        "value": "./",
+        "expected": "."
+      },
+      {
+        "value": "./.",
+        "expected": "."
+      },
+      {
+        "value": "a/..",
+        "expected": "."
+      },
+      {
+        "value": "foo/bar/../..",
+        "expected": "."
+      },
+      {
+        "value": "a/../..",
+        "expected": ".."
+      },
+      {
+        "value": "..",
+        "expected": ".."
+      },
+      {
+        "value": "../..",
+        "expected": "../.."
+      },
+      {
+        "value": "",
+        "expected": "."
+      },
+      {
+        "value": "/",
+        "expected": "/"
+      },
+      {
+        "value": "//",
+        "expected": "//"
+      },
+      {
+        "value": "///",
+        "expected": "/"
+      },
+      {
+        "value": "//a",
+        "expected": "//a"
+      },
+      {
+        "value": "///a",
+        "expected": "/a"
+      },
+      {
+        "value": "/..",
+        "expected": "/"
+      },
+      {
+        "value": "/../..",
+        "expected": "/"
+      },
+      {
+        "value": "/a//b/./c/../d",
+        "expected": "/a/b/d"
+      },
+      {
+        "value": "a/../b",
+        "expected": "b"
+      },
+      {
+        "value": "/a/",
+        "expected": "/a"
+      },
+      {
+        "value": "a/b/",
+        "expected": "a/b"
+      },
+      {
+        "value": "é/../ü",
+        "expected": "ü"
+      },
+      {
+        "value": "a/./../b/",
+        "expected": "b"
+      }
+    ]
+  },
+  "windows": {
+    "expand_home": [
+      {
+        "home": "C:\\Users\\u",
+        "value": "~",
+        "expected": "C:\\Users\\u"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\",
+        "expected": "C:\\Users\\u"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\.",
+        "expected": "C:\\Users\\u"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\..",
+        "expected": "C:\\Users\\u\\.."
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\x",
+        "expected": "C:\\Users\\u\\x"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\a\\",
+        "expected": "C:\\Users\\u\\a"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\a\\\\b",
+        "expected": "C:\\Users\\u\\a\\b"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~/x",
+        "expected": "C:\\Users\\u\\x"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~/a/b",
+        "expected": "C:\\Users\\u\\a\\b"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\C:y",
+        "expected": "C:\\Users\\u\\y"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\é:x",
+        "expected": "é:x"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\é:\\x",
+        "expected": "é:\\x"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\c:y",
+        "expected": "c:\\Users\\u\\y"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\D:y",
+        "expected": "D:y"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\C:\\z",
+        "expected": "C:\\z"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\D:\\q",
+        "expected": "D:\\q"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\\\x",
+        "expected": "C:\\x"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\\\\\srv\\sh\\f",
+        "expected": "\\\\srv\\sh\\f"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~\\é\\ü",
+        "expected": "C:\\Users\\u\\é\\ü"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "C:\\abs",
+        "expected": "C:\\abs"
+      },
+      {
+        "home": "C:\\Users\\u",
+        "value": "",
+        "expected": ""
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~",
+        "expected": "C:\\Users\\u"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\",
+        "expected": "C:\\Users\\u"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\.",
+        "expected": "C:\\Users\\u"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\..",
+        "expected": "C:\\Users\\u\\.."
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\x",
+        "expected": "C:\\Users\\u\\x"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\a\\",
+        "expected": "C:\\Users\\u\\a"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\a\\\\b",
+        "expected": "C:\\Users\\u\\a\\b"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~/x",
+        "expected": "C:\\Users\\u\\x"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~/a/b",
+        "expected": "C:\\Users\\u\\a\\b"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\C:y",
+        "expected": "C:\\Users\\u\\y"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\é:x",
+        "expected": "é:x"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\é:\\x",
+        "expected": "é:\\x"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\c:y",
+        "expected": "c:\\Users\\u\\y"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\D:y",
+        "expected": "D:y"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\C:\\z",
+        "expected": "C:\\z"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\D:\\q",
+        "expected": "D:\\q"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\\\x",
+        "expected": "C:\\x"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\\\\\srv\\sh\\f",
+        "expected": "\\\\srv\\sh\\f"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~\\é\\ü",
+        "expected": "C:\\Users\\u\\é\\ü"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "C:\\abs",
+        "expected": "C:\\abs"
+      },
+      {
+        "home": "C:/Users/u",
+        "value": "",
+        "expected": ""
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~",
+        "expected": "\\\\srv\\sh\\"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\",
+        "expected": "\\\\srv\\sh\\"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\.",
+        "expected": "\\\\srv\\sh\\"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\..",
+        "expected": "\\\\srv\\sh\\.."
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\x",
+        "expected": "\\\\srv\\sh\\x"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\a\\",
+        "expected": "\\\\srv\\sh\\a"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\a\\\\b",
+        "expected": "\\\\srv\\sh\\a\\b"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~/x",
+        "expected": "\\\\srv\\sh\\x"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~/a/b",
+        "expected": "\\\\srv\\sh\\a\\b"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\C:y",
+        "expected": "C:y"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\é:x",
+        "expected": "é:x"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\é:\\x",
+        "expected": "é:\\x"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\c:y",
+        "expected": "c:y"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\D:y",
+        "expected": "D:y"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\C:\\z",
+        "expected": "C:\\z"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\D:\\q",
+        "expected": "D:\\q"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\\\x",
+        "expected": "\\\\srv\\sh\\x"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\\\\\srv\\sh\\f",
+        "expected": "\\\\srv\\sh\\f"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~\\é\\ü",
+        "expected": "\\\\srv\\sh\\é\\ü"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "C:\\abs",
+        "expected": "C:\\abs"
+      },
+      {
+        "home": "\\\\srv\\sh",
+        "value": "",
+        "expected": ""
+      },
+      {
+        "home": "C:",
+        "value": "~",
+        "expected": "C:"
+      },
+      {
+        "home": "C:",
+        "value": "~\\",
+        "expected": "C:"
+      },
+      {
+        "home": "C:",
+        "value": "~\\.",
+        "expected": "C:"
+      },
+      {
+        "home": "C:",
+        "value": "~\\..",
+        "expected": "C:.."
+      },
+      {
+        "home": "C:",
+        "value": "~\\x",
+        "expected": "C:x"
+      },
+      {
+        "home": "C:",
+        "value": "~\\a\\",
+        "expected": "C:a"
+      },
+      {
+        "home": "C:",
+        "value": "~\\a\\\\b",
+        "expected": "C:a\\b"
+      },
+      {
+        "home": "C:",
+        "value": "~/x",
+        "expected": "C:x"
+      },
+      {
+        "home": "C:",
+        "value": "~/a/b",
+        "expected": "C:a\\b"
+      },
+      {
+        "home": "C:",
+        "value": "~\\C:y",
+        "expected": "C:y"
+      },
+      {
+        "home": "C:",
+        "value": "~\\é:x",
+        "expected": "é:x"
+      },
+      {
+        "home": "C:",
+        "value": "~\\é:\\x",
+        "expected": "é:\\x"
+      },
+      {
+        "home": "C:",
+        "value": "~\\c:y",
+        "expected": "c:y"
+      },
+      {
+        "home": "C:",
+        "value": "~\\D:y",
+        "expected": "D:y"
+      },
+      {
+        "home": "C:",
+        "value": "~\\C:\\z",
+        "expected": "C:\\z"
+      },
+      {
+        "home": "C:",
+        "value": "~\\D:\\q",
+        "expected": "D:\\q"
+      },
+      {
+        "home": "C:",
+        "value": "~\\\\x",
+        "expected": "C:\\x"
+      },
+      {
+        "home": "C:",
+        "value": "~\\\\\\srv\\sh\\f",
+        "expected": "\\\\srv\\sh\\f"
+      },
+      {
+        "home": "C:",
+        "value": "~\\é\\ü",
+        "expected": "C:é\\ü"
+      },
+      {
+        "home": "C:",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": "C:",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": "C:",
+        "value": "C:\\abs",
+        "expected": "C:\\abs"
+      },
+      {
+        "home": "C:",
+        "value": "",
+        "expected": ""
+      },
+      {
+        "home": "C:\\",
+        "value": "~",
+        "expected": "C:\\"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\",
+        "expected": "C:\\"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\.",
+        "expected": "C:\\"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\..",
+        "expected": "C:\\.."
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\x",
+        "expected": "C:\\x"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\a\\",
+        "expected": "C:\\a"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\a\\\\b",
+        "expected": "C:\\a\\b"
+      },
+      {
+        "home": "C:\\",
+        "value": "~/x",
+        "expected": "C:\\x"
+      },
+      {
+        "home": "C:\\",
+        "value": "~/a/b",
+        "expected": "C:\\a\\b"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\C:y",
+        "expected": "C:\\y"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\é:x",
+        "expected": "é:x"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\é:\\x",
+        "expected": "é:\\x"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\c:y",
+        "expected": "c:\\y"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\D:y",
+        "expected": "D:y"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\C:\\z",
+        "expected": "C:\\z"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\D:\\q",
+        "expected": "D:\\q"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\\\x",
+        "expected": "C:\\x"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\\\\\srv\\sh\\f",
+        "expected": "\\\\srv\\sh\\f"
+      },
+      {
+        "home": "C:\\",
+        "value": "~\\é\\ü",
+        "expected": "C:\\é\\ü"
+      },
+      {
+        "home": "C:\\",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": "C:\\",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": "C:\\",
+        "value": "C:\\abs",
+        "expected": "C:\\abs"
+      },
+      {
+        "home": "C:\\",
+        "value": "",
+        "expected": ""
+      },
+      {
+        "home": "é:\\home",
+        "value": "~",
+        "expected": "é:\\home"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\",
+        "expected": "é:\\home"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\.",
+        "expected": "é:\\home"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\..",
+        "expected": "é:\\home\\.."
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\x",
+        "expected": "é:\\home\\x"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\a\\",
+        "expected": "é:\\home\\a"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\a\\\\b",
+        "expected": "é:\\home\\a\\b"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~/x",
+        "expected": "é:\\home\\x"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~/a/b",
+        "expected": "é:\\home\\a\\b"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\C:y",
+        "expected": "C:y"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\é:x",
+        "expected": "é:\\home\\x"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\é:\\x",
+        "expected": "é:\\x"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\c:y",
+        "expected": "c:y"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\D:y",
+        "expected": "D:y"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\C:\\z",
+        "expected": "C:\\z"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\D:\\q",
+        "expected": "D:\\q"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\\\x",
+        "expected": "é:\\x"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\\\\\srv\\sh\\f",
+        "expected": "\\\\srv\\sh\\f"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~\\é\\ü",
+        "expected": "é:\\home\\é\\ü"
+      },
+      {
+        "home": "é:\\home",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": "é:\\home",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": "é:\\home",
+        "value": "C:\\abs",
+        "expected": "C:\\abs"
+      },
+      {
+        "home": "é:\\home",
+        "value": "",
+        "expected": ""
+      },
+      {
+        "home": "",
+        "value": "~",
+        "expected": "."
+      },
+      {
+        "home": "",
+        "value": "~\\",
+        "expected": "."
+      },
+      {
+        "home": "",
+        "value": "~\\.",
+        "expected": "."
+      },
+      {
+        "home": "",
+        "value": "~\\..",
+        "expected": ".."
+      },
+      {
+        "home": "",
+        "value": "~\\x",
+        "expected": "x"
+      },
+      {
+        "home": "",
+        "value": "~\\a\\",
+        "expected": "a"
+      },
+      {
+        "home": "",
+        "value": "~\\a\\\\b",
+        "expected": "a\\b"
+      },
+      {
+        "home": "",
+        "value": "~/x",
+        "expected": "x"
+      },
+      {
+        "home": "",
+        "value": "~/a/b",
+        "expected": "a\\b"
+      },
+      {
+        "home": "",
+        "value": "~\\C:y",
+        "expected": "C:y"
+      },
+      {
+        "home": "",
+        "value": "~\\é:x",
+        "expected": "é:x"
+      },
+      {
+        "home": "",
+        "value": "~\\é:\\x",
+        "expected": "é:\\x"
+      },
+      {
+        "home": "",
+        "value": "~\\c:y",
+        "expected": "c:y"
+      },
+      {
+        "home": "",
+        "value": "~\\D:y",
+        "expected": "D:y"
+      },
+      {
+        "home": "",
+        "value": "~\\C:\\z",
+        "expected": "C:\\z"
+      },
+      {
+        "home": "",
+        "value": "~\\D:\\q",
+        "expected": "D:\\q"
+      },
+      {
+        "home": "",
+        "value": "~\\\\x",
+        "expected": "\\x"
+      },
+      {
+        "home": "",
+        "value": "~\\\\\\srv\\sh\\f",
+        "expected": "\\\\srv\\sh\\f"
+      },
+      {
+        "home": "",
+        "value": "~\\é\\ü",
+        "expected": "é\\ü"
+      },
+      {
+        "home": "",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": "",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": "",
+        "value": "C:\\abs",
+        "expected": "C:\\abs"
+      },
+      {
+        "home": "",
+        "value": "",
+        "expected": ""
+      },
+      {
+        "home": ".",
+        "value": "~",
+        "expected": "."
+      },
+      {
+        "home": ".",
+        "value": "~\\",
+        "expected": "."
+      },
+      {
+        "home": ".",
+        "value": "~\\.",
+        "expected": "."
+      },
+      {
+        "home": ".",
+        "value": "~\\..",
+        "expected": ".."
+      },
+      {
+        "home": ".",
+        "value": "~\\x",
+        "expected": "x"
+      },
+      {
+        "home": ".",
+        "value": "~\\a\\",
+        "expected": "a"
+      },
+      {
+        "home": ".",
+        "value": "~\\a\\\\b",
+        "expected": "a\\b"
+      },
+      {
+        "home": ".",
+        "value": "~/x",
+        "expected": "x"
+      },
+      {
+        "home": ".",
+        "value": "~/a/b",
+        "expected": "a\\b"
+      },
+      {
+        "home": ".",
+        "value": "~\\C:y",
+        "expected": "C:y"
+      },
+      {
+        "home": ".",
+        "value": "~\\é:x",
+        "expected": "é:x"
+      },
+      {
+        "home": ".",
+        "value": "~\\é:\\x",
+        "expected": "é:\\x"
+      },
+      {
+        "home": ".",
+        "value": "~\\c:y",
+        "expected": "c:y"
+      },
+      {
+        "home": ".",
+        "value": "~\\D:y",
+        "expected": "D:y"
+      },
+      {
+        "home": ".",
+        "value": "~\\C:\\z",
+        "expected": "C:\\z"
+      },
+      {
+        "home": ".",
+        "value": "~\\D:\\q",
+        "expected": "D:\\q"
+      },
+      {
+        "home": ".",
+        "value": "~\\\\x",
+        "expected": "\\x"
+      },
+      {
+        "home": ".",
+        "value": "~\\\\\\srv\\sh\\f",
+        "expected": "\\\\srv\\sh\\f"
+      },
+      {
+        "home": ".",
+        "value": "~\\é\\ü",
+        "expected": "é\\ü"
+      },
+      {
+        "home": ".",
+        "value": "plain",
+        "expected": "plain"
+      },
+      {
+        "home": ".",
+        "value": "~user",
+        "expected": "~user"
+      },
+      {
+        "home": ".",
+        "value": "C:\\abs",
+        "expected": "C:\\abs"
+      },
+      {
+        "home": ".",
+        "value": "",
+        "expected": ""
+      }
+    ],
+    "normpath": [
+      {
+        "value": ".",
+        "expected": "."
+      },
+      {
+        "value": "a\\..",
+        "expected": "."
+      },
+      {
+        "value": "a/..",
+        "expected": "."
+      },
+      {
+        "value": "",
+        "expected": "."
+      },
+      {
+        "value": "C:\\a\\..",
+        "expected": "C:\\"
+      },
+      {
+        "value": "C:a\\..",
+        "expected": "C:"
+      },
+      {
+        "value": "C:\\",
+        "expected": "C:\\"
+      },
+      {
+        "value": "C:",
+        "expected": "C:"
+      },
+      {
+        "value": "\\",
+        "expected": "\\"
+      },
+      {
+        "value": "\\\\srv\\sh",
+        "expected": "\\\\srv\\sh"
+      },
+      {
+        "value": "\\\\srv\\sh\\f\\..",
+        "expected": "\\\\srv\\sh\\"
+      },
+      {
+        "value": "\\\\?\\C:\\z\\..",
+        "expected": "\\\\?\\C:\\"
+      },
+      {
+        "value": "..\\..",
+        "expected": "..\\.."
+      },
+      {
+        "value": "C:\\..",
+        "expected": "C:\\"
+      },
+      {
+        "value": "x/y/../z",
+        "expected": "x\\z"
+      },
+      {
+        "value": "a\\.\\b\\",
+        "expected": "a\\b"
+      },
+      {
+        "value": "é\\..\\ü",
+        "expected": "ü"
+      }
+    ]
+  }
+}

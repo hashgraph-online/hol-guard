@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+from tests.release_workflow_helpers import native_wheel_job
 from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -33,19 +34,27 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     }
     native_pin = next(
         step
-        for step in jobs["build-native-guard-wheels"]["steps"]
+        for step in native_wheel_job()["steps"]
         if step.get("name") == "Verify release approval enrollment root pin"
     )
     assert "--require-release-root" in native_pin["run"]
-    assert "needs.build.outputs.channel != 'canary'" in str(native_pin.get("if", ""))
+    assert "inputs.channel != 'canary'" in str(native_pin.get("if", ""))
     alpha_needs = ["build", "reserve-alpha-tag", "assemble-native-guard-distributions", "publish-main-assets"]
     assert jobs["publish-alpha-testpypi"]["needs"] == alpha_needs
     assert jobs["publish-alpha-pypi"]["needs"] == alpha_needs
     assemble = jobs["assemble-native-guard-distributions"]
-    assert assemble["needs"] == ["build", "build-native-guard-wheels", "publish-installed-bundle-assets"]
+    assert assemble["needs"] == [
+        "build",
+        "build-native-guard-wheel-linux-x64",
+        "build-native-guard-wheel-macos-x64",
+        "build-native-guard-wheel-macos-arm64",
+        "build-native-guard-wheel-windows-x64",
+        "build-native-guard-wheel-windows-arm64",
+        "publish-installed-bundle-assets",
+    ]
     assert "needs.build.result == 'success'" in assemble["if"]
-    assert "needs.build-native-guard-wheels.result == 'success'" in assemble["if"]
-    native_if = jobs["build-native-guard-wheels"]["if"]
+    assert "needs.build-native-guard-wheel-linux-x64.result == 'success'" in assemble["if"]
+    native_if = jobs["build-native-guard-wheel-linux-x64"]["if"]
     assert "channel == 'stable'" in native_if
     assert "refs/heads/main" in native_if
     assemble_steps = assemble["steps"]
@@ -160,7 +169,7 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
         < main_verify["run"].find("\ndone\n")
     )
 
-    stable_native = jobs["build-native-guard-wheels"]["if"]
+    stable_native = jobs["build-native-guard-wheel-linux-x64"]["if"]
     assert "needs.build.outputs.channel == 'stable'" in stable_native
     assert "github.ref == 'refs/heads/main'" in stable_native
     for job_name in ("publish-main-testpypi", "publish-main-pypi", "release-main"):
@@ -431,4 +440,4 @@ def test_stable_repair_reuses_original_plugin_scanner_files() -> None:
     assert build["permissions"]["statuses"] == "read"
     version_step = next(step for step in build["steps"] if step.get("id") == "version")
     assert "REPAIR_ARGS+=(--publication-unrecorded)" in version_step["run"]
-    assert 'hol-guard / published ${RELEASE_VERSION}' in version_step["run"]
+    assert "hol-guard / published ${RELEASE_VERSION}" in version_step["run"]

@@ -19,11 +19,19 @@ from ..native_command_control_authority_store import _key
 from . import active_security, lifecycle, lifecycle_store, transport
 from .authority import MAX_PROVENANCE_BYTES, VerifiedDistribution, verify_distribution
 from .discovery import prepare_discovery
+from .state_paths import resolved_guard_home
 
 PREFIX = "guard-command-discovery-current"
 STAMP = "guard-command-discovery-current-enrolled"
 COMPLETE = "guard-command-discovery-complete"
 ENROLLED = "guard.discovery-current-enrolled.v1"
+
+
+def _cache(store, name):
+    # The prefix above the Guard home is resolved once so that a host which
+    # reaches it through a symlink still yields a path every checked_path below
+    # here accepts. Components at and below the Guard home stay checked.
+    return resolved_guard_home(store.guard_home) / "command-packs" / name
 
 
 def _read(store):
@@ -104,7 +112,7 @@ def refresh(store):
     """Fixed verified factory -> native monotonic cursor -> complete handle."""
     captured = _capture(store)
     _invoke(store, captured)
-    directory = store.guard_home / "command-packs" / "current-publication"
+    directory = _cache(store, "current-publication")
     provenance = []
     # A transport/verifier failure may restore only the protected completed
     # view. Cache files cannot nominate a newer Root through this update path.
@@ -147,7 +155,7 @@ def refresh(store):
     handle = prepare_discovery(
         store.guard_home,
         authority,
-        fetch=transport.cached_fetcher(store.guard_home / "command-packs" / "transfers"),
+        fetch=transport.cached_fetcher(_cache(store, "transfers")),
     )
     # A security update or activation racing preparation cannot publish a view
     # below its new floors. No network is performed during this final check.
@@ -173,12 +181,10 @@ def restore(store):
     captured = _capture(store)
     complete = store._get_policy_integrity_secret_from_store(store._build_scoped_secret_ref(COMPLETE))
     retained = _invoke(store, (captured[0], complete, captured[2]))["retained"]
-    directory = store.guard_home / "command-packs" / "current-publication"
+    directory = _cache(store, "current-publication")
     authority = _load(directory, retained, now=int(time.time()))
     _invoke(store, captured, publication=authority.data.decode(), now=time.time(), restore=True, complete=complete)
-    handle = prepare_discovery(
-        store.guard_home, authority, fetch=transport.cached_fetcher(store.guard_home / "command-packs" / "transfers")
-    )
+    handle = prepare_discovery(store.guard_home, authority, fetch=transport.cached_fetcher(_cache(store, "transfers")))
     _invoke(
         store, _capture(store), publication=authority.data.decode(), now=time.time(), restore=True, complete=complete
     )

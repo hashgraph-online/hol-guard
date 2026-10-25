@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use crate::hook_decision_containment_route::edge_route;
 use crate::policy_enforcement::AdmittedPolicySnapshot;
 use guard_contracts::{
     GuardHookEdgeResultV2, GuardHookEnvelopeV2, GuardHookPayloadKindV2, HookOutputSummaryV1,
@@ -328,16 +329,13 @@ fn evaluate_validated_envelope(
                             envelope.deadline_budget_ms.unwrap_or(9_000).min(9_000),
                         ),
                 ),
+                // The envelope carries the roots and nothing more: every
+                // proof a context can hold is one a caller with the command
+                // in hand sets, so they all stay at their default false.
                 guard_command::pretool::PathContext {
                     home_dir: Some(envelope.source.home_dir.as_str()),
                     cwd: envelope.source.cwd.as_deref(),
-                    cdpath_unset: false,
-                    rustup_override_absent: false,
-                    npm_config_inert: false,
-                    pip_config_inert: false,
-                    shell_home_matches: false,
-                    ripgrep_config_absent: false,
-                    psql_environment: Default::default(),
+                    ..Default::default()
                 },
                 Some(
                     envelope
@@ -366,6 +364,7 @@ fn evaluate_validated_envelope(
                 policy_snapshot,
                 evaluated,
             );
+            let evaluated = crate::network_protection::apply_to_envelope(&envelope, evaluated);
             let value = serde_json::to_value(evaluated)
                 .map_err(|_| "native_hook_edge_response_invalid".to_owned())?;
             validate_pre_tool_result(&value)?;
@@ -382,7 +381,6 @@ fn evaluate_validated_envelope(
             (value, receipt)
         }
         "PostToolUse" => {
-            let payload_kind = kind.clone();
             let request = NativeHookRequestV1 {
                 protocol_version: NATIVE_PROTOCOL_VERSION,
                 request_id: envelope.request_id.clone(),
@@ -407,9 +405,10 @@ fn evaluate_validated_envelope(
                 crate::policy_enforcement::apply_post_tool_policy_with_delivery(
                     snapshot,
                     &request,
-                    payload_kind,
+                    kind.clone(),
                     native,
                     delivery.as_ref(),
+                    envelope.recording_only,
                 )?
             } else {
                 native
@@ -452,6 +451,8 @@ fn evaluate_validated_envelope(
     )
     .map(Value::Object);
     crate::encode_response(&GuardHookEdgeResultV2 {
+        // Every edge carries its route so no hook asks again; only PreToolUse is routed.
+        containment_route: Some(edge_route(&event_name, &result, envelope.recording_only)),
         schema: GUARD_HOOK_EDGE_RESULT_V2_SCHEMA.to_owned(),
         authority: "rust".to_owned(),
         request_id: Some(request_id),

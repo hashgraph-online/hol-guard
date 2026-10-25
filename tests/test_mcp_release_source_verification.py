@@ -333,7 +333,8 @@ def test_pull_request_validation_is_separate_from_privileged_triggers() -> None:
             "branches": ["main", "release/3.0"],
             "paths": [
                 "distributions/mcpb/**",
-                ".github/tools/mcpb-cli/**",
+                "scripts/ci/pack_mcpb.py",
+                "tests/test_pack_mcpb.py",
                 ".github/workflows/mcpb-validation.yml",
             ],
         }
@@ -344,5 +345,6 @@ def test_pull_request_validation_is_separate_from_privileged_triggers() -> None:
     assert "ref" not in job["steps"][0]["with"]
     assert job["steps"][0]["with"]["persist-credentials"] is False
     commands = "\n".join(step.get("run", "") for step in job["steps"])
-    assert "compileall" in commands and "npm ci --ignore-scripts" in commands
-    assert '"$MCPB_CLI" validate' in commands and '"$MCPB_CLI" pack' in commands
+    assert "compileall" in commands
+    assert 'python3 scripts/ci/pack_mcpb.py distributions/mcpb' in commands
+    assert "npm ci" not in commands

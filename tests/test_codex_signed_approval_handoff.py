@@ -8,7 +8,6 @@ import pytest
 
 from codex_plugin_scanner.guard import approval_hook_copy as approval_hook_copy_module
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_resume as resume
-from codex_plugin_scanner.guard.adapters._modules.codex.codex_hook_response import codex_hook_response
 from codex_plugin_scanner.guard.approval_hook_copy import (
     _SIGNED_APPROVAL_LINK_UNAVAILABLE,
     live_hook_approval_context,
@@ -201,38 +200,6 @@ def test_codex_live_approval_does_not_open_unsigned_local_url_without_auth(
     assert opened_urls == []
     assert "could not create a signed approval link" in captured.err.lower()
     assert approval_url not in captured.err
-
-
-def test_codex_bridge_stdout_excludes_native_approval_aliases() -> None:
-    review_url = "http://127.0.0.1:5474/requests/req-native-codex-bridge"
-    signed_url = f"{review_url}#guard-token=fixture"
-    response = {
-        "policy_action": "review",
-        "reason_code": "native_pre_tool_review",
-        "reason": f"Open HOL Guard: {signed_url}.",
-        "approval_url": review_url,
-        "approval_request_id": "req-native-codex-bridge",
-        "primary_approval_url": review_url,
-        "guardApprovalUrl": review_url,
-        "approval_requests": [{"request_id": "req-native-codex-bridge", "approval_url": review_url}],
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": f"Open HOL Guard: {signed_url}.",
-        },
-    }
-    filtered = codex_hook_response(response, event_name="PreToolUse")
-
-    assert set(filtered) == {"hookSpecificOutput"}
-    assert filtered["hookSpecificOutput"]["permissionDecisionReason"] == f"Open HOL Guard: {signed_url}."
-    for alias in (
-        "approval_url",
-        "approval_request_id",
-        "primary_approval_url",
-        "guardApprovalUrl",
-        "approval_requests",
-    ):
-        assert alias not in filtered
 
 
 def test_codex_native_review_reason_signs_loopback_without_changing_aliases(tmp_path: Path) -> None:

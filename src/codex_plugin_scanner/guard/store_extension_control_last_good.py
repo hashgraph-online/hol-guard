@@ -23,21 +23,16 @@ from typing import cast
 from uuid import uuid4
 
 from .runtime.extension_control_authority import (
-    SNAPSHOT_PURPOSE,
-    TRANSITION_PURPOSE,
     AuthorityAnchor,
     AuthorityPhase,
     ExtensionControlAuthorityError,
-    authenticated_record,
     layers_from_json,
-    verify_authenticated_record,
 )
-from .store_extension_control_authority_support import _now, _private_hash
+from .store_extension_control_authority_support import _now, _plan_int, _plan_map, _plan_record
 
 _LOGGER = logging.getLogger(__name__)
 LAST_GOOD_FILE_NAME = "extension-control-last-good.json"
 LAST_GOOD_SCHEMA = "guard.extension-control-last-good.v1"
-RESTORED_BASELINE_FIELD = "restored_baseline"
 _MAX_EXPORT_BYTES = 1024 * 1024
 _EXPORT_FIELDS = ("revision", "catalog_digest", "layers_json", "previous_digest", "committed_at")
 
@@ -106,40 +101,6 @@ class ExtensionControlLastGoodMixin:
             with suppress(FileNotFoundError):
                 temporary.unlink()
 
-    def _verified_last_good_export(self, *, key: bytes) -> dict[str, object] | None:
-        path = self._last_good_path()
-        try:
-            if path.is_symlink() or not path.is_file() or path.stat().st_size > _MAX_EXPORT_BYTES:
-                return None
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return None
-        if not isinstance(raw, dict) or raw.get("schema") != LAST_GOOD_SCHEMA:
-            return None
-        try:
-            payload = verify_authenticated_record(
-                str(raw["snapshot_json"]),
-                expected_digest=str(raw["snapshot_digest"]),
-                expected_mac=str(raw["snapshot_mac"]),
-                key=key,
-                purpose=SNAPSHOT_PURPOSE,
-            )
-        except (KeyError, ExtensionControlAuthorityError):
-            return None
-        if any(payload.get(name) != raw.get(name) for name in _EXPORT_FIELDS):
-            return None
-        revision = payload.get("revision")
-        if type(revision) is not int or revision < 0:
-            return None
-        if not all(isinstance(payload.get(name), str) for name in ("catalog_digest", "layers_json", "committed_at")):
-            return None
-        return {
-            **payload,
-            "snapshot_json": str(raw["snapshot_json"]),
-            "snapshot_digest": str(raw["snapshot_digest"]),
-            "snapshot_mac": str(raw["snapshot_mac"]),
-        }
-
     def _quarantine_unusable_last_good_export(self) -> bool:
         """Move an export that cannot be applied aside; report whether it moved."""
 
@@ -153,28 +114,30 @@ class ExtensionControlLastGoodMixin:
             return False
         return True
 
-    def _restore_last_good_authority(self, anchor: AuthorityAnchor, *, key: bytes) -> bool:
-        """Re-create the snapshot row from the export when it matches the vault anchor."""
+    def _restore_last_good_authority(self, *, key: bytes) -> bool:
+        """Re-create the snapshot row from the export when it matches the vault anchor.
 
-        if anchor.phase is not AuthorityPhase.COMMITTED:
+        The resident reads and verifies the export and seals any baseline
+        transition; this method only applies its plan.
+        """
+
+        anchor_json = self._read_anchor_json()
+        if anchor_json is None:
             return False
-        exported = self._verified_last_good_export(key=key)
-        if exported is None:
+        plan = _plan_map(
+            self._extension_control_authority_op("restore_plan", key=key, anchor_json=anchor_json, now=_now()),
+            "plan",
+        )
+        if plan.get("outcome") != "restore":
             return False
-        revision = cast(int, exported["revision"])
-        snapshot_digest = str(exported["snapshot_digest"])
-        if revision != anchor.revision or snapshot_digest != anchor.snapshot_digest:
-            return False
-        restored_at = _now()
-        layers_json = str(exported["layers_json"])
-        catalog_digest = str(exported["catalog_digest"])
-        previous_digest = exported.get("previous_digest")
+        revision = _plan_int(plan, "revision")
+        control_count = _plan_int(plan, "control_count")
+        catalog_digest, layers_json = str(plan["catalog_digest"]), str(plan["layers_json"])
+        committed_at, restored_at = str(plan["committed_at"]), str(plan["restored_at"])
+        previous_digest = plan.get("previous_digest")
+        snapshot_json, snapshot_digest, snapshot_mac = _plan_record(plan, "snapshot")
+        baseline = plan.get("baseline")
         with self._connect() as connection:
-            existing = connection.execute(
-                "select 1 from extension_control_authority_snapshot where singleton = 1"
-            ).fetchone()
-            if existing is not None:
-                return False
             connection.execute(
                 """
                 insert into extension_control_authority_snapshot (
@@ -186,42 +149,54 @@ class ExtensionControlLastGoodMixin:
                     revision,
                     catalog_digest,
                     layers_json,
-                    previous_digest,
-                    exported["snapshot_json"],
+                    None if previous_digest is None else str(previous_digest),
+                    snapshot_json,
                     snapshot_digest,
-                    exported["snapshot_mac"],
-                    exported["committed_at"],
+                    snapshot_mac,
+                    committed_at,
                 ),
             )
-            baseline_exists = (
+            if baseline is not None:
+                hashes = _plan_map(_plan_map(plan, "baseline"), "hashes")
+                transition_json, transition_digest, transition_mac = _plan_record(
+                    _plan_map(plan, "baseline"), "transition"
+                )
+                # The baseline's created_at equals the snapshot's committed_at,
+                # which chain validation requires of the pair.
                 connection.execute(
-                    "select 1 from extension_control_authority_transition where revision = ?", (revision,)
-                ).fetchone()
-                is not None
-            )
-            if revision > 0 and not baseline_exists:
-                self._insert_restored_baseline_transition(
-                    connection,
-                    revision=revision,
-                    catalog_digest=catalog_digest,
-                    layers_json=layers_json,
-                    previous_digest=str(previous_digest),
-                    snapshot_json=str(exported["snapshot_json"]),
-                    snapshot_digest=snapshot_digest,
-                    snapshot_mac=str(exported["snapshot_mac"]),
-                    restored_at=restored_at,
-                    key=key,
+                    """
+                    insert into extension_control_authority_transition (
+                        revision, previous_revision, phase, actor_id_hash, idempotency_key_hash,
+                        nonce_hash, catalog_digest, layers_json, snapshot_json, snapshot_digest,
+                        snapshot_mac, transition_json, transition_digest, transition_mac,
+                        created_at, committed_at
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        revision,
+                        revision - 1,
+                        AuthorityPhase.COMMITTED.value,
+                        str(hashes["actor"]),
+                        str(hashes["idempotency"]),
+                        str(hashes["nonce"]),
+                        catalog_digest,
+                        layers_json,
+                        snapshot_json,
+                        snapshot_digest,
+                        snapshot_mac,
+                        transition_json,
+                        transition_digest,
+                        transition_mac,
+                        committed_at,
+                        restored_at,
+                    ),
                 )
             connection.execute(
                 "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
                 (
                     "extension_control_authority_restored",
                     json.dumps(
-                        {
-                            "revision": revision,
-                            "control_count": _count_controls(layers_json),
-                            "source": "last-good-export",
-                        },
+                        {"revision": revision, "control_count": control_count, "source": "last-good-export"},
                         sort_keys=True,
                         separators=(",", ":"),
                     ),
@@ -230,74 +205,7 @@ class ExtensionControlLastGoodMixin:
             )
         _LOGGER.warning(
             "Guard restored %d extension control(s) at revision %d from its last-good export.",
-            _count_controls(layers_json),
+            control_count,
             revision,
         )
         return True
-
-    def _insert_restored_baseline_transition(
-        self,
-        connection: sqlite3.Connection,
-        *,
-        revision: int,
-        catalog_digest: str,
-        layers_json: str,
-        previous_digest: str,
-        snapshot_json: str,
-        snapshot_digest: str,
-        snapshot_mac: str,
-        restored_at: str,
-        key: bytes,
-    ) -> None:
-        # The transition's created_at must equal the restored snapshot's
-        # committed_at for chain validation to accept the pair.
-        created_at = str(json.loads(snapshot_json)["committed_at"])
-        ref = f"restored-baseline:{revision}:{snapshot_digest}"
-        actor_hash = _private_hash("trusted-store-restore", key=key, purpose="actor")
-        idempotency_hash = _private_hash(ref, key=key, purpose="idempotency")
-        nonce_hash = _private_hash(ref, key=key, purpose="nonce")
-        transition_json, transition_digest, transition_mac = authenticated_record(
-            {
-                "revision": revision,
-                "previous_revision": revision - 1,
-                "previous_digest": previous_digest,
-                "snapshot_digest": snapshot_digest,
-                "catalog_digest": catalog_digest,
-                "actor_id_hash": actor_hash,
-                "idempotency_key_hash": idempotency_hash,
-                "nonce_hash": nonce_hash,
-                "created_at": created_at,
-                "phase": AuthorityPhase.PREPARED.value,
-                RESTORED_BASELINE_FIELD: True,
-            },
-            key=key,
-            purpose=TRANSITION_PURPOSE,
-        )
-        connection.execute(
-            """
-            insert into extension_control_authority_transition (
-                revision, previous_revision, phase, actor_id_hash, idempotency_key_hash,
-                nonce_hash, catalog_digest, layers_json, snapshot_json, snapshot_digest,
-                snapshot_mac, transition_json, transition_digest, transition_mac,
-                created_at, committed_at
-            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                revision,
-                revision - 1,
-                AuthorityPhase.COMMITTED.value,
-                actor_hash,
-                idempotency_hash,
-                nonce_hash,
-                catalog_digest,
-                layers_json,
-                snapshot_json,
-                snapshot_digest,
-                snapshot_mac,
-                transition_json,
-                transition_digest,
-                transition_mac,
-                created_at,
-                restored_at,
-            ),
-        )

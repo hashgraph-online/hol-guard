@@ -43,6 +43,10 @@ fn one(capability: &'static str) -> Capabilities {
     Some(vec![capability])
 }
 
+pub(super) fn repository_selector(value: &str) -> bool {
+    options::repository(value)
+}
+
 pub(super) fn arguments_are_read_only(arguments: &[String], text: &str) -> bool {
     // A glued `-Rowner/repo` selector is an unproven content read and stays
     // on the review path. A separate `--repo` read keeps the benign floor.
@@ -128,12 +132,19 @@ fn classify(original: &[String], text: &str) -> Capabilities {
     }
     options::validate_selectors(original)?;
     let args = options::strip_globals(original)?;
+    // A trailing `--help` prints the subcommand's help and runs nothing, so
+    // `gh repo delete owner/name --help` reads as locally as `gh --help`. The
+    // capability grammar reads it with the same function, so the two cannot
+    // drift back apart.
+    if crate::github_capability_contract::github_cli_invocation_is_help(args) {
+        return one("read_local");
+    }
     let Some(top) = args.first().map(|value| value.to_ascii_lowercase()) else {
         return one("unknown");
     };
     if matches!(
         top.as_str(),
-        "--version" | "-v" | "--help" | "-h" | "completion" | "help" | "version"
+        "--version" | "-v" | "completion" | "help" | "version"
     ) {
         return one("read_local");
     }
@@ -143,6 +154,9 @@ fn classify(original: &[String], text: &str) -> Capabilities {
     if matches!(top.as_str(), "search" | "status") {
         return one("read_remote");
     }
+    if let Some(capability) = crate::github_additional_commands::classify(args) {
+        return one(capability.as_str());
+    }
     if top == "secret" {
         return one("secret_remote");
     }
@@ -150,16 +164,9 @@ fn classify(original: &[String], text: &str) -> Capabilities {
         return one("unknown");
     };
     // Interspersed group-global options are not reconstructed by token guessing.
+    // A help invocation already returned above.
     if subcommand.starts_with('-') {
-        return if subcommand == "--help"
-            && matches!(
-                top.as_str(),
-                "issue" | "pr" | "release" | "repo" | "run" | "workflow" | "gpg-key" | "ssh-key"
-            ) {
-            one("read_local")
-        } else {
-            None
-        };
+        return None;
     }
     let tail = &args[2..];
     if top == "auth" {
@@ -179,7 +186,6 @@ fn classify(original: &[String], text: &str) -> Capabilities {
                 one("secret_remote")
             }
             "status" => Some(vec!["read_local", "read_remote"]),
-            "switch" if tail.len() == 1 && tail[0] == "--help" => one("read_local"),
             "login" | "logout" | "switch" | "refresh" | "setup-git" => one("write_local"),
             _ => one("unknown"),
         };

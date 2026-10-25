@@ -18,7 +18,7 @@ import { policySelectionKey } from "./policy-rules-overview-model";
 import { PolicyRuleRow } from "./policy-workspace-row";
 export type { PolicySortKey, PolicySortState };
 const PAGE_SIZE = 10;
-const TABLE_MIN_WIDTH_CLASS = "min-w-[520px] lg:min-w-[820px]";
+const TABLE_MIN_WIDTH_CLASS = "min-w-[500px] lg:min-w-[680px]";
 
 function PolicySortHeader({
   label,
@@ -171,20 +171,6 @@ export function PolicyRuleTable({
           <PolicySortHeader
             label={cloudVariant ? "Applies to" : "App"}
             sortKey="app"
-            sort={sort}
-            onSortChange={onSortChange}
-            className="hidden lg:table-cell"
-          />
-          <PolicySortHeader
-            label="Updated"
-            sortKey="updated"
-            sort={sort}
-            onSortChange={onSortChange}
-            className="hidden lg:table-cell"
-          />
-          <PolicySortHeader
-            label={cloudVariant ? "Policy" : "Approval record"}
-            sortKey="approval"
             sort={sort}
             onSortChange={onSortChange}
             className="hidden lg:table-cell"

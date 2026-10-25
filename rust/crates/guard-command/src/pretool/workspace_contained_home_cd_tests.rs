@@ -57,6 +57,7 @@ fn every_guard_the_home_projection_applies_admits_a_plain_cd() {
         pip_config_inert: false,
         ripgrep_config_absent: false,
         psql_environment: Default::default(),
+        creates_nothing: false,
     };
     let model = parse(command);
     assert_eq!(model.confidence, "exact", "confidence");

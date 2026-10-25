@@ -1452,115 +1452,19 @@ pub fn write_package_firewall_refresh_state(guard_home: &Path, last_attempt: f64
 // Posture — `build_local_supply_chain_posture` + internals.
 // ---------------------------------------------------------------------------
 
-/// `.runtime.supply_chain_support._SUPPORT_LEVELS` — ported verbatim.
-/// TODO(deps): dedup once `supply_chain_support` lands in Rust.
-static SUPPORT_LEVELS: LazyLock<
-    BTreeMap<&'static str, (&'static str, &'static str, &'static str)>,
-> = LazyLock::new(|| {
-    [
-        ("npm", ("npm", "protected", "Protected")),
-        ("pypi", ("PyPI", "protected", "Protected")),
-        ("cargo", ("Cargo", "beta", "Beta")),
-        ("go", ("Go modules", "beta", "Beta")),
-        ("maven", ("Maven/Gradle", "beta", "Beta")),
-        ("packagist", ("Composer", "beta", "Beta")),
-        ("rubygems", ("RubyGems", "beta", "Beta")),
-        (
-            "homebrew",
-            ("Homebrew formulae", "monitor-only", "Monitor-only"),
-        ),
-        (
-            "homebrew-cask",
-            ("Homebrew Casks", "monitor-only", "Monitor-only"),
-        ),
-        (
-            "homebrew-tap",
-            ("Homebrew taps", "monitor-only", "Monitor-only"),
-        ),
-        (
-            "docker",
-            ("Docker base images", "monitor-only", "Monitor-only"),
-        ),
-        (
-            "github-actions",
-            ("GitHub Actions", "monitor-only", "Monitor-only"),
-        ),
-        (
-            "system",
-            ("System packages", "monitor-only", "Monitor-only"),
-        ),
-        (
-            "unsupported",
-            ("Unsupported managers", "monitor-only", "Monitor-only"),
-        ),
-    ]
-    .into_iter()
-    .collect()
-});
+/// `ecosystem_support_metadata` — the shared port in `supply_chain_support`.
+///
+/// This module carried its own copy of the table and of Python's
+/// `str.title()` fallback until that module landed. The copy split the
+/// fallback on spaces alone, so an unknown ecosystem written with any other
+/// separator kept its lower-case letters where `title()` capitalises them.
+pub use crate::supply_chain_support::ecosystem_support_metadata;
 
-static SUPPORT_ORDER: &[&str] = &[
-    "npm",
-    "pypi",
-    "cargo",
-    "go",
-    "maven",
-    "packagist",
-    "rubygems",
-    "homebrew",
-    "homebrew-cask",
-    "homebrew-tap",
-    "docker",
-    "github-actions",
-    "system",
-    "unsupported",
-];
-
-/// `ecosystem_support_metadata`.
-pub fn ecosystem_support_metadata(ecosystem: &str) -> Map<String, Value> {
-    let (display_name, support_level, support_label) =
-        SUPPORT_LEVELS.get(ecosystem).copied().unwrap_or({
-            (
-                "", // computed below
-                "monitor-only",
-                "Monitor-only",
-            )
-        });
-    let display_name = if display_name.is_empty() {
-        // `ecosystem.replace("-", " ").title()` — Python `str.title()` per word.
-        ecosystem
-            .replace('-', " ")
-            .split(' ')
-            .map(|word| {
-                let mut chars = word.chars();
-                match chars.next() {
-                    Some(first) => {
-                        first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase()
-                    }
-                    None => String::new(),
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ")
-    } else {
-        display_name.to_string()
-    };
-    let mut out = Map::new();
-    out.insert("display_name".into(), json!(display_name));
-    out.insert("support_level".into(), json!(support_level));
-    out.insert("support_label".into(), json!(support_label));
-    out
-}
-
-/// `ecosystem_support_matrix`.
+/// `ecosystem_support_matrix`, as the JSON values this module's callers read.
 pub fn ecosystem_support_matrix() -> Vec<Value> {
-    SUPPORT_ORDER
-        .iter()
-        .map(|ecosystem| {
-            let mut row = Map::new();
-            row.insert("ecosystem".into(), json!(ecosystem));
-            row.extend(ecosystem_support_metadata(ecosystem));
-            Value::Object(row)
-        })
+    crate::supply_chain_support::ecosystem_support_matrix()
+        .into_iter()
+        .map(Value::Object)
         .collect()
 }
 

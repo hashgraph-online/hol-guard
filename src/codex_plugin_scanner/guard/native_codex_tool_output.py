@@ -37,9 +37,17 @@ from .native_runtime_resilience import (
 )
 
 _MAX_REQUEST_BYTES = 256 * 1024
-_MAX_POST_TOOL_REQUEST_BYTES = 6 * 1024 * 1024
+# The largest envelope a post-tool review will frame, which is more than
+# ``CODEX_POST_TOOL_OUTPUT_MAX_BYTES``: that bound counts the op's own canonical
+# request and this counts the envelope around it. Held under the transport's
+# frame limit so a request past it is refused for its size rather than as a
+# malformed frame.
+_MAX_POST_TOOL_REQUEST_BYTES = 6 * 1024 * 1024 - 64 * 1024
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _FEATURE = "codex-tool-output-v1"
+# The resident derives the post-tool command texts from the payload itself.
+_POST_TOOL_COMMANDS_FEATURE = "codex-post-tool-commands-v1"
+_POST_TOOL_PAYLOAD_KINDS = frozenset({"post_tool_output", "post_tool_read_only_payload"})
 _REQUEST_SCHEMA = "guard-codex-tool-output-request.v1"
 _RESULT_SCHEMA = "guard-codex-tool-output-result.v1"
 _DEFAULT_TIMEOUT_SECONDS = 8.0
@@ -113,6 +121,7 @@ def codex_tool_output_native(
         or status.capabilities is None
         or _RESIDENT_PROTOCOL_FEATURE not in status.capabilities.features
         or _FEATURE not in status.capabilities.features
+        or (kind in _POST_TOOL_PAYLOAD_KINDS and _POST_TOOL_COMMANDS_FEATURE not in status.capabilities.features)
     ):
         return _deny(_UNAVAILABLE)
     guard_home = _resolve_digest_home(None)
@@ -122,7 +131,7 @@ def codex_tool_output_native(
         return _deny(_UNAVAILABLE)
     try:
         action: dict[str, object] = {"kind": kind}
-        if kind == "post_tool_output":
+        if kind in _POST_TOOL_PAYLOAD_KINDS:
             action["body"] = _packed_body(body or {})
         elif kind == "post_tool_read_only":
             action.update({"commands": list(commands or ()), "cwd": _anchored(cwd), "home_dir": _anchored(home_dir)})
@@ -195,7 +204,7 @@ def codex_tool_output_native(
     # unavailable" artifact, which is a review the user did not need.
     limit = (
         _MAX_POST_TOOL_REQUEST_BYTES
-        if kind in {"post_tool_output", "prompt_credential_file", "prompt_attachment"}
+        if kind in _POST_TOOL_PAYLOAD_KINDS or kind in {"prompt_credential_file", "prompt_attachment"}
         else _MAX_REQUEST_BYTES
     )
     if len(resident) > limit or time.monotonic() >= effective_deadline:

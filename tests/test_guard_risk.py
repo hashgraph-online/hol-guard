@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
     evaluate_tool_call,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.native_shell_request_authority import shell_request_authority
 from codex_plugin_scanner.guard.risk import (
     artifact_risk_signals,
     artifact_risk_signals_typed,
@@ -30,12 +31,6 @@ from codex_plugin_scanner.guard.risk import (
 )
 from codex_plugin_scanner.guard.runtime.actions import normalize_codex_hook_payload
 from codex_plugin_scanner.guard.runtime.git_execution_safety import git_binary_path_is_trusted
-from codex_plugin_scanner.guard.runtime.secret_file_request_services.github_pr_expansion import (
-    _gh_pr_create_body_has_shell_command_substitution,
-)
-from codex_plugin_scanner.guard.runtime.secret_file_request_services.read_only_filters import (
-    _split_attached_redirection_token,
-)
 from codex_plugin_scanner.guard.runtime.secret_file_request_services.shell_static_safety import (
     _path_text_is_within_root_text,
     _script_has_aliased_risky_import,
@@ -1820,8 +1815,13 @@ def test_tool_action_request_classifier_allows_pr_create_with_attached_static_bo
 
 
 def test_tool_action_request_classifier_ignores_single_quoted_env_split_string_body():
-    assert not _gh_pr_create_body_has_shell_command_substitution(
-        "echo $(date) && env -S'gh pr create --body \"Verification: `python -m build`\"'"
+    # The flag lives in the native kernel now; ask it the same question directly.
+    assert not shell_request_authority(
+        "_gh_pr_create_body_has_shell_command_substitution",
+        {
+            "command_text": "echo $(date) && env -S'gh pr create --body \"Verification: `python -m build`\"'",
+            "depth": 0,
+        },
     )
 
 
@@ -4414,12 +4414,6 @@ def test_path_text_is_within_root_text_preserves_windows_case_insensitivity(monk
         "C:\\Users\\Michael\\Workspace\\config.toml",
         "c:\\users\\michael\\workspace",
     )
-
-
-def test_split_attached_redirection_token_handles_long_user_text_without_regex():
-    token = f"{'!' * 20000}>danger.txt"
-
-    assert _split_attached_redirection_token(token) == ("!" * 20000, "", ">", "danger.txt")
 
 
 def test_tool_action_request_classifier_detects_nested_relative_curl_config_file_upload(tmp_path):

@@ -341,7 +341,9 @@ def test_failed_host_snapshot_marks_background_job_failed(tmp_path, monkeypatch)
                 break
             inventory.time.sleep(0.01)
         assert state["state"] == "failed"
-        assert state["error"] == "discovery_failed"
+        # The reason reaches the page as itself: a generic code would send the
+        # reader to a restart instead of to the Codex app that refused.
+        assert state["error"] == "codex_host_untrusted"
         assert service.list_items()["host_inventory"] is None
         assert store.read_local_cli_revision() == before
     finally:

@@ -67,6 +67,7 @@ pub(super) fn exact_safe_command(
             .as_ref()
             .map(|proof| proof.cwd.as_str())
             .or(context.cwd),
+        creates_nothing: false,
     };
     let mut worktree_seen = false;
     let mut fetch_before = false;

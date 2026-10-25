@@ -83,7 +83,7 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
 )
 from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import extract_package_intent_request
-from codex_plugin_scanner.guard.runtime.secret_file_request_services import constants_core, pytest_target_detection
+from codex_plugin_scanner.guard.runtime.secret_file_request_services import constants_core
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_file_write_request,
     extract_sensitive_tool_action_request,
@@ -7757,7 +7757,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_find_exec_del
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["approval_reuse"]["action"] == "block"
+    assert output == {"permissionDecision": "allow"}
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_wrapped_command_split_string_argument(
@@ -8051,7 +8051,7 @@ def test_guard_hook_emits_copilot_native_allow_response_for_benign_find_ok_delet
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["approval_reuse"]["action"] == "block"
+    assert output == {"permissionDecision": "allow"}
 
 
 def test_guard_hook_emits_copilot_native_allow_response_for_perl_sleep_wait(
@@ -14186,22 +14186,25 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
     worker = threading.Thread(target=resolve_pending, daemon=True)
     worker.start()
 
-    rc = main(
-        [
-            "guard",
-            "run",
-            "claude-code",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-        ]
-    )
-    stop_resolver.set()
-    worker.join(timeout=1.0)
-    output = capsys.readouterr().out
+    try:
+        rc = main(
+            [
+                "guard",
+                "run",
+                "claude-code",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+            ]
+        )
+    finally:
+        stop_resolver.set()
+        worker.join(timeout=1.0)
+    captured = capsys.readouterr()
+    output = captured.out
 
-    assert rc == 0
+    assert rc == 0, f"guard run returned {rc}\nstdout:\n{output}\nstderr:\n{captured.err}"
     assert "Launch allowed" in output
     assert "Approval received" in output
     assert observed_actions
@@ -17247,8 +17250,6 @@ def test_guard_runtime_requires_restricted_profile_for_simple_pytest_module_invo
     ),
 )
 def test_guard_runtime_requires_restricted_profile_for_inline_process_pytest(command, tmp_path):
-    assert pytest_target_detection._shell_command_targets_pytest(command)
-
     match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
 
     assert match is not None
@@ -17256,12 +17257,12 @@ def test_guard_runtime_requires_restricted_profile_for_inline_process_pytest(com
     assert match.reason_code == "pytest_restricted_profile_required"
 
 
-def test_guard_runtime_does_not_target_harmless_inline_process_command():
+def test_guard_runtime_does_not_target_harmless_inline_process_command(tmp_path):
     command = "python -c \"import subprocess as sp; sp.run(['echo', 'harmless'])\""
 
-    assert not pytest_target_detection._shell_command_targets_pytest(
-        command,
-    )
+    match = extract_sensitive_tool_action_request("Bash", {"command": command}, cwd=tmp_path)
+
+    assert match is None or match.reason_code != "pytest_restricted_profile_required"
 
 
 def test_guard_runtime_allows_apply_patch_to_non_sensitive_source_file(tmp_path):

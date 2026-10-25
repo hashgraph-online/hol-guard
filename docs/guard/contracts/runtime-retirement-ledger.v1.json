@@ -86,7 +86,34 @@
   "src/codex_plugin_scanner/guard/runtime/npm_source_spec.py",
   "src/codex_plugin_scanner/guard/runtime/github_pr_body_file.py",
   "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_body_safety.py",
-  "src/codex_plugin_scanner/guard/runtime/command_option_parsing.py"
+  "src/codex_plugin_scanner/guard/runtime/command_option_parsing.py",
+  "src/codex_plugin_scanner/guard/runtime/executable_flag_contract.py",
+  "src/codex_plugin_scanner/guard/runtime/workspace_path_guard.py",
+  "src/codex_plugin_scanner/guard/evaluation_codex_event_trace.py",
+  "src/codex_plugin_scanner/guard/policy_recipe.py",
+  "src/codex_plugin_scanner/guard/runtime/network_public_suffix.py",
+  "src/codex_plugin_scanner/guard/runtime/remote_approval_execution.py",
+  "src/codex_plugin_scanner/guard/runtime/resource_budget.py",
+  "src/codex_plugin_scanner/guard/runtime/node_semver.py",
+  "src/codex_plugin_scanner/guard/runtime/data_flow.py",
+  "src/codex_plugin_scanner/guard/runtime/restricted_linux_elf.py",
+  "src/codex_plugin_scanner/guard/runtime/restricted_linux_paths.py",
+  "src/codex_plugin_scanner/guard/runtime/restricted_linux_mappings.py",
+  "src/codex_plugin_scanner/guard/runtime/restricted_linux_mapping_plan.py",
+  "src/codex_plugin_scanner/guard/runtime/shell_command_wrappers.py",
+  "src/codex_plugin_scanner/guard/runtime/source_paths.py",
+  "src/codex_plugin_scanner/guard/adapters/_modules/codex/codex_hook_response.py",
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/local_read_operands.py",
+  "src/codex_plugin_scanner/guard/runtime/sandbox.py",
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/pytest_target_detection.py",
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/python_pytest_entrypoints.py",
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_expansion.py",
+  "src/codex_plugin_scanner/guard/runtime/containment_outputs.py",
+  "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py",
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/read_only_filters.py",
+  "src/codex_plugin_scanner/guard/runtime/extension_control_resolver.py",
+  "src/codex_plugin_scanner/guard/inventory_contract_scans.py",
+  "src/codex_plugin_scanner/guard/runtime/skill_paths.py"
  ],
  "retired_tests": [
   {
@@ -4704,50 +4731,9 @@
    "rationale": "Original clean-forward and binding-recheck outcomes replay in compiled Rust; actual native signed receipts cover forwarding with and without a policy store. Unsigned route fixtures now assert fail-closed behavior."
   },
   {
-   "old_node": "tests/test_guard_restricted_linux_paths.py::test_directory_replacement_during_discovery_fails_closed",
-   "base_commit": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
-   "source_sha256": "4f45563b5abe2a3f37e947f3a8a09b6e7012fd036b35756fd23a71dca7ae6f9a",
-   "replacement_nodes": [
-    "rust/crates/guard-runtime/src/restricted_linux_launch/tests.rs::replaced_directory_cannot_redirect_descriptor_discovery"
-   ],
-   "status": "native_behavior_ported_requires_ci",
-   "rationale": "Pinned original plan, path, permission and copy outcomes replay in Rust; native failure ordering and descriptor tests replace Python implementation mocks. Public native caller regression tests remain."
-  },
-  {
    "old_node": "tests/test_guard_restricted_linux_socket.py::test_failed_seccomp_installation_never_returns_success",
    "base_commit": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
    "source_sha256": "0790e8023c57a52a4fba9ec7257d4fc7014879114095dd3127b47af62f27ad97",
-   "replacement_nodes": [
-    "rust/crates/guard-runtime/src/restricted_linux_launch/tests.rs::original_python_kernel_plan_and_mount_contracts",
-    "rust/crates/guard-runtime/src/restricted_linux_launch/pipeline.rs::failed_kernel_stage_never_reaches_repository_execution"
-   ],
-   "status": "native_behavior_ported_requires_ci",
-   "rationale": "Pinned original plan, path, permission and copy outcomes replay in Rust; native failure ordering and descriptor tests replace Python implementation mocks. Public native caller regression tests remain."
-  },
-  {
-   "old_node": "tests/test_guard_restricted_linux_mappings.py::test_private_snapshot_is_an_independent_complete_copy",
-   "base_commit": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
-   "source_sha256": "210062d0beceab553edc3f103a5b205a695ca8b204a8b577e69675ad823ea00a",
-   "replacement_nodes": [
-    "rust/crates/guard-runtime/src/restricted_linux_launch/tests.rs::original_python_kernel_plan_and_mount_contracts"
-   ],
-   "status": "native_behavior_ported_requires_ci",
-   "rationale": "Pinned original plan, path, permission and copy outcomes replay in Rust; native failure ordering and descriptor tests replace Python implementation mocks. Public native caller regression tests remain."
-  },
-  {
-   "old_node": "tests/test_guard_restricted_linux_mappings.py::test_unverified_snapshot_cannot_become_a_mapping",
-   "base_commit": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
-   "source_sha256": "adb82f590dc8f1a3be2066899584061c3dfdfd23ffab54bc7ab37fbdc08e0159",
-   "replacement_nodes": [
-    "rust/crates/guard-runtime/src/restricted_linux_launch/tests.rs::original_python_kernel_plan_and_mount_contracts"
-   ],
-   "status": "native_behavior_ported_requires_ci",
-   "rationale": "Pinned original plan, path, permission and copy outcomes replay in Rust; native failure ordering and descriptor tests replace Python implementation mocks. Public native caller regression tests remain."
-  },
-  {
-   "old_node": "tests/test_guard_restricted_linux_mappings.py::test_failed_capability_drop_prevents_repository_execution",
-   "base_commit": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
-   "source_sha256": "75bcab26d89ef15aadf223956c59c4223346778b84aeb6efc6291f23cf4ac417",
    "replacement_nodes": [
     "rust/crates/guard-runtime/src/restricted_linux_launch/tests.rs::original_python_kernel_plan_and_mount_contracts",
     "rust/crates/guard-runtime/src/restricted_linux_launch/pipeline.rs::failed_kernel_stage_never_reaches_repository_execution"
@@ -6658,6 +6644,714 @@
    ],
    "status": "obsolete_implementation_assertion",
    "rationale": "Asserted the retired Python caller's lru_cache of native option results. The cache was deleted with the module; the resident answers each option call directly, so there is no Python cache to reuse or skip."
+  },
+  {
+   "old_node": "tests/test_guard_manifest_path_traversal.py::test_resolve_path_within_workspace_rejects_parent_traversal",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/workspace_path_guard_tests.rs::parent_traversal_resolves_to_nothing",
+    "rust/crates/guard-command/src/workspace_path_guard_tests.rs::absolute_and_empty_operands_resolve_to_nothing"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_manifest_path_traversal.py::test_resolve_path_within_workspace_rejects_symlink_escape",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/workspace_path_guard_tests.rs::a_symlink_out_of_the_workspace_resolves_to_nothing"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_node_semver.py::test_node_semver_spec_matches_conservative_subset",
+   "source_sha256": "4f4c9dd349343eee71164b607ec2072d19dd01935f991163e2a0a4841bedfcbe",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/direct_tool_semver_tests.rs::semver_matches_only_the_provable_subset"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "The whole parametrized table moved to the Rust owner, case for case, including the four pairs the recorded parity fixture never carried: an exact-specifier mismatch, a zero-major caret with its minor pinned, a zero-major zero-minor caret at equality, and a prerelease mismatch."
+  },
+  {
+   "old_node": "tests/test_guard_restricted_linux_paths.py::test_directory_replacement_during_discovery_fails_closed",
+   "base_commit": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
+   "source_sha256": "4f45563b5abe2a3f37e947f3a8a09b6e7012fd036b35756fd23a71dca7ae6f9a",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/restricted_linux_launch/tests.rs::replaced_directory_cannot_redirect_descriptor_discovery"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Pinned original plan, path, permission and copy outcomes replay in Rust; native failure ordering and descriptor tests replace Python implementation mocks. Public native caller regression tests remain."
+  },
+  {
+   "old_node": "tests/test_guard_restricted_linux_mappings.py::test_private_snapshot_is_an_independent_complete_copy",
+   "base_commit": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
+   "source_sha256": "210062d0beceab553edc3f103a5b205a695ca8b204a8b577e69675ad823ea00a",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/restricted_linux_launch/tests.rs::original_python_kernel_plan_and_mount_contracts"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Pinned original plan, path, permission and copy outcomes replay in Rust; native failure ordering and descriptor tests replace Python implementation mocks. Public native caller regression tests remain."
+  },
+  {
+   "old_node": "tests/test_guard_restricted_linux_mappings.py::test_unverified_snapshot_cannot_become_a_mapping",
+   "base_commit": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
+   "source_sha256": "adb82f590dc8f1a3be2066899584061c3dfdfd23ffab54bc7ab37fbdc08e0159",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/restricted_linux_launch/tests.rs::original_python_kernel_plan_and_mount_contracts"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Pinned original plan, path, permission and copy outcomes replay in Rust; native failure ordering and descriptor tests replace Python implementation mocks. Public native caller regression tests remain."
+  },
+  {
+   "old_node": "tests/test_guard_restricted_linux_mappings.py::test_failed_capability_drop_prevents_repository_execution",
+   "base_commit": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
+   "source_sha256": "75bcab26d89ef15aadf223956c59c4223346778b84aeb6efc6291f23cf4ac417",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/restricted_linux_launch/tests.rs::original_python_kernel_plan_and_mount_contracts",
+    "rust/crates/guard-runtime/src/restricted_linux_launch/pipeline.rs::failed_kernel_stage_never_reaches_repository_execution"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Pinned original plan, path, permission and copy outcomes replay in Rust; native failure ordering and descriptor tests replace Python implementation mocks. Public native caller regression tests remain."
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_ts_file_under_src_allowed",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::workspace_source_files_are_allowed_with_their_reason_codes"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_tsx_file_under_src_allowed",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::workspace_source_files_are_allowed_with_their_reason_codes"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_py_file_allowed",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::workspace_source_files_are_allowed_with_their_reason_codes"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_md_file_under_docs_allowed",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::workspace_source_files_are_allowed_with_their_reason_codes"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_json_file_allowed_by_extension",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::workspace_source_files_are_allowed_with_their_reason_codes"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_benign_dotfile_allowed",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::workspace_source_files_are_allowed_with_their_reason_codes"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_env_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::credential_dotfiles_are_refused_as_sensitive_basenames"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_npmrc_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::credential_dotfiles_are_refused_as_sensitive_basenames"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_netrc_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::credential_dotfiles_are_refused_as_sensitive_basenames"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_git_credentials_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::credential_dotfiles_are_refused_as_sensitive_basenames"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_hidden_unsafe_dir_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::hidden_directories_are_refused_except_github_workflows"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_workflow_source_file_allowed",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::hidden_directories_are_refused_except_github_workflows"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_other_hidden_github_source_file_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::hidden_directories_are_refused_except_github_workflows"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_empty_target_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::empty_glob_and_traversal_targets_never_resolve"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_glob_pattern_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::empty_glob_and_traversal_targets_never_resolve"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_relative_path_escape_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::empty_glob_and_traversal_targets_never_resolve"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_absolute_path_outside_workspace_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::an_absolute_path_outside_the_workspace_is_refused_without_the_opt_in"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_workflow_source_symlink_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::a_symlink_anywhere_in_the_path_is_refused"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_absolute_symlink_inside_workspace_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::a_symlink_anywhere_in_the_path_is_refused"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_relative_symlink_inside_workspace_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::a_symlink_anywhere_in_the_path_is_refused"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_external_source_path_requires_explicit_search_opt_in",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::an_external_sibling_checkout_is_allowed_only_with_the_opt_in"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_external_source_path_under_sibling_git_directory_allowed",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::an_external_sibling_checkout_is_allowed_only_with_the_opt_in"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_external_source_path_in_downloads_nested_git_checkout_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::an_external_target_must_be_an_immediate_sibling_inside_a_resolvable_home"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_external_source_path_outside_home_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::an_external_target_must_be_an_immediate_sibling_inside_a_resolvable_home"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_external_source_path_with_unresolvable_home_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::an_external_target_must_be_an_immediate_sibling_inside_a_resolvable_home"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_external_search_opt_in_rejects_relative_escape",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::the_external_opt_in_never_admits_a_relative_escape_or_a_symlink"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_external_symlinked_source_path_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::the_external_opt_in_never_admits_a_relative_escape_or_a_symlink"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_external_sensitive_path_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::external_sensitive_names_are_refused_without_substring_false_positives"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_external_sensitive_filename_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::external_sensitive_names_are_refused_without_substring_false_positives"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_external_sensitive_filename_avoids_substring_false_positives",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::external_sensitive_names_are_refused_without_substring_false_positives"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestPathContainsSymlink::test_symlink_pointing_outside_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::path_contains_symlink_reports_links_and_escapes"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestPathContainsSymlink::test_normal_file_no_symlink",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::path_contains_symlink_reports_links_and_escapes"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestPathContainsSymlink::test_path_outside_base_returns_true",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::path_contains_symlink_reports_links_and_escapes"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestResolveSourceCandidatePath::test_relative_path_resolves_under_cwd",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::candidate_resolution_follows_the_working_directory_and_home"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestResolveSourceCandidatePath::test_absolute_path_returns_as_is",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::candidate_resolution_follows_the_working_directory_and_home"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestResolveSourceCandidatePath::test_tilde_path_with_home_dir",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::candidate_resolution_follows_the_working_directory_and_home"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestResolveSourceCandidatePath::test_empty_target_returns_none",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::candidate_resolution_follows_the_working_directory_and_home"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourceClassifierVersion::test_version_is_stable_string",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-rules/src/lib.rs::rule_material_starts_with_every_version"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "The classifier version is now the compile-time constant SOURCE_CLASSIFIER_VERSION in rust/crates/guard-rules/src/lib.rs. The rules fingerprint material names it on its second line, and the Rust test checks that line against the constant, so a version change that skips the fingerprint fails."
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathIsAllowed::test_external_source_path_without_home_rejected",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::an_external_target_without_a_home_is_refused"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Ported: an opted-in external target with no home is refused as external_home_unavailable."
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestResolveSourceCandidatePath::test_tilde_path_without_home_dir_returns_none",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/codex_output_source_paths_tests.rs::a_tilde_path_without_a_home_does_not_resolve"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Ported: a tilde path does not resolve when no home is supplied."
+  },
+  {
+   "old_node": "tests/test_hook_source_paths.py::TestSourcePathDecision::test_frozen_dataclass",
+   "source_sha256": "4c991465b1dfdaaa541c16f62ae718e1922fc127debc533e569b93615198d127",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "SourceDecision is a plain Rust struct returned by value. Immutability is a property of the type, not something a runtime test can observe."
+  },
+  {
+   "old_node": "tests/test_codex_pretool_allow_schema.py::test_codex_pre_tool_response_omits_unsupported_allow",
+   "base_commit": "7c75d1dac1febc51bfcae6f54a61d8ecb2cbd4e3",
+   "source_sha256": "b178d3bf6c6b8a33f55b23197835c7ffb8c517938663a3c8821acca411e1da24",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::responses_are_shaped_as_python_shapes_them"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "The recorded shape vectors replay the same allowed-key filtering in Rust, which owns every hook response the bridge emits."
+  },
+  {
+   "old_node": "tests/test_codex_pretool_allow_schema.py::test_codex_pre_tool_warn_preserves_reason_as_system_message",
+   "base_commit": "7c75d1dac1febc51bfcae6f54a61d8ecb2cbd4e3",
+   "source_sha256": "b178d3bf6c6b8a33f55b23197835c7ffb8c517938663a3c8821acca411e1da24",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::responses_are_shaped_as_python_shapes_them"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "The recorded shape vectors replay the same allowed-key filtering in Rust, which owns every hook response the bridge emits."
+  },
+  {
+   "old_node": "tests/test_codex_pretool_allow_schema.py::test_codex_pre_tool_response_drops_invalid_permission_fields",
+   "base_commit": "7c75d1dac1febc51bfcae6f54a61d8ecb2cbd4e3",
+   "source_sha256": "b178d3bf6c6b8a33f55b23197835c7ffb8c517938663a3c8821acca411e1da24",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::responses_are_shaped_as_python_shapes_them"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "The recorded shape vectors replay the same allowed-key filtering in Rust, which owns every hook response the bridge emits."
+  },
+  {
+   "old_node": "tests/test_codex_signed_approval_handoff.py::test_codex_bridge_stdout_excludes_native_approval_aliases",
+   "base_commit": "7c75d1dac1febc51bfcae6f54a61d8ecb2cbd4e3",
+   "source_sha256": "4fae1440004a510ba16137fbb9c33e7fd717c1614b8327bd113249d308a89286",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::approval_aliases_never_reach_the_hook_response"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "The approval aliases are stripped by the native shaper; the new Rust test asserts the same review response leaks none of them."
+  },
+  {
+   "old_node": "tests/test_codex_contained_tests.py::test_codex_response_drops_allow_without_updated_input",
+   "base_commit": "7c75d1dac1febc51bfcae6f54a61d8ecb2cbd4e3",
+   "source_sha256": "fb40c8a0ab431ab2ef33ad19488e2e139fbad3daec0970fd7f12a873978a3a2b",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::responses_are_shaped_as_python_shapes_them"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "The recorded shape vectors replay the same allowed-key filtering in Rust, which owns every hook response the bridge emits."
+  },
+  {
+   "old_node": "tests/test_codex_contained_tests.py::test_policy_deny_overrides_an_updated_input_allow",
+   "base_commit": "7c75d1dac1febc51bfcae6f54a61d8ecb2cbd4e3",
+   "source_sha256": "fb40c8a0ab431ab2ef33ad19488e2e139fbad3daec0970fd7f12a873978a3a2b",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::a_policy_deny_overrides_an_updated_input_allow"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "A Rust shaper test sends a policy deny with an allow that carries updatedInput and checks the response denies and drops the rewritten input."
+  },
+  {
+   "old_node": "tests/test_secret_file_request_service_regressions.py::test_local_read_rejects_missing_containment_root",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/shell_secret_read_containment_tests.rs::local_read_rejects_missing_containment_root"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_secret_file_request_service_regressions.py::test_local_read_rejects_symlink_loop_root",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/shell_secret_read_containment_tests.rs::local_read_rejects_symlink_loop_root"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_secret_file_request_service_regressions.py::test_ripgrep_hidden_mode_parser_handles_clusters_and_option_values",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/shell_secret_read_containment_tests.rs::ripgrep_hidden_mode_parser_handles_clusters_and_option_values"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_sandbox_result_is_dataclass",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_sandbox_result_to_dict_truncates_output",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_sandbox_request_defaults",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_is_secret_path_ssh",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_is_secret_path_aws",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_is_secret_path_env",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_is_secret_path_benign",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_detect_network_attempts_curl",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_detect_network_attempts_https_url",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_detect_network_attempts_benign",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_build_env_clean_has_minimal_keys",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_build_env_minimal_preserves_inherited_paths_without_sensitive_values",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_build_env_passthrough_preserves_inherited_values",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_redact_env_hides_token",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_run_sandbox_off_mode_returns_empty",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_run_sandbox_benign_shell_script",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_run_sandbox_clean_env_uses_private_workspace_for_home_and_tmpdir",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_run_sandbox_detects_network_attempt_statically",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_run_sandbox_escape_attempt_network_fixture",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_run_sandbox_escape_attempt_secret_file_excluded",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_run_sandbox_timeout_enforced",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_run_sandbox_failure_safe_on_bad_interpreter",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_run_sandbox_unexpected_write_detected",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_run_sandbox_fork_bomb_limited",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_run_sandbox_python_script_path",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_run_sandbox_node_script_path",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_run_sandbox_suspicious_mode_skips_benign",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_signals_detected_on_timeout",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_sandbox.py::test_to_dict_keys_present",
+   "source_sha256": "1a7fb9cc570330e37d7aed62c43115c283b892144e6a634595375c199d45616e",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserts the behaviour of runtime/sandbox.py, a static-first sandbox runner no production path ever imported. The module is deleted as dead code rather than replaced, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_contained_workspace_write_contract.py::test_capture_rejects_undeclared_change_and_link",
+   "source_sha256": "c1bc6f347f122d830283942dfac541d7bda3e7af676138a0b9fa17cf875675f5",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Drives capture_declared_outputs in runtime/containment_outputs.py, a declared-output capture walk no production caller ever imported. The module is deleted as dead code rather than replaced: the native contained-execution path captures only stdout.bin and stderr.bin from its own run directory and never walks a declared output tree, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_contained_workspace_write_contract.py::test_capture_rejects_file_count_over_budget",
+   "source_sha256": "c1bc6f347f122d830283942dfac541d7bda3e7af676138a0b9fa17cf875675f5",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Drives capture_declared_outputs in runtime/containment_outputs.py, a declared-output capture walk no production caller ever imported. The module is deleted as dead code rather than replaced: the native contained-execution path captures only stdout.bin and stderr.bin from its own run directory and never walks a declared output tree, so there is no native node that reproduces this assertion."
+  },
+  {
+   "old_node": "tests/test_guard_contained_workspace_write_contract.py::test_output_discovery_stops_at_entry_budget",
+   "source_sha256": "c1bc6f347f122d830283942dfac541d7bda3e7af676138a0b9fa17cf875675f5",
+   "replacement_nodes": [
+    "rust/crates/guard-contained-process/src/tests.rs::directory_entry_budget_rejects_overflow_without_consuming_future_scans"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "The budget assertion itself is ported: bound_fs::Directory::entries refuses an overflowing scan and leaves later scans intact, which the native test proves with real directory entries instead of the fake scandir iterator this test installed. The declared-output capture walk the assertion ran through is gone with runtime/containment_outputs.py; the native contained-execution path captures only stdout.bin and stderr.bin from its own run directory."
+  },
+  {
+   "old_node": "tests/test_hook_source_skill_read.py::test_supported_omp_scheme_matrix_is_complete",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Compared PI_INLINE_RESOURCE_SCHEMES to a literal copy of itself. No production module imported runtime/skill_paths.py; skill:// document resolution is resolve_known_skill_doc_path in codex_output_source_paths.rs."
   }
  ],
  "preserved_tests": [
@@ -6988,16 +7682,6 @@
  "implementation_base_sha": "1dc81dd4319cdf18e4b1c0fd3d061f732601b188",
  "replaced_implementations": [
   {
-   "path": "src/codex_plugin_scanner/guard/runtime/restricted_linux_mappings.py",
-   "base_commit": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
-   "source_sha256": "dd444d6d651697c0c7b7cf38d77bfa155e15adba183219fec85a393190789df1",
-   "remaining_role": "Portable native mapping/mount projections and legacy identity DTO only; stable image copying, noexec mounts and capability drop are native.",
-   "native_replacements": [
-    "rust/crates/guard-runtime/src/restricted_linux_launch/mod.rs"
-   ],
-   "parity_fixture": "rust/crates/guard-runtime/tests/fixtures/linux_launch_parity.json"
-  },
-  {
    "path": "src/codex_plugin_scanner/guard/runtime/restricted_linux_namespace.py",
    "base_commit": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
    "source_sha256": "a9b077f191f28ee2b82156bdd1f93aece68f6b4288bac81a2019490e1561f422",
@@ -7022,26 +7706,6 @@
    "base_commit": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
    "source_sha256": "5892ba09cd8a077be5d8a345df131054115ff9f46e41ec9d4e1e93f62608e94c",
    "remaining_role": "Legacy fixed-locator constants and fail-closed compatibility entry only; the namespace invokes the packaged native kernel launcher directly.",
-   "native_replacements": [
-    "rust/crates/guard-runtime/src/restricted_linux_launch/mod.rs"
-   ],
-   "parity_fixture": "rust/crates/guard-runtime/tests/fixtures/linux_launch_parity.json"
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/restricted_linux_elf.py",
-   "base_commit": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
-   "source_sha256": "db657bee3f0a23b44b23b9c1eb398babc0db4262d56477f8f179d94784c636df",
-   "remaining_role": "Typed projection of the native exact ELF loader result; bounded ELF parsing and system-image ownership checks are native.",
-   "native_replacements": [
-    "rust/crates/guard-runtime/src/restricted_linux_launch/mod.rs"
-   ],
-   "parity_fixture": "rust/crates/guard-runtime/tests/fixtures/linux_launch_parity.json"
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/restricted_linux_paths.py",
-   "base_commit": "e9814d78ea81b24fe0c343b03d7fa5621d9bc452",
-   "source_sha256": "08fa4d90b10eff57b9e6e205ba4e025ecb0926828bb19df8bc97938ac88c1135",
-   "remaining_role": "Typed projection of the native private inode-index snapshot; native descriptor discovery and existing secret-path classification own admission.",
    "native_replacements": [
     "rust/crates/guard-runtime/src/restricted_linux_launch/mod.rs"
    ],
@@ -7090,18 +7754,6 @@
    "remaining_role": "Native transport projection of credential patterns and Seatbelt denials only; pattern construction and string escaping are native.",
    "native_replacements": [
     "rust/crates/guard-command/src/restricted_pytest/credentials.rs",
-    "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
-   ],
-   "parity_fixture": "rust/crates/guard-command/tests/fixtures/contained_execution_parity.json"
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/restricted_linux_mapping_plan.py",
-   "base_commit": "1b76783140a37e849645f943984f587acaa52cfa",
-   "source_sha256": "0b7d2c667b1da815b33870865be842e46702a96a9bd8271dcafa1e98329a4e4a",
-   "remaining_role": "Bounded owner-only mapping input/result snapshot handoff and path-based ELF projection; ELF parsing and dependency-closure evidence are native.",
-   "native_replacements": [
-    "rust/crates/guard-command/src/restricted_pytest/mapping.rs",
-    "rust/crates/guard-command/src/restricted_pytest/mapping_elf.rs",
     "rust/crates/guard-runtime/src/restricted_pytest_op.rs"
    ],
    "parity_fixture": "rust/crates/guard-command/tests/fixtures/contained_execution_parity.json"
@@ -7168,17 +7820,6 @@
    "remaining_role": "Public option payload DTO and bound resident projection only; option and operand admission retired.",
    "native_replacements": [
     "rust/crates/guard-command/src/shell_interpreter_options.rs",
-    "rust/crates/guard-runtime/src/shell_helpers_op.rs"
-   ],
-   "parity_fixture": "tests/fixtures/shell-helper-python.v1.json"
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/data_flow.py",
-   "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
-   "source_sha256": "2cae49b5d617d61d89f7b6da5788f75652e8c4043088902267c50adec50c9d09",
-   "remaining_role": "Public structures and native transport only; segmentation, pipe and redirect semantics retired.",
-   "native_replacements": [
-    "rust/crates/guard-command/src/data_flow.rs",
     "rust/crates/guard-runtime/src/shell_helpers_op.rs"
    ],
    "parity_fixture": "tests/fixtures/shell-helper-python.v1.json"

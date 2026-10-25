@@ -216,7 +216,7 @@ where
     #[cfg(not(unix))]
     let opened = open_transition_lock(&path)?;
     validate_transition_lock(&path, &opened.file)?;
-    fs2::FileExt::try_lock_exclusive(&opened.file).map_err(|error| {
+    crate::resident_state::try_lock_exclusive_briefly(&opened.file).map_err(|error| {
         if crate::resident_state::is_lock_contention(&error) {
             "native_approval_authority_busy".to_owned()
         } else {

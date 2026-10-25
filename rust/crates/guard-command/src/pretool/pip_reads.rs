@@ -29,8 +29,13 @@
 //! `/etc` and `/Library`, are not checked: writing any of them already means
 //! controlling the `pip` the command runs, which is the larger capability.
 //! The `XDG_` variables that would move the global files somewhere a user can
-//! write are rejected with the rest of pip's environment. See
-//! [`super::npm_reads`] for the same proof over `.npmrc`.
+//! write are rejected with the rest of pip's environment. `XDG_CONFIG_HOME`
+//! is the exception: it moves the *user* file, the stamp carries the
+//! directory it names, so [`redirected_configuration_inert`] reads the
+//! `pip.conf` there and the proof covers the file pip itself would read. A
+//! session that exports it — every Linux agent that follows the base
+//! directory specification — keeps its listings quiet instead of losing them
+//! all to review. See [`super::npm_reads`] for the same proof over `.npmrc`.
 
 use std::fs;
 use std::io::ErrorKind;
@@ -51,8 +56,11 @@ const QUIET_FLAGS: &[&str] = &[
     "-v",
 ];
 
+// pip's user site lives under the home directory, so a read of it answers
+// for whichever home the command runs with.
+const USER_SCOPE_FLAG: &str = "--user";
 /// Which installed distributions a listing covers.
-const SCOPE_FLAGS: &[&str] = &["--local", "-l", "--user"];
+const SCOPE_FLAGS: &[&str] = &["--local", "-l", USER_SCOPE_FLAG];
 
 const LIST_FLAGS: &[&str] = &["--not-required", "--editable", "-e", "--include-editable"];
 
@@ -102,6 +110,24 @@ fn configuration_inert(context: super::PathContext<'_>) -> bool {
         .all(|path| pip_conf_inert(path))
 }
 
+/// Report that a redirected user configuration directory adds no option.
+///
+/// `XDG_CONFIG_HOME` moves the file platformdirs hands pip out of the
+/// directories [`configuration_inert`] reads, so the proof follows it to the
+/// `pip.conf` the command would actually read. The redirect is provable only
+/// when the stamp carries an absolute directory for it: a session that
+/// exports the name without a stamped value, or with a relative one the proof
+/// cannot resolve, leaves the listing reviewed.
+pub(super) fn redirected_configuration_inert(directory: Option<&str>, exported: bool) -> bool {
+    match directory {
+        Some(directory) => {
+            let directory = Path::new(directory);
+            directory.is_absolute() && pip_conf_inert(&directory.join("pip").join("pip.conf"))
+        }
+        None => !exported,
+    }
+}
+
 /// A missing file is inert. Anything unreadable, oversized or not a regular
 /// file is not.
 fn pip_conf_inert(path: &Path) -> bool {
@@ -118,6 +144,13 @@ fn pip_conf_inert(path: &Path) -> bool {
 /// Keys that only change how pip prints. Every other key is an option the
 /// command did not ask for, so the command goes back to review rather than
 /// this check guessing what the option does.
+///
+/// The value does not matter, because a key is listed here only when both of
+/// its values leave the command doing what it would do with no file at all.
+/// `disable-pip-version-check = false` is pip's own default, so reading it
+/// reviews a machine that writes the default down while admitting the machine
+/// that leaves it out, and both run the same command. A key whose value could
+/// add work the command did not ask for belongs outside this list instead.
 const INERT_KEYS: &[&str] = &[
     "disable-pip-version-check",
     "require-virtualenv",
@@ -146,7 +179,14 @@ fn inert_line(line: &str) -> bool {
 
 pub(super) fn safe_pip_arguments(arguments: &[String]) -> bool {
     let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
-    let (command, rest) = match split_subcommand(&words) {
+    safe_pip_words(&words)
+}
+
+/// The same reading surface, for a caller that already holds the words. `uv
+/// pip` puts pip's subcommands in front of the project environment, so one
+/// allowlist decides both spellings.
+pub(super) fn safe_pip_words(words: &[&str]) -> bool {
+    let (command, rest) = match split_subcommand(words) {
         Some(split) => split,
         None => return false,
     };
@@ -165,6 +205,22 @@ pub(super) fn safe_pip_arguments(arguments: &[String]) -> bool {
         Some("cache") => cache_query(rest),
         _ => false,
     }
+}
+
+/// Whether the read stays inside the environment the command names.
+///
+/// A contained run is given the workspace as its `HOME`, so a read that
+/// resolves out of the home directory reports the sandbox's own layout
+/// instead of the developer's: the cache lives under `~/.cache`, and the
+/// user site under `~/.local`. A listing of the wrong environment is a worse
+/// answer than the review it replaces, so those two forms keep the review
+/// they have today, where they run against the real home. Everything else a
+/// query reads is the environment's own metadata, which the interpreter
+/// finds from its own prefix.
+pub(super) fn environment_read_words(words: &[&str]) -> bool {
+    safe_pip_words(words)
+        && !matches!(split_subcommand(words), Some((Some("cache"), _)))
+        && !words.contains(&USER_SCOPE_FLAG)
 }
 
 /// Splits the leading quiet options off, then the subcommand. `--version`
@@ -263,13 +319,125 @@ fn plain_name(word: &str) -> bool {
         && !word.contains("..")
 }
 
+const XDG_CONFIG_HOME_NAME: &str = "XDG_CONFIG_HOME";
+
+/// Whether nothing outside the command line can add an option to the listing.
+///
+/// A stamped environment carries the names the session exported and the
+/// directory `XDG_CONFIG_HOME` names; without one the runtime's own
+/// environment is the session's. Either way a variable pip reads keeps the
+/// command out, and a redirected configuration directory is read where pip
+/// would read it.
+pub(super) fn environment_configuration_inert(
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
+    match execution_environment {
+        Some(environment) => {
+            environment.has_valid_shape()
+                && !environment
+                    .environment_names
+                    .iter()
+                    .any(|name| pip_selector(name))
+                && redirected_configuration_inert(
+                    environment.xdg_config_home.as_deref(),
+                    environment
+                        .environment_names
+                        .iter()
+                        .any(|name| name.eq_ignore_ascii_case(XDG_CONFIG_HOME_NAME)),
+                )
+        }
+        None => {
+            !std::env::vars_os()
+                .any(|(name, value)| !value.is_empty() && pip_selector(&name.to_string_lossy()))
+                && exported_configuration_inert(std::env::var_os(XDG_CONFIG_HOME_NAME).as_deref())
+        }
+    }
+}
+
+/// Whether the session's own `XDG_CONFIG_HOME` leaves pip's file where it is.
+///
+/// A value this runtime cannot read as text still moves the file pip reads,
+/// so the export is taken as an `OsStr` and only its text is read on: a
+/// redirect whose directory cannot be read is never inert.
+fn exported_configuration_inert(exported: Option<&std::ffi::OsStr>) -> bool {
+    let exported = exported.filter(|value| !value.is_empty());
+    redirected_configuration_inert(
+        exported.and_then(|value| value.to_str()),
+        exported.is_some(),
+    )
+}
+
+/// Variables pip reads before any option on the command line, beyond the ones
+/// that only change how it prints.
+///
+/// pip asks platformdirs where its user and global configuration files live,
+/// so the names platformdirs resolves those directories from move a
+/// `pip.conf` out of the directories the file check reads: the config names
+/// on Linux, and the data names on macOS, where a configuration directory is
+/// a data directory. `XDG_CONFIG_HOME` is not among them, because the stamp
+/// carries the directory it names and
+/// [`redirected_configuration_inert`] reads the `pip.conf`
+/// there, which is the file pip itself would read. The remaining `XDG_`
+/// names, `XDG_RUNTIME_DIR` among them, name no directory pip reads
+/// configuration from.
+fn pip_selector(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    if matches!(
+        upper.as_str(),
+        "XDG_CONFIG_DIRS" | "XDG_DATA_HOME" | "XDG_DATA_DIRS"
+    ) {
+        return true;
+    }
+    upper.starts_with("PIP_")
+        && !matches!(
+            upper.as_str(),
+            "PIP_DISABLE_PIP_VERSION_CHECK"
+                | "PIP_REQUIRE_VIRTUALENV"
+                | "PIP_NO_COLOR"
+                | "PIP_NO_INPUT"
+                | "PIP_QUIET"
+                | "PIP_VERBOSE"
+        )
+}
+
 #[cfg(test)]
 mod tests {
-    use super::safe_pip_arguments;
+    use super::{inert_line, safe_pip_arguments};
 
     fn safe(command: &str) -> bool {
         let arguments: Vec<String> = command.split_whitespace().map(str::to_owned).collect();
         safe_pip_arguments(&arguments)
+    }
+
+    #[test]
+    fn a_printing_key_is_inert_whichever_value_it_carries() {
+        for line in [
+            "",
+            "   ",
+            "# a comment",
+            "; a comment",
+            "[list]",
+            "disable-pip-version-check = false",
+            "disable-pip-version-check = true",
+            "disable_pip_version_check: no",
+            "require-virtualenv = false",
+            "format = freeze",
+        ] {
+            assert!(inert_line(line), "{line}");
+        }
+    }
+
+    #[test]
+    fn a_key_that_adds_work_the_command_did_not_ask_for_is_not_inert() {
+        for line in [
+            "index-url = https://example.invalid/simple",
+            "extra-index-url = https://example.invalid/simple",
+            "target = /tmp/elsewhere",
+            "cache-dir = /tmp/elsewhere",
+            "retries = 20",
+        ] {
+            assert!(!inert_line(line), "{line}");
+        }
     }
 
     #[test]
@@ -349,6 +517,34 @@ mod tests {
             "--version install requests",
         ] {
             assert!(!safe(command), "pip {command}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod configuration_tests {
+    use super::exported_configuration_inert;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn no_redirect_leaves_pips_file_where_the_check_reads_it() {
+        assert!(exported_configuration_inert(None));
+        assert!(exported_configuration_inert(Some(OsStr::new(""))));
+    }
+
+    #[test]
+    fn a_redirect_the_check_cannot_follow_keeps_the_review() {
+        assert!(!exported_configuration_inert(Some(OsStr::new(
+            "relative/config"
+        ))));
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            // A directory name this runtime cannot read as text still names a
+            // `pip.conf` the command would read, so it is not proved inert.
+            assert!(!exported_configuration_inert(Some(OsStr::from_bytes(
+                b"/tmp/\xff"
+            ))));
         }
     }
 }

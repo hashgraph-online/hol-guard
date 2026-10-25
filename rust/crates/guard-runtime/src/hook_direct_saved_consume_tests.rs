@@ -186,6 +186,7 @@ fn consume_with(
         home_dir: vectors["home_dir"].as_str().unwrap(),
         guard_home: &guard_home,
         binding: &full,
+        hint: None,
     };
     (
         super::super::answer(&edge, &context),

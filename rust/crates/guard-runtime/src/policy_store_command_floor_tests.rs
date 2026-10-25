@@ -201,3 +201,32 @@ fn protected_authority_never_reverts_to_first_install_defaults_even_after_restar
         .contains("authority_downgrade"));
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn protected_floor_refuses_a_snapshot_that_drops_the_command_binding() {
+    // A publisher cannot recover from a rejected command binding by retrying
+    // the same snapshot without it. Once a home has been protected the floor
+    // outlives the process, so the binding-less retry is refused too, and
+    // dropping the binding would also silently drop managed layers, global
+    // lockdown and per-target controls. Recovery belongs in the activation
+    // record the binding is built from, not in the publisher.
+    let root = test_root("command-floor-binding-removed");
+    let key = install_test_key(&root, 66);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    push(&store, control_snapshot(1, 7, 3, "enabled", &key, &root)).unwrap();
+    let mut unbound = control_snapshot(2, 7, 3, "enabled", &key, &root);
+    unbound.command_extensions = None;
+    resign(&mut unbound, &key);
+    assert!(push(&store, unbound)
+        .unwrap_err()
+        .contains("command_control_binding_removed"));
+    drop(store);
+    let restarted = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let mut after_restart = control_snapshot(2, 7, 3, "enabled", &key, &root);
+    after_restart.command_extensions = None;
+    resign(&mut after_restart, &key);
+    assert!(push(&restarted, after_restart)
+        .unwrap_err()
+        .contains("command_control_binding_removed"));
+    fs::remove_dir_all(root).unwrap();
+}

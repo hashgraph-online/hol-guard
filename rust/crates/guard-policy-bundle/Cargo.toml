@@ -1,0 +1,21 @@
+[package]
+name = "guard-policy-bundle"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+base64ct.workspace = true
+guard-contracts = { path = "../guard-contracts" }
+guard-policy-snapshot = { path = "../guard-policy-snapshot" }
+hex.workspace = true
+rsa.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
+
+[lints]
+workspace = true

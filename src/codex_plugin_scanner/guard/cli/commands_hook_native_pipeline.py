@@ -173,13 +173,11 @@ def run_native_hook_pipeline(
         # No route means no handler to run: the host outage response, never a guess.
         return _emit_native_unavailable(
             args,
-            payload=payload,
             workspace=runtime_workspace,
             context=context,
             event_name=str(inputs["hook_event"] or inputs["runtime_event"]),
             reason_code=error.code,
             worker=worker,
-            recording_only=False,
         )
     return run_route_plan(
         NativeHookRun(

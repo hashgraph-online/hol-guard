@@ -25,7 +25,7 @@ from tests.native_activation_support import compiled_lifecycle as compiled_lifec
 from tests.native_activation_support import subset_store
 from tests.test_extension_pack_preparation import delivery as delivery
 
-KEY = b"offline-subset-authority-fixture!!"
+KEY = b"offline-subset-authority-fixture"
 
 
 def committed(delivery, selected):
@@ -36,7 +36,7 @@ def committed(delivery, selected):
     # Preserve an actual legacy remote v1 record to qualify schema5 reading.
     import json
 
-    from codex_plugin_scanner.guard.runtime.extension_control_authority import authenticated_record
+    from tests.extension_control_records import authenticated_record
 
     legacy = json.loads(sealed[0])
     legacy["schema"] = activation_record.SCHEMA

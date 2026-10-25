@@ -16,9 +16,11 @@ use serde_json::{Map, Value};
 
 use crate::{
     ArtifactBrowserOutcomeInputsV1, ArtifactBrowserOutcomeV1, ArtifactFinalizeInputsV1,
-    ArtifactFinalizeV1, ArtifactReusePlanV1, ArtifactReuseStepInputsV1, CodexToolOutputFactsV1,
+    ArtifactFinalizeV1, ArtifactReusePlanV1, ArtifactReuseStepInputsV1,
+    ClaudePermissionVerdictInputsV1, ClaudePermissionVerdictV1, CodexToolOutputFactsV1,
+    ContainmentRouteInputsV1, ContainmentRouteV1, ContainmentSinkInputsV1, ContainmentSinkV1,
     HookRouteInputsV1, HookRouteV1, NativeExtensionControlLayerV1, NativePermissionPersistInputsV1,
-    NativePermissionPersistPlanV1,
+    NativePermissionPersistPlanV1, PretoolFloorInputsV1, PretoolFloorV1,
 };
 
 /// Schema discriminator for the request.
@@ -43,6 +45,22 @@ pub const HOOK_DECISION_ARTIFACT_DIRECTIVE_FEATURE: &str = "hook-decision-artifa
 /// it rejects the query.
 pub const HOOK_DECISION_ARTIFACT_REVIEW_ROUTE_FEATURE: &str =
     "hook-decision-artifact-review-route-v1";
+
+/// Advertised when a directive carries `json_exit_code`, the status the JSON
+/// document itself exits with. A resident that predates the field omits it,
+/// and the caller decodes a directive by its exact key set, so a reply from
+/// the older resident would be rejected and every hook decision would fail
+/// closed after an upgrade until it is retired. Callers that read a directive
+/// demand this capability so the older resident is replaced instead.
+pub const HOOK_DECISION_JSON_EXIT_CODE_FEATURE: &str = "hook-decision-json-exit-code-v1";
+/// Advertised when `native_edge` carries `reason_code`, the reason the edge
+/// result reached its action. `HookNativeEdgeV1` denies unknown fields, so a
+/// resident that predates the field rejects every composition, settlement and
+/// finalize request that names it, and the hook fails closed as unavailable
+/// until that resident retires. Callers that send an edge demand this
+/// capability so the older resident is replaced instead. It ships with
+/// `hook-decision-json-exit-code-v1`.
+pub const HOOK_DECISION_NATIVE_EDGE_REASON_FEATURE: &str = "hook-decision-native-edge-reason-v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -102,6 +120,24 @@ pub enum HookDecisionQueryV1 {
     /// The hook pipeline's dispatch route: which handlers answer a prepared
     /// payload, in what order.
     HookRoute { inputs: Box<HookRouteInputsV1> },
+    /// The PreToolUse floor: the action the resident pre-tool review holds
+    /// the hook verdict at, if any.
+    PretoolFloor { inputs: Box<PretoolFloorInputsV1> },
+    /// Whether a native PreToolUse result is routed toward the contained
+    /// sink, through this device's local CLI grant, or not at all.
+    ContainmentRoute {
+        inputs: Box<ContainmentRouteInputsV1>,
+    },
+    /// Whether a rendered receipt is rewritten into the contained sink.
+    ContainmentSink {
+        inputs: Box<ContainmentSinkInputsV1>,
+    },
+    /// The verdict for Claude Code's permission dialog: no decision, the
+    /// Guard approval question, a review deferring to Claude's dialog, or a
+    /// deny.
+    ClaudePermissionVerdict {
+        inputs: Box<ClaudePermissionVerdictInputsV1>,
+    },
 }
 
 /// Facts the artifact hook's review route depends on. The transport gathers
@@ -317,6 +353,11 @@ pub struct HookNativeEdgeV1 {
     pub minimum_action: Value,
     #[serde(default)]
     pub decision: Value,
+    /// The edge result's `reason_code`. A network protection review is a match
+    /// against the synced bundle rather than an unproven command, so the floor
+    /// keeps it before execution.
+    #[serde(default)]
+    pub reason_code: Value,
 }
 
 /// What the transport learned after the lookups the composition permitted.
@@ -431,6 +472,14 @@ pub enum HookDecisionPayloadV1 {
         plan: Box<ArtifactReusePlanV1>,
     },
     HookRoute(Box<HookRouteV1>),
+    PretoolFloor(Box<PretoolFloorV1>),
+    ContainmentRoute(Box<ContainmentRouteV1>),
+    ContainmentSink(Box<ContainmentSinkV1>),
+    ClaudePermissionVerdict {
+        /// Facts still missing; resubmit with them when non-empty.
+        needs_facts: Vec<String>,
+        verdict: Option<Box<ClaudePermissionVerdictV1>>,
+    },
     CopilotSettle {
         /// Facts still missing; resubmit with them when non-empty.
         needs_facts: Vec<String>,
@@ -603,6 +652,11 @@ pub struct HookResponseDirectiveV1 {
     pub emitter: String,
     /// `None` leaves the exit code to the host adapter (grok).
     pub exit_code: Option<i32>,
+    /// The status a JSON-document response carries. A replayed decision
+    /// relaxes `exit_code` to 0 so the fallback envelope acknowledges without
+    /// re-blocking, but the document answers before that branch and keeps the
+    /// harness's own status. `None` leaves it to the host adapter (grok).
+    pub json_exit_code: Option<i32>,
     /// For an exit block: write the stderr explanation only on a non-zero exit.
     pub stderr_only_on_nonzero_exit: bool,
     /// `always`, `with_approval_context`, `never`, or `artifact_codex` (the

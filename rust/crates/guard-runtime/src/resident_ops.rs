@@ -105,6 +105,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::CommandModel(request) => {
                 crate::oneshot::evaluate_command_model_request(&request)
             }
+            ResidentOperationV1::PreToolUse(request) if request.extension_evidence => {
+                crate::pre_tool_extension_evidence_op::evaluate_with_store(&request, policy_store)
+            }
             ResidentOperationV1::PreToolUse(request) => {
                 crate::oneshot::evaluate_pre_tool_request(&request)
             }
@@ -289,6 +292,15 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::ApprovalReuseDecide(request) => {
                 crate::approval_reuse::evaluate_approval_reuse_request(&request)
             }
+            ResidentOperationV1::ExtensionControl(request) => {
+                crate::extension_control_op::evaluate_extension_control_request(&request)
+            }
+            ResidentOperationV1::ExtensionAllowHint(request) => {
+                crate::extension_allow_hint_op::evaluate_with_store(&request, policy_store)
+            }
+            ResidentOperationV1::ApprovalExtensionRecommendation(request) => {
+                crate::approval_extension_recommendation_op::evaluate_with_store(&request, policy_store)
+            }
             ResidentOperationV1::ComposioRole(request) => {
                 crate::composio_role_op::evaluate_composio_role_request(&request)
             }
@@ -369,6 +381,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::PackageIntentParse(request) => {
                 crate::package_authority_op::evaluate_package_intent_parse(&request)
             }
+            ResidentOperationV1::PackageIntentExtract(request) => {
+                crate::package_intent_extract_op::evaluate_package_intent_extract(&request)
+            }
             ResidentOperationV1::PackageRequestArtifact(request) => {
                 crate::package_authority_op::evaluate_package_request_artifact_request(&request)
             }
@@ -434,6 +449,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::LocalCliGrantDecide(request) => {
                 crate::local_cli_grant_op::evaluate_local_cli_grant_request(&request)
             }
+            ResidentOperationV1::LocalCliHelpParse(request) => {
+                crate::local_cli_help::evaluate_local_cli_help_parse_request(&request)
+            }
             ResidentOperationV1::LocalCliHook(request) => {
                 crate::local_cli_hook_op::evaluate_local_cli_hook_request(&request)
             }
@@ -459,6 +477,14 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             }
             ResidentOperationV1::HookAuthorityState(request) => {
                 crate::hook_authority_state_op::evaluate_hook_authority_state_request(&request)
+            }
+            ResidentOperationV1::ExtensionControlAuthority(request) => {
+                crate::extension_control_authority_op::evaluate_extension_control_authority_request(
+                    &request,
+                )
+            }
+            ResidentOperationV1::CommandPackRecord(request) => {
+                crate::command_pack_record_op::evaluate_command_pack_record_request(&request)
             }
             ResidentOperationV1::PolicyIntegrityRows(request) => {
                 crate::policy_integrity_rows_op::evaluate_policy_integrity_rows_request(&request)
@@ -486,6 +512,35 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             }
             ResidentOperationV1::HookArtifactFacts(request) => {
                 crate::hook_artifact_facts_op::evaluate_hook_artifact_facts_request(&request)
+            }
+            ResidentOperationV1::InventoryItemClassification(request) => {
+                crate::inventory_item_classification_op::evaluate_inventory_item_classification_request(
+                    &request,
+                )
+            }
+            ResidentOperationV1::InventorySnapshotDigest(request) => {
+                crate::inventory_snapshot_digest_op::evaluate_inventory_snapshot_digest_request(
+                    &request,
+                )
+            }
+            ResidentOperationV1::InventorySourceEvidence(request) => {
+                crate::inventory_source_evidence_op::evaluate_inventory_source_evidence_request(
+                    &request,
+                )
+            }
+            ResidentOperationV1::InventoryScanFindings(request) => {
+                crate::inventory_scan_findings_op::evaluate_inventory_scan_findings_request(
+                    &request,
+                )
+            }
+            ResidentOperationV1::CodexHookIdentity(request) => {
+                crate::codex_hook_identity_op::evaluate_codex_hook_identity_request(&request)
+            }
+            ResidentOperationV1::InventoryScanTargets(request) => {
+                crate::inventory_scan_targets_op::evaluate_inventory_scan_targets_request(&request)
+            }
+            ResidentOperationV1::ArtifactContentHash(request) => {
+                crate::artifact_content_hash_op::evaluate_artifact_content_hash_request(&request)
             }
             ResidentOperationV1::ConsumerArtifactCompose(request) => {
                 crate::consumer_artifact_compose_op::evaluate_consumer_artifact_compose_request(
@@ -541,6 +596,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             }
             ResidentOperationV1::PackageProtectFinalize(request) => {
                 crate::package_protect_finalize_op::evaluate_package_protect_finalize(&request)
+            }
+            ResidentOperationV1::PackageEvaluationView(request) => {
+                crate::package_evaluation_view_op::evaluate_package_evaluation_view(&request)
             }
             ResidentOperationV1::PackagePosture(request) => {
                 crate::package_posture_op::evaluate_package_posture(&request)
@@ -636,6 +694,11 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::DiscoveryPlacementProject(request) => {
                 crate::discovery_placement_op::evaluate_discovery_placement_project(&request)
             }
+            // Untrusted portal release bytes are validated and projected here;
+            // the daemon adapter only moves bytes (no Python fallback).
+            ResidentOperationV1::ReleaseFeedProject(request) => {
+                crate::release_feed_op::evaluate_release_feed_project(&request)
+            }
             ResidentOperationV1::DataFlowAnalyze(request) => {
                 crate::data_flow_analyze_op::evaluate_data_flow_analyze(&request)
             }
@@ -647,6 +710,19 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             }
             ResidentOperationV1::VerifiedReadDecision(request) => {
                 crate::verified_read_decision_op::evaluate_verified_read_decision(&request)
+            }
+            ResidentOperationV1::InventoryUrlRedaction(request) => {
+                crate::inventory_url_redaction_op::evaluate_inventory_url_redaction(&request)
+            }
+            ResidentOperationV1::VerifiedReadPlan(request) => {
+                crate::verified_read_plan_op::evaluate_verified_read_plan(&request)
+            }
+            ResidentOperationV1::AibomReportSummaries(request) => {
+                crate::aibom_report_summaries_op::evaluate_aibom_report_summaries(&request)
+            }
+            // Diagnostic correlation only: the lineage never authorizes an action.
+            ResidentOperationV1::RetryLineageCapture(request) => {
+                crate::retry_lineage_capture_op::evaluate_retry_lineage_capture(&request)
             }
             #[cfg(not(unix))]
             ResidentOperationV1::ContainedNodeExecute(_)
@@ -683,7 +759,7 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
 fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
     match operation {
         ResidentOperationV1::CloudCatalog(request) => {
-            if request["action"] == "begin" {
+            if request["action"] == "begin" || request["action"] == "reuse" {
                 request["observation"]["guard_home"].as_str()
             } else {
                 request["guard_home"].as_str()
@@ -717,6 +793,8 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PackageAuthorityDecide(request) => Some(&request.guard_home),
         ResidentOperationV1::CursorObserverProof(request) => Some(&request.guard_home),
         ResidentOperationV1::HookAuthorityState(request) => Some(&request.guard_home),
+        ResidentOperationV1::ExtensionControlAuthority(request) => Some(&request.guard_home),
+        ResidentOperationV1::CommandPackRecord(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageEvaluationCompose(request) => Some(&request.guard_home),
         ResidentOperationV1::VerifiedNpm(request) => Some(&request.guard_home),
@@ -788,6 +866,8 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.store_path),
         ResidentOperationV1::ContributedMcpDecide(request) => Some(&request.store_path),
         ResidentOperationV1::HookAuthorityState(request) => Some(&request.store_path),
+        ResidentOperationV1::ExtensionControlAuthority(request) => Some(&request.store_path),
+        ResidentOperationV1::CommandPackRecord(request) => Some(&request.store_path),
         ResidentOperationV1::ProtectRequest(request) => request.store_path.as_deref(),
         ResidentOperationV1::CodexRequestResume(request) => Some(&request.store_path),
         ResidentOperationV1::PolicyIntegrityRows(request) => request

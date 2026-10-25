@@ -2,6 +2,10 @@
 
 ZCode, Claude Code and Codex 0.131+ apply a hook's ``updatedInput``, so a contained test run is
 rewritten into Guard's execution sink instead of stopping for review.
+
+Whether a receipt is rewritten, and under which profile, is the resident's
+answer (``native_containment_sink``): the harness, host and profile tables live
+there. This module writes the request snapshot and quotes the sink command.
 """
 
 from __future__ import annotations
@@ -18,31 +22,19 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from ..codex_hook_launch_runtime import isolated_guard_cli_command
+from ..native_hook_containment_route import ContainmentSink, native_containment_sink
 
-_PROFILES = {
-    "native_pytest_readonly_containment_required": "pytest-readonly-v2",
-    "native_node_test_readonly_containment_required": "node-test-readonly-v1",
-    "native_vitest_readonly_containment_required": "vitest-readonly-v1",
-    "native_package_test_readonly_containment_required": "package-test-readonly-v1",
-    "native_python_eval_readonly_containment_required": "python-eval-readonly-v1",
-    "native_node_eval_readonly_containment_required": "node-eval-readonly-v1",
-    "native_bun_eval_readonly_containment_required": "node-eval-readonly-v1",
-    "native_git_readonly_containment_required": "git-readonly-v1",
-    "native_node_tool_readonly_containment_required": "node-tool-readonly-v1",
-    "native_node_build_output_containment_required": "node-build-output-v1",
-    "native_workspace_containment_required": "workspace-contained-v1",
-}
-_ROUTED_HARNESSES = frozenset({"zcode", "claude-code"})
-# Codex is routed by its hook bridge, which first confirms the running Codex applies updatedInput.
-_SINK_HARNESSES = _ROUTED_HARNESSES | {"codex"}
-_WINDOWS_SINK_HARNESSES = frozenset({"claude-code", "codex"})
+_FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 
 
 def cleanup_stale_zcode_requests() -> None:
     """Reclaim abandoned private snapshots after a full day, never follow links."""
-    if os.name != "posix":
-        return
     cutoff = time.time() - 86_400
+    if os.name != "posix":
+        root = _request_root()
+        if root is not None:
+            cleanup_stale_windows_requests(Path(root), cutoff)
+        return
     try:
         with os.scandir(tempfile.gettempdir()) as entries:
             for index, entry in enumerate(entries):
@@ -79,6 +71,37 @@ def cleanup_stale_zcode_requests() -> None:
         pass
 
 
+def cleanup_stale_windows_requests(root: Path, cutoff: float) -> None:
+    """Remove only a plain directory holding a plain request file, never a
+    reparse point at either level."""
+    try:
+        with os.scandir(root) as entries:
+            for index, entry in enumerate(entries):
+                if index >= 4096:
+                    break
+                if not entry.name.startswith("hol-guard-contained-test-"):
+                    continue
+                try:
+                    directory = os.lstat(entry.path)
+                    request_path = os.path.join(entry.path, "request.json")
+                    request = os.lstat(request_path)
+                    if (
+                        not stat.S_ISDIR(directory.st_mode)
+                        or not stat.S_ISREG(request.st_mode)
+                        or getattr(directory, "st_file_attributes", 0) & _FILE_ATTRIBUTE_REPARSE_POINT
+                        or getattr(request, "st_file_attributes", 0) & _FILE_ATTRIBUTE_REPARSE_POINT
+                        or directory.st_mtime > cutoff
+                        or request.st_mtime > cutoff
+                    ):
+                        continue
+                    os.unlink(request_path)
+                    os.rmdir(entry.path)
+                except OSError:
+                    continue
+    except OSError:
+        pass
+
+
 def route_zcode_containment(
     response: dict[str, object],
     *,
@@ -87,11 +110,23 @@ def route_zcode_containment(
     guard_home: Path,
     home_dir: Path,
     workspace: Path | None,
+    sink: ContainmentSink | None = None,
+    deadline: float | None = None,
 ) -> dict[str, object]:
-    """Rewrite at the authority edge so frozen/stdlib hook clients also work."""
-    # The execution sink needs the denial/profile receipt, not another rewrite.
-    # An untrusted caller setting this flag only keeps its original call denied.
-    if harness not in _ROUTED_HARNESSES or workspace is None or payload.get("guard_containment_receipt_only") is True:
+    """Rewrite at the authority edge so frozen/stdlib hook clients also work.
+
+    The resident answers whether the sink takes the call (``sink``, when the
+    caller already asked); without a workspace there is no snapshot to write,
+    so the receipt stands. No resident answer raises
+    ``NativeHookDecisionError`` for the caller's outage response.
+    """
+    if workspace is None:
+        return response
+    if sink is None:
+        sink = native_containment_sink(
+            response, harness=harness, bridge=False, payload=payload, guard_home=guard_home, deadline=deadline
+        )
+    if sink.profile is None:
         return response
     config = {
         "harness": harness,
@@ -104,6 +139,7 @@ def route_zcode_containment(
         input_text=json.dumps({**payload, "cwd": str(workspace)}),
         config=config,
         cli_args=["--home", str(home_dir)],
+        sink=sink,
     )
     return routed if routed is not None else response
 
@@ -146,69 +182,40 @@ def _request_root() -> str | None:
     return str(trusted_windows_local_temp())
 
 
-_WINDOWS_PROFILES = frozenset(
-    {
-        "python-eval-readonly-v1",
-        "node-eval-readonly-v1",
-        "node-build-output-v1",
-        "node-tool-readonly-v1",
-        "pytest-readonly-v2",
-    }
-)
-
-
-def platform_contains(response: Mapping[str, object]) -> bool:
-    """macOS runs every contained profile; Linux runs the workspace sandbox;
-    Windows runs installed Python and Node scripts, a project's own pytest,
-    Vite builds and local lint, typecheck and format checks in an
-    AppContainer."""
-    profile = response.get("required_execution_profile")
-    return (
-        sys.platform == "darwin"
-        or (sys.platform == "linux" and profile == "workspace-contained-v1")
-        or (sys.platform == "win32" and profile in _WINDOWS_PROFILES)
-    )
-
-
 def contained_zcode_response(
     response: Mapping[str, object],
     *,
     input_text: str,
     config: Mapping[str, object],
     cli_args: Sequence[str],
+    sink: ContainmentSink | None = None,
 ) -> dict[str, object] | None:
-    """Allow only the rewritten sink; native authority is rechecked at execution."""
-    reason = response.get("reason_code")
-    if (
-        not platform_contains(response)
-        or config.get("harness") not in _SINK_HARNESSES
-        # The sink command is POSIX-quoted for Git Bash and the Pi shell; on
-        # Windows Codex gets a PowerShell command. Any other harness there
-        # keeps its single review.
-        or (sys.platform == "win32" and config.get("harness") not in _WINDOWS_SINK_HARNESSES)
-        or response.get("decision") != "deny"
-        or response.get("policy_action") != "sandbox-required"
-        or response.get("observe_mode") is True
-        or not isinstance(reason, str)
-        or reason not in _PROFILES
-        or response.get("required_execution_profile") != _PROFILES[reason]
-    ):
+    """Allow only the rewritten sink; native authority is rechecked at execution.
+
+    ``sink`` is the resident's answer when the caller already asked it; the
+    Codex bridge, which has confirmed the running Codex applies
+    ``updatedInput``, lets this ask with Codex routed.
+    """
+    try:
+        payload = json.loads(input_text)
+    except ValueError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if sink is None:
+        harness = config.get("harness")
+        sink = native_containment_sink(
+            response,
+            harness=harness if isinstance(harness, str) else "",
+            bridge=True,
+            payload=payload,
+            guard_home=Path(str(config["guard_home"])) if config.get("guard_home") else None,
+        )
+    if sink.profile is None:
         return None
     directory: Path | None = None
     try:
-        payload = json.loads(input_text)
-        if not isinstance(payload, dict):
-            return None
-        event = payload.get("hook_event_name", payload.get("hookEventName"))
-        tool = payload.get("tool_name", payload.get("toolName"))
         original = payload.get("tool_input", payload.get("toolInput"))
-        if event not in {"PreToolUse", "pre_tool_use"} or tool not in {
-            "Bash",
-            "bash",
-            "run_terminal_command",
-            "run_command",
-        }:
-            return None
         if not isinstance(original, dict) or not isinstance(original.get("command"), str):
             return None
         workspace_value = payload.get("cwd", payload.get("workspace"))
@@ -261,9 +268,9 @@ def contained_zcode_response(
             args.extend(["--home", cli_args[cli_args.index("--home") + 1]])
         command = (*_sink_command_prefix(config), *args)
         if sys.platform == "win32" and config.get("harness") == "codex":
-            from ..windows_powershell_quote import powershell_join
+            from ..windows_powershell_quote import sink_command_line
 
-            shell_command = powershell_join(command)
+            shell_command = sink_command_line(command)
         else:
             shell_command = shlex.join(command)
         if shell_command is None:

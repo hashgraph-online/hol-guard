@@ -4,19 +4,10 @@ from __future__ import annotations
 
 import ast
 import os
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from ..shell_execution_context import ShellExecutionContext
-from .constants_core import (
-    _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES,
-    _SHELL_COMMAND_STRING_INTERPRETERS,
-    _UNMODELED_INLINE_INTERPRETER_COMMANDS,
-)
-from .constants_patterns import _READ_ONLY_INTERPRETER_MUTATION_PATTERNS
-from .request_artifacts import _normalized_shell_command_name
-from .shell_tokenization import _iter_shell_command_segments, _shell_segment_primary_command
 
 
 def _leading_literal_cd_workspace_root(
@@ -75,15 +66,6 @@ def _without_safe_inspection_redirections(args: list[str]) -> list[str] | None:
     return filtered
 
 
-def _shell_syntax_check_segment_is_safe(command_name: str, args: list[str]) -> bool:
-    if command_name not in _SHELL_COMMAND_STRING_INTERPRETERS or len(args) != 2 or args[0] != "-n":
-        return False
-    target = Path(args[1].strip("'\""))
-    return target.suffix == ".sh" and all(
-        part not in {"", ".", ".."} and not part.startswith(".") for part in target.parts if part != target.anchor
-    )
-
-
 def _shell_token_escapes_root(token: str, *, cwd: Path, root: Path) -> bool:
     stripped = token.strip().strip("'\"")
     if not stripped:
@@ -104,139 +86,6 @@ def _shell_token_escapes_root(token: str, *, cwd: Path, root: Path) -> bool:
     return not _path_text_is_within_root(os.fspath(candidate), root)
 
 
-def _github_jq_filter_args_are_safe(args: list[str]) -> bool:
-    normalized_args = _collapse_single_quoted_shell_argument(args)
-    if normalized_args is None:
-        return False
-    boolean_options = {
-        "--ascii-output",
-        "--compact-output",
-        "--exit-status",
-        "--join-output",
-        "--monochrome-output",
-        "--raw-input",
-        "--raw-output",
-        "--slurp",
-        "--sort-keys",
-        "-C",
-        "-M",
-        "-R",
-        "-S",
-        "-a",
-        "-c",
-        "-e",
-        "-j",
-        "-r",
-        "-s",
-    }
-    index = 0
-    while index < len(normalized_args):
-        token = normalized_args[index]
-        if token in {"2>&1", "1>&2"}:
-            index += 1
-            continue
-        if token in boolean_options:
-            index += 1
-            continue
-        if token.startswith("-"):
-            return False
-        return index == len(normalized_args) - 1 and _github_jq_program_is_safe(token)
-    return False
-
-
-_JQ_EXTERNAL_INPUT = re.compile(r"\$ENV\b|(?<![A-Za-z0-9_$\.])(env|import|include)(?![A-Za-z0-9_])")
-
-
-def _github_jq_program_is_safe(program: str) -> bool:
-    """Reject jq programs that can read process or module data outside stdin."""
-
-    normalized = program[1:-1] if len(program) >= 2 and program.startswith("'") and program.endswith("'") else program
-    sanitized = _strip_jq_strings_and_comments(normalized)
-    for match in _JQ_EXTERNAL_INPUT.finditer(sanitized):
-        if match.group(0).startswith("$"):
-            return False
-        previous = _previous_nonspace(sanitized, match.start())
-        following = _next_nonspace(sanitized, match.end())
-        if previous == "." or following == ":" or (previous in {"{", ","} and following in {",", "}"}):
-            if match.group(1) == "env" and following in {",", "}"}:
-                return False
-            continue
-        return False
-    return True
-
-
-def _previous_nonspace(value: str, end: int) -> str:
-    return next((value[index] for index in range(end - 1, -1, -1) if not value[index].isspace()), "")
-
-
-def _next_nonspace(value: str, start: int) -> str:
-    return next((value[index] for index in range(start, len(value)) if not value[index].isspace()), "")
-
-
-def _strip_jq_strings_and_comments(program: str) -> str:
-    """Mask jq strings and comments while preserving token boundaries."""
-
-    output: list[str] = []
-    in_string = False
-    in_comment = False
-    escaped = False
-    for character in program:
-        if in_comment:
-            in_comment = character != "\n"
-            output.append("\n" if character == "\n" else " ")
-            continue
-        if in_string:
-            output.append(" ")
-            if escaped:
-                escaped = False
-            elif character == "\\":
-                escaped = True
-            elif character == '"':
-                in_string = False
-            continue
-        if character == '"':
-            in_string = True
-            output.append(" ")
-        elif character == "#":
-            in_comment = True
-            output.append(" ")
-        else:
-            output.append(character)
-    return "".join(output)
-
-
-def _collapse_single_quoted_shell_argument(args: list[str]) -> list[str] | None:
-    """Rejoin one shell-tokenized single-quoted argument without widening operands."""
-
-    normalized: list[str] = []
-    index = 0
-    while index < len(args):
-        token = args[index]
-        if not token.startswith("'"):
-            normalized.append(token)
-            index += 1
-            continue
-        if len(token) > 1 and token.endswith("'"):
-            if "'" in token[1:-1]:
-                return None
-            normalized.append(token)
-            index += 1
-            continue
-        parts = [token]
-        index += 1
-        while index < len(args) and not args[index].endswith("'"):
-            if "'" in args[index]:
-                return None
-            parts.append(args[index])
-            index += 1
-        if index >= len(args) or "'" in args[index][:-1]:
-            return None
-        parts.append(args[index])
-        normalized.append(" ".join(parts))
-        index += 1
-    return normalized
-
-
 def _path_text_is_within_root(path_text: str, root: Path) -> bool:
     return _path_text_is_within_root_text(path_text, os.path.realpath(os.fspath(root)))
 
@@ -250,64 +99,10 @@ def _path_text_is_within_root_text(path_text: str, root_text: str) -> bool:
         return False
 
 
-def _script_interpreter_texts(parts: list[str]) -> tuple[str, ...]:
-    scripts: list[str] = []
-    for segment in _iter_shell_command_segments(parts):
-        command_name, command_index = _shell_segment_primary_command(segment)
-        if command_name is None or command_index is None:
-            continue
-        if command_name not in _SHELL_COMMAND_STRING_INTERPRETERS and not _is_script_interpreter_command(command_name):
-            continue
-        index = command_index + 1
-        while index < len(segment):
-            token = segment[index]
-            if token == "--":
-                break
-            flag_payload = _interpreter_flag_payload(segment, index)
-            if flag_payload is not None:
-                scripts.append(flag_payload.script_text)
-                break
-            if _is_python_interpreter_command(command_name) and token in _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES:
-                if index + 1 >= len(segment):
-                    break
-                index += 2
-                continue
-            if token.startswith("--"):
-                _option_name, separator, _attached = token.partition("=")
-                if separator:
-                    index += 1
-                    continue
-                break
-            if token.startswith("-"):
-                index += 1
-                continue
-            break
-    return tuple(scripts)
-
-
 def _shell_token_has_command_substitution(token: str) -> bool:
     if "$(" in token or "`" in token:
         return True
     return any(character in token for character in ("$", "<", ">", "|", "&", ";", "\n"))
-
-
-def _is_script_interpreter_command(command_name: str) -> bool:
-    return _is_python_interpreter_command(command_name) or command_name in _UNMODELED_INLINE_INTERPRETER_COMMANDS
-
-
-def _is_python_interpreter_command(command_name: str) -> bool:
-    normalized_name = _normalized_shell_command_name(command_name)
-    return re.fullmatch(r"pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?", normalized_name) is not None
-
-
-def _script_is_benign_wait(script_text: str) -> bool:
-    normalized_script = script_text.strip()
-    if not normalized_script:
-        return False
-    return bool(
-        re.fullmatch(r"sleep\s+\d+(?:\.\d+)?", normalized_script)
-        or re.fullmatch(r"(?:import\s+time\s*;\s*)?time\.sleep\(\s*\d+(?:\.\d+)?\s*\)", normalized_script)
-    )
 
 
 def _script_has_aliased_risky_import(script_text: str) -> bool:
@@ -333,17 +128,6 @@ def _script_has_aliased_risky_import(script_text: str) -> bool:
         if any(alias.asname is not None for alias in node.names):
             return True
     return False
-
-
-def _script_is_read_only_observer(script_text: str) -> bool:
-    normalized_script = script_text.strip()
-    if not normalized_script:
-        return False
-    if _script_is_benign_wait(normalized_script):
-        return True
-    if _script_has_aliased_risky_import(normalized_script):
-        return False
-    return not any(pattern.search(normalized_script) for pattern in _READ_ONLY_INTERPRETER_MUTATION_PATTERNS)
 
 
 @dataclass(frozen=True, slots=True)
@@ -389,18 +173,11 @@ def _interpreter_flag_payload(parts: list[str], index: int) -> _InterpreterFlagP
 
 __all__ = [
     "_InterpreterFlagPayload",
-    "_github_jq_filter_args_are_safe",
     "_interpreter_flag_payload",
-    "_is_python_interpreter_command",
-    "_is_script_interpreter_command",
     "_leading_literal_cd_workspace_root",
     "_path_text_is_within_root",
     "_path_text_is_within_root_text",
     "_script_has_aliased_risky_import",
-    "_script_interpreter_texts",
-    "_script_is_benign_wait",
-    "_script_is_read_only_observer",
-    "_shell_syntax_check_segment_is_safe",
     "_shell_token_escapes_root",
     "_shell_token_has_command_substitution",
     "_without_safe_inspection_redirections",

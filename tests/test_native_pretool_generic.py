@@ -8,6 +8,7 @@ import json
 import logging
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,6 +16,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook, commands_hook_native_authority
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool, render_pre_tool_review
+from codex_plugin_scanner.guard.daemon.hook_native_exact_action import native_exact_action
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge
 from codex_plugin_scanner.guard.store import GuardStore
@@ -161,10 +163,14 @@ def test_native_review_queues_approval_without_escaping_to_cli(
         started_at="2026-09-05T00:00:00+00:00",
         last_heartbeat_at="2026-09-05T00:00:00+00:00",
     )
+
     # The approval wait is offered only for a review the agent's retry can match.
+    def evidence(**kwargs: Any) -> tuple[str | None, str | None, str | None]:
+        return (f"native-review-v4:{'ab' * 32}:ask:review:review:r", *native_exact_action(**kwargs))
+
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.native_review_binding",
-        lambda *_args, **_kwargs: f"native-review-v4:{'ab' * 32}:ask:review:review:r",
+        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.native_review_evidence",
+        evidence,
     )
     worker = HookWorker(store=store)
     response = worker.review_http_payload(

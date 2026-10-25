@@ -1,5 +1,6 @@
 //! The contained route hands the sink the command the denial was answered
-//! for. A virtualenv activation exports settings and runs nothing else, so
+//! for. A trailing group is decided as the list inside it, and a virtualenv
+//! activation exports settings and runs nothing else, so
 //! the pre-tool pass projects `source .venv/bin/activate && pytest -q` to
 //! `.venv/bin/pytest -q` and answers for that; the sink models no shell
 //! builtin, so the snapshot has to carry the projected text or the sink
@@ -157,6 +158,33 @@ fn an_activation_reaches_the_sink_as_the_program_it_hands_the_verdict_to() {
             .contains("guard execute-contained-test --harness omp"),
         "{updated}"
     );
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn a_trailing_group_reaches_the_sink_as_the_list_inside_it() {
+    let root = scratch("group");
+    environment(&root.join("project"), &["pytest"]);
+    // The pre-tool pass decides `(.venv/bin/pytest -q)` as the list inside
+    // its parentheses. A snapshot that kept the parenthesis handed the sink a
+    // program named `(.venv/bin/pytest`, which it refused to resolve.
+    for (command, projected) in [
+        ("(.venv/bin/pytest -q)", ".venv/bin/pytest -q"),
+        ("{ .venv/bin/pytest -q; }", ".venv/bin/pytest -q"),
+        (
+            "(source .venv/bin/activate && pytest -q)",
+            ".venv/bin/pytest -q",
+        ),
+    ] {
+        let (snapshot, _) = routed(&root, command);
+        assert_eq!(
+            snapshot["payload"]["tool_input"]["command"], projected,
+            "{command}"
+        );
+        for entry in fs::read_dir(root.join("tmp")).unwrap().flatten() {
+            fs::remove_dir_all(entry.path()).unwrap();
+        }
+    }
     fs::remove_dir_all(root).unwrap();
 }
 

@@ -2,6 +2,9 @@
 //! A `&&` chain that commits work, pushes it and opens a pull request runs
 //! without review only when every step keeps the proof it has on its own.
 //! This binary registers a push verdict, so it runs in its own process.
+#[path = "../../../test_support/unique_nanos.rs"]
+mod unique_nanos;
+
 #[path = "support/git_helper_fixture.rs"]
 #[allow(dead_code)]
 mod git_helper_fixture;
@@ -15,6 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 const PUBLISH: &str = "native_exact_safe_git_publish_chain";
+const WRITE: &str = "native_exact_safe_git_local_write";
 
 /// Every repository and branch the verdict was asked about, and whether the
 /// chain creates the branch.
@@ -87,10 +91,7 @@ fn repository(label: &str) -> Repository {
     let home = std::fs::canonicalize(base).unwrap().join(format!(
         "guard-git-publish-{label}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let cleanup = FixtureCleanup(home.clone());
     let primary = home.join("org/app");
@@ -360,6 +361,7 @@ fn in_session(
             shell_home_matches: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),
+            creates_nothing: false,
         },
         Some(&context),
     )
@@ -416,4 +418,52 @@ fn a_session_certificate_anchor_keeps_the_publish_chain_proof() {
         let result = in_session(&repository, publish, &["GIT_SSL_CAINFO", name]);
         assert_ne!(result.minimum_action, "allow", "{name}");
     }
+}
+
+impl Repository {
+    /// As [`Repository::decision`], for a host whose harness has no workspace
+    /// sandbox: `workspace_contained::host_eligible` leaves `cursor` out, so
+    /// the containment route never runs and the proof here is the only one
+    /// that can settle a local Git write.
+    fn unsandboxed(&self, command: &str) -> (String, String) {
+        let result = evaluate_with_node(
+            "cursor",
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+            Some(&controls("default")),
+            &self.home,
+            self.primary.to_str(),
+        );
+        (result.minimum_action, result.reason_code)
+    }
+}
+
+/// An index-only `git reset` or `git restore --staged` is a proven local
+/// write on a host without a workspace sandbox, where `workspace_git_keeps_work`
+/// never sees the command. Every form that writes the working tree keeps its
+/// review there, and so does a reset before a push: the reset moves the branch
+/// after the verdict judged what the push would send.
+#[test]
+fn an_index_only_reset_or_restore_settles_without_a_sandbox() {
+    install_git_push_verdict(verdict);
+    let repository = repository("unsandboxed");
+    for command in [
+        "git reset --soft HEAD~1",
+        "git restore --staged tracked.txt",
+    ] {
+        assert_eq!(
+            repository.unsandboxed(command),
+            ("allow".to_owned(), WRITE.to_owned()),
+            "{command}"
+        );
+    }
+    for command in [
+        "git reset --hard",
+        "git restore tracked.txt",
+        "git restore --staged --worktree tracked.txt",
+        "git reset --soft HEAD~1 && git push origin main",
+    ] {
+        assert_ne!(repository.unsandboxed(command).0, "allow", "{command}");
+    }
+    repository.asked();
 }

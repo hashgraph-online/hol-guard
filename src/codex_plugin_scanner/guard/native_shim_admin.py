@@ -57,8 +57,11 @@ _PROBE_TIMEOUT_SECONDS = int(SQLITE_CONNECT_TIMEOUT_SECONDS) + 5
 # The environment keys the non-probe subops read; a probe forwards everything
 # because the shim it executes inherits the caller's environment. The Windows
 # path model also reads the profile and cwd-search keys from this map, so a
-# status or repair subop must see them too.
+# status or repair subop must see them too. ``HOL_GUARD_SHIM_TOOL_DIRS`` is the
+# daemon's request to search the well-known manager directories as well as its
+# own PATH; the resident reads it from this map, so the request schema is unchanged.
 _ENVIRONMENT_KEYS = (
+    "HOL_GUARD_SHIM_TOOL_DIRS",
     "HOME",
     "PATH",
     "PATHEXT",

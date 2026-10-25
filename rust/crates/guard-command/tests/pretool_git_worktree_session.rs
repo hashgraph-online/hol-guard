@@ -70,6 +70,7 @@ fn evaluate_in(
             shell_home_matches: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),
+            creates_nothing: false,
         },
         Some(&context),
     )
@@ -154,10 +155,7 @@ fn worktree_proof_follows_the_session_git_configuration() {
     let root = std::fs::canonicalize(root_directory).unwrap().join(format!(
         "guard-git-worktree-session-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let repository = root.join("repository");
     let _cleanup = FixtureCleanup(root.clone());
@@ -321,10 +319,7 @@ fn fixture_repository(label: &str) -> (std::path::PathBuf, FixtureCleanup) {
     let root = std::fs::canonicalize(root_directory).unwrap().join(format!(
         "guard-git-worktree-{label}-{}-{}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     let cleanup = FixtureCleanup(root.clone());
     let repository = root.join("repository");

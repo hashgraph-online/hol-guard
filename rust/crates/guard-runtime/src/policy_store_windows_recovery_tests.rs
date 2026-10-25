@@ -5,10 +5,7 @@ fn test_root(label: &str) -> std::path::PathBuf {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-policy-recovery-{label}-{}-{}",
         std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos()
+        crate::unique_nanos::unique_nanos()
     ));
     crate::resident_state::ensure_private_directory(&root, true).unwrap();
     root

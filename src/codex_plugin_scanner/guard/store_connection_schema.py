@@ -73,6 +73,10 @@ from .store_workflow_capabilities_schema import (
     WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION,
     ensure_workflow_capability_schema,
 )
+from .store_workspace_assessment_schema import (
+    WORKSPACE_ASSESSMENT_MIGRATION_VERSION,
+    ensure_workspace_assessment_schema,
+)
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -195,6 +199,7 @@ _REQUIRED_SCHEMA_MIGRATION_VERSIONS = (  # Keep retired-index databases on the p
     BASH_OPERATION_MIGRATION_VERSION,
     BASH_REVIEW_MIGRATION_VERSION,
     BASH_INVOCATION_MIGRATION_VERSION,
+    WORKSPACE_ASSESSMENT_MIGRATION_VERSION,
 )
 
 
@@ -1093,6 +1098,7 @@ class StoreConnectionSchemaMixin:
             ensure_extension_control_authority_schema(connection, require_compatible=False)
             ensure_local_cli_schema(connection)
             ensure_bash_operation_schema(connection, applied_at=_now())
+            ensure_workspace_assessment_schema(connection, applied_at=_now())
             ensure_workflow_capability_schema(connection, applied_at=_now())
             ensure_command_shadow_schema(connection, applied_at=_now())
             ensure_mcp_policy_request_schema(connection)

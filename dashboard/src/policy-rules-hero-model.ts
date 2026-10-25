@@ -10,7 +10,6 @@ export interface RulesHeroModel {
   headline: string;
   subheadline: string;
   facts: string[];
-  liveLabel: string;
 }
 
 const RISKY_FAMILIES = new Set(["tool-action", "package-request", "mcp", "prompt-env-read"]);
@@ -25,6 +24,16 @@ export function policyRiskScore(policy: GuardPolicyDecision): number {
   if (family && RISKY_FAMILIES.has(family)) score += 2;
   if (!isCloudManagedPolicy(policy.source)) score += 1;
   return score;
+}
+
+/**
+ * The widest broad allow, for the one line the attention strip shows: a
+ * global rule outranks a harness-scoped one whatever their risk scores are,
+ * and the score only separates rules of the same reach.
+ */
+export function widestBroadAllow(policies: GuardPolicyDecision[]): GuardPolicyDecision | undefined {
+  const breadth = (policy: GuardPolicyDecision) => (policy.scope === "global" ? 2 : policy.scope === "harness" ? 1 : 0);
+  return [...policies].sort((a, b) => breadth(b) - breadth(a) || policyRiskScore(b) - policyRiskScore(a))[0];
 }
 
 export function isBroadAllow(policy: GuardPolicyDecision): boolean {
@@ -56,24 +65,6 @@ export function buildRuleAttention(
   };
 }
 
-/**
- * Spotlight picks: broad allows always lead (the hero calls them out by
- * name, so they must appear here), then highest risk score, then newest.
- */
-export function buildRulesSpotlight(
-  policies: readonly GuardPolicyDecision[],
-): GuardPolicyDecision[] {
-  const remembered = policies.filter((p) => p.action === "allow" || p.action === "block");
-  const sorted = [...remembered].sort((a, b) => {
-    const broadDelta = Number(isBroadAllow(b)) - Number(isBroadAllow(a));
-    if (broadDelta !== 0) return broadDelta;
-    const byRisk = policyRiskScore(b) - policyRiskScore(a);
-    if (byRisk !== 0) return byRisk;
-    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-  });
-  return sorted.slice(0, 3);
-}
-
 export function buildRulesHeroModel(input: {
   counts: PolicyRuleCounts;
   attention: RuleAttention;
@@ -95,10 +86,8 @@ export function buildRulesHeroModel(input: {
       tone: "setup",
       badge: "Nothing remembered yet",
       headline: "Guard asks before it repeats anything",
-      subheadline:
-        "No decision is remembered on this device yet. The first time an app asks to do something new, Guard checks with you — approve it once and choose how broadly to remember it, and it lands here.",
+      subheadline: "approve in Inbox and it lands here.",
       facts,
-      liveLabel: "Asking every time",
     };
   }
   if (attention.broadAllows.length > 0) {
@@ -107,18 +96,14 @@ export function buildRulesHeroModel(input: {
       tone: "review",
       badge: "Worth a second look",
       headline: n === 1 ? "1 broad allow deserves a second look" : `${n} broad allows deserve a second look`,
-      subheadline:
-        "These rules let an action through everywhere it matches — every project, or every time an app runs it. If one is wider than you meant, narrow or remove it below and Guard will ask again.",
+      subheadline: "remove one and Guard asks again.",
       facts,
-      liveLabel: `${counts.total} rules in force`,
     };
   }
   const provenance =
-    counts.cloud === 0
-      ? "Every rule below is a choice you made once, stated in plain language with where it came from and how to undo it."
-      : counts.local === 0
-        ? "Every rule below synced from Guard Cloud, stated in plain language. They are read-only here — change them in Guard Cloud or their governing Extension."
-        : "Rules below mix choices you made on this device with rules synced from Guard Cloud. Each one says where it came from and how it can be changed.";
+    counts.local === 0 && counts.cloud > 0
+      ? "read-only here — change them in Guard Cloud or their governing Extension."
+      : "";
   return {
     tone: "clear",
     badge: "Memory is tidy",
@@ -126,9 +111,8 @@ export function buildRulesHeroModel(input: {
       counts.total === 1
         ? "1 decision Guard will repeat for you"
         : `${counts.total} decisions Guard will repeat for you`,
-    subheadline: `${provenance} Nothing here widens itself — Guard only repeats what was approved.`,
+    subheadline: provenance,
     facts,
-    liveLabel: `${counts.total} rules in force`,
   };
 }
 

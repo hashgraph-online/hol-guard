@@ -260,6 +260,9 @@ fn run_case(case: &Value) -> Result<(), String> {
         | NativeExactActionPayloadV1::LaunchEvidence { .. } => {
             Err("legacy identity vector unexpectedly returned a Bash subject".into())
         }
+        NativeExactActionPayloadV1::ReviewEvidence { .. } => {
+            Err("legacy identity vector unexpectedly returned review evidence".into())
+        }
         NativeExactActionPayloadV1::ReviewBinding { binding } => {
             let mut want = expected["binding"].as_str().map(str::to_owned);
             if want.is_none() && concrete["request"]["query"]["facts"]["action_type"] == "package" {

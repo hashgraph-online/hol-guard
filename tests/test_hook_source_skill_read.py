@@ -9,9 +9,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-from codex_plugin_scanner.guard.runtime.skill_paths import (
-    PI_INLINE_RESOURCE_SCHEMES,
-)
 from codex_plugin_scanner.guard.store import GuardStore
 
 SKILL_URI = "skill://test-skill"
@@ -132,24 +129,6 @@ def test_ordinary_file_target_mismatch_is_not_allowed(context: Context) -> None:
     )
 
     assert result["model_output_action"] != "allow_original"
-
-
-def test_supported_omp_scheme_matrix_is_complete() -> None:
-    assert {
-        "agent",
-        "artifact",
-        "history",
-        "issue",
-        "local",
-        "mcp",
-        "memory",
-        "omp",
-        "pr",
-        "rule",
-        "ssh",
-        "vault",
-        "xd",
-    } == PI_INLINE_RESOURCE_SCHEMES
 
 
 def test_omp_virtual_resource_with_secret_is_blocked(context: Context) -> None:

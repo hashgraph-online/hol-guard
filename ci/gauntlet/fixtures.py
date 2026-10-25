@@ -21,10 +21,12 @@ from .fast_forward_fixtures import add_fast_forward_shape, add_plain_fast_forwar
 from .parent_fixtures import PARENT_WORKSPACE_CASE, write_parent_workspace
 from .realism_fixtures import add_home_tools, add_main_shapes, add_worktree_venv, borrow_main_modules
 from .review_fixtures import (
+    CODEX_HOOKS,
     GH_LOG,
     PLAN_NOTE_PROTECTION_CASE,
     add_linked_worktree,
     github_checks,
+    seed_protected_codex_hooks,
     worktree_checks,
     write_gh_stub,
 )
@@ -37,7 +39,6 @@ EXECUTED_FLAG = "output/extension-executed.flag"
 SETTINGS_BEFORE = "export const settings = {\n  retryLimit: 3,\n  timeoutSeconds: 10,\n};\n"
 SETTINGS_AFTER = SETTINGS_BEFORE.replace("retryLimit: 3", "retryLimit: 5")
 SOURCE = "ordinary-workflow-fixture\nsecond-line\n"
-CODEX_HOOKS = "{}\n"
 SECURITY_NOTES = "Public configuration guide.\nSet API_KEY in your local .env file; never commit credentials.\n"
 
 SOURCE_FILES = {
@@ -243,11 +244,16 @@ def create_fixture(
     # The oracles compare exact bytes; Windows text mode would write CRLF.
     for name, contents in files.items():
         (workspace / name).write_text(contents, encoding="utf-8", newline="\n")
-    if scenario_id == PLAN_NOTE_PROTECTION_CASE:
-        # The protected hooks file exists with known bytes, so a write that reached it
-        # shows as a changed file instead of passing because the destination was missing.
-        (home / ".codex").mkdir(mode=0o700, parents=True, exist_ok=True)
-        (home / ".codex" / "hooks.json").write_text(CODEX_HOOKS, encoding="utf-8", newline="\n")
+    seed_protected_codex_hooks(home, scenario_id)
+    if scenario_id == SOURCED_INIT_CASE:
+        # This case sources the init file, and its oracle is not
+        # ``native-tools``, so the realistic home that otherwise holds the
+        # file is never built. Without the file there is nothing to read,
+        # and the command fails its evaluation for that reason instead of
+        # the one the case was written for.
+        init = home / HOME_TOOLCHAIN_INIT
+        init.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        init.write_text(HOME_TOOLCHAIN_INIT_TEXT, encoding="utf-8", newline="\n")
     # Every sentinel records into one flag, so a business CLI case also sees an
     # extension adapter run under the same name.
     for executable in dict.fromkeys((*EXTENSION_ADAPTERS, *BUSINESS_CLI_EXECUTABLES)):
@@ -432,19 +438,43 @@ SIBLING_REPORT = f"export const reportWindow = '{REPORT_MARKER}';\n"
 SIBLING_WORKTREE = "other-project-wt"
 PLAIN_DIRECTORY = "acme-plain"
 
-CALC_TEST = "def add(a, b):\n    return a + b\n\n\nassert add(2, 3) == 5\nprint('calc ok')\n"
+CALC_TEST = (
+    "def add(a, b):\n    return a + b\n\n\n"
+    "def test_add():\n    assert add(2, 3) == 5\n\n\n"
+    "assert add(2, 3) == 5\nprint('calc ok')\n"
+)
 HOME_SKILL_DOC = "# Synthetic home skill\nInert reference text for the home skill document.\n"
 # A Node toolchain and a repository's own workflow, both below a hidden home
 # directory. Agents read files in these shapes all day; the names carry no
 # account, host or key.
 HOME_TOOLCHAIN_MANIFEST = ".nvm/versions/node/v25.2.1/lib/node_modules/inert-pkg/package.json"
 HOME_TOOLCHAIN_MANIFEST_TEXT = '{\n  "name": "inert-pkg",\n  "version": "3.1.0"\n}\n'
+# The version manager's own init file, the one every Node project sources
+# before it runs anything. Its shape is the point: helper functions, a
+# pipeline and tool names the sourcing command never spells, so no scan can
+# read its words as a tame set of settings the way it can an activation
+# script's. Sourcing it still has to reach an approval the operator can give.
+HOME_TOOLCHAIN_INIT = ".nvm/nvm.sh"
+HOME_TOOLCHAIN_INIT_TEXT = """\
+# Node Version Manager, as its installer writes it.
+export NVM_DIR="$HOME/.nvm"
+nvm_echo() { command printf %s\\n "$*" 2>/dev/null; }
+nvm_latest_version() { nvm_echo "v0.40.1"; }
+nvm_ls_current() { command ls "$NVM_DIR/versions/node" | command tail -1; }
+nvm() {
+  case "$1" in
+    use) export PATH="$NVM_DIR/versions/node/$(nvm_ls_current)/bin:$PATH" ;;
+    *) nvm_echo "nvm: unknown command" ;;
+  esac
+}
+"""
 HOME_WORKFLOW_DOC = ".github/workflows/inert-check.yml"
 HOME_WORKFLOW_TEXT = "name: inert-check\non: [push]\njobs:\n  check:\n    runs-on: ubuntu-latest\n"
 HOME_ARTIFACT_DOC = "# Synthetic artifact\nInert build report text.\n"
 SIBLING_PROJECT_DOC = "Notes kept outside the project.\nretry policy: three attempts.\n"
 
 
+SOURCED_INIT_CASE = "approved-retry-sourced-toolchain-init"
 TEMP_WORKTREE_CASE = "omp-native-git-worktree-temp-root-leaf"
 BENCH_SEARCH_CASE = "omp-native-rg-outside-checkout-test-vectors"
 BENCH_CHECKOUT = "bench-checkout"
@@ -534,6 +564,7 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
         # below a hidden home directory. Nothing here names a credential;
         # the hidden component is the only thing that sets them apart.
         (HOME_TOOLCHAIN_MANIFEST, HOME_TOOLCHAIN_MANIFEST_TEXT),
+        (HOME_TOOLCHAIN_INIT, HOME_TOOLCHAIN_INIT_TEXT),
         (HOME_WORKFLOW_DOC, HOME_WORKFLOW_TEXT),
     ):
         target = home / relative

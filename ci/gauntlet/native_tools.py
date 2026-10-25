@@ -12,6 +12,7 @@ from typing import Any
 from .catalog import Scenario
 from .command_outputs import _text
 from .input_evidence import post_input_matches
+from .parent_fixtures import PARENT_DIRECTORY, PARENT_WORKSPACE_CASE
 from .proofs import _edit_path, _path
 from .review_fixtures import (
     GITHUB_LOOKUP_CASE,
@@ -423,7 +424,7 @@ def _background_read_error(calls: list[dict[str, Any]], *, require_steps: bool =
                 # start-result label. A free-standing word such as "job"
                 # is not the process ID and must never satisfy a selector.
                 start_id = re.compile(
-                    r"(?:background\s+job|job[_\s]+id|process[_\s]+id)"
+                    r"(?:background(?:ed)?(?:\s+as)?\s+job|job[_\s]+id|process[_\s]+id)"
                     r"\s*[:=#]?\s*([A-Za-z0-9_]+(?:[.-][A-Za-z0-9_]+)*)",
                     re.IGNORECASE,
                 )
@@ -457,12 +458,25 @@ def _reported_credential_answers(text: str) -> bool:
     return all(re.search(rf"\b{field}\b[^\S\n]*:[^\S\n]*(?!<)\S", lowered) for field in ("token", "password"))
 
 
-def _credential_reports(call: dict[str, Any]) -> list[str]:
-    """The replies from this task call's subtasks that were sent to read the README.
+def _read_name(path: object) -> str:
+    """The name an assignment uses for a file the host recorded a read of.
+
+    The stem, not the whole basename: an assignment says "read the README" as
+    often as it spells `README.md`, and the extension adds nothing to which
+    file the subtask was sent to.
+    """
+    return posixpath.splitext(posixpath.basename(str(path).replace("\\", "/")))[0].lower()
+
+
+def _credential_reports(call: dict[str, Any], read_names: set[str]) -> list[str]:
+    """The replies from this task call's subtasks that were sent to read the file.
 
     Pairing each `<task-result>` with the assignment of the same name keeps an
     unrelated subtask's output from standing in for the answer: only the subtask
-    that was told to read the file can report what the file holds.
+    that was told to read the file can report what the file holds. `read_names`
+    holds the file the host recorded a delegated read of, so the pairing follows
+    the lookup that actually happened rather than one word of the catalog's
+    prompt wording, which a new file name would silently leave unmatched.
     """
     text = _text(call)
     if text is None:
@@ -473,12 +487,12 @@ def _credential_reports(call: dict[str, Any]) -> list[str]:
     reports: list[str] = []
     for name, section in TASK_RESULT_SECTION.findall(text):
         assignment = assignments.get(name)
-        if isinstance(assignment, str) and "readme" in assignment.lower():
+        if isinstance(assignment, str) and any(read in assignment.lower() for read in read_names):
             reports.extend(TASK_OUTPUT_SECTION.findall(section))
     return reports
 
 
-def _credential_report_error(calls: list[dict[str, Any]], delegated: set[str]) -> str | None:
+def _credential_report_error(calls: list[dict[str, Any]], delegated: set[str], read_names: set[str]) -> str | None:
     """Return why the delegated report is not the credential answer this case proves.
 
     The case exists so an honest `Token: no` answer is not read back as an assigned
@@ -504,7 +518,7 @@ def _credential_report_error(calls: list[dict[str, Any]], delegated: set[str]) -
             else:
                 continue
         elif call["name"] == "task":
-            reports = _credential_reports(call)
+            reports = _credential_reports(call, read_names)
         else:
             continue
         if any(_reported_credential_answers(report) for report in reports):
@@ -552,6 +566,7 @@ def native_tools_scope_error(
     delegated_paths = {delegated_file, f"{{{{workspace}}}}/{delegated_file}"}
     declared_by_yield = _declared_keys_by_yield(calls, set(delegated))
     read_in_scope = False
+    read_names: set[str] = set()
     for call in calls:
         if call["id"] not in delegated:
             continue
@@ -574,7 +589,11 @@ def native_tools_scope_error(
                 return "delegated lookup read outside its requested file"
             # Only a read that finished without an error looked something up; one
             # that never finished (no result recorded) did not.
-            read_in_scope = read_in_scope or call.get("is_error") is False
+            if call.get("is_error") is False:
+                read_in_scope = True
+                # The file this subtask really opened. A reply is the answer to
+                # this lookup only when its assignment names that file.
+                read_names.add(_read_name(named or path))
         elif call["name"] == "yield":
             data = call["args"].get("data")
             if not isinstance(data, (dict, str)):
@@ -595,11 +614,22 @@ def native_tools_scope_error(
             return "delegated work used an unexpected tool"
     if any(call["name"] not in allowed for call in calls if call["id"] not in set(delegated) | bridged):
         return "the model used a tool outside the scenario"
-    # Evidence names the fixture root `{{fixture}}`; the catalog spells it `{{root}}` so
-    # the prompt a model reads does not frame ordinary work as a fixture.
-    listed = {command.replace("{{root}}", "{{fixture}}") for command in scenario.commands}
+    def spelled(command: object) -> object:
+        if not isinstance(command, str):
+            return command
+        # Evidence names the fixture root `{{fixture}}`; the catalog spells it `{{root}}` so
+        # the prompt a model reads does not frame ordinary work as a fixture.
+        command = command.replace("{{root}}", "{{fixture}}")
+        # The parent-search session starts in the directory holding the repository, so the
+        # redactor writes that prefix as the workspace while the catalog spells it below
+        # the home. Both sides resolve to one path; compare them under one spelling.
+        if scenario.id == PARENT_WORKSPACE_CASE:
+            command = command.replace("{{home}}/" + PARENT_DIRECTORY, "{{workspace}}")
+        return command
+
+    listed = {spelled(command) for command in scenario.commands}
     for call in calls:
-        if call["name"] == "bash" and call["args"].get("command") not in listed:
+        if call["name"] == "bash" and spelled(call["args"].get("command")) not in listed:
             return "the model ran a shell command the scenario did not list"
     if scenario.id == WORKTREE_CASE and (scope := _linked_worktree_error(calls, require_steps=False)):
         return scope
@@ -609,17 +639,19 @@ def native_tools_scope_error(
         scope := _task_schema_error(calls, set(delegated), require_result=not guard_denied)
     ):
         return scope
+    # The loop above already accepts every spelling that resolves to the
+    # requested file, the Windows backslash form included, so reuse its
+    # verdict instead of comparing the literal argument a second time. It runs
+    # before the credential report is read, because a lookup that never happened
+    # leaves that report nothing to pair with and is the more precise answer.
+    if scenario.id in {TASK_SCHEMA_CASE, CREDENTIAL_REPORT_CASE} and not guard_denied and not read_in_scope:
+        return "delegated lookup did not read README.md"
     if (
         scenario.id == CREDENTIAL_REPORT_CASE
         and not guard_denied
-        and (scope := _credential_report_error(calls, set(delegated)))
+        and (scope := _credential_report_error(calls, set(delegated), read_names))
     ):
         return scope
-    # The loop above already accepts every spelling that resolves to the
-    # requested file, the Windows backslash form included, so reuse its
-    # verdict instead of comparing the literal argument a second time.
-    if scenario.id in {TASK_SCHEMA_CASE, CREDENTIAL_REPORT_CASE} and not guard_denied and not read_in_scope:
-        return "delegated lookup did not read README.md"
     if scenario.id == SESSION_EDIT_CASE and (scope := _session_edit_error(calls, require_steps=False)):
         return scope
     if scenario.id == GITHUB_LOOKUP_CASE and (scope := _github_lookup_error(calls, require_call=False)):
@@ -632,7 +664,7 @@ def native_tools_scope_error(
         return scope
     if not set(scenario.required_tools) <= {call["name"] for call in calls}:
         return "the model did not use every tool the scenario names"
-    ran = {call["args"].get("command") for call in calls if call["name"] == "bash"}
+    ran = {spelled(call["args"].get("command")) for call in calls if call["name"] == "bash"}
     if listed - ran:
         return "the model skipped a listed shell command"
     if scenario.id == SESSION_SHELL_CASE and not guard_denied:

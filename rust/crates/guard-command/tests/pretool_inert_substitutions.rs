@@ -9,10 +9,7 @@ use serde_json::json;
 const EVALUATION_FAILED: &str = "native_command_extension_evaluation_failed";
 
 fn workspace(name: &str) -> (std::path::PathBuf, FixtureCleanup) {
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let nonce = crate::unique_nanos::unique_nanos();
     let root = std::env::temp_dir()
         .canonicalize()
         .unwrap()

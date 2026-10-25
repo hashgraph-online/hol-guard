@@ -163,6 +163,19 @@ Quality grades use the checks applicable to each package. Trust scoring has sepa
 
 <a id="ci-and-automation"></a>
 
+### Package a plugin for every runtime
+
+`hol-guard plugin` is the Plugin Kit. Point it at one plugin source, such as a Claude Code plugin, Codex plugin, Gemini CLI extension, MCP Registry `server.json` or a folder of skills, and it checks the source and writes a ready-to-load copy for each agent runtime that can use it. It runs locally, reads only the folder you name and makes no network calls.
+
+```bash
+hol-guard plugin check            # what marketplaces and runtime loaders would reject
+hol-guard plugin package          # writes dist/hol-plugin/<runtime>/ for each runtime
+hol-guard plugin links            # install commands per runtime, plus listing links
+hol-guard plugin init --name my-plugin   # scaffold a new plugin in an empty folder
+```
+
+Runtimes: `claude-code`, `codex`, `gemini-cli`, `cursor`, `vscode`, `opencode`, `mcp-registry` and `agent-skills`. See [the Plugin Kit guide](docs/guard/plugin-kit.md).
+
 ### GitHub Actions
 
 Add the scanner to a plugin repository:

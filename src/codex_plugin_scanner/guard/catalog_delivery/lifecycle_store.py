@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
+import contextlib
+import json
+import os
+import tempfile
+import time
+
 from ..native_command_control_authority_io import require_exclusive_command_control_mutation_lease
 from ..native_command_control_authority_store import _key
 from . import lifecycle
 
 PREFIX = "guard-command-pack-lifecycle"
 STAMP = "guard-command-pack-lifecycle-enrolled"
+# A native request carries a bounded payload. Control history grows without
+# bound, so hand the native walk a file once the chain outgrows the request.
+LEGACY_HISTORY_INLINE_BYTES = 1024 * 1024
+SPILL_PREFIX = "legacy-history-"
+SPILL_SUFFIX = ".jsonl"
+# A spill lives for one native call. Anything older than this outlived the
+# process that wrote it, so no live migration can still be reading it.
+SPILL_ORPHAN_SECONDS = 60 * 60
 
 
 def _stamp(store):
@@ -44,6 +58,11 @@ def write(store, record):
         raise ValueError("pack_lifecycle_protected_write_mismatch")
 
 
+def floor_enrolled(store):
+    """True when a floor and its enrollment stamp are both already present."""
+    return read(store) is not None and _stamp(store) is not None
+
+
 def enroll_installed(store, authority):
     """Installation enrollment only; never invoked by activation/recovery.
 
@@ -66,23 +85,73 @@ def migrate_installed(store, authority):
     them exactly. Missing/corrupt stamped floors are never reconstructed.
     """
     require_exclusive_command_control_mutation_lease(store.guard_home)
-    result = lifecycle.invoke(
-        "migrate",
-        key=_key(store).hex(),
-        floor=read(store),
-        stamp=_stamp(store),
-        **legacy_evidence(store),
-        **lifecycle.release_evidence(authority),
-    )
+    with legacy_transport(store) as evidence:
+        result = lifecycle.invoke(
+            "migrate",
+            key=_key(store).hex(),
+            floor=read(store),
+            stamp=_stamp(store),
+            **evidence,
+            **lifecycle.release_evidence(authority),
+        )
     if result["record"] is not None:
         _mark(store, result["stamp"])
         write(store, result["record"])
 
 
+@contextlib.contextmanager
+def legacy_transport(store, connection=None):
+    """Keep the legacy evidence request within the native payload bound.
+
+    An install accumulates one authority transition per policy save and the
+    native walk reads them in order, so a long-lived install eventually cannot
+    state its own history in a single request. Spill the chain to a private
+    file beside the request instead; the native side authenticates every
+    record exactly as it does inline, and the file never outlives the call.
+    """
+    evidence = legacy_evidence(store, connection)
+    history = evidence["legacy_history"]
+    if sum(len(item["record"]) for item in history if item) <= LEGACY_HISTORY_INLINE_BYTES:
+        yield evidence
+        return
+    from ..native_policy_snapshot_windows_support import _runtime_state_directory
+
+    # The runtime state directory is private state: provision it the way every
+    # other writer does, so a default umask cannot leave it world-readable and
+    # fail the authority reads this migration exists to restore.
+    directory = _runtime_state_directory(store.guard_home)
+    _discard_orphaned_spills(directory)
+    handle, spilled = tempfile.mkstemp(prefix=SPILL_PREFIX, suffix=SPILL_SUFFIX, dir=directory)
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as stream:
+            for item in history:
+                stream.write(json.dumps(item, separators=(",", ":")) + "\n")
+        yield {**evidence, "legacy_history": [], "legacy_history_path": spilled}
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(spilled)
+
+
+def _discard_orphaned_spills(directory):
+    """Drop chains a terminated process left behind.
+
+    The ordinary exit removes its own file, but a crash during migration
+    strands a full history, and interrupted retries accumulate copies of it.
+    Only files older than a call could possibly be are removed, so a migration
+    running in another process keeps the chain it is still streaming.
+    """
+    stale = time.time() - SPILL_ORPHAN_SECONDS
+    with contextlib.suppress(OSError):
+        for entry in os.scandir(directory):
+            if not entry.name.startswith(SPILL_PREFIX) or not entry.name.endswith(SPILL_SUFFIX):
+                continue
+            with contextlib.suppress(OSError):
+                if entry.is_file(follow_symlinks=False) and entry.stat(follow_symlinks=False).st_mtime < stale:
+                    os.unlink(entry.path)
+
+
 def legacy_evidence(store, connection=None):
     """Transport retained credential/SQL envelopes; native code binds them."""
-    import json
-
     from . import activation_baseline, activation_store
 
     if connection is None:
