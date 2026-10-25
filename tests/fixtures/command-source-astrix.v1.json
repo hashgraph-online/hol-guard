@@ -849,8 +849,10 @@
     },
     {
       "id": "unsupported-command-out-of-scope",
-      "command": "astrix mcp serve",
-      "enabled_extensions": [],
+      "command": "axc init",
+      "enabled_extensions": [
+        "command.astrix"
+      ],
       "disabled_permissions": [],
       "expected_action": "review",
       "expected_effective_segments": [],
