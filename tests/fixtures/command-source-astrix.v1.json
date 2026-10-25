@@ -51,7 +51,7 @@
             "kind": "none"
           },
           "publisher": {
-            "id": "community.vivek5200.astrix",
+            "id": "community.vivek5200",
             "display_name": "Vivek",
             "url": "https://github.com/vivek5200"
           },
@@ -849,7 +849,7 @@
     },
     {
       "id": "unsupported-command-out-of-scope",
-      "command": "axc init",
+      "command": "astrix unknown-subcommand",
       "enabled_extensions": [
         "command.astrix"
       ],
