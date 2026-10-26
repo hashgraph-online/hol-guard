@@ -14,7 +14,15 @@ import {
   type WorkspaceWorktree,
 } from "./workspace-findings-api";
 import { createLatestRefresh } from "./workspace-findings-refresh";
-import { Cell, HookFindingsTable, McpFindingsTable, RuntimeFindingsTable, SecretFindingsTable, SkillFindingsTable } from "./workspace-findings-tables";
+import {
+  Cell,
+  HookFindingsTable,
+  McpFindingsTable,
+  PluginFindingsTable,
+  RuntimeFindingsTable,
+  SecretFindingsTable,
+  SkillFindingsTable,
+} from "./workspace-findings-tables";
 import { FixCell, FixHistory, FixLoadError, FixReview, useWorktreeFixes, type WorktreeFixes } from "./workspace-fix-panel";
 
 const REFRESH_MS = 15_000;
@@ -41,6 +49,7 @@ const COVERAGE_REASONS: Record<string, string> = {
   skills_incomplete: "Some agent skills could not be read in full, so their instructions may not all be checked.",
   mcp_config_incomplete: "Some MCP server settings could not be read, so not every configured server was checked.",
   hook_config_incomplete: "Some agent hook settings could not be fully checked, so not every project hook was screened.",
+  plugin_manifest_incomplete: "Some agent plugin files could not be fully read, so not every plugin hook or MCP server was checked.",
 };
 
 const FAILURE_REASONS: Record<string, string> = {
@@ -60,6 +69,7 @@ const DETECTOR_LABELS: Record<string, string> = {
   skill_content_v1: "Skill checking",
   mcp_config_v1: "MCP server checking",
   hook_config_v1: "Project hook checking",
+  plugin_manifest_v1: "Agent plugin checking",
 };
 
 export type WorktreeStatus = { label: string; tone: TagTone; detail: string | null };
@@ -332,6 +342,7 @@ function FindingsSections(props: FindingsSectionsProps) {
   const skills = props.findings.filter((finding) => finding.kind === "skill");
   const servers = props.findings.filter((finding) => finding.kind === "mcp");
   const hooks = props.findings.filter((finding) => finding.kind === "hook");
+  const plugins = props.findings.filter((finding) => finding.kind === "plugin");
   if (props.findings.length === 0) {
     return <p className="text-sm text-slate-600">{emptyFindingsCopy(props.dependencyFilesFound, props.secretsChecked)}</p>;
   }
@@ -343,6 +354,7 @@ function FindingsSections(props: FindingsSectionsProps) {
       {skills.length > 0 && <SkillFindingsTable findings={skills} />}
       {servers.length > 0 && <McpFindingsTable findings={servers} />}
       {hooks.length > 0 && <HookFindingsTable findings={hooks} />}
+      {plugins.length > 0 && <PluginFindingsTable findings={plugins} />}
     </div>
   );
 }

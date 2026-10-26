@@ -62,9 +62,7 @@ from codex_plugin_scanner.guard.policy_bundle_parser import (
     policy_bundle_rejection_message,
     validated_policy_bundle_payload,
 )
-from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
-from codex_plugin_scanner.guard.proxy import stdio as stdio_proxy_module
-from codex_plugin_scanner.guard.proxy import stdio_sensitive_read as stdio_sensitive_read_module
+from codex_plugin_scanner.guard.proxy import RemoteGuardProxy
 from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
@@ -508,17 +506,6 @@ class _RemoteProxyHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt: str, *args) -> None:
         return
-
-
-class _LineOnlyInput:
-    def __init__(self, lines: list[str]) -> None:
-        self._lines = lines
-
-    def __iter__(self):
-        return iter(self._lines)
-
-    def read(self) -> str:
-        raise AssertionError("read() should not be used for streamed MCP proxy input")
 
 
 class _FlushTrackingOutput(io.StringIO):
@@ -11835,60 +11822,7 @@ def test_headless_approval_resolver_treats_managed_hermes_as_native_or_center(tm
     assert result["approval_wait"]["resolved"] is False
 
 
-def test_hermes_mcp_proxy_streams_stdio_messages_without_waiting_for_eof(tmp_path, monkeypatch, capsys):
-    guard_home = tmp_path / "guard-home"
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    store = GuardStore(guard_home)
-    store.set_managed_install(
-        "hermes",
-        True,
-        str(workspace),
-        {
-            "servers": {
-                "yaml:demo": {
-                    "transport": "stdio",
-                    "command": "python",
-                    "args": ["-m", "demo"],
-                }
-            }
-        },
-        "2026-04-15T00:00:00+00:00",
-    )
-    captured_messages: list[dict[str, object]] = []
-
-    class _FakeProxy:
-        def __init__(self, **kwargs) -> None:
-            self.kwargs = kwargs
-
-        def run_stream(self, *, input_stream, output_stream, error_stream) -> int:
-            for line in input_stream:
-                payload = json.loads(line)
-                captured_messages.append(payload)
-                output_stream.write(json.dumps({"jsonrpc": "2.0", "id": payload["id"], "result": {"ok": True}}) + "\n")
-                output_stream.flush()
-            return 0
-
-    monkeypatch.setattr(
-        guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
-    )
-    monkeypatch.setattr(guard_commands_module, "StdioGuardProxy", _FakeProxy)
-    monkeypatch.setattr(sys, "stdin", _LineOnlyInput(['{"jsonrpc":"2.0","id":7,"method":"tools/list"}\n']))
-
-    rc = guard_commands_module._run_hermes_mcp_proxy(
-        args=argparse.Namespace(server="yaml:demo"),
-        context=HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=guard_home),
-        store=store,
-        config=load_guard_config(guard_home),
-    )
-    output = capsys.readouterr()
-
-    assert rc == 0
-    assert captured_messages == [{"jsonrpc": "2.0", "id": 7, "method": "tools/list"}]
-    assert '"id": 7' in output.out
-
-
-def test_hermes_mcp_proxy_passes_manifest_env_to_stdio_proxy(tmp_path, monkeypatch):
+def test_hermes_mcp_proxy_serves_a_legacy_manifest_stdio_server_through_the_runtime_proxy(tmp_path, monkeypatch):
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -11915,14 +11849,11 @@ def test_hermes_mcp_proxy_passes_manifest_env_to_stdio_proxy(tmp_path, monkeypat
         def __init__(self, **kwargs) -> None:
             captured_init.append(kwargs)
 
-        def run_stream(self, *, input_stream, output_stream, error_stream) -> int:
+        def serve(self) -> int:
             return 0
 
-    monkeypatch.setattr(
-        guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
-    )
-    monkeypatch.setattr(guard_commands_module, "StdioGuardProxy", _FakeProxy)
-    monkeypatch.setattr(sys, "stdin", _LineOnlyInput([]))
+    monkeypatch.setenv("GITHUB_TOKEN", "placeholder")
+    monkeypatch.setattr(guard_commands_module, "ElicitationMcpGuardProxy", _FakeProxy)
 
     rc = guard_commands_module._run_hermes_mcp_proxy(
         args=argparse.Namespace(server="yaml:demo"),
@@ -11932,7 +11863,65 @@ def test_hermes_mcp_proxy_passes_manifest_env_to_stdio_proxy(tmp_path, monkeypat
     )
 
     assert rc == 0
-    assert captured_init[0]["env"] == {"GITHUB_TOKEN": "ghp_test_token"}
+    assert captured_init[0]["harness"] == "hermes"
+    assert captured_init[0]["command"] == ["python", "-m", "demo"]
+    assert captured_init[0]["transport"] == "stdio"
+    assert captured_init[0]["server_env_keys"] == ("GITHUB_TOKEN",)
+    assert os.environ["GITHUB_TOKEN"] == "ghp_test_token"
+
+
+def test_hermes_mcp_proxy_serves_a_relay_launch_server_from_its_argv(tmp_path, monkeypatch, capsys):
+    guard_home = tmp_path / "guard-home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    store = GuardStore(guard_home)
+    captured_init: list[dict[str, object]] = []
+
+    class _FakeProxy:
+        def __init__(self, **kwargs) -> None:
+            captured_init.append(kwargs)
+
+        def serve(self) -> int:
+            return 0
+
+    monkeypatch.setattr(guard_commands_module, "ElicitationMcpGuardProxy", _FakeProxy)
+    context = HarnessContext(home_dir=tmp_path, workspace_dir=workspace, guard_home=guard_home)
+
+    rc = guard_commands_module._run_hermes_mcp_proxy(
+        args=argparse.Namespace(
+            server=None,
+            server_command="python",
+            server_args=["-m", "demo"],
+            server_name="demo",
+            server_id="server-id-1",
+            source_scope="global",
+            config_path="/tmp/hermes-config.yaml",
+            server_env_keys=["DEMO_TOKEN"],
+        ),
+        context=context,
+        store=store,
+        config=load_guard_config(guard_home),
+    )
+
+    assert rc == 0
+    assert captured_init[0]["harness"] == "hermes"
+    assert captured_init[0]["server_name"] == "demo"
+    assert captured_init[0]["command"] == ["python", "-m", "demo"]
+    assert captured_init[0]["source_scope"] == "global"
+    assert captured_init[0]["config_path"] == "/tmp/hermes-config.yaml"
+    assert captured_init[0]["server_id"] == "server-id-1"
+    assert captured_init[0]["server_env_keys"] == ("DEMO_TOKEN",)
+
+    rejected = guard_commands_module._run_hermes_mcp_proxy(
+        args=argparse.Namespace(server=None, server_command="python", server_args=[]),
+        context=context,
+        store=store,
+        config=load_guard_config(guard_home),
+    )
+
+    assert rejected == 2
+    assert "--server-name" in capsys.readouterr().err
+    assert len(captured_init) == 1
 
 
 def test_hermes_mcp_proxy_rejects_invalid_json(tmp_path, monkeypatch, capsys):
@@ -16570,530 +16559,6 @@ def test_guard_hook_allows_codex_safe_user_prompt_submit_without_output(
 
     assert rc == 0
     assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-
-
-def test_stdio_proxy_blocks_disallowed_tools_and_redacts_headers():
-    proxy = StdioGuardProxy(
-        command=[
-            sys.executable,
-            "-u",
-            "-c",
-            "\n".join(
-                [
-                    "import json, sys",
-                    "for line in sys.stdin:",
-                    "    message = json.loads(line)",
-                    "    result = {'echo': message.get('method')}",
-                    "    if message.get('method') == 'tools/call':",
-                    "        result['tool'] = message.get('params', {}).get('name')",
-                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': result}))",
-                    "    sys.stdout.flush()",
-                ]
-            ),
-        ],
-        blocked_tools={"dangerous"},
-    )
-
-    allowed = proxy.run_session(
-        [
-            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-            {
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": "tools/call",
-                "params": {
-                    "name": "safe-tool",
-                    "arguments": {
-                        "headers": {
-                            "Authorization": "Bearer secret-token",
-                            "x-api-key": "hidden",
-                        }
-                    },
-                },
-            },
-        ]
-    )
-    blocked = proxy.run_session(
-        [
-            {
-                "jsonrpc": "2.0",
-                "id": 3,
-                "method": "tools/call",
-                "params": {"name": "dangerous"},
-            }
-        ]
-    )
-
-    assert allowed["responses"][1]["result"]["tool"] == "safe-tool"
-    assert allowed["events"][1]["redacted_params"]["arguments"]["headers"]["Authorization"] == "*****"
-    assert blocked["responses"][0]["error"]["code"] == -32001
-    assert blocked["events"][0]["decision"] == "block"
-
-
-def test_stdio_proxy_returns_timeout_error_when_child_server_hangs(monkeypatch):
-    proxy = StdioGuardProxy(
-        command=[
-            sys.executable,
-            "-u",
-            "-c",
-            "\n".join(
-                [
-                    "import json, sys, time",
-                    "for line in sys.stdin:",
-                    "    message = json.loads(line)",
-                    "    if message.get('id') is None:",
-                    "        continue",
-                    "    time.sleep(60)",
-                ]
-            ),
-        ],
-    )
-    monkeypatch.setattr(proxy, "_response_timeout_seconds", lambda: 0.05)
-
-    result = proxy.run_session(
-        [
-            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-        ]
-    )
-
-    assert result["responses"][0]["error"]["code"] == -32800
-    assert result["responses"][0]["error"]["data"]["guard_timeout"] is True
-    assert result["responses"][0]["error"]["data"]["source"] == "child_response"
-    assert result["events"][0]["decision"] == "timeout"
-    assert isinstance(result["return_code"], int)
-    assert result["return_code"] != 0
-
-
-def test_stdio_proxy_waits_for_matching_response_id():
-    proxy = StdioGuardProxy(
-        command=[
-            sys.executable,
-            "-u",
-            "-c",
-            "\n".join(
-                [
-                    "import json, sys",
-                    "for line in sys.stdin:",
-                    "    message = json.loads(line)",
-                    "    print(json.dumps({'jsonrpc': '2.0', 'method': 'tools/progress', 'params': {'step': 1}}))",
-                    "    result = {'echo': message.get('method')}",
-                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': result}))",
-                    "    sys.stdout.flush()",
-                ]
-            ),
-        ],
-    )
-
-    result = proxy.run_session(
-        [
-            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
-        ]
-    )
-
-    assert result["responses"][0]["id"] == 1
-    assert result["responses"][0]["result"]["echo"] == "initialize"
-
-
-def test_stdio_proxy_stream_does_not_wait_for_notification_replies():
-    proxy = StdioGuardProxy(
-        command=[
-            sys.executable,
-            "-u",
-            "-c",
-            "\n".join(
-                [
-                    "import json, sys",
-                    "for line in sys.stdin:",
-                    "    message = json.loads(line)",
-                    "    if message.get('id') is None:",
-                    "        continue",
-                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
-                    "    sys.stdout.flush()",
-                ]
-            ),
-        ],
-    )
-    output_stream = _FlushTrackingOutput()
-
-    exit_code = proxy.run_stream(
-        input_stream=_LineOnlyInput(
-            [
-                '{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}\n',
-                '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n',
-            ]
-        ),
-        output_stream=output_stream,
-        error_stream=io.StringIO(),
-    )
-
-    assert exit_code == 0
-    assert '"id":1' in output_stream.getvalue()
-
-
-def test_stdio_proxy_stream_forwards_interleaved_notifications():
-    proxy = StdioGuardProxy(
-        command=[
-            sys.executable,
-            "-u",
-            "-c",
-            "\n".join(
-                [
-                    "import json, sys",
-                    "for line in sys.stdin:",
-                    "    message = json.loads(line)",
-                    "    print(json.dumps({'jsonrpc': '2.0', 'method': 'tools/progress', 'params': {'step': 1}}))",
-                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
-                    "    sys.stdout.flush()",
-                ]
-            ),
-        ],
-    )
-    output_stream = _FlushTrackingOutput()
-
-    exit_code = proxy.run_stream(
-        input_stream=_LineOnlyInput(['{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n']),
-        output_stream=output_stream,
-        error_stream=io.StringIO(),
-    )
-    output_lines = [json.loads(line) for line in output_stream.getvalue().splitlines()]
-
-    assert exit_code == 0
-    assert output_lines[0]["method"] == "tools/progress"
-    assert output_lines[1]["id"] == 1
-
-
-def test_stdio_proxy_blocks_sensitive_file_reads_without_forwarding(tmp_path):
-    store = GuardStore(tmp_path / "guard-home")
-    (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
-    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path / "workspace")
-    proxy = StdioGuardProxy(
-        command=[
-            sys.executable,
-            "-u",
-            "-c",
-            "\n".join(
-                [
-                    "import json, sys",
-                    "for line in sys.stdin:",
-                    "    message = json.loads(line)",
-                    "    result = {'tool': message.get('params', {}).get('name')}",
-                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': result}))",
-                    "    sys.stdout.flush()",
-                ]
-            ),
-        ],
-        cwd=tmp_path / "workspace",
-        guard_store=store,
-        guard_config=config,
-        approval_center_url="http://127.0.0.1:4455",
-        harness="codex",
-    )
-
-    allowed = proxy.run_session(
-        [
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {
-                    "name": "read_file",
-                    "arguments": {
-                        "path": "README.md",
-                        "headers": {"Authorization": "Bearer secret-token"},
-                    },
-                },
-            }
-        ]
-    )
-    blocked = proxy.run_session(
-        [
-            {
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": "tools/call",
-                "params": {
-                    "name": "read_file",
-                    "arguments": {
-                        "path": ".env",
-                        "headers": {"Authorization": "Bearer secret-token"},
-                    },
-                },
-            }
-        ]
-    )
-
-    assert allowed["responses"][0]["result"]["tool"] == "read_file"
-    assert allowed["events"][0]["decision"] == "forward"
-    assert blocked["responses"][0]["error"]["code"] == -32001
-    assert "sensitive local file" in blocked["responses"][0]["error"]["message"].lower()
-    assert "http://127.0.0.1:4455" in blocked["responses"][0]["error"]["message"]
-    assert blocked["responses"][0]["error"]["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
-    assert blocked["responses"][0]["error"]["data"]["reviewHint"]
-    assert blocked["events"][0]["decision"] == "require-reapproval"
-    assert blocked["events"][0]["policy_action"] == "require-reapproval"
-    assert blocked["events"][0]["transport_outcome"] == "not-forwarded"
-    assert blocked["responses"][0]["error"]["data"]["guardPolicyAction"] == "require-reapproval"
-    assert blocked["events"][0]["approval_delivery"]["destination"] == "harness"
-    assert blocked["events"][0]["redacted_params"]["arguments"]["headers"]["Authorization"] == "*****"
-    assert blocked["events"][0]["path_summary"].endswith("/.env")
-    pending = store.list_approval_requests(limit=10)
-    assert len(pending) == 1
-    assert pending[0]["artifact_type"] == "file_read_request"
-
-
-def test_stdio_proxy_respects_native_only_approval_surface_policy(tmp_path, monkeypatch):
-    store = GuardStore(tmp_path / "guard-home")
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace_dir,
-        approval_surface_policy="native-only",
-    )
-    monkeypatch.setattr(
-        stdio_proxy_module,
-        "load_guard_daemon_auth_token",
-        lambda _guard_home: (_ for _ in ()).throw(AssertionError("should not read auth token")),
-    )
-    monkeypatch.setattr(
-        stdio_proxy_module,
-        "open_browser_url",
-        lambda _url: (_ for _ in ()).throw(AssertionError("should not open browser")),
-    )
-    proxy = StdioGuardProxy(
-        command=[
-            sys.executable,
-            "-u",
-            "-c",
-            "\n".join(
-                [
-                    "import json, sys",
-                    "for line in sys.stdin:",
-                    "    message = json.loads(line)",
-                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
-                    "    sys.stdout.flush()",
-                ]
-            ),
-        ],
-        cwd=workspace_dir,
-        guard_store=store,
-        guard_config=config,
-        approval_center_url="http://127.0.0.1:4455",
-    )
-
-    blocked = proxy.run_session(
-        [
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {"name": "read_file", "arguments": {"path": ".env"}},
-            }
-        ]
-    )
-
-    assert blocked["responses"][0]["error"]["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
-    assert blocked["responses"][0]["error"]["data"]["reviewHint"]
-
-
-def test_stdio_proxy_rewrites_stale_request_url_to_active_approval_center(tmp_path, monkeypatch):
-    store = GuardStore(tmp_path / "guard-home")
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
-    monkeypatch.setattr(
-        stdio_sensitive_read_module,
-        "queue_blocked_approvals",
-        lambda **_kwargs: [
-            {
-                "request_id": "stale-read-request",
-                "approval_url": "http://127.0.0.1:4833/requests/stale-read-request",
-            }
-        ],
-    )
-    proxy = StdioGuardProxy(
-        command=[
-            sys.executable,
-            "-u",
-            "-c",
-            "\n".join(
-                [
-                    "import json, sys",
-                    "for line in sys.stdin:",
-                    "    message = json.loads(line)",
-                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
-                    "    sys.stdout.flush()",
-                ]
-            ),
-        ],
-        cwd=workspace_dir,
-        guard_store=store,
-        guard_config=config,
-        approval_center_url="http://127.0.0.1:4455",
-        harness="codex",
-    )
-
-    blocked = proxy.run_session(
-        [
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {"name": "read_file", "arguments": {"path": ".env"}},
-            }
-        ]
-    )
-
-    error = blocked["responses"][0]["error"]
-
-    assert error["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
-    assert error["data"]["approvalRequests"][0]["approval_url"] == "http://127.0.0.1:4833/requests/stale-read-request"
-    assert error["data"]["reviewUrl"] == "http://127.0.0.1:4455/requests/stale-read-request"
-    assert "http://127.0.0.1:4455/requests/stale-read-request" in error["data"]["reviewHint"]
-
-
-def test_stdio_proxy_respects_adapter_no_browser_flow(tmp_path, monkeypatch):
-    store = GuardStore(tmp_path / "guard-home")
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
-    monkeypatch.setattr(
-        stdio_proxy_module,
-        "load_guard_daemon_auth_token",
-        lambda _guard_home: (_ for _ in ()).throw(AssertionError("should not read auth token")),
-    )
-    monkeypatch.setattr(
-        stdio_proxy_module,
-        "open_browser_url",
-        lambda _url: (_ for _ in ()).throw(AssertionError("should not open browser")),
-    )
-    proxy = StdioGuardProxy(
-        command=[
-            sys.executable,
-            "-u",
-            "-c",
-            "\n".join(
-                [
-                    "import json, sys",
-                    "for line in sys.stdin:",
-                    "    message = json.loads(line)",
-                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
-                    "    sys.stdout.flush()",
-                ]
-            ),
-        ],
-        cwd=workspace_dir,
-        guard_store=store,
-        guard_config=config,
-        approval_center_url="http://127.0.0.1:4455",
-        harness="hermes",
-    )
-
-    blocked = proxy.run_session(
-        [
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {"name": "read_file", "arguments": {"path": ".env"}},
-            }
-        ]
-    )
-
-    assert blocked["responses"][0]["error"]["data"]["approvalCenterUrl"] == "http://127.0.0.1:4455"
-    assert blocked["responses"][0]["error"]["data"]["reviewHint"]
-
-
-def test_stdio_proxy_handles_unknown_harness_when_queueing_sensitive_read_blocks(tmp_path):
-    store = GuardStore(tmp_path / "guard-home")
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
-    proxy = StdioGuardProxy(
-        command=[
-            sys.executable,
-            "-u",
-            "-c",
-            "\n".join(
-                [
-                    "import json, sys",
-                    "for line in sys.stdin:",
-                    "    message = json.loads(line)",
-                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
-                    "    sys.stdout.flush()",
-                ]
-            ),
-        ],
-        cwd=workspace_dir,
-        guard_store=store,
-        guard_config=config,
-        approval_center_url="http://127.0.0.1:4455",
-    )
-
-    blocked = proxy.run_session(
-        [
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {"name": "read_file", "arguments": {"path": ".env"}},
-            }
-        ]
-    )
-
-    assert blocked["responses"][0]["error"]["code"] == -32001
-    assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "browser"
-    assert blocked["events"][0]["approval_delivery"]["destination"] == "browser"
-
-
-def test_stdio_proxy_uses_native_delivery_for_managed_hermes(tmp_path):
-    store = GuardStore(tmp_path / "guard-home")
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    store.set_managed_install(
-        "hermes",
-        True,
-        str(workspace_dir),
-        {"capabilities": {"same_channel": True}},
-        "2026-04-15T00:00:00+00:00",
-    )
-    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
-    proxy = StdioGuardProxy(
-        command=[
-            sys.executable,
-            "-u",
-            "-c",
-            "\n".join(
-                [
-                    "import json, sys",
-                    "for line in sys.stdin:",
-                    "    message = json.loads(line)",
-                    "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
-                    "    sys.stdout.flush()",
-                ]
-            ),
-        ],
-        cwd=workspace_dir,
-        guard_store=store,
-        guard_config=config,
-        approval_center_url="http://127.0.0.1:4455",
-        harness="hermes",
-    )
-
-    blocked = proxy.run_session(
-        [
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {"name": "read_file", "arguments": {"path": ".env"}},
-            }
-        ]
-    )
-
-    assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["destination"] == "harness"
-    assert blocked["responses"][0]["error"]["data"]["approvalDelivery"]["prompt_channel"] == "native"
-    assert blocked["events"][0]["approval_delivery"]["destination"] == "harness"
 
 
 def test_hermes_pretool_reviews_docker_sensitive_command_requests(tmp_path, capsys, monkeypatch):

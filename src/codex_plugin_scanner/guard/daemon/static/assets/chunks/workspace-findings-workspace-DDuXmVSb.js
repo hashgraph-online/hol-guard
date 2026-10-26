@@ -168,6 +168,31 @@ function normalizeFinding(value) {
       }
     };
   }
+  if (item.source_kind === "workspace_source" && item.detector === "plugin_manifest_v1") {
+    const path = text$1(item.path);
+    const title = text$1(item.title);
+    const reason = text$1(item.reason);
+    if (path === null || title === null || reason === null || common.ruleIds.length === 0) return null;
+    const check = { title, reason, confidence: text$1(item.confidence) ?? "likely", falsePositiveHint: text$1(item.false_positive_hint) };
+    const event = item.component === "hook" ? text$1(item.event) : null;
+    const server = item.component === "mcp_server" ? text$1(item.server) : null;
+    if (event === null && server === null) return null;
+    return {
+      ...common,
+      kind: "plugin",
+      ecosystem: "unknown",
+      packageName: null,
+      packageVersion: null,
+      fixVersion: null,
+      path,
+      line: null,
+      lines: [],
+      runtime: null,
+      skill: null,
+      mcp: server === null ? null : { ...check, server },
+      hook: event === null ? null : { ...check, event }
+    };
+  }
   if (item.source_kind === "agent_inventory" && item.detector === "runtime_identity_v1") {
     const family = text$1(item.runtime_family);
     const path = text$1(item.path);
@@ -402,6 +427,21 @@ function HookFindingsTable({ findings }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block break-all font-mono text-xs text-slate-500", children: finding.path })
       ] }),
       check: (finding) => finding.hook
+    }
+  );
+}
+function PluginFindingsTable({ findings }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    RuleFindingsTable,
+    {
+      findings,
+      caption: "Agent plugins with risky hooks or MCP servers",
+      subjectLabel: "Plugin",
+      subject: (finding) => /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block break-all font-semibold text-slate-800", children: finding.hook ? `${finding.hook.event} hook` : `${finding.mcp?.server} MCP server` }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block break-all font-mono text-xs text-slate-500", children: finding.path })
+      ] }),
+      check: (finding) => finding.hook ?? finding.mcp
     }
   );
 }
@@ -937,7 +977,8 @@ const COVERAGE_REASONS = {
   runtimes_incomplete: "Some runtimes this workspace's tools launch could not be identified or checked.",
   skills_incomplete: "Some agent skills could not be read in full, so their instructions may not all be checked.",
   mcp_config_incomplete: "Some MCP server settings could not be read, so not every configured server was checked.",
-  hook_config_incomplete: "Some agent hook settings could not be fully checked, so not every project hook was screened."
+  hook_config_incomplete: "Some agent hook settings could not be fully checked, so not every project hook was screened.",
+  plugin_manifest_incomplete: "Some agent plugin files could not be fully read, so not every plugin hook or MCP server was checked."
 };
 const FAILURE_REASONS = {
   workspace_snapshot_failed: "Guard could not read this workspace.",
@@ -954,7 +995,8 @@ const DETECTOR_LABELS = {
   runtime_identity_v1: "Runtime checking",
   skill_content_v1: "Skill checking",
   mcp_config_v1: "MCP server checking",
-  hook_config_v1: "Project hook checking"
+  hook_config_v1: "Project hook checking",
+  plugin_manifest_v1: "Agent plugin checking"
 };
 function sameWorktree(left, right) {
   return left.codebaseKey === right.codebaseKey && left.worktreeKey === right.worktreeKey;
@@ -1145,6 +1187,7 @@ function FindingsSections(props) {
   const skills = props.findings.filter((finding) => finding.kind === "skill");
   const servers = props.findings.filter((finding) => finding.kind === "mcp");
   const hooks = props.findings.filter((finding) => finding.kind === "hook");
+  const plugins = props.findings.filter((finding) => finding.kind === "plugin");
   if (props.findings.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: emptyFindingsCopy(props.dependencyFilesFound, props.secretsChecked) });
   }
@@ -1154,7 +1197,8 @@ function FindingsSections(props) {
     runtimes.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(RuntimeFindingsTable, { findings: runtimes }),
     skills.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(SkillFindingsTable, { findings: skills }),
     servers.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(McpFindingsTable, { findings: servers }),
-    hooks.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(HookFindingsTable, { findings: hooks })
+    hooks.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(HookFindingsTable, { findings: hooks }),
+    plugins.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(PluginFindingsTable, { findings: plugins })
   ] });
 }
 function FindingsTable({ findings, fixes }) {

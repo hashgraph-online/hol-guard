@@ -463,8 +463,16 @@ def _configure_guard_cloud_parsers(
 
     hermes_mcp_proxy_parser = guard_subparsers.add_parser("hermes-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(hermes_mcp_proxy_parser)
-    hermes_mcp_proxy_parser.add_argument("--server", required=True)
+    hermes_mcp_proxy_parser.add_argument("--server")
     hermes_mcp_proxy_parser.add_argument("--stdio", action="store_true")
+    hermes_mcp_proxy_parser.add_argument("--server-name")
+    hermes_mcp_proxy_parser.add_argument("--server-id")
+    hermes_mcp_proxy_parser.add_argument("--source-scope", default="project")
+    hermes_mcp_proxy_parser.add_argument("--config-path")
+    hermes_mcp_proxy_parser.add_argument("--transport", default="stdio")
+    hermes_mcp_proxy_parser.add_argument("--command", dest="server_command")
+    hermes_mcp_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
+    hermes_mcp_proxy_parser.add_argument("--server-env-key", dest="server_env_keys", action="append", default=[])
 
     mcp_parser = guard_subparsers.add_parser(
         "mcp",

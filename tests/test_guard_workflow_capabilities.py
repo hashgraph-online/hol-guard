@@ -30,11 +30,9 @@ from codex_plugin_scanner.guard.workflow_capabilities import (
     WorkflowCapabilityError,
     WorkflowCapabilityReceipt,
     WorkflowCapabilityRuleBinding,
-    canonical_framed_payload,
     format_utc_timestamp,
-    sign_workflow_capability,
-    sign_workflow_capability_receipt,
 )
+from tests.workflow_capability_frame_support import sign_workflow_capability, sign_workflow_capability_receipt
 
 _KEY = b"k" * 32
 _KEY_ID = "guard-policy-integrity-key:test"
@@ -138,9 +136,8 @@ def _issue(
     *,
     approval_provenance_id: str | None = None,
 ) -> SignedWorkflowCapability:
-    signed = sign_workflow_capability(claim, key=_KEY, key_id=_KEY_ID)
     return store.issue_workflow_capability(
-        signed,
+        claim,
         approval_provenance_id=approval_provenance_id or claim.approval_provenance_id,
     )
 
@@ -161,15 +158,6 @@ def _claim_capability(
         expected_issuer_id=claim.issuer_id,
         expected_approval_provenance_id=claim.approval_provenance_id,
     )
-
-
-def test_framing_and_signatures_are_deterministic_and_tamper_evident() -> None:
-    claim = _claim()
-    first = sign_workflow_capability(claim, key=_KEY, key_id=_KEY_ID)
-    second = sign_workflow_capability(claim, key=_KEY, key_id=_KEY_ID)
-
-    assert first == second
-    assert canonical_framed_payload("ab", {"c": 1}) != canonical_framed_payload("a", {"bc": 1})
 
 
 def test_contract_rejects_unknown_null_wildcard_bool_and_noncanonical_rules() -> None:

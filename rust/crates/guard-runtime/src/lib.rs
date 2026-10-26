@@ -669,6 +669,7 @@ use guard_policy_bundle::{
     python as policy_bundle_py, time as policy_bundle_time,
 };
 mod policy_bundle_op;
+mod policy_bundle_payload_hash;
 #[cfg(test)]
 mod policy_bundle_transport_tests;
 mod policy_decision_lookup_op;

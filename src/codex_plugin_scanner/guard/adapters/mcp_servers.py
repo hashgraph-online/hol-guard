@@ -59,6 +59,7 @@ _GUARD_PROXY_COMMANDS = frozenset(
         "opencode-mcp-proxy",
         "copilot-mcp-proxy",
         "cursor-mcp-proxy",
+        "hermes-mcp-proxy",
         "mcp-proxy",
     }
 )

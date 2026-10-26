@@ -21,8 +21,8 @@
 //! re-decides the call and answers it as the proxy answers after its claim.
 //!
 //! The relay answers only what the resident decided. A call it cannot send
-//! as the proxy would see it (a shell or package request, a Composio action,
-//! arguments whose key order or numbers the decoded map lost), a resident
+//! as the proxy would see it (arguments whose key order or numbers the
+//! decoded map lost, a tool name that is not ASCII), a resident
 //! that cannot be reached, and every deferred decision get the proxy's
 //! fail-closed "no native decision" response.
 

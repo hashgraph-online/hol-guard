@@ -15,7 +15,6 @@ from ..workflow_capabilities import (
     SignedWorkflowCapabilityReceipt,
     WorkflowCapabilityBinding,
     WorkflowCapabilityClaim,
-    sign_workflow_capability,
 )
 from .effect_decision import PositiveProof
 
@@ -28,7 +27,7 @@ _AUTHORIZATION_SEAL: Final = object()
 
 class WorkflowCapabilityStore(Protocol):
     def issue_workflow_capability(
-        self, signed: SignedWorkflowCapability, *, approval_provenance_id: str
+        self, claim: WorkflowCapabilityClaim, *, approval_provenance_id: str
     ) -> SignedWorkflowCapability: ...
 
     def claim_workflow_capability(
@@ -127,8 +126,6 @@ def issue_github_workflow_capability_binding(
     not_before: str,
     expires_at: str,
     max_uses: int,
-    key: bytes,
-    key_id: str,
 ) -> SignedWorkflowCapability:
     claim = WorkflowCapabilityClaim(
         schema_version=WORKFLOW_CAPABILITY_SCHEMA,
@@ -145,8 +142,7 @@ def issue_github_workflow_capability_binding(
         expires_at=expires_at,
         max_uses=max_uses,
     )
-    signed = sign_workflow_capability(claim, key=key, key_id=key_id)
-    return store.issue_workflow_capability(signed, approval_provenance_id=approval_provenance_id)
+    return store.issue_workflow_capability(claim, approval_provenance_id=approval_provenance_id)
 
 
 __all__ = (

@@ -62,8 +62,8 @@ def issue_resolved_github_workflow_capability(
             existing = None
         if existing is not None:
             return _existing_matches(existing, lineage)
-        key, key_id = store._policy_integrity_secret_material(create=False)
-        if key is None or key_id is None:
+        # The resident signs the claim; this only confirms the local key exists.
+        if any(part is None for part in store._policy_integrity_secret_material(create=False)):
             return False
         issued_at = datetime.fromisoformat(resolved_at.replace("Z", "+00:00"))
         if issued_at.tzinfo is None:
@@ -81,8 +81,6 @@ def issue_resolved_github_workflow_capability(
             not_before=format_utc_timestamp(issued_at),
             expires_at=format_utc_timestamp(issued_at + _CAPABILITY_TTL),
             max_uses=_CAPABILITY_MAX_USES,
-            key=key,
-            key_id=key_id,
         )
         return signed.claim.capability_id == capability_id
     except (KeyError, TypeError, ValueError, WorkflowCapabilityError):

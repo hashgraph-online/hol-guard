@@ -22,7 +22,9 @@ use serde_json::{json, Value};
 
 use crate::claude_hook_bridge_http::remaining;
 use crate::claude_hook_bridge_render::py_strip;
-use crate::codex_hook_bridge_direct_resident::send_to_live_resident;
+use crate::codex_hook_bridge_direct_resident::{
+    send_to_live_resident, send_to_live_resident_reporting, DirectMiss,
+};
 use crate::codex_hook_response::{POST_TOOL_USE, PRE_TOOL_USE};
 
 const STATE_DIRECTORY: &str = "native-runtime";
@@ -305,17 +307,26 @@ fn request_body(
 /// The harness response of an `answer`, or `None` for a defer or anything
 /// that is not a well-formed `hook_direct` result.
 pub(crate) fn answered_response(output: &[u8]) -> Option<String> {
-    let result: Value = serde_json::from_slice(output).ok()?;
-    if result.get("schema")?.as_str()? != DIRECT_RESULT_SCHEMA
-        || result.get("outcome")?.as_str()? != "answer"
-    {
-        return None;
+    answered_response_reporting(output).ok()
+}
+
+/// [`answered_response`], telling a deferral from a reply it cannot use.
+fn answered_response_reporting(output: &[u8]) -> Result<String, DirectMiss> {
+    let result: Value = serde_json::from_slice(output).map_err(|_| DirectMiss::Unanswered)?;
+    if result.get("schema").and_then(Value::as_str) != Some(DIRECT_RESULT_SCHEMA) {
+        return Err(DirectMiss::Unanswered);
     }
-    let response = result.get("edge")?.get("harness_response")?;
-    if !response.is_object() {
-        return None;
+    match result.get("outcome").and_then(Value::as_str) {
+        Some("answer") => {}
+        Some("defer") => return Err(DirectMiss::Defer),
+        _ => return Err(DirectMiss::Unanswered),
     }
-    serde_json::to_string(response).ok()
+    let response = result
+        .get("edge")
+        .and_then(|edge| edge.get("harness_response"))
+        .filter(|response| response.is_object())
+        .ok_or(DirectMiss::Unanswered)?;
+    serde_json::to_string(response).map_err(|_| DirectMiss::Unanswered)
 }
 
 fn direct_enabled(switch: &str) -> bool {
@@ -403,24 +414,28 @@ pub(crate) fn bounded_direct_answer(
     answered_response(&output)
 }
 
-/// The harness response a live resident answered for a Grok hook, or `None`
-/// to take the daemon path. The bridge asks for a prompt only once the
-/// daemon reports its workspace ready, with the time left stamped, as the
-/// daemon would receive it.
+/// The harness response a live resident answered for a Grok hook, or why
+/// the hook takes the daemon path. The bridge asks for a prompt with the
+/// time left stamped, as the daemon would receive it.
 pub(crate) fn grok_direct_answer(
     guard_home: &Path,
     home: &str,
     event_name: &str,
     data: &str,
     rpc_deadline: Instant,
-) -> Option<String> {
-    if !direct_event(event_name) || !direct_enabled(BOUNDED_DIRECT_SWITCH) {
-        return None;
+) -> Result<String, DirectMiss> {
+    if !direct_enabled(BOUNDED_DIRECT_SWITCH) {
+        return Err(DirectMiss::Disabled);
+    }
+    if !direct_event(event_name) {
+        return Err(DirectMiss::Event);
     }
     let deadline = Instant::now() + remaining(rpc_deadline).min(DIRECT_TIMEOUT);
-    let request = grok_direct_request(guard_home, home, data, remaining(deadline))?;
-    let output = send_to_live_resident(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
-    answered_response(&output)
+    let request = grok_direct_request(guard_home, home, data, remaining(deadline))
+        .ok_or(DirectMiss::Request)?;
+    let output =
+        send_to_live_resident_reporting(&guard_home.join(STATE_DIRECTORY), &request, deadline)?;
+    answered_response_reporting(&output)
 }
 
 /// The harness response a live resident answered for `data` as `harness`

@@ -19,7 +19,7 @@ The canonical `sandbox-required` directive semantics and every consumer that rea
 | Runner | execution | `runtime/runner.py` | routes to containment | No |
 | Hook handlers | pre/post-tool | `cli/commands_hook_{claude,copilot,generic,runtime_eval,runtime_finish,runtime_review,github_workflow}.py` | enforce before tool runs | No |
 | Approvals | approval queue | `approvals.py`, `approval_resolution.py`, `runtime/approval_reuse.py` | sandbox-required not auto-approvable | No |
-| MCP | tool calls | `mcp_tool_calls.py`, `proxy/runtime_mcp.py`, `proxy/stdio.py` | enforce on MCP path | No |
+| MCP | tool calls | `mcp_tool_calls.py`, `proxy/runtime_mcp.py` | enforce on MCP path | No |
 | Receipts | evidence | `store_receipts.py`, `incident.py` | record verbatim, never rewrite | No |
 | Adapters | harness payloads | `adapters/{cursor_hook_payload,cursor_hook_script_template_head,grok_hooks,pi_hooks,zcode_hooks}.py` | pass through to harness | No |
 | Persistence | schema | `store_command_shadow_schema.py`, `models.py`, `types.py` | store verbatim | No |

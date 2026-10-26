@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sys
 from dataclasses import replace
 from pathlib import Path
 
@@ -22,12 +21,8 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
 )
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
-from codex_plugin_scanner.guard.proxy._env import _build_scrubbed_env
-from codex_plugin_scanner.guard.proxy.stdio import StdioGuardProxy
 from codex_plugin_scanner.guard.runtime.approval_context import (
     build_approval_context_token,
-    build_configured_environment_hash,
-    build_runtime_launch_identity,
 )
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.runtime.package_intent_common import PackageIntent, build_package_request_artifact
@@ -39,7 +34,6 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_file_read_request_artifact,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.guard_sensitive_read_support import sensitive_read_token
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -987,235 +981,3 @@ def _sensitive_read_artifact(workspace: Path) -> tuple[GuardArtifact, str]:
     )
     assert artifact is not None
     return artifact, artifact_hash(artifact)
-
-
-def _marker_child_command(marker: Path) -> list[str]:
-    return [
-        sys.executable,
-        "-u",
-        "-c",
-        "\n".join(
-            (
-                "import json, pathlib, sys",
-                "for line in sys.stdin:",
-                "    message = json.loads(line)",
-                f"    pathlib.Path({str(marker)!r}).write_text(json.dumps(message), encoding='utf-8')",
-                "    print(json.dumps({'jsonrpc': '2.0', 'id': message.get('id'), 'result': {'ok': True}}))",
-                "    sys.stdout.flush()",
-            )
-        ),
-    ]
-
-
-def _save_sensitive_read_allow(
-    store: GuardStore,
-    workspace: Path,
-    config: GuardConfig,
-    command: list[str],
-) -> None:
-    artifact, _legacy_digest = _sensitive_read_artifact(workspace)
-    current_action = config.risk_actions["local_secret_read"] if config.risk_actions is not None else "review"
-    launch_env = _build_scrubbed_env()
-    digest = sensitive_read_token(
-        artifact,
-        config=config,
-        cwd=workspace,
-        current_action=current_action,
-        server_launch_identity=build_runtime_launch_identity(
-            command[0],
-            args=command[1:],
-            structured_command=True,
-            cwd=workspace,
-            launch_env=launch_env,
-        ),
-        configured_env_values_hash=build_configured_environment_hash(
-            launch_env,
-            configured_keys=(),
-        ),
-    )
-    store.upsert_policy(
-        PolicyDecision(
-            harness="codex",
-            scope="artifact",
-            action="allow",
-            artifact_id=artifact.artifact_id,
-            artifact_hash=digest,
-            reason="old exact approval",
-            source="approval-gate",
-        ),
-        "2026-07-17T00:00:00Z",
-    )
-
-
-def test_stdio_sensitive_read_exact_review_approval_is_reused_with_evidence(
-    tmp_path: Path, native_context_digest: Path
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    store = GuardStore(tmp_path / "guard-home")
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace,
-        security_level="custom",
-        risk_actions={"local_secret_read": "review"},
-    )
-    marker = tmp_path / "forwarded.json"
-    command = _marker_child_command(marker)
-    _save_sensitive_read_allow(store, workspace, config, command)
-    proxy = StdioGuardProxy(
-        command=command,
-        cwd=workspace,
-        guard_store=store,
-        guard_config=config,
-        approval_center_url="http://127.0.0.1:4455",
-        harness="codex",
-        current_config_provider=lambda: config,
-    )
-
-    result = proxy.run_session(
-        [
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {"name": "read_file", "arguments": {"path": ".env"}},
-            }
-        ]
-    )
-
-    assert result["responses"][0]["result"]["ok"] is True
-    assert marker.exists()
-    assert result["events"][0]["approval_reuse_reason_code"] == "approval_reuse_accepted"
-    receipt = store.list_receipts(limit=1)[0]
-    assert receipt["policy_decision"] == "allow"
-    receipt_evidence = receipt["scanner_evidence"]
-    assert isinstance(receipt_evidence, list)
-    assert isinstance(receipt_evidence[-1], dict)
-    assert receipt_evidence[-1]["reason_code"] == "approval_reuse_accepted"
-
-
-@pytest.mark.parametrize("current_action", ["require-reapproval", "sandbox-required", "block"])
-def test_stdio_sensitive_read_saved_allow_and_payload_hint_never_lower_current_action(
-    tmp_path: Path,
-    current_action: GuardAction,
-    native_context_digest: Path,
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    store = GuardStore(tmp_path / "guard-home")
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace,
-        security_level="custom",
-        risk_actions={"local_secret_read": current_action},
-    )
-    marker = tmp_path / "must-not-forward.json"
-    command = _marker_child_command(marker)
-    _save_sensitive_read_allow(store, workspace, config, command)
-    proxy = StdioGuardProxy(
-        command=command,
-        cwd=workspace,
-        guard_store=store,
-        guard_config=config,
-        approval_center_url="http://127.0.0.1:4455",
-        harness="codex",
-    )
-
-    result = proxy.run_session(
-        [
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {
-                    "name": "read_file",
-                    "policy_action": "allow",
-                    "arguments": {"path": ".env"},
-                },
-            }
-        ]
-    )
-
-    assert result["responses"][0]["error"]["code"] == -32001
-    assert marker.exists() is False
-    event = result["events"][0]
-    assert event["approval_reuse_reason_code"] in {
-        "approval_reuse_reapproval_required",
-        "approval_reuse_sandbox_required",
-        "approval_reuse_current_block",
-    }
-    approvals = store.list_approval_requests(limit=1)
-    if current_action == "require-reapproval":
-        approval = approvals[0]
-        assert approval["policy_action"] == current_action
-        approval_evidence = approval["scanner_evidence"]
-        assert isinstance(approval_evidence, list)
-        assert isinstance(approval_evidence[-1], dict)
-        assert approval_evidence[-1]["reason_code"] == event["approval_reuse_reason_code"]
-    else:
-        assert approvals == []
-        assert "approval_requests" not in event
-
-
-@pytest.mark.parametrize(
-    ("changed_config_fields", "expected_reason"),
-    [
-        ({"managed_policy_hash": "policy-v2"}, "approval_reuse_policy_changed"),
-        ({"sandbox_analysis": "strict"}, "approval_reuse_sandbox_changed"),
-    ],
-)
-def test_stdio_sensitive_read_policy_and_sandbox_changes_invalidate_review_approval(
-    tmp_path: Path,
-    changed_config_fields: dict[str, object],
-    expected_reason: str,
-    native_context_digest: Path,
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    store = GuardStore(tmp_path / "guard-home")
-    base_config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace,
-        security_level="custom",
-        risk_actions={"local_secret_read": "review"},
-        managed_policy_hash="policy-v1",
-        sandbox_analysis="off",
-    )
-    changed_config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace,
-        security_level="custom",
-        risk_actions={"local_secret_read": "review"},
-        managed_policy_hash=str(changed_config_fields.get("managed_policy_hash", "policy-v1")),
-        sandbox_analysis=str(changed_config_fields.get("sandbox_analysis", "off")),
-    )
-    marker = tmp_path / "must-not-forward.json"
-    command = _marker_child_command(marker)
-    _save_sensitive_read_allow(store, workspace, base_config, command)
-    proxy = StdioGuardProxy(
-        command=command,
-        cwd=workspace,
-        guard_store=store,
-        guard_config=changed_config,
-        approval_center_url="http://127.0.0.1:4455",
-        harness="codex",
-    )
-
-    result = proxy.run_session(
-        [
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "tools/call",
-                "params": {"name": "read_file", "arguments": {"path": ".env"}},
-            }
-        ]
-    )
-
-    assert marker.exists() is False
-    assert result["events"][0]["approval_reuse_reason_code"] == expected_reason
-    approval = store.list_approval_requests(limit=1)[0]
-    evidence = approval["scanner_evidence"]
-    assert isinstance(evidence, list)
-    assert isinstance(evidence[-1], dict)
-    assert evidence[-1]["reason_code"] == expected_reason

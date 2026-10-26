@@ -10,6 +10,52 @@ use crate::claude_hook_bridge_http::remaining;
 /// rather than after a connect that is already out of time.
 const MINIMUM_DIRECT_TIMEOUT: Duration = Duration::from_millis(50);
 
+/// Why a bridge took a hook to the daemon without a resident answer. The
+/// bridge names it to the daemon, which counts it beside the hook; nothing
+/// decides a hook by it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DirectMiss {
+    /// The direct lane is switched off for this bridge.
+    Disabled,
+    /// The resident is never asked about this event.
+    Event,
+    /// The bridge could not build the request, such as a guard home or home
+    /// outside the resident's reach.
+    Request,
+    /// No resident state directory, or discovery failed.
+    NoState,
+    /// No discovered resident runs this caller's runtime.
+    NoResident,
+    /// The resident's state carries no usable token.
+    Token,
+    /// Too little time was left to ask.
+    Late,
+    /// Connecting, the handshake or the exchange failed.
+    Send,
+    /// The resident deferred the hook; it counts the reason itself.
+    Defer,
+    /// The resident's reply was not an answer the bridge could use.
+    Unanswered,
+}
+
+impl DirectMiss {
+    /// The code the daemon counts; `[a-z_]` only.
+    pub(crate) fn code(self) -> &'static str {
+        match self {
+            Self::Disabled => "disabled",
+            Self::Event => "event",
+            Self::Request => "request",
+            Self::NoState => "no_state",
+            Self::NoResident => "no_resident",
+            Self::Token => "token",
+            Self::Late => "late",
+            Self::Send => "send",
+            Self::Defer => "defer",
+            Self::Unanswered => "unanswered",
+        }
+    }
+}
+
 /// Send the request to a live resident that runs this caller's own runtime.
 ///
 /// The same steps serve every platform. Discovery reads only owner-only
@@ -23,12 +69,22 @@ pub(crate) fn send_to_live_resident(
     request: &[u8],
     deadline: Instant,
 ) -> Option<Vec<u8>> {
+    send_to_live_resident_reporting(state_base, request, deadline).ok()
+}
+
+/// [`send_to_live_resident`], naming why no resident answered.
+pub(crate) fn send_to_live_resident_reporting(
+    state_base: &Path,
+    request: &[u8],
+    deadline: Instant,
+) -> Result<Vec<u8>, DirectMiss> {
     // Discovery checks the directory's privacy; it must already exist.
     if !std::fs::symlink_metadata(state_base).is_ok_and(|metadata| metadata.is_dir()) {
-        return None;
+        return Err(DirectMiss::NoState);
     }
     let durable_digest = crate::resident_state::durable_runtime_digest(state_base);
-    let states = crate::resident_state::discover_same_executable_states(state_base).ok()?;
+    let states = crate::resident_state::discover_same_executable_states(state_base)
+        .map_err(|_| DirectMiss::NoState)?;
     for (_scope, _digest, state) in states {
         if crate::resident_state::validate_direct_lane_process_identity(
             state.process_id,
@@ -40,10 +96,11 @@ pub(crate) fn send_to_live_resident(
         {
             continue;
         }
-        let token = crate::resident_state::token_from_state(&state).ok()?;
+        let token =
+            crate::resident_state::token_from_state(&state).map_err(|_| DirectMiss::Token)?;
         let timeout = remaining(deadline);
         if timeout < MINIMUM_DIRECT_TIMEOUT {
-            return None;
+            return Err(DirectMiss::Late);
         }
         let identity = crate::resident_client::ExpectedProcessIdentity {
             process_id: state.process_id,
@@ -62,7 +119,7 @@ pub(crate) fn send_to_live_resident(
             timeout,
             &identity,
         )
-        .ok();
+        .map_err(|_| DirectMiss::Send);
     }
-    None
+    Err(DirectMiss::NoResident)
 }

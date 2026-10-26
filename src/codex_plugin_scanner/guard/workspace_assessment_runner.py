@@ -39,6 +39,11 @@ from .workspace_mcp_config_findings import (
     project_mcp_config_findings,
     with_mcp_config_coverage,
 )
+from .workspace_plugin_manifest_findings import (
+    PLUGIN_MANIFEST_DETECTOR,
+    project_plugin_manifest_findings,
+    with_plugin_manifest_coverage,
+)
 from .workspace_runtime_findings import (
     RUNTIME_DETECTOR,
     assessment_context_digest,
@@ -58,6 +63,7 @@ DETECTOR_SET: Final = (
     SKILL_DETECTOR,
     MCP_CONFIG_DETECTOR,
     HOOK_CONFIG_DETECTOR,
+    PLUGIN_MANIFEST_DETECTOR,
 )
 DETECTOR_SET_DIGEST: Final = hashlib.sha256(
     ("guard.workspace-detectors.v1\0" + "\0".join(DETECTOR_SET)).encode("utf-8")
@@ -175,20 +181,25 @@ def execute(
         project_skill_findings(before.skills),
         project_mcp_config_findings(mcp_configs),
         project_hook_config_findings(before.hooks),
+        project_plugin_manifest_findings(before.plugins),
     )
     truncated = supply_truncated or runtime_truncated or merge_truncated
     refused = offline.refused if offline is not None else 0
-    coverage = with_hook_config_coverage(
-        with_mcp_config_coverage(
-            with_skill_coverage(
-                with_runtime_coverage(
-                    coverage_summary(before, payload, findings_truncated=truncated, egress_refused=refused), posture
+    coverage = with_plugin_manifest_coverage(
+        with_hook_config_coverage(
+            with_mcp_config_coverage(
+                with_skill_coverage(
+                    with_runtime_coverage(
+                        coverage_summary(before, payload, findings_truncated=truncated, egress_refused=refused),
+                        posture,
+                    ),
+                    before.skills,
                 ),
-                before.skills,
+                mcp_configs,
             ),
-            mcp_configs,
+            before.hooks,
         ),
-        before.hooks,
+        before.plugins,
     )
     return assessments.RunOutcome(
         state="completed" if coverage["status"] == "complete" else "partial",
@@ -209,15 +220,19 @@ def _detector_snapshot(root: Path, secret_key: str) -> WorkspaceSnapshot:
     # Each scan is newer than the one before it, so a runtime that lacks one
     # lacks every later one too.
     try:
-        return workspace_snapshot(root, mode="content", secrets=True, secret_key=secret_key, skills=True, hooks=True)
+        return workspace_snapshot(
+            root, mode="content", secrets=True, secret_key=secret_key, skills=True, hooks=True, plugins=True
+        )
     except WorkspaceSnapshotError as error:
         if error.code == "workspace_snapshot_secrets_unavailable":
             return workspace_snapshot(root, mode="content")
         if error.code == "workspace_snapshot_skills_unavailable":
             return workspace_snapshot(root, mode="content", secrets=True, secret_key=secret_key)
-        if error.code != "workspace_snapshot_hooks_unavailable":
+        if error.code == "workspace_snapshot_hooks_unavailable":
+            return workspace_snapshot(root, mode="content", secrets=True, secret_key=secret_key, skills=True)
+        if error.code != "workspace_snapshot_plugins_unavailable":
             raise
-    return workspace_snapshot(root, mode="content", secrets=True, secret_key=secret_key, skills=True)
+    return workspace_snapshot(root, mode="content", secrets=True, secret_key=secret_key, skills=True, hooks=True)
 
 
 def _runtime_posture(store: Any, root: Path) -> dict[str, object] | None:

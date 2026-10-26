@@ -97,7 +97,7 @@ fn an_asking_session_is_decidable_for_every_relay_harness() {
     );
     // Opencode answers the native prompt from the decision; the others
     // answer `False` and take the inline elicitation before this queue.
-    for harness in ["codex", "copilot", "cursor"] {
+    for harness in ["codex", "copilot", "cursor", "hermes"] {
         let mut binding = asking("enforce");
         binding.mcp_relay = Some(view_for(harness, "enforce", Some("full")));
         assert_eq!(

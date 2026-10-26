@@ -156,6 +156,26 @@ export function HookFindingsTable({ findings }: { findings: WorkspaceFinding[] }
   );
 }
 
+/** Hooks and MCP servers an agent plugin in the worktree ships. */
+export function PluginFindingsTable({ findings }: { findings: WorkspaceFinding[] }) {
+  return (
+    <RuleFindingsTable
+      findings={findings}
+      caption="Agent plugins with risky hooks or MCP servers"
+      subjectLabel="Plugin"
+      subject={(finding) => (
+        <>
+          <span className="block break-all font-semibold text-slate-800">
+            {finding.hook ? `${finding.hook.event} hook` : `${finding.mcp?.server} MCP server`}
+          </span>
+          <span className="block break-all font-mono text-xs text-slate-500">{finding.path}</span>
+        </>
+      )}
+      check={(finding) => finding.hook ?? finding.mcp}
+    />
+  );
+}
+
 const RUNTIME_VERDICTS: Record<string, { label: string; tone: TagTone }> = {
   affected: { label: "Affected version", tone: "attention" },
   restart_required: { label: "Restart needed", tone: "amber" },

@@ -1,8 +1,9 @@
 use super::{
-    answered_response, bounded_direct_request, bounded_event, direct_event, direct_request,
-    grok_direct_answer, grok_direct_request, harness_event, parse_hook_query, HookQuery,
-    CLAUDE_CODE, CODEX, CURSOR,
+    answered_response, answered_response_reporting, bounded_direct_request, bounded_event,
+    direct_event, direct_request, grok_direct_answer, grok_direct_request, harness_event,
+    parse_hook_query, HookQuery, CLAUDE_CODE, CODEX, CURSOR,
 };
+use crate::codex_hook_bridge_direct_resident::DirectMiss;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -256,7 +257,7 @@ fn a_grok_hook_asks_with_the_home_the_daemon_keeps() {
     for event in ["PermissionRequest", "Notification"] {
         assert_eq!(
             grok_direct_answer(&homes.guard_home, "", event, PAYLOAD, deadline),
-            None,
+            Err(DirectMiss::Event),
             "{event}"
         );
     }
@@ -304,6 +305,55 @@ fn only_an_answer_returns_its_harness_response() {
         );
     }
     assert_eq!(answered_response(b"not json"), None);
+}
+
+#[test]
+fn a_miss_tells_a_deferral_from_a_reply_the_bridge_cannot_use() {
+    let reported =
+        |output: &Value| answered_response_reporting(&serde_json::to_vec(output).unwrap());
+    assert_eq!(
+        reported(&json!({"schema": "guard-hook-direct-result.v1", "outcome": "defer"})),
+        Err(DirectMiss::Defer)
+    );
+    for output in [
+        json!({"schema": "other", "outcome": "defer"}),
+        json!({"schema": "guard-hook-direct-result.v1", "outcome": "answer", "edge": {}}),
+        json!({"schema": "guard-hook-direct-result.v1"}),
+    ] {
+        assert_eq!(reported(&output), Err(DirectMiss::Unanswered), "{output}");
+    }
+    assert_eq!(
+        answered_response_reporting(b"not json"),
+        Err(DirectMiss::Unanswered)
+    );
+    let codes = [
+        DirectMiss::Disabled,
+        DirectMiss::Event,
+        DirectMiss::Request,
+        DirectMiss::NoState,
+        DirectMiss::NoResident,
+        DirectMiss::Token,
+        DirectMiss::Late,
+        DirectMiss::Send,
+        DirectMiss::Defer,
+        DirectMiss::Unanswered,
+    ]
+    .map(DirectMiss::code);
+    assert_eq!(
+        codes,
+        [
+            "disabled",
+            "event",
+            "request",
+            "no_state",
+            "no_resident",
+            "token",
+            "late",
+            "send",
+            "defer",
+            "unanswered"
+        ]
+    );
 }
 
 #[test]

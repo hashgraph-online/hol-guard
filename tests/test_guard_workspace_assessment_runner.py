@@ -66,7 +66,21 @@ HOOKS_COMPLETE = {
     "truncation_reasons": [],
     "findings": [],
 }
-SCANNED = replace(SNAPSHOT, secrets=SECRETS_COMPLETE, skills=SKILLS_COMPLETE, hooks=HOOKS_COMPLETE)
+PLUGINS_COMPLETE = {
+    "schema": "guard.workspace-plugins.v1",
+    "detector_version": "plugin-manifest-v1",
+    "status": "complete",
+    "plugins_scanned": 0,
+    "files_scanned": 0,
+    "commands_scanned": 0,
+    "servers_scanned": 0,
+    "skipped": {"oversize": 0, "not_text": 0, "unparsed": 0, "unread": 0},
+    "truncation_reasons": [],
+    "findings": [],
+}
+SCANNED = replace(
+    SNAPSHOT, secrets=SECRETS_COMPLETE, skills=SKILLS_COMPLETE, hooks=HOOKS_COMPLETE, plugins=PLUGINS_COMPLETE
+)
 KEYS = assessments.WorktreeKeys(SNAPSHOT.codebase_key, SNAPSHOT.worktree_key)
 
 BLOCKED_PACKAGE = {
@@ -122,6 +136,7 @@ def snapshots(monkeypatch: pytest.MonkeyPatch, module, *values: native.Workspace
         secret_key: str | None = None,
         skills: bool = False,
         hooks: bool = False,
+        plugins: bool = False,
     ) -> native.WorkspaceSnapshot:
         modes.append(mode)
         return remaining.pop(0) if len(remaining) > 1 else remaining[0]
@@ -148,6 +163,7 @@ def test_unchanged_snapshot_reports_projected_findings(tmp_path: Path, monkeypat
         "skill_content_v1": "no_inputs",
         "mcp_config_v1": "no_inputs",
         "hook_config_v1": "no_inputs",
+        "plugin_manifest_v1": "no_inputs",
     }
     [finding] = outcome.findings
     assert finding["severity"] == "critical"
@@ -255,6 +271,7 @@ def test_snapshot_failure_fails_the_run(tmp_path: Path, monkeypatch) -> None:
         secret_key: str | None = None,
         skills: bool = False,
         hooks: bool = False,
+        plugins: bool = False,
     ):
         raise native.WorkspaceSnapshotError("workspace_snapshot_native_unavailable")
 

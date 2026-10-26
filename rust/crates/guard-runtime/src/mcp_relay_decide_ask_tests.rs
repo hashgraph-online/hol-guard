@@ -31,7 +31,7 @@ fn the_native_prompt_answer_follows_the_harness_proxy_class() {
     assert!(!native_prompt_allows(OPENCODE, &facts("policy")));
     assert!(native_prompt_allows(OPENCODE, &facts("approval-gate")));
     // The base class answers `False`, which routes to an inline elicitation.
-    for harness in ["codex", "copilot", "cursor"] {
+    for harness in ["codex", "copilot", "cursor", "hermes"] {
         assert!(
             !native_prompt_allows(harness, &facts("approval-gate")),
             "{harness}"

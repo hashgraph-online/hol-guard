@@ -23,6 +23,7 @@ fn request(root: &Path) -> SnapshotRequest {
         secret_key: None,
         skills: true,
         hooks: false,
+        plugins: false,
     }
 }
 

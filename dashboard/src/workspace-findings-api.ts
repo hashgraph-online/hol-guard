@@ -22,7 +22,7 @@ export type WorkspaceRun = WorktreeKeys & {
   finishedAtMs: number | null;
 };
 
-export type WorkspaceFindingKind = "supply_chain" | "secret" | "runtime" | "skill" | "mcp" | "hook";
+export type WorkspaceFindingKind = "supply_chain" | "secret" | "runtime" | "skill" | "mcp" | "hook" | "plugin";
 
 /** The fixed wording of the skill content rule that matched; never text from the skill. */
 export type WorkspaceSkillCheck = { title: string; reason: string; confidence: string; falsePositiveHint: string | null };
@@ -61,9 +61,15 @@ export type WorkspaceFinding = {
   runtime: WorkspaceRuntime | null;
   /** Set only for an agent skill finding, a warning with no fix. */
   skill: WorkspaceSkillCheck | null;
-  /** Set only for an MCP server configuration finding, a warning with no fix. */
+  /**
+   * Set only for an MCP server configuration finding, a warning with no fix,
+   * or for an agent plugin finding about a server the plugin ships.
+   */
   mcp: WorkspaceMcpCheck | null;
-  /** Set only for a project hook configuration finding, a warning with no fix. */
+  /**
+   * Set only for a project hook configuration finding, a warning with no fix,
+   * or for an agent plugin finding about a hook the plugin ships.
+   */
   hook: WorkspaceHookCheck | null;
 };
 
@@ -267,6 +273,31 @@ function normalizeFinding(value: unknown): WorkspaceFinding | null {
         confidence: text(item.confidence) ?? "likely",
         falsePositiveHint: text(item.false_positive_hint),
       },
+    };
+  }
+  if (item.source_kind === "workspace_source" && item.detector === "plugin_manifest_v1") {
+    const path = text(item.path);
+    const title = text(item.title);
+    const reason = text(item.reason);
+    if (path === null || title === null || reason === null || common.ruleIds.length === 0) return null;
+    const check = { title, reason, confidence: text(item.confidence) ?? "likely", falsePositiveHint: text(item.false_positive_hint) };
+    const event = item.component === "hook" ? text(item.event) : null;
+    const server = item.component === "mcp_server" ? text(item.server) : null;
+    if (event === null && server === null) return null;
+    return {
+      ...common,
+      kind: "plugin",
+      ecosystem: "unknown",
+      packageName: null,
+      packageVersion: null,
+      fixVersion: null,
+      path,
+      line: null,
+      lines: [],
+      runtime: null,
+      skill: null,
+      mcp: server === null ? null : { ...check, server },
+      hook: event === null ? null : { ...check, event },
     };
   }
   if (item.source_kind === "agent_inventory" && item.detector === "runtime_identity_v1") {

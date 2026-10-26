@@ -156,8 +156,46 @@ fn respond(
     }
 }
 
+/// Computes the canonical policy-document hash of a v2 bundle `payload`, or
+/// `None` when the payload is not a valid policy document.
+pub type PayloadHasher = fn(&Value) -> Option<String>;
+
 pub fn evaluate_policy_bundle_authority_request(
     request: &PolicyBundleAuthorityRequestV1,
+) -> PolicyBundleAuthorityResultV1 {
+    evaluate(request, None)
+}
+
+/// Like [`evaluate_policy_bundle_authority_request`], but a v2 validation that
+/// needs the payload hash gets it from `hasher` instead of asking the caller.
+pub fn evaluate_with_payload_hasher(
+    request: &PolicyBundleAuthorityRequestV1,
+    hasher: PayloadHasher,
+) -> PolicyBundleAuthorityResultV1 {
+    evaluate(request, Some(hasher))
+}
+
+/// Answers a v2 validation's evidence request with the hasher's payload hash.
+fn with_evidence(kind: &str, input: &Obj, hasher: PayloadHasher) -> Option<Handled> {
+    let bundle = document(input, "bundle_chunks").ok()?;
+    let evidence = match bundle.get("payload").and_then(hasher) {
+        Some(hash) => json!({ "hash": hash }),
+        None => json!({ "error": true }),
+    };
+    let mut input = input.clone();
+    input.insert("evidence".to_owned(), evidence);
+    dispatch(kind, &input)
+}
+
+fn needs_evidence(kind: &str, input: &Obj, outcome: &Option<Handled>) -> bool {
+    matches!(kind, "validate_synced" | "validate_v2")
+        && input.get("evidence").is_none_or(Value::is_null)
+        && matches!(outcome, Some(Ok(value)) if *value == json!({ "needs_evidence": true }))
+}
+
+fn evaluate(
+    request: &PolicyBundleAuthorityRequestV1,
+    hasher: Option<PayloadHasher>,
 ) -> PolicyBundleAuthorityResultV1 {
     let digest = request_digest(request).unwrap_or_default();
     if request.schema != POLICY_BUNDLE_AUTHORITY_REQUEST_SCHEMA
@@ -170,7 +208,11 @@ pub fn evaluate_policy_bundle_authority_request(
     let Value::Object(input) = &request.input else {
         return respond(request, digest, "error", INVALID, Value::Null);
     };
-    match dispatch(&request.kind, input) {
+    let mut outcome = dispatch(&request.kind, input);
+    if let Some(hasher) = hasher.filter(|_| needs_evidence(&request.kind, input, &outcome)) {
+        outcome = with_evidence(&request.kind, input, hasher).or(outcome);
+    }
+    match outcome {
         None => respond(request, digest, "error", UNKNOWN_KIND, Value::Null),
         Some(Err(Fail::Invalid)) => respond(request, digest, "error", INVALID, Value::Null),
         Some(Err(Fail::Code(code))) => respond(request, digest, "ok", "ok", rejected(&code)),

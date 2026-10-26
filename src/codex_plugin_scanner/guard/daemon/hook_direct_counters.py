@@ -7,7 +7,9 @@ harness. A bridge asks the resident first and posts to the daemon only when
 the resident defers or the bridge cannot use the resident at all, so the
 daemon's received count minus the resident's defers estimates the hooks a
 bridge handed to the daemon without the resident: the resident was down or
-timed out, or the bridge rejected the shape itself.
+timed out, or the bridge rejected the shape itself. A bridge that knows why
+the resident did not answer names the reason in a request header, and the
+daemon counts those reasons per harness too.
 
 Both counts are diagnostics only. Nothing reads them to decide a hook. Harness
 names are reduced to a fixed set of slots, and no path, command or payload is
@@ -47,6 +49,22 @@ _LOG_EVENT: Final = "hook_direct_counters"
 _LOG_INTERVAL_SECONDS: Final = 300.0
 _MAX_OUTCOMES: Final = 64
 _OUTCOME_CODE: Final = re.compile(r"[a-z_]{1,64}")
+# The reasons a bridge names for a hook the resident did not answer.
+DIRECT_MISS_CODES: Final = frozenset(
+    {
+        "disabled",
+        "event",
+        "request",
+        "no_state",
+        "no_resident",
+        "token",
+        "late",
+        "send",
+        "defer",
+        "unanswered",
+    }
+)
+_UNKNOWN_MISS: Final = "unknown"
 
 
 def harness_slot(harness: object) -> str:
@@ -89,6 +107,7 @@ class HookCounterLog:
     ) -> None:
         self._lock = threading.Lock()
         self._received: dict[str, int] = dict.fromkeys(HARNESS_SLOTS, 0)
+        self._missed: dict[str, dict[str, int]] = {}
         self._resident: tuple[str, dict[str, dict[str, int]]] | None = None
         self._interval_seconds = interval_seconds
         self._clock = clock
@@ -101,12 +120,16 @@ class HookCounterLog:
 
         self._sink = sink
 
-    def note_received(self, harness: object) -> None:
-        """Count one hook request the daemon received."""
+    def note_received(self, harness: object, miss: object = None) -> None:
+        """Count one hook request the daemon received, and the bridge's miss reason."""
 
         slot = harness_slot(harness)
         with self._lock:
             self._received[slot] += 1
+            if miss is not None:
+                code = miss if isinstance(miss, str) and miss in DIRECT_MISS_CODES else _UNKNOWN_MISS
+                reasons = self._missed.setdefault(slot, {})
+                reasons[code] = reasons.get(code, 0) + 1
 
     def observe_page(self, epoch: object, counters: object) -> None:
         """Keep the resident counts a drain page carried, when it has them."""
@@ -121,7 +144,8 @@ class HookCounterLog:
         with self._lock:
             epoch, resident = self._resident if self._resident is not None else (None, {})
             received = {slot: count for slot, count in self._received.items() if count}
-        return {"epoch": epoch, "resident": resident, "received": received}
+            missed = {slot: dict(reasons) for slot, reasons in self._missed.items()}
+        return {"epoch": epoch, "resident": resident, "received": received, "missed": missed}
 
     def maybe_log(self) -> bool:
         """Log the counts when they changed and the interval has passed."""
@@ -155,15 +179,16 @@ def bind_hook_counter_sink(worker: object, diagnostics: object) -> None:
         counters.bind_sink(record)
 
 
-def note_hook_received(worker: object, harness: object) -> None:
+def note_hook_received(worker: object, harness: object, miss: object = None) -> None:
     """Count one hook request on the daemon hook route, without judging it."""
 
     counters = getattr(worker, "hook_counters", None)
     if isinstance(counters, HookCounterLog):
-        counters.note_received(harness)
+        counters.note_received(harness, miss)
 
 
 __all__ = [
+    "DIRECT_MISS_CODES",
     "HARNESS_SLOTS",
     "HookCounterLog",
     "bind_hook_counter_sink",

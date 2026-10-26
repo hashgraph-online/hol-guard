@@ -60,14 +60,23 @@ fn a_server_past_the_bound_stays_unknown() {
 }
 
 #[test]
-fn composio_and_nameless_tools_are_decided_by_the_proxy() {
+fn only_tools_the_relay_cannot_send_are_decided_by_the_proxy() {
+    // The relay never sends a call to an empty or non-ASCII name.
+    for tool in [
+        json!({"description": "no name"}),
+        json!({"name": 7}),
+        json!({"name": ""}),
+        json!({"name": "composio_\u{e9}"}),
+        json!({"name": "lire_\u{e9}t\u{e9}"}),
+    ] {
+        assert!(proxy_tool(&tool), "{tool}");
+    }
+    // The resident reads a Composio wrapper's provider catalog hash itself.
     for tool in [
         json!({"name": "COMPOSIO_SEARCH_TOOLS"}),
         json!({"name": "github__composio_execute"}),
-        json!({"description": "no name"}),
-        json!({"name": 7}),
     ] {
-        assert!(proxy_tool(&tool), "{tool}");
+        assert!(!proxy_tool(&tool), "{tool}");
     }
 }
 
@@ -105,7 +114,7 @@ fn a_report_records_whether_any_tool_is_decided_by_the_proxy() {
     let request = McpRelayServerReportRequestV1 {
         tools: vec![
             json!({"name": "read_file"}),
-            json!({"name": "COMPOSIO_EXECUTE"}),
+            json!({"description": "nameless"}),
         ],
         ..request
     };

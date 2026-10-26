@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_workspace_assessment_runner import (
     AUDIT,
     HOOKS_COMPLETE,
+    PLUGINS_COMPLETE,
     SECRETS_COMPLETE,
     SKILLS_COMPLETE,
     SNAPSHOT,
@@ -53,7 +54,7 @@ def skills_result(*findings: dict[str, object], **overrides: object) -> dict[str
 
 def run_with(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, skills: dict[str, object] | None):
     store, claimed = queued_run(tmp_path)
-    scanned = replace(SNAPSHOT, secrets=SECRETS_COMPLETE, skills=skills, hooks=HOOKS_COMPLETE)
+    scanned = replace(SNAPSHOT, secrets=SECRETS_COMPLETE, skills=skills, hooks=HOOKS_COMPLETE, plugins=PLUGINS_COMPLETE)
     monkeypatch.setattr(runner, "workspace_snapshot", lambda root, **_: scanned)
     monkeypatch.setattr(runner, "_local_audit", lambda store, config, root: AUDIT)
     return store, claimed, runner.execute(store, None, claimed, clock=lambda: T0)
@@ -119,7 +120,11 @@ def test_older_runtime_keeps_the_secret_scan_and_reports_skills_not_run(tmp_path
     assert requested == [(True, True), (True, False), (False, False)]
     assert outcome.state == "partial"
     assert outcome.coverage is not None
-    assert outcome.coverage["reasons"] == ["detector_not_run:skill_content_v1", "detector_not_run:hook_config_v1"]
+    assert outcome.coverage["reasons"] == [
+        "detector_not_run:skill_content_v1",
+        "detector_not_run:hook_config_v1",
+        "detector_not_run:plugin_manifest_v1",
+    ]
     assert outcome.coverage["detectors"]["secrets"] == "complete"
     assert outcome.coverage["detectors"]["skill_content_v1"] == "not_run"
 

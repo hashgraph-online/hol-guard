@@ -1,7 +1,7 @@
 """Launcher selection for Guard-managed MCP stdio proxies: native relay or Python.
 
 The native runtime's ``mcp-relay`` subcommand replaces the Python MCP proxy for
-the Codex, Copilot, Cursor and OpenCode proxies. It receives the exact Python
+the Codex, Copilot, Cursor, Hermes and OpenCode proxies. It receives the exact Python
 proxy argv after its subcommand, so one generated argv serves both launchers and
 upstream recovery reads it unchanged. The relay asks the resident for every
 ``tools/call`` decision and blocks any call the resident does not decide, so
@@ -29,7 +29,9 @@ NATIVE_MCP_RELAY_FEATURE = "mcp-stdio-relay-v1"
 NATIVE_MCP_RELAY_DECIDE_FEATURE = "mcp-relay-decide-v2"
 MCP_RELAY_SELECTION_ENV = "HOL_GUARD_MCP_RELAY"
 # The proxies the native relay parses; other Guard proxies stay on Python.
-RELAY_PROXY_COMMANDS = frozenset({"codex-mcp-proxy", "copilot-mcp-proxy", "cursor-mcp-proxy", "opencode-mcp-proxy"})
+RELAY_PROXY_COMMANDS = frozenset(
+    {"codex-mcp-proxy", "copilot-mcp-proxy", "cursor-mcp-proxy", "hermes-mcp-proxy", "opencode-mcp-proxy"}
+)
 _PYTHON_PROXY_PREFIX = ("-m", "codex_plugin_scanner.cli", "guard")
 
 

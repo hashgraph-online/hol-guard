@@ -7,6 +7,7 @@ use guard_command::local_supply_chain::is_audit_sensitive_basename;
 use sha2::{Digest, Sha256};
 
 use super::hooks::HookScan;
+use super::plugins::PluginScan;
 use super::secrets::SecretScan;
 use super::skills::SkillScan;
 use super::{Limits, SnapshotMode, SKIP_DIRS};
@@ -93,6 +94,8 @@ pub(super) struct Walk {
     pub(super) skills: Option<SkillScan>,
     /// Present when the caller asked for the project hook check.
     pub(super) hooks: Option<HookScan>,
+    /// Present when the caller asked for the agent plugin check.
+    pub(super) plugins: Option<PluginScan>,
 }
 
 #[derive(Default)]
@@ -112,7 +115,7 @@ impl Walk {
     }
 
     /// Record that the walk left `relative` unread, which matters only when it
-    /// is a skill or hook configuration a scan had to read.
+    /// is a skill, hook configuration or plugin file a scan had to read.
     fn left_unread(&mut self, relative: &str) {
         if let Some(skills) = self.skills.as_mut() {
             if skills.admits(relative) {
@@ -124,10 +127,15 @@ impl Walk {
                 hooks.left_unread();
             }
         }
+        if let Some(plugins) = self.plugins.as_mut() {
+            if plugins.admits(relative) {
+                plugins.left_unread(relative);
+            }
+        }
     }
 
-    /// Record a special file the walk did not follow, which the skill and
-    /// hook scans count when their input could be there.
+    /// Record a special file the walk did not follow, which the skill, hook
+    /// and plugin scans count when their input could be there.
     fn left_special(&mut self, relative: &str) {
         if let Some(skills) = self.skills.as_mut() {
             skills.left_special(relative);
@@ -135,16 +143,22 @@ impl Walk {
         if let Some(hooks) = self.hooks.as_mut() {
             hooks.left_unfollowed(relative);
         }
+        if let Some(plugins) = self.plugins.as_mut() {
+            plugins.left_special(relative);
+        }
     }
 
-    /// Record a symlink the walk did not follow, which the skill and hook
-    /// scans count when their input could be behind it.
+    /// Record a symlink the walk did not follow, which the skill, hook and
+    /// plugin scans count when their input could be behind it.
     fn left_link(&mut self, relative: &str, target: Option<&Path>) {
         if let Some(skills) = self.skills.as_mut() {
             skills.left_link(relative, target);
         }
         if let Some(hooks) = self.hooks.as_mut() {
             hooks.left_unfollowed(relative);
+        }
+        if let Some(plugins) = self.plugins.as_mut() {
+            plugins.left_link(relative, target);
         }
     }
 
@@ -315,7 +329,12 @@ fn admit_file(
         .as_mut()
         .is_some_and(|skills| skills.admits(child));
     let scan_hooks = walk.hooks.as_mut().is_some_and(|hooks| hooks.admits(child));
-    let capture = (scan_content || scan_skill || scan_hooks).then_some(&mut captured);
+    let scan_plugin = walk
+        .plugins
+        .as_mut()
+        .is_some_and(|plugins| plugins.admits(child));
+    let capture =
+        (scan_content || scan_skill || scan_hooks || scan_plugin).then_some(&mut captured);
     match hash_stable(file, node, limits.file_bytes, capture) {
         Ok((digest, read)) => {
             walk.hashed_bytes += read;
@@ -333,6 +352,11 @@ fn admit_file(
             if scan_hooks {
                 if let Some(hooks) = walk.hooks.as_mut() {
                     hooks.observe(child, &captured);
+                }
+            }
+            if scan_plugin {
+                if let Some(plugins) = walk.plugins.as_mut() {
+                    plugins.observe(child, &captured);
                 }
             }
         }

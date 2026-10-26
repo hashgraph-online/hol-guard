@@ -16,7 +16,7 @@
 
 use guard_command::hook_config_risk::detect_hook_config_risk;
 use guard_command::jsonc::loads_jsonc;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
@@ -29,7 +29,7 @@ pub(super) const MAX_HOOK_FINDINGS: usize = 200;
 const MAX_CONFIG_BYTES: usize = 1024 * 1024;
 /// Hook commands checked in one worktree.
 const MAX_COMMANDS: usize = 512;
-const MAX_COMMAND_BYTES: usize = 64 * 1024;
+pub(super) const MAX_COMMAND_BYTES: usize = 64 * 1024;
 const MAX_EVENT_CHARS: usize = 64;
 const FINDING_ID_HEX_CHARS: usize = 32;
 /// Hook configuration files agents read from the worktree root.
@@ -70,10 +70,21 @@ struct Finding {
 }
 
 /// One hook command: a shell command line, or a program with `args`.
-struct Command<'a> {
-    event: &'a str,
-    text: &'a str,
-    args: Option<Vec<String>>,
+pub(super) struct Command<'a> {
+    pub(super) event: &'a str,
+    pub(super) text: &'a str,
+    pub(super) args: Option<Vec<String>>,
+}
+
+impl Command<'_> {
+    /// The executable and arguments together, as held to the command bound.
+    pub(super) fn bytes(&self) -> usize {
+        self.text.len()
+            + self
+                .args
+                .as_deref()
+                .map_or(0, |args| args.iter().map(String::len).sum())
+    }
 }
 
 #[derive(Default)]
@@ -156,12 +167,7 @@ impl HookScan {
                 self.command_cap_hit = true;
                 return;
             }
-            let bytes = command.text.len()
-                + command
-                    .args
-                    .as_deref()
-                    .map_or(0, |args| args.iter().map(String::len).sum());
-            if bytes > MAX_COMMAND_BYTES {
+            if command.bytes() > MAX_COMMAND_BYTES {
                 self.command_oversize = true;
                 continue;
             }
@@ -296,6 +302,11 @@ fn hook_commands<'a>(relative: &str, document: &'a Value) -> Vec<Command<'a>> {
         (None, Value::Object(events)) if flat => events,
         _ => return Vec::new(),
     };
+    event_commands(events)
+}
+
+/// Every hook command in an object keyed by hook event.
+pub(super) fn event_commands(events: &Map<String, Value>) -> Vec<Command<'_>> {
     let mut commands = Vec::new();
     for (event, entries) in events {
         let Value::Array(entries) = entries else {
@@ -343,7 +354,7 @@ fn push_entry<'a>(event: &'a str, entry: &'a Value, nested: bool, out: &mut Vec<
 
 /// The event name as stored: a hook event identifier, or `other` for a key
 /// that is not one, since the configuration file chooses it.
-fn stored_event(event: &str) -> &str {
+pub(super) fn stored_event(event: &str) -> &str {
     let identifier = !event.is_empty()
         && event.len() <= MAX_EVENT_CHARS
         && event
