@@ -361,6 +361,21 @@ pub(crate) fn note(name: &'static str, value: usize) {
     }
 }
 
+/// Notes the declarative command work counts after a resident request, so a
+/// scale run can report the active set and candidate counts it measured.
+pub(crate) fn note_command_work() {
+    if !enabled() {
+        return;
+    }
+    let stats = guard_command::native_command_program::work_stats::snapshot();
+    if let Some(active) = stats.active_extensions {
+        note("command_active_extensions", active);
+    }
+    note("command_candidates_last", stats.last_candidates);
+    note("command_matchers_evaluated_last", stats.last_evaluated);
+    note("command_candidates_max", stats.max_candidates);
+}
+
 fn emit_line(arguments: std::fmt::Arguments<'_>) {
     // A broken diagnostic sink must not change native wire/error results.
     // Render only finite labels and numbers into a bounded stack buffer.

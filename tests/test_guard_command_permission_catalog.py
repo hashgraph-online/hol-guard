@@ -8,7 +8,7 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtensionRegistry,
 )
-from codex_plugin_scanner.guard.runtime.github_capability_contract import GitHubCommandCapability
+from tests.native_github_capability_support import GitHubCommandCapability
 
 _GITHUB_PERMISSION_IDS = {
     "command.github.permission.read-local",

@@ -13,6 +13,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 
 use crate::hook_artifact_compose_policy_tail::PolicyCompositionQueryV1;
+use crate::is_python_space;
 
 /// Schema discriminator for the request.
 pub const HOOK_ARTIFACT_COMPOSE_REQUEST_SCHEMA: &str = "guard-hook-artifact-compose-request.v1";
@@ -254,26 +255,6 @@ impl PolicyArtifactFactsV1 {
             .trim_matches(is_python_space)
             .eq_ignore_ascii_case("strong")
     }
-}
-
-/// What `str.strip()` removes. Rust's own `trim` leaves the C1 and the
-/// information separators in place, so confidence text padded with them would
-/// read as a weaker confidence than the one the artifact reported.
-fn is_python_space(ch: char) -> bool {
-    matches!(
-        ch,
-        '\u{09}'..='\u{0d}'
-            | ' '
-            | '\u{1c}'..='\u{1f}'
-            | '\u{85}'
-            | '\u{a0}'
-            | '\u{1680}'
-            | '\u{2000}'..='\u{200a}'
-            | '\u{2028}'..='\u{2029}'
-            | '\u{202f}'
-            | '\u{205f}'
-            | '\u{3000}'
-    )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

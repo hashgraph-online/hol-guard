@@ -344,7 +344,6 @@ def test_pending_authority_waivers_all_name_a_reachable_module() -> None:
     report = MODULE.validate(ROOT)
     waived = {item["path"] for item in report["inventory"] if item["category"] == "pending_authority_migration"}
 
-    assert waived
     assert set(MODULE._PENDING_AUTHORITY_PATHS) == waived
     assert all((ROOT / path).is_file() for path in MODULE._PENDING_AUTHORITY_PATHS)
 

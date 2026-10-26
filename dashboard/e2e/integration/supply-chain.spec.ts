@@ -171,16 +171,30 @@ test.describe("Supply chain hub against the live daemon", () => {
     await expect(drawer).toHaveCount(0);
   });
 
-  // Product bug: the drawer is an aria-modal dialog, but Escape does not close
-  // it (dashboard/src/supply-chain-manager-drawer.tsx).
-  test.fixme("manager details drawer closes on Escape", async ({ page, state }) => {
+  test("manager details drawer closes on Escape and returns focus to its row", async ({ page, state }) => {
+    await openHub(page);
+    const [manager] = supplySeed(state).shimmedManagers;
+    const opener = page.getByRole("button", { name: `Open ${manager} manager details`, exact: true });
+    await opener.click();
+    const drawer = page.getByRole("dialog", { name: `${manager} manager details` });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "Close manager details drawer" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
+    await expect(opener).toBeFocused();
+  });
+
+  test("manager details drawer keeps Tab focus inside the dialog", async ({ page, state }) => {
     await openHub(page);
     const [manager] = supplySeed(state).shimmedManagers;
     await page.getByRole("button", { name: `Open ${manager} manager details`, exact: true }).click();
     const drawer = page.getByRole("dialog", { name: `${manager} manager details` });
     await expect(drawer).toBeVisible();
-    await page.keyboard.press("Escape");
-    await expect(drawer).toHaveCount(0);
+    for (let step = 0; step < 12; step += 1) {
+      await page.keyboard.press("Tab");
+      const inside = await drawer.evaluate((node) => node.contains(document.activeElement));
+      expect(inside).toBe(true);
+    }
   });
 
   test("restore protection asks for the approval password before changing anything", async ({ page, state }) => {

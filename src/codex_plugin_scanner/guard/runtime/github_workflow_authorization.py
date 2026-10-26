@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import hmac
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Final, Protocol
 
 from typing_extensions import override
@@ -16,20 +15,19 @@ from ..workflow_capabilities import (
     SignedWorkflowCapabilityReceipt,
     WorkflowCapabilityBinding,
     WorkflowCapabilityClaim,
-    WorkflowCapabilityError,
-    canonical_framed_payload,
-    sign_workflow_capability,
 )
-from .effect_contract import ProofRequirement, ProofRoute
 from .effect_decision import PositiveProof
-from .github_capability_interaction import GITHUB_MAINTENANCE_ACTION_CLASS
 
+# The `maintain_remote` action class in the Rust GitHub capability contract
+# (guard-command/src/github_capability_contract.rs), the only capability a
+# workflow authorization can cover.
+GITHUB_MAINTENANCE_ACTION_CLASS: Final = "maintenance"
 _AUTHORIZATION_SEAL: Final = object()
 
 
 class WorkflowCapabilityStore(Protocol):
     def issue_workflow_capability(
-        self, signed: SignedWorkflowCapability, *, approval_provenance_id: str
+        self, claim: WorkflowCapabilityClaim, *, approval_provenance_id: str
     ) -> SignedWorkflowCapability: ...
 
     def claim_workflow_capability(
@@ -128,8 +126,6 @@ def issue_github_workflow_capability_binding(
     not_before: str,
     expires_at: str,
     max_uses: int,
-    key: bytes,
-    key_id: str,
 ) -> SignedWorkflowCapability:
     claim = WorkflowCapabilityClaim(
         schema_version=WORKFLOW_CAPABILITY_SCHEMA,
@@ -146,79 +142,10 @@ def issue_github_workflow_capability_binding(
         expires_at=expires_at,
         max_uses=max_uses,
     )
-    signed = sign_workflow_capability(claim, key=key, key_id=key_id)
-    return store.issue_workflow_capability(signed, approval_provenance_id=approval_provenance_id)
-
-
-def claim_github_workflow_authorization(
-    store: WorkflowCapabilityStore,
-    capability_id: str,
-    binding: WorkflowCapabilityBinding,
-    command_identity: str,
-    *,
-    invocation_id: str,
-    subject_id: str,
-    task_id: str,
-    issuer_id: str,
-    approval_provenance_id: str,
-) -> GitHubWorkflowAuthorization:
-    receipt = store.claim_workflow_capability(
-        capability_id,
-        invocation_id=invocation_id,
-        expected_binding=binding,
-        expected_subject_id=subject_id,
-        expected_task_id=task_id,
-        expected_issuer_id=issuer_id,
-        expected_approval_provenance_id=approval_provenance_id,
-    )
-    if type(receipt) is not SignedWorkflowCapabilityReceipt:
-        raise WorkflowCapabilityError("invalid_github_workflow_receipt")
-    claimed = receipt.receipt
-    if (
-        claimed.binding != binding
-        or claimed.capability_id != capability_id
-        or claimed.invocation_id != invocation_id
-        or claimed.task_id != task_id
-        or claimed.approval_provenance_id != approval_provenance_id
-    ):
-        raise WorkflowCapabilityError("github_workflow_receipt_mismatch")
-    receipt_sha256 = _framed_sha256("github-workflow-receipt", receipt.to_dict())
-    return GitHubWorkflowAuthorization(
-        authority_token=_AUTHORIZATION_SEAL,
-        command_identity=command_identity,
-        receipt_sha256=receipt_sha256,
-        proof=PositiveProof(
-            route=ProofRoute.WORKFLOW_AUTHORIZED,
-            binding_digest=_framed_sha256(
-                "github-workflow-claimed-binding",
-                {"binding": asdict(binding), "receipt_sha256": receipt_sha256},
-            ),
-            satisfied_requirements=frozenset(
-                {
-                    ProofRequirement.OPERATION_AND_TARGETS,
-                    ProofRequirement.REMOTE_RESOURCE_IDENTITY,
-                    ProofRequirement.REPOSITORY_IDENTITY,
-                    ProofRequirement.WORKSPACE_IDENTITY,
-                    ProofRequirement.WORKING_DIRECTORY_IDENTITY,
-                    ProofRequirement.EXECUTABLE_IDENTITY,
-                    ProofRequirement.LAUNCH_CHAIN,
-                    ProofRequirement.CONFIGURATION_IDENTITY,
-                    ProofRequirement.DEPENDENCY_PROVENANCE,
-                    ProofRequirement.PARSER_CONFIDENCE,
-                    ProofRequirement.EXPECTED_EFFECTS,
-                    ProofRequirement.CAPABILITY_CONSTRAINTS,
-                }
-            ),
-        ),
-    )
-
-
-def _framed_sha256(purpose: str, payload: object) -> str:
-    return hashlib.sha256(canonical_framed_payload(purpose, payload)).hexdigest()
+    return store.issue_workflow_capability(claim, approval_provenance_id=approval_provenance_id)
 
 
 __all__ = (
     "GitHubWorkflowAuthorization",
-    "claim_github_workflow_authorization",
     "issue_github_workflow_capability_binding",
 )

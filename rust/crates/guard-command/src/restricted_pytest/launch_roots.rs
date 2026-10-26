@@ -33,36 +33,97 @@ pub(crate) fn launches_outside_exec_roots<'a>(
     workspace: &Path,
 ) -> bool {
     // Reachability, not a grant: this asks whether the sandbox could run what
-    // the command launches, so the Go module cache, the Cargo caches and the
-    // Maven repository stay in view and such a run is not judged unreachable
-    // before the plan decides whether to grant them.
+    // the command launches, so the Go module cache, the Cargo caches, the
+    // Maven repository and every workspace venv stay in view and such a run
+    // is not judged unreachable before the plan decides whether to grant
+    // them.
     let (roots, sandbox_path) =
-        workspace_exec_roots(search_path, home, workspace, true, true, true);
+        workspace_exec_roots(search_path, home, workspace, None, true, true, true);
     let mut executable = executable_roots(workspace, roots);
     executable.extend(linked_checkout(workspace, home));
     let reaches = |path: &Path| path_is_within_any(path, &executable);
+    let shimless = without_package_shims(search_path, workspace);
     launches.into_iter().any(|(program, places)| {
         places.iter().any(|place| {
             unreachable_from(
                 program,
                 place.as_deref(),
-                (search_path, sandbox_path.as_str()),
+                (search_path, shimless.as_str(), sandbox_path.as_str()),
+                workspace,
                 &reaches,
             )
         })
     })
 }
 
+/// Whether `entry` is a package-shim directory: a `bin` below a
+/// `package-shims`, which is how Guard lays its own shims out under the guard
+/// home. The shape is read rather than the guard home compared, because the
+/// guard home is wherever this install put it. `local_mcp_stdio` reads the
+/// same shape to keep a shim from answering a server launch.
+fn is_package_shim_dir(entry: &Path) -> bool {
+    fn name(path: &Path) -> Option<&str> {
+        path.file_name().and_then(OsStr::to_str)
+    }
+    name(entry) == Some("bin") && entry.parent().and_then(name) == Some("package-shims")
+}
+
+/// Whether `entry` is Guard's shim directory, as opposed to a project
+/// directory that ends in the same two names.
+///
+/// The sandbox does not execute from Guard's shim directory, which sits
+/// outside the workspace. A project that keeps a tool under its own
+/// `package-shims/bin` is inside the workspace, and `workspace_tools` keeps
+/// that directory on the sandbox PATH. Stripping it would send a run the
+/// sandbox can already execute to review.
+fn is_guard_package_shim(entry: &Path, workspace: &Path) -> bool {
+    is_package_shim_dir(entry) && !path_is_within(entry, workspace)
+}
+
+/// `search_path` without Guard's package-shim directories. Guard's own shims
+/// sit first on the PATH of every session it supervises, so a bare `npm`
+/// resolves to a shim rather than to the Node install behind it. The sandbox
+/// refuses to execute from that directory - a shim must never answer for a
+/// tool inside it - so reading the shim as the program would make every
+/// manager the shims cover unreachable, and ordinary work such as `npm run
+/// build` would be reviewed on every machine the shims are installed on.
+/// Resolving past them asks the question the sandbox actually faces: which
+/// program the run reaches once the shim layer is gone. A `package-shims/bin`
+/// inside the workspace is left in place: that is a project path, not the
+/// shim layer.
+fn without_package_shims(search_path: &str, workspace: &Path) -> String {
+    search_path
+        .split(':')
+        .filter(|entry| !is_guard_package_shim(Path::new(entry), workspace))
+        .collect::<Vec<_>>()
+        .join(":")
+}
+
 /// Whether `program`, started from `place`, is one the sandbox could not run.
-/// `paths` are the session `PATH` and the one the sandbox accepted.
+/// `paths` are the session `PATH`, the same list without the package-shim
+/// directories, and the one the sandbox accepted.
 fn unreachable_from(
     program: &str,
     place: Option<&Path>,
-    paths: (&str, &str),
+    paths: (&str, &str, &str),
+    workspace: &Path,
     reaches: &impl Fn(&Path) -> bool,
 ) -> bool {
-    let (search_path, sandbox_path) = paths;
+    let (search_path, shimless_path, sandbox_path) = paths;
     let found = match locate(program, search_path, place) {
+        Lookup::Found(path)
+            if path
+                .parent()
+                .is_some_and(|dir| is_guard_package_shim(dir, workspace)) =>
+        {
+            match locate(program, shimless_path, place) {
+                Lookup::Found(path) => path,
+                // A shim is the only answer this session has, so there is
+                // nothing behind it for the sandbox to run, and containing
+                // the command would trade a review for a failure.
+                Lookup::Missing | Lookup::Unresolved => return true,
+            }
+        }
         Lookup::Found(path) => path,
         Lookup::Missing => return false,
         Lookup::Unresolved => return true,

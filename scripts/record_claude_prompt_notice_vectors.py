@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Record parity vectors for Guard's Claude Code prompt notice.
 
-The expected answers come from ``_claude_native_prompt_brand``, which the
-daemon applies to a reviewed Claude ``UserPromptSubmit`` outside Watch. The
-resident's port in ``hook_direct_claude_prompt_text.rs`` replays every vector:
-one native prompt result, the harness response the edge rendered for it, and
-the response the daemon returns after adding its notice.
+The expected answers come from Guard's Claude prompt copy in
+``commands_support_prompts``. The resident adds this notice to a reviewed
+Claude ``UserPromptSubmit`` outside Watch (``hook_direct_claude_prompt_text.rs``)
+and replays every vector: one native prompt result, the harness response the
+edge rendered for it, and the response after the notice is added.
 
 Usage: python scripts/record_claude_prompt_notice_vectors.py [--check]
 Deterministic output.
@@ -21,7 +21,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from codex_plugin_scanner.guard.daemon.hook_worker_native import _claude_native_prompt_brand  # noqa: E402
+from codex_plugin_scanner.guard.cli.commands_support_prompts import (  # noqa: E402
+    _claude_prompt_additional_context,
+    _claude_prompt_system_message,
+)
+from codex_plugin_scanner.guard.models import GuardArtifact  # noqa: E402
 
 OUT = ROOT / "rust/crates/guard-runtime/tests/fixtures/claude_prompt_notice_vectors.json"
 ACTIONS = ("require-reapproval", "block", "sandbox-required")
@@ -61,6 +65,56 @@ RESPONSES: tuple[tuple[str, dict[str, object]], ...] = (
 )
 
 
+# Native classes Guard's prompt copy reads as a request for local secrets.
+SECRET_READ_NATIVE_CLASSES = frozenset({"local_env_read", "sensitive_material"})
+
+
+def brand(response: dict[str, object], native_result: dict[str, object]) -> dict[str, object]:
+    """Add Guard's Claude prompt notice to ``response`` as the copy helpers render it."""
+
+    raw_classes = native_result.get("prompt_risk_classes")
+    request_classes = (
+        [
+            "secret_read" if item in SECRET_READ_NATIVE_CLASSES else item
+            for item in raw_classes
+            if isinstance(item, str) and item
+        ]
+        if isinstance(raw_classes, list)
+        else []
+    )
+    artifact = GuardArtifact(
+        artifact_id="claude-code:native-prompt:session",
+        name="user prompt",
+        harness="claude-code",
+        artifact_type="prompt_request",
+        source_scope="harness",
+        config_path="",
+        metadata={"prompt_request_classes": request_classes},
+    )
+    policy_action = str(native_result.get("minimum_action") or "")
+    native_reason = str(native_result.get("reason") or "")
+    system_message = _claude_prompt_system_message(
+        event_name="UserPromptSubmit",
+        policy_action=policy_action,
+        artifact=artifact,
+        native_reason=lambda: native_reason,
+    )
+    if system_message:
+        response["systemMessage"] = system_message
+    additional_context = _claude_prompt_additional_context(
+        harness="claude-code",
+        event_name="UserPromptSubmit",
+        policy_action=policy_action,
+        artifact=artifact,
+        native_reason=native_reason,
+    )
+    if additional_context:
+        hook_output = response.get("hookSpecificOutput")
+        if isinstance(hook_output, dict):
+            hook_output["additionalContext"] = additional_context
+    return response
+
+
 def result(action: object, classes: object, reason: object) -> dict[str, object]:
     fields: dict[str, object] = {"decision": "block", "minimum_action": action, "reason": reason}
     if classes is not ...:
@@ -96,7 +150,7 @@ def document() -> dict[str, object]:
             "name": name,
             "result": native_result,
             "response": response,
-            "expected": _claude_native_prompt_brand(copy.deepcopy(response), native_result),
+            "expected": brand(copy.deepcopy(response), native_result),
         }
         for name, native_result, response in cases()
     ]

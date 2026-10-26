@@ -117,7 +117,7 @@ def test_missing_release_is_published_only_after_all_platform_downloads(tmp_path
     publisher.publish(directory)
     edits = [i for i, command in enumerate(commands) if command[:3] == ("gh", "release", "edit")]
     downloads = [i for i, command in enumerate(commands) if command[:3] == ("gh", "release", "download")]
-    assert len(downloads) == 8  # Five native wheels, pure wheel, sdist and provenance.
+    assert len(downloads) == 9  # Six native wheels, pure wheel, sdist and provenance.
     assert max(downloads) < edits[0]
     assert (tmp_path / "output").read_text() == "core_ready=true\n"
 

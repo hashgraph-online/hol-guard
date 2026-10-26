@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import sqlite3
+import time
 from pathlib import Path
 
 import pytest
@@ -25,6 +27,12 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControlLayer,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+def _native_receipt_decisions(guard_home: Path) -> list[str]:
+    with sqlite3.connect(guard_home / "guard.db") as connection:
+        rows = connection.execute("select decision from native_hook_decision_receipts").fetchall()
+    return [str(row[0]) for row in rows]
 
 
 @pytest.mark.parametrize(
@@ -110,11 +118,17 @@ def test_guard_hook_honors_explicit_extension_permission(
     )
 
     assert result == 0
-    assert output.getvalue() == ""
+    assert json.loads(output.getvalue())["hookSpecificOutput"]["permissionDecision"] == "allow"
     assert store.list_approval_requests(limit=1) == []
-    receipts = store.list_receipts(limit=1)
+    # The resident records the decision receipt on its own thread after the
+    # hook answers.
+    decisions = _native_receipt_decisions(guard_home)
+    deadline = time.monotonic() + 10
+    while receipt_expected and not decisions and time.monotonic() < deadline:
+        time.sleep(0.05)
+        decisions = _native_receipt_decisions(guard_home)
     if receipt_expected:
-        assert receipts[0]["policy_decision"] == "allow"
+        assert decisions == ["allow"]
     else:
         # An enabled permission does not skip independent artifact policy.
-        assert not receipts or receipts[0]["policy_decision"] == "allow"
+        assert set(decisions) <= {"allow"}

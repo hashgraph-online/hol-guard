@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
 from codex_plugin_scanner.guard import native_consumer_artifact_compose, native_hook_artifact_compose
-from codex_plugin_scanner.guard.consumer import service
+from codex_plugin_scanner.guard.runtime.decisions import project_native_authoritative_decision
 
 _FIXTURES = Path(__file__).parent.parent / "rust/crates/guard-runtime/tests/fixtures"
 
@@ -50,8 +51,7 @@ def test_fused_decision_needs_one_existing_resident_call(
             {"runtime": runtime, "signals": []},
             guard_home=native_approval_reuse_runtime,
         )
-        projected = service._project_runtime_decision(answer)
-        assert projected is not None
+        projected = project_native_authoritative_decision(cast("dict[str, Any]", answer["authoritative_decision"]))
         assert projected.action == vector["expected"]["policy_action"]
         assert projected.reason == vector["expected"]["decision_reason"]
     assert calls == [f"{operation}_artifact_compose"]

@@ -299,3 +299,82 @@ def test_documented_behavior_serializes_separately_from_observed_capabilities(tm
     assert "private-hostname" not in encoded
     assert "private-token" not in encoded
     assert skill_path.as_posix() not in encoded
+
+
+def test_evidence_stays_unavailable_when_the_runtime_does_not_answer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard import skill_document_evidence
+
+    home = tmp_path / "home"
+    path = _write_skill(home, "curl https://secret.example.test/v1/data\n")
+    monkeypatch.setattr(
+        skill_document_evidence,
+        "native_skill_document_evidence",
+        lambda *_args, **_kwargs: None,
+    )
+
+    metadata = _metadata_for(path, home)
+
+    assert metadata["contentEvidence"] == {
+        "analysisVersion": "1",
+        "readabilityStatus": "unavailable",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
+    }
+    assert "documentedCapabilities" not in metadata
+
+
+def test_a_runtime_answer_is_presented_without_being_recomputed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The evidence Python reports is the runtime's, capability included."""
+
+    from codex_plugin_scanner.guard import skill_document_evidence
+
+    home = tmp_path / "home"
+    # A document whose own text documents nothing; the answer still carries a
+    # capability, so Python cannot be deriving one from the bytes.
+    path = _write_skill(home, "A local formatting skill.\n")
+    monkeypatch.setattr(
+        skill_document_evidence,
+        "native_skill_document_evidence",
+        lambda *_args, **_kwargs: {
+            "readabilityStatus": "readable",
+            "byteLength": 7,
+            "schemaVersion": "guard.skill.content-evidence.v1",
+            "contentHash": f"sha256:{'0' * 64}",
+            "lineCount": 3,
+            "headingCount": 2,
+            "frontmatterPresent": True,
+            "truncatedForAnalysis": False,
+            "documentedNetworkCapability": "explicit_remote_api_statement",
+        },
+    )
+
+    metadata = _metadata_for(path, home)
+
+    assert metadata["contentEvidence"] == {
+        "analysisVersion": "1",
+        "evidenceAuthority": "device_claim",
+        "affectsV4Score": False,
+        "readabilityStatus": "readable",
+        "byteLength": 7,
+        "schemaVersion": "guard.skill.content-evidence.v1",
+        "contentHash": f"sha256:{'0' * 64}",
+        "lineCount": 3,
+        "headingCount": 2,
+        "frontmatterPresent": True,
+        "truncatedForAnalysis": False,
+    }
+    assert metadata["documentedCapabilities"] == [
+        {
+            "capability": "network_egress",
+            "source": "skill_documentation",
+            "confidence": "high",
+            "evidenceCode": "explicit_remote_api_statement",
+            "inferenceVersion": "1",
+        }
+    ]

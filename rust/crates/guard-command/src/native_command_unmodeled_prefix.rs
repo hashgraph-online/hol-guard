@@ -7,11 +7,30 @@
 //! own options, so the program is not at a fixed offset: `nice -n 10 cargo`,
 //! `nice -10 cargo` and `timeout -k 5 30 cargo` each put it somewhere else.
 //! Each prefix below is walked through its own documented option grammar. A
-//! word that grammar does not cover, a program spelled as a path, a script
-//! file this scan never opened, and an interpreter standing behind the prefix
-//! all leave a program the text does not name, so each one keeps the
-//! evaluation failure the command arrived with.
+//! word that grammar does not cover, a script file this scan never opened, and
+//! an interpreter standing behind the prefix all leave a program the text does
+//! not name, so each one keeps the evaluation failure the command arrived
+//! with. A program spelled as a path does so too for the caller that has no
+//! route left to read it; see [`Handover`].
 use super::{command_basename, is_assignment, without_redirections, INTERPRETERS, SHELL_PREFIXES};
+
+/// Who is asking whether the words behind a launcher name a program nothing
+/// opened, and so what happens to a program spelled as a path.
+///
+/// The parser reads the launcher to hand its program to the parser's own
+/// routes. Those routes open what the word names: `.venv/bin/pytest -q`
+/// arrives at the same reading with the launcher written or not, so handing
+/// a path on decides nothing the bare command had not already decided.
+///
+/// The unmodelled floor has no such route left. A path there is a file this
+/// scan never opened, and reading only its last word would hand `nice
+/// ./deploy.sh` the owners of a program called `deploy.sh`, so it keeps the
+/// failure the command arrived with.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Handover {
+    Parsed,
+    Floor,
+}
 
 /// One prefix's option grammar: the short letters it takes alone, the short
 /// letters that carry a value, the same for its long spellings, whether a
@@ -235,24 +254,32 @@ fn command_reads_a_program_file(piece: &str) -> bool {
         return false;
     };
     if is_launcher(program) {
-        return prefix_reads_a_program_file(&words);
+        return prefix_reads_a_program_file(&words, Handover::Floor);
     }
-    reads_a_program_file(&words, 0)
+    reads_a_program_file(&words, 0, Handover::Floor)
 }
 
 /// The same question asked of the program a launcher hands its options to.
 ///
-/// A launcher runs that program directly, so a path or a script name there is
-/// a file whose own text names the programs it runs, and this scan has not
-/// read it. `nice ./deploy.sh` is that file, not the one word `deploy.sh`.
-pub(crate) fn prefix_reads_a_program_file(words: &[&str]) -> bool {
+/// A launcher runs that program directly, so a script name there is a file
+/// whose own text names the programs it runs, and this scan has not read it.
+/// `nice ./deploy.sh` is that file, not the one word `deploy.sh`. A path that
+/// is not a script is the caller's to decide through [`Handover`].
+pub(crate) fn prefix_reads_a_program_file(words: &[&str], handover: Handover) -> bool {
     // Options this grammar does not cover leave the program unknown, and an
     // unknown program is read as one this scan never saw.
     let Some(index) = program_index(words) else {
         return true;
     };
-    let rest = &words[index..];
-    let Some(program) = rest.first() else {
+    reads_behind_a_prefix(&words[index..], handover)
+}
+
+/// Whether the words a prefix hands over still name a program this scan never
+/// read. The question is the same wherever the handover came from, so a
+/// stacked launcher and a transparent `env` both ask it again of what they
+/// hand on.
+fn reads_behind_a_prefix(words: &[&str], handover: Handover) -> bool {
+    let Some(program) = words.first() else {
         return true;
     };
     // A launcher hands its program to whatever stands next, which may be
@@ -261,12 +288,62 @@ pub(crate) fn prefix_reads_a_program_file(words: &[&str]) -> bool {
     // miss it. Walk a stacked launcher down to the program it runs, and keep
     // the failure for any other prefix standing in that position.
     if is_launcher(program) {
-        return prefix_reads_a_program_file(rest);
+        return prefix_reads_a_program_file(words, handover);
+    }
+    if let Some(next) = transparent_env_program(words) {
+        return reads_behind_a_prefix(&words[next..], handover);
     }
     if SHELL_PREFIXES.contains(&command_basename(program).as_str()) {
         return true;
     }
-    program.contains(['/', '\\']) || names_a_script(program) || reads_a_program_file(rest, 0)
+    (handover == Handover::Floor && program.contains(['/', '\\']))
+        || names_a_script(program)
+        || reads_a_program_file(words, 0, handover)
+}
+
+/// Where an `env` that only decides the names its program starts with hands
+/// the text over, if these words begin with one.
+///
+/// The parser already reads `env CI=1 pytest -q` as `pytest -q`, so a command
+/// spelled that way is modelled and never arrives here. Behind a launcher it
+/// does arrive: `exec env CI=1 pytest -q` is unmodeled as a whole, and this
+/// scan read the word `env` as a program it never saw, which left ordinary
+/// test runs asking for approval while `exec pytest -q` beside them ran
+/// quietly. Walking the prefix the way the parser walks it keeps the two
+/// spellings reading alike.
+///
+/// Only the prefix the parser calls transparent walks through. `env -i`,
+/// `env -S'sh -c id'`, `env -C /tmp` and a bare `env prog` are each something
+/// other than a name list, so `env` stays the command to judge and the words
+/// behind it keep their failure.
+fn transparent_env_program(words: &[&str]) -> Option<usize> {
+    if !crate::parser_wrappers::env_spelling(words.first()?) {
+        return None;
+    }
+    let tokens: Vec<String> = words.iter().map(|word| (*word).to_owned()).collect();
+    let (program, _names) = crate::parser_wrappers::transparent_prefix(&tokens, 0)?;
+    // Only a prefix that writes ordinary values walks through. Nothing
+    // further along this path reads the names it decided, while on the parser
+    // path they reach `environment_names`, where a name that steers lookup,
+    // loading, configuration, credentials, the trust anchor or the endpoint
+    // keeps the command under review. Without this, `exec env LD_PRELOAD=x.so
+    // pytest -q` earned pytest's owner floor while the bare
+    // `LD_PRELOAD=x.so pytest -q` beside it was still reviewed, so writing a
+    // launcher in front of a loader hook made the command less strict.
+    //
+    // Only a name this prefix writes is read. `-u LD_PRELOAD` takes the hook
+    // away from the program rather than handing it one, so an unset keeps the
+    // walk the launcher was added for.
+    if words[..program].iter().any(|word| {
+        is_assignment(word)
+            && word.split_once('=').is_some_and(|(name, _)| {
+                !crate::command_compatibility::environment::ordinary_setting_name(name)
+            })
+    }) {
+        return None;
+    }
+    // The program always stands past the prefix, so the walk moves forward.
+    (program > 0).then_some(program)
 }
 
 /// The command a launcher prefix stands in front of, as a slice of the text.
@@ -323,12 +400,19 @@ fn word_spans(text: &str) -> Vec<(usize, &str)> {
 
 /// Whether the word at `index` is an interpreter that takes the program it
 /// runs from a file this scan never read.
-fn reads_a_program_file(words: &[&str], index: usize) -> bool {
+fn reads_a_program_file(words: &[&str], index: usize, handover: Handover) -> bool {
     let Some(program) = words.get(index) else {
         return true;
     };
     let program = command_basename(program);
     if program == "env" || program == "env.exe" {
+        if let Some(next) = transparent_env_program(&words[index..]) {
+            // The words behind the prefix are asked the same question a
+            // handover anywhere else asks, and answer it the same way, so
+            // `env CI=1 ./deploy.sh` is that script file, not the one word
+            // `deploy.sh`.
+            return reads_behind_a_prefix(&words[index + next..], handover);
+        }
         return env_runs_a_program(&words[index + 1..]);
     }
     if !is_python(program.as_str()) {

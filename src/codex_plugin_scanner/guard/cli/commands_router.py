@@ -240,6 +240,11 @@ def _dispatch_guard_command(
         home_override_explicit=home_override_explicit,
         workspace_override_explicit=bool(getattr(args, "workspace", None)),
     )
+    if args.guard_command == "runtime":
+        # Read-only: describes executables without starting them and decides nothing.
+        from .runtime_posture_command import run_runtime_posture_command
+
+        return run_runtime_posture_command(args, context=context, output_stream=output_stream)
     if args.guard_command == "doctor" and bool(getattr(args, "incident", False)):
         from .doctor_incident import run_codex_incident_export
 

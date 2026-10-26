@@ -1,219 +1,23 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from datetime import datetime, timezone
 
-import pytest
-
-from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.runtime.command_activity_contract import (
-    ActivityApprovalReuseStatus,
-    ActivityDecisionReason,
-    ActivityLatencyBucket,
-    ActivityParseConfidence,
     CommandExecutionStatus,
     CommandHookPhase,
     CommandProofLevel,
     CorrelationHandle,
     CorrelationKind,
-    ReceiptLinkStatus,
 )
 from codex_plugin_scanner.guard.runtime.command_activity_lifecycle import (
-    CommandActivityDecisionFacts,
-    build_correlated_post_activity,
-    build_pre_hook_evidence,
     build_unpaired_post_evidence,
 )
-from codex_plugin_scanner.guard.runtime.effect_contract import EffectKind, UncertaintyKind
-from tests.native_command_test_support import real_native_command_evaluation
 
 NOW = datetime(2026, 7, 18, 20, 0, tzinfo=timezone.utc)
 
 
 def _correlation(kind: CorrelationKind = CorrelationKind.REQUEST, *, digest: str = "a" * 64) -> CorrelationHandle:
     return CorrelationHandle(kind=kind, harness="codex", key_id="key.v1", digest=digest)
-
-
-def _decision(
-    *,
-    action: GuardAction = "allow",
-    reason: ActivityDecisionReason = ActivityDecisionReason.EXTENSION_MATCH,
-    receipt_id: str | None = None,
-) -> CommandActivityDecisionFacts:
-    return CommandActivityDecisionFacts(
-        policy_action=action,
-        decision_reason_code=reason,
-        prompted=action == "review",
-        approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
-        receipt_id=receipt_id,
-    )
-
-
-def test_pre_hook_uses_only_authoritative_evaluation_and_final_decision_facts() -> None:
-    evaluation = real_native_command_evaluation("rm -rf ./generated-output").evaluation
-    request = _correlation()
-    evidence = build_pre_hook_evidence(
-        evaluation,
-        _decision(action="review", receipt_id="receipt:01"),
-        activity_id="activity:01",
-        occurred_at=NOW,
-        harness="codex",
-        request_correlation=request,
-        evaluation_latency_bucket=ActivityLatencyBucket.LE_2_MS,
-    )
-
-    activity = evidence.activity
-    match = evidence.matches[0]
-    assert activity.execution_status is CommandExecutionStatus.PREVENTED
-    assert activity.policy_action == "review"
-    assert activity.prompted is True
-    assert activity.receipt_link_status is ReceiptLinkStatus.LINKED
-    assert activity.receipt_id == "receipt:01"
-    assert activity.controlling_rule_id == "command.filesystem.recursive-delete"
-    assert activity.parse_confidence is ActivityParseConfidence.EXACT
-    assert activity.request_correlation == request
-    assert match.identity.extension_id == "command.filesystem"
-    assert match.identity.extension_version == "1.0.0"
-    assert match.identity.rule_id == "command.filesystem.recursive-delete"
-    assert match.identity.rule_version == "1.0.0"
-    assert match.effect_claims == frozenset({EffectKind.DESTRUCTIVE_OR_IRREVERSIBLE_OPERATION})
-    assert match.default_floor == "review"
-
-
-def test_allow_and_warn_are_allowed_unconfirmed_while_review_or_stronger_is_prevented() -> None:
-    evaluation = real_native_command_evaluation("rm -rf ./generated-output").evaluation
-    for action in ("allow", "warn"):
-        evidence = build_pre_hook_evidence(
-            evaluation,
-            _decision(action=action),
-            activity_id=f"activity:{action}",
-            occurred_at=NOW,
-            harness="codex",
-        )
-        assert evidence.activity.execution_status is CommandExecutionStatus.ALLOWED_UNCONFIRMED
-    for action in ("review", "require-reapproval", "sandbox-required", "block"):
-        evidence = build_pre_hook_evidence(
-            evaluation,
-            _decision(action=action, receipt_id=f"receipt:{action}"),
-            activity_id=f"activity:{action}",
-            occurred_at=NOW,
-            harness="codex",
-        )
-        assert evidence.activity.execution_status is CommandExecutionStatus.PREVENTED
-
-
-def test_required_critical_rule_retains_the_evaluators_block_floor() -> None:
-    evidence = build_pre_hook_evidence(
-        real_native_command_evaluation("mkfs /dev/example").evaluation,
-        _decision(action="block", receipt_id="receipt:critical"),
-        activity_id="activity:critical",
-        occurred_at=NOW,
-        harness="codex",
-    )
-
-    assert any(match.default_floor == "block" for match in evidence.matches)
-
-
-def test_no_match_reason_is_exact_and_does_not_invent_rule_evidence() -> None:
-    evaluation = real_native_command_evaluation("printf routine").evaluation
-    evidence = build_pre_hook_evidence(
-        evaluation,
-        _decision(reason=ActivityDecisionReason.NO_MATCH),
-        activity_id="activity:no-match",
-        occurred_at=NOW,
-        harness="codex",
-    )
-
-    assert evidence.matches == ()
-    assert evidence.activity.match_count == 0
-    assert evidence.activity.controlling_rule_id is None
-    with pytest.raises(ValueError, match="no-match"):
-        _ = build_pre_hook_evidence(
-            evaluation,
-            _decision(),
-            activity_id="activity:bad-reason",
-            occurred_at=NOW,
-            harness="codex",
-        )
-
-
-def test_claimed_workflow_capability_may_authorize_without_extension_matches() -> None:
-    evidence = build_pre_hook_evidence(
-        real_native_command_evaluation("printf routine").evaluation,
-        CommandActivityDecisionFacts(
-            policy_action="allow",
-            decision_reason_code=ActivityDecisionReason.CAPABILITY,
-            prompted=False,
-            approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
-            receipt_id="receipt:capability",
-            workflow_authorization_claimed=True,
-        ),
-        activity_id="activity:capability",
-        occurred_at=NOW,
-        harness="codex",
-    )
-
-    assert evidence.matches == ()
-    assert evidence.activity.match_count == 0
-    assert evidence.activity.decision_reason_code is ActivityDecisionReason.CAPABILITY
-
-
-@pytest.mark.parametrize("action,claimed", [("review", True), ("allow", False)])
-def test_capability_reason_requires_final_allow_and_a_claimed_authorization(
-    action: GuardAction,
-    claimed: bool,
-) -> None:
-    with pytest.raises(ValueError, match="claimed workflow authorization and final allow"):
-        _ = CommandActivityDecisionFacts(
-            policy_action=action,
-            decision_reason_code=ActivityDecisionReason.CAPABILITY,
-            prompted=action == "review",
-            approval_reuse_status=ActivityApprovalReuseStatus.NOT_APPLICABLE,
-            receipt_id="receipt:invalid-capability",
-            workflow_authorization_claimed=claimed,
-        )
-
-
-def test_parser_uncertainty_is_bounded_without_storing_parser_input() -> None:
-    exact = real_native_command_evaluation("rm -rf ./generated-output").evaluation
-    uncertain_command = replace(
-        exact.command,
-        confidence="uncertain",
-        uncertainty_reason="command_token_limit_exceeded",
-    )
-    uncertain = replace(exact, command=uncertain_command)
-    evidence = build_pre_hook_evidence(
-        uncertain,
-        _decision(reason=ActivityDecisionReason.UNCERTAINTY),
-        activity_id="activity:uncertain",
-        occurred_at=NOW,
-        harness="codex",
-    )
-
-    assert evidence.activity.parse_confidence is ActivityParseConfidence.UNCERTAIN
-    assert evidence.activity.uncertainty_class is UncertaintyKind.PARSER_BUDGET_EXHAUSTED
-    assert "generated-output" not in repr(evidence)
-
-
-def test_correlated_post_activity_accepts_the_parent_row_returned_by_storage() -> None:
-    request = _correlation()
-    pre = build_pre_hook_evidence(
-        real_native_command_evaluation("rm -rf ./generated-output").evaluation,
-        _decision(),
-        activity_id="activity:stored",
-        occurred_at=NOW,
-        harness="codex",
-        request_correlation=request,
-    )
-
-    post = build_correlated_post_activity(
-        pre.activity,
-        request_correlation=request,
-        succeeded=True,
-    )
-
-    assert post.execution_status is CommandExecutionStatus.CONFIRMED_SUCCESS
-    assert post.activity_id == pre.activity.activity_id
 
 
 def test_unpaired_post_claims_no_decision_match_receipt_or_request_proof() -> None:
@@ -236,18 +40,3 @@ def test_unpaired_post_claims_no_decision_match_receipt_or_request_proof() -> No
     assert activity.receipt_id is None
     assert activity.match_count == 0
     assert evidence.matches == ()
-
-
-def test_runtime_construction_exposes_no_command_or_matcher_content_fields() -> None:
-    evaluation = real_native_command_evaluation("rm -rf /private/forbidden-sentinel").evaluation
-    evidence = build_pre_hook_evidence(
-        evaluation,
-        _decision(),
-        activity_id="activity:privacy",
-        occurred_at=NOW,
-        harness="codex",
-    )
-
-    serialized = repr(evidence)
-    for forbidden in ("forbidden-sentinel", "raw_text", "normalized_text", "matcher_evidence"):
-        assert forbidden not in serialized

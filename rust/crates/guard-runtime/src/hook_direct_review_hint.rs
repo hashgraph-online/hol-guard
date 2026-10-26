@@ -1,8 +1,9 @@
 //! The queue-time hint a reviewed `PreToolUse` is stored with.
 //!
-//! This ports `native_review_hint` (`native_review_allow_hint.py`) for the
-//! reviews the resident queues itself. A review grouped under a connector is
-//! stored with the connector-setup hint instead and never reaches here
+//! This is `native_review_hint` for the reviews the resident queues itself,
+//! and, through the `extension_review_hint` op ([`op`]), for the ones the
+//! daemon queues. A review grouped under a connector is stored with the
+//! connector-setup hint instead and never reaches here
 //! (`hook_direct_review_connector.rs`).
 //!
 //! Every queued review carries the coverage hint when an extension observed
@@ -104,12 +105,32 @@ fn allow_hint(
     if remaining(scope.deadline)? < MIN_BUDGET {
         return None;
     }
+    let review = shell_review(payload, workspace, home_dir)?;
+    let deadline = scope.deadline;
+    crate::command_effect::with_store(Some(scope.policy_store), |controls| {
+        // Without admitted extension controls there is no snapshot to bind.
+        controls.map_or(Ok(None), |controls| {
+            hint_under(controls, &review, result, deadline)
+        })
+    })
+    .ok()
+    .flatten()
+    .and_then(|hint| serde_json::to_value(hint).ok())
+}
+
+/// The extension-evidence review of the payload's shell command, in the
+/// launch directory the daemon would use.
+fn shell_review(
+    payload: &Map<String, Value>,
+    workspace: &str,
+    home_dir: &str,
+) -> Option<PreToolRequestV1> {
     let command = pre_tool_command(payload).ok()??;
     let cwd = super::super::local_cli::launch_cwd(payload, workspace).ok()?;
     let home_dir = Some(home_dir.to_owned()).filter(|home| !home.is_empty());
     // The hint reviews the command in the shell the hook was stamped from,
     // never the resident's own environment.
-    let review = PreToolRequestV1 {
+    Some(PreToolRequestV1 {
         model: CommandModelRequestV1 {
             command,
             dialect: "posix".to_owned(),
@@ -123,17 +144,7 @@ fn allow_hint(
             .filter(|stamp| stamp.is_object())
             .cloned(),
         extension_evidence: true,
-    };
-    let deadline = scope.deadline;
-    crate::command_effect::with_store(Some(scope.policy_store), |controls| {
-        // Without admitted extension controls there is no snapshot to bind.
-        controls.map_or(Ok(None), |controls| {
-            hint_under(controls, &review, result, deadline)
-        })
     })
-    .ok()
-    .flatten()
-    .and_then(|hint| serde_json::to_value(hint).ok())
 }
 
 /// The allow hint for `review` under the admitted `controls`, once the fresh
@@ -149,6 +160,17 @@ fn hint_under(
     if !same_review(result, &fresh) {
         return Ok(None);
     }
+    counterfactual(controls, review, fresh, deadline)
+}
+
+/// The permissions whose Allow would let `review` run, given its `fresh`
+/// extension evidence under `controls`.
+fn counterfactual(
+    controls: &CompiledNativeCommandControls,
+    review: &PreToolRequestV1,
+    fresh: Value,
+    deadline: Instant,
+) -> Result<Option<ExtensionAllowHintV1>, String> {
     // The fresh review used part of the budget; the counterfactual needs the
     // same floor the hint started with.
     let Some(budget) = remaining(deadline)
@@ -208,6 +230,9 @@ fn same_review(paused: &Object, fresh: &Value) -> bool {
             .iter()
             .all(|key| present(paused.get(*key)) == present(fresh.get(*key)))
 }
+
+#[path = "hook_direct_review_hint_op.rs"]
+pub(crate) mod op;
 
 #[cfg(test)]
 #[path = "hook_direct_review_hint_tests.rs"]

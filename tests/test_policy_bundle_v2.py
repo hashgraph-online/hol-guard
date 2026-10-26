@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+import copy
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
@@ -22,12 +24,12 @@ from codex_plugin_scanner.guard.policy_bundle_v2 import (
     POLICY_BUNDLE_V2_CONTRACT,
     canonical_policy_bundle_v2_payload,
     computed_policy_bundle_v2_hash,
-    payload_hash_for_policy_bundle_v2,
     validate_policy_bundle_v2_transition,
     validated_policy_bundle_v2_acknowledgement,
     validated_policy_bundle_v2_payload,
 )
-from codex_plugin_scanner.guard.policy_document_yaml import load_policy_document
+from codex_plugin_scanner.guard.policy_document import canonical_json_bytes, canonical_policy_document_bytes
+from codex_plugin_scanner.guard.policy_document_yaml import load_policy_document, parse_policy_document_yaml
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
 
 _FIXTURE = Path(__file__).parents[1] / "spec" / "guard-policy" / "v1alpha1" / "fixtures" / "valid" / "basic.yaml"
@@ -54,6 +56,25 @@ def _verification_key(
     )
 
 
+def _reference_payload_hash(payload: dict[str, object]) -> str:
+    """The hash Guard Cloud binds: the payload's canonical JSON read as a policy document."""
+
+    document = parse_policy_document_yaml(canonical_json_bytes(payload))
+    return "sha256:" + hashlib.sha256(canonical_policy_document_bytes(document)).hexdigest()
+
+
+def _fixture_payload(**edits: object) -> dict[str, object]:
+    payload = copy.deepcopy(load_policy_document(_FIXTURE).to_mapping())
+    metadata = cast(dict[str, object], payload["metadata"])
+    spec = cast(dict[str, object], payload["spec"])
+    rule = cast(list[dict[str, object]], spec["rules"])[0]
+    if "description" in edits:
+        rule["description"] = edits["description"]
+    if "labels" in edits:
+        metadata["labels"] = edits["labels"]
+    return payload
+
+
 def _signed_bundle(
     private_key: rsa.RSAPrivateKey,
     verification_key: PolicyBundleVerificationKey,
@@ -62,6 +83,7 @@ def _signed_bundle(
     rollback: dict[str, object] | None = None,
     payload_base: dict[str, object] | None = None,
     payload_extensions: dict[str, object] | None = None,
+    payload_hash: str | None = None,
 ) -> dict[str, object]:
     document = load_policy_document(_FIXTURE)
     payload = dict(payload_base) if payload_base is not None else document.to_mapping()
@@ -87,7 +109,7 @@ def _signed_bundle(
         "payload": payload,
         "rollback": rollback,
     }
-    bundle["payloadHash"] = payload_hash_for_policy_bundle_v2(bundle)
+    bundle["payloadHash"] = payload_hash if payload_hash is not None else _reference_payload_hash(payload)
     bundle["bundleHash"] = computed_policy_bundle_v2_hash(bundle)
     signature = private_key.sign(
         canonical_policy_bundle_v2_payload(bundle),
@@ -536,4 +558,56 @@ def test_policy_shadow_comparison_uses_bounded_semantic_reason_codes() -> None:
         "row_count",
         "selector_set",
         "action",
+    )
+
+
+@pytest.mark.parametrize(
+    "edits",
+    [
+        {"description": "Block\x85untrusted\x85\x85installs"},
+        {"description": "Block  \x85  untrusted installs"},
+        {"description": "Line\u2028separator and\u2029paragraph\x85kept"},
+        {"description": "Trailing spaces   "},
+        {"description": 'Quotes " back\\slash\ttab\nnewline'},
+        {"description": "Unicode caf\u00e9 \U0001f600 \u00a0"},
+        {"description": "Marker\x85  --- not at line start"},
+        {"description": "x" * 4096},
+        # Over the schema's 4096 characters as JSON, within it once folded.
+        {"description": "x" * 4090 + "      \x85y"},
+    ],
+)
+def test_runtime_payload_hash_matches_the_policy_document_reading(edits: dict[str, object]) -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verification_key = _verification_key(private_key)
+    bundle = _signed_bundle(private_key, verification_key, payload_base=_fixture_payload(**edits))
+
+    assert validated_policy_bundle_v2_payload(
+        bundle,
+        trusted_verification_keys=(verification_key,),
+        anchored_verification_keys=(verification_key,),
+        now=datetime(2026, 7, 16, tzinfo=timezone.utc),
+    ) == (bundle, None)
+
+
+@pytest.mark.parametrize(
+    "edits",
+    [
+        {"description": "Marker\x85--- at line start"},
+        {"description": "Document end\u2028... here"},
+        {"description": "Non-printable \x7f"},
+        {"labels": {"line\x85break": "v"}},
+        {"labels": {"<<": "v"}},
+    ],
+)
+def test_runtime_refuses_a_payload_the_policy_document_reading_refuses(edits: dict[str, object]) -> None:
+    payload = _fixture_payload(**edits)
+    with pytest.raises(Exception):  # noqa: B017 - any parser refusal
+        _reference_payload_hash(payload)
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verification_key = _verification_key(private_key)
+    bundle = _signed_bundle(private_key, verification_key, payload_base=payload, payload_hash="sha256:" + "0" * 64)
+
+    assert validated_policy_bundle_v2_payload(bundle, trusted_verification_keys=(verification_key,)) == (
+        None,
+        "invalid_policy_document",
     )

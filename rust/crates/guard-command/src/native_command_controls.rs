@@ -5,7 +5,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use guard_contracts::{
-    NativeCommandControlBindingV1, NativeCommandObservationBatchV1, NativeCommandObservationsV1,
+    NativeCommandControlBindingV1, NativeCommandObservationBatchV1, NativeCommandObservationV1,
+    NativeCommandObservationsV1, NativeCommandPermissionObservationV1,
     NativeCommandReceiptBindingV1, PreToolResultV1, NATIVE_COMMAND_OBSERVATIONS_SCHEMA,
     NATIVE_COMMAND_RECEIPT_BINDING_SCHEMA,
 };
@@ -218,6 +219,10 @@ impl CompiledNativeCommandControls {
         context: crate::pretool::PathContext<'_>,
         environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     ) -> PreToolResultV1 {
+        // Record the active set the decision is actually made with. Compiling
+        // a later snapshot on another thread must not change what this
+        // request reports.
+        crate::native_command_program::work_stats::record_active(self.active_extensions.len());
         let observed = match command {
             Some(command) => self.observe_command(command, deadline, context, environment),
             None => Ok((NativeCommandObservationBatchV1::default(), None)),
@@ -402,10 +407,15 @@ impl CompiledNativeCommandControls {
         result
     }
 
+    /// Whether the user's authenticated extension permissions already cover
+    /// every segment of `command`. A Rust floor raised after the controls run
+    /// consults this through [`Self::explicit_allow_covers_command`]; the
+    /// controls themselves reach it through [`Self::explicit_allow`].
     fn explicit_permissions_cover_command(
         &self,
         command: &CanonicalCommandV1,
-        batch: &NativeCommandObservationBatchV1,
+        observations: &[NativeCommandObservationV1],
+        permission_observations: &[NativeCommandPermissionObservationV1],
         context: crate::pretool::PathContext<'_>,
     ) -> bool {
         if command.confidence != "exact"
@@ -418,7 +428,7 @@ impl CompiledNativeCommandControls {
         let mut covered: BTreeSet<_> = crate::pretool::benign_command_segments(command, context)
             .into_iter()
             .collect();
-        for observation in &batch.observations {
+        for observation in observations {
             if observation.effective_segment_indexes.is_empty() {
                 continue;
             }
@@ -442,11 +452,38 @@ impl CompiledNativeCommandControls {
         }
         // GitHub permission-only owners run last so they never hide an
         // ungranted rule.
-        covered.extend(self.github_granted_segments(&batch.permission_observations));
+        covered.extend(self.github_granted_segments(permission_observations));
         // Delegated package-firewall ownership is not execution consent. Only
         // verified rule observations or the native benign proof can cover a
         // segment; an extra unclassified command retains its own review.
         (0..command.segments.len()).all(|index| covered.contains(&index))
+    }
+
+    /// Whether the user's authenticated extension permissions settle
+    /// `command` on their own, for a Rust floor that is raised after the
+    /// controls have run and so cannot be read off the result's reason.
+    ///
+    /// The caller establishes that the floor it is about to raise is one an
+    /// Allow may settle; this answers only whether the Allow reaches the
+    /// whole command. It reads the observations already recorded on the
+    /// result, so it classifies exactly what the controls classified, and it
+    /// keeps every fixed floor: a segment that runs a configured Git program
+    /// or names Guard itself fails `fixed_command_floor`, and an evaluation
+    /// error leaves nothing to read.
+    pub(crate) fn explicit_allow_covers_command(
+        &self,
+        command: &CanonicalCommandV1,
+        observations: &NativeCommandObservationsV1,
+        context: crate::pretool::PathContext<'_>,
+    ) -> bool {
+        observations.evaluation_error.is_none()
+            && !crate::pretool::fixed_command_floor(command)
+            && self.explicit_permissions_cover_command(
+                command,
+                &observations.observations,
+                &observations.permission_observations,
+                context,
+            )
     }
 }
 
@@ -465,7 +502,7 @@ mod unmodeled;
 use floor::{add_authority_repair_hint, rank, rule_floor, strengthen};
 pub(crate) use unmodeled::{
     bounds_its_owners, launcher_body, prefix_reads_a_program_file, python_is_builtin_only,
-    python_stdin, unread_file_interpreter,
+    python_stdin, unread_file_interpreter, Handover,
 };
 
 #[cfg(test)]

@@ -257,7 +257,11 @@ impl<'a> IgnoreProbe<'a> {
 /// Whether a destructive argument names the whole workspace, an ancestor of
 /// it, or every entry at its root. Deleting build output stays contained;
 /// wiping the workspace loses uncommitted work like `git reset --hard`.
-fn broad_target(argument: &str, workspace: &Path) -> bool {
+///
+/// `below` is how many directories under the workspace root the segment's
+/// shell stands, so a relative operand is resolved from there: after
+/// `cd build`, `rm -f ../*` names every entry at the root, not at its parent.
+fn broad_target(argument: &str, workspace: &Path, below: usize) -> bool {
     use std::path::Component;
     // BSD `sed -i ''` passes an empty backup suffix, not a path.
     if argument.is_empty() || argument.starts_with('-') {
@@ -270,7 +274,14 @@ fn broad_target(argument: &str, workspace: &Path) -> bool {
     let joined = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        workspace.join(path)
+        // The names of the directories the shell descended through do not
+        // matter: a `..` pops whatever stands above it, so a placeholder per
+        // level resolves the operand at the right depth.
+        let mut base = workspace.to_path_buf();
+        for _ in 0..below {
+            base.push("_");
+        }
+        base.join(path)
     };
     let mut normal = std::path::PathBuf::new();
     for component in joined.components() {
@@ -305,6 +316,7 @@ pub(super) fn destroys_workspace(
     let Some(extensions) = result.command_extensions.as_ref() else {
         return true;
     };
+    let below = super::cwd::depths(model, workspace);
     extensions
         .observations
         .iter()
@@ -312,10 +324,34 @@ pub(super) fn destroys_workspace(
         .flat_map(segment_indexes)
         .any(|index| {
             model.segments.get(index).is_none_or(|segment| {
+                let below = below.get(index).copied().unwrap_or(0);
                 segment
                     .arguments
                     .iter()
-                    .any(|argument| broad_target(argument, workspace))
+                    .any(|argument| broad_target(argument, workspace, below))
             })
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    /// A destructive operand is resolved from the directory its segment runs
+    /// in. `cd build && rm -f ../*` names every entry at the workspace root,
+    /// which is the loss this screen refuses, even though the same operand
+    /// read from the root would point at the root's parent.
+    #[test]
+    fn a_parent_glob_after_a_descent_names_the_workspace_root() {
+        let workspace = Path::new("/synthetic/workspace");
+        assert!(super::broad_target("../*", workspace, 1));
+        assert!(super::broad_target("..", workspace, 1));
+        assert!(super::broad_target("../../*", workspace, 2));
+        // Without a proven descent the same operand leaves the workspace, and
+        // the reach checks refuse it before this one is asked.
+        assert!(!super::broad_target("../*", workspace, 0));
+        // A named entry one level down is ordinary build output.
+        assert!(!super::broad_target("../target", workspace, 1));
+        assert!(!super::broad_target("out", workspace, 1));
+    }
 }

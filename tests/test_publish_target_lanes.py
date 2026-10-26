@@ -15,6 +15,7 @@ import pytest
 from tests.release_workflow_helpers import (
     NATIVE_WHEEL_LANES,
     NATIVE_WHEEL_WORKFLOW,
+    PREPARED_WHEEL_LANES,
     PUBLISH_WORKFLOW,
     ROOT,
     load_workflow,
@@ -28,7 +29,9 @@ TARGETS = (
     "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc",
     "aarch64-pc-windows-msvc",
+    "aarch64-unknown-linux-musl",
 )
+PREPARED_TARGETS = TARGETS[:5]
 PREPARE = ROOT / ".github/workflows/release-native-prepare.yml"
 
 
@@ -64,10 +67,12 @@ def _assert_graph(jobs: dict) -> None:
     wheel_ids = [f"build-native-guard-wheel-{lane}" for lane in NATIVE_WHEEL_LANES]
     assert {key for key in jobs if key.startswith("build-native-guard-wheel")} == set(wheel_ids)
     assert {key for key in jobs if key.startswith("precompile-native")} == {
-        f"precompile-native-{lane}" for lane in NATIVE_WHEEL_LANES
+        f"precompile-native-{lane}" for lane in PREPARED_WHEEL_LANES
     }
     conditions = []
     for lane, target in zip(NATIVE_WHEEL_LANES, TARGETS, strict=True):
+        if lane not in PREPARED_WHEEL_LANES:
+            continue
         prepare_id = f"precompile-native-{lane}"
         prepare = jobs[prepare_id]
         wheel = jobs[f"build-native-guard-wheel-{lane}"]
@@ -100,6 +105,26 @@ def _assert_graph(jobs: dict) -> None:
         assert "github.run_attempt == 1" in condition
         conditions.append(condition.replace(prepare_id, "prepare").replace(selected, "selected"))
     assert len(set(conditions)) == 1
+    prepared = "(needs.prepare.result == 'success' || needs.prepare.result == 'skipped') && "
+    for lane, target in zip(NATIVE_WHEEL_LANES, TARGETS, strict=True):
+        if lane in PREPARED_WHEEL_LANES:
+            continue
+        wheel = jobs[f"build-native-guard-wheel-{lane}"]
+        assert wheel["uses"] == "./.github/workflows/release-native-wheel.yml"
+        assert wheel["needs"] == ["build"]
+        assert wheel["with"] == {
+            "target": target,
+            "source_sha": "${{ needs.build.outputs.source_sha }}",
+            "version": "${{ needs.build.outputs.version }}",
+            "channel": "${{ needs.build.outputs.channel }}",
+            "precompiled": False,
+            "release_repair": "${{ needs.build.outputs.release_repair == 'true' }}",
+        }
+        assert wheel["permissions"] == {"contents": "read"}
+        assert "secrets" not in wheel
+        selected = f"contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), '{target}')"
+        condition = " ".join(wheel["if"].split()).replace(selected, "selected")
+        assert condition == conditions[0].replace(prepared, "")
     assemble = jobs["assemble-native-guard-distributions"]
     assert assemble["needs"] == ["build", *wheel_ids, "publish-installed-bundle-assets"]
     assert assemble["runs-on"] == "ubuntu-latest"
@@ -111,7 +136,7 @@ def test_each_wheel_waits_only_for_build_and_its_own_preparation() -> None:
     _assert_graph(load_workflow(PUBLISH_WORKFLOW)["jobs"])
 
 
-@pytest.mark.parametrize("lane", NATIVE_WHEEL_LANES)
+@pytest.mark.parametrize("lane", PREPARED_WHEEL_LANES)
 def test_every_preparation_caller_must_authorize_artifact_reads(lane):
     jobs = copy.deepcopy(load_workflow(PUBLISH_WORKFLOW)["jobs"])
     del jobs[f"precompile-native-{lane}"]["permissions"]["actions"]
@@ -171,9 +196,9 @@ def test_prepare_default_is_five_targets_and_each_selector_is_exactly_one() -> N
         "default": "",
     }
     table = native_target_matrix(workflow["jobs"]["compile"])
-    assert list(table) == ["", *TARGETS]
-    assert table[""] == [table[target][0] for target in TARGETS]
-    for target in TARGETS:
+    assert list(table) == ["", *PREPARED_TARGETS]
+    assert table[""] == [table[target][0] for target in PREPARED_TARGETS]
+    for target in PREPARED_TARGETS:
         assert len(table[target]) == 1
         assert table[target][0]["target"] == target
     assert "arbitrary-target" not in table
@@ -207,22 +232,15 @@ def test_single_wheel_callee_retains_all_fixed_native_hardware_tuples() -> None:
         "macos-15",
         "windows-latest",
         "windows-11-arm",
+        "ubuntu-24.04-arm",
     ]
-    selector = next(
-        step
-        for step in load_workflow(PUBLISH_WORKFLOW)["jobs"]["build"]["steps"]
-        if step.get("id") == "native_wheel_matrix"
-    )
+    selector = _selector_step()
     assert rows == json.loads(selector["env"]["NATIVE_WHEEL_MATRIX"])
 
 
-@pytest.mark.parametrize("channel,old_source,count", [("stable", False, 5), ("canary", False, 4), ("stable", True, 4)])
+@pytest.mark.parametrize("channel,old_source,count", [("stable", False, 6), ("canary", False, 4), ("stable", True, 4)])
 def test_actual_selection_script_keeps_same_canary_and_old_source_omissions(tmp_path, channel, old_source, count):
-    selector = next(
-        step
-        for step in load_workflow(PUBLISH_WORKFLOW)["jobs"]["build"]["steps"]
-        if step.get("id") == "native_wheel_matrix"
-    )
+    selector = _selector_step()
     source = (
         "0" * 40 if old_source else subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     )
@@ -244,7 +262,7 @@ def test_actual_selection_script_keeps_same_canary_and_old_source_omissions(tmp_
     values = dict(line.split("=", 1) for line in output.read_text().splitlines())
     assert json.loads(values["targets"]) == [row["target"] for row in json.loads(values["matrix"])]
     assert len(json.loads(values["targets"])) == count
-    assert (TARGETS[-1] in json.loads(values["targets"])) is (count == 5)
+    assert (TARGETS[-1] in json.loads(values["targets"])) is (count == 6)
 
 
 def _assembly_condition_allows(selected: tuple[str, ...], outcomes: dict[str, str]) -> bool:
@@ -279,26 +297,28 @@ def test_assembly_rejects_every_selected_target_that_did_not_succeed(missing_lan
     assert not _assembly_allowed(TARGETS, outcomes)
 
 
-def test_assembly_allows_only_intentionally_unselected_target_to_skip() -> None:
+@pytest.mark.parametrize("unselected", ["windows-arm64", "linux-arm64"])
+def test_assembly_allows_only_intentionally_unselected_target_to_skip(unselected: str) -> None:
     outcomes = dict.fromkeys(NATIVE_WHEEL_LANES, "success")
-    outcomes["windows-arm64"] = "skipped"
-    assert _assembly_condition_allows(TARGETS[:-1], outcomes)
+    outcomes["windows-arm64"] = outcomes["linux-arm64"] = "skipped"
+    assert _assembly_condition_allows(TARGETS[:4], outcomes)
     source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     assert (
-        _inventory_result(json.dumps(TARGETS[:-1]), json.dumps(_matrix_rows()[:-1]), ROOT, source, "canary").returncode
+        _inventory_result(json.dumps(TARGETS[:4]), json.dumps(_matrix_rows()[:4]), ROOT, source, "canary").returncode
         == 0
     )
     for result in ("failure", "cancelled", "success"):
-        outcomes["windows-arm64"] = result
-        assert not _assembly_condition_allows(TARGETS[:-1], outcomes)
+        outcomes[unselected] = result
+        assert not _assembly_condition_allows(TARGETS[:4], outcomes)
+
+
+def _selector_step():
+    steps = load_workflow(PUBLISH_WORKFLOW)["jobs"]["build"]["steps"]
+    return next(step for step in steps if step.get("id") == "native_wheel_matrix")
 
 
 def _matrix_rows():
-    selector = next(
-        step
-        for step in load_workflow(PUBLISH_WORKFLOW)["jobs"]["build"]["steps"]
-        if step.get("id") == "native_wheel_matrix"
-    )
+    selector = _selector_step()
     return json.loads(selector["env"]["NATIVE_WHEEL_MATRIX"])
 
 
@@ -321,13 +341,16 @@ def _inventory_result(selected, matrix, root, source, channel="stable"):
 @pytest.fixture(scope="module")
 def qualified_sources(tmp_path_factory):
     sources = {}
-    for capable in (False, True):
-        root = tmp_path_factory.mktemp("source-capable" if capable else "source-historical")
+    # False predates GitHub-only wheels, "manifest" predates the Linux ARM64 wheel, True carries both.
+    for capable in (False, "manifest", True):
+        root = tmp_path_factory.mktemp(f"source-{capable}")
         (root / "marker").write_text("qualified source\n")
         if capable:
             manifest = root / "scripts/embed_native_wheel_manifest.py"
             manifest.parent.mkdir()
             manifest.write_text("# source capability fixture\n")
+        if capable is True:
+            (root / "scripts/release_artifact_sets.py").write_text('GITHUB_ONLY = {"manylinux_2_17_aarch64"}\n')
         env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
         subprocess.run(["git", "init", "--quiet"], cwd=root, env=env, check=True)
         subprocess.run(["git", "add", "."], cwd=root, env=env, check=True)
@@ -356,16 +379,42 @@ def qualified_sources(tmp_path_factory):
     return sources
 
 
-@pytest.mark.parametrize("channel", ["stable", "alpha", "canary"])
-@pytest.mark.parametrize("capable", [False, True])
-def test_inventory_gate_preserves_original_source_capability_and_channel_routes(qualified_sources, capable, channel):
-    root, source = qualified_sources[capable]
+def _expected_rows(capable, channel):
     rows = _matrix_rows()
     if channel == "canary" or not capable:
-        rows = rows[:-1]
+        return rows[:4]
+    return rows if capable is True else rows[:5]
+
+
+@pytest.mark.parametrize("channel", ["stable", "alpha", "canary"])
+@pytest.mark.parametrize("capable", [False, "manifest", True])
+def test_inventory_gate_preserves_original_source_capability_and_channel_routes(qualified_sources, capable, channel):
+    root, source = qualified_sources[capable]
+    rows = _expected_rows(capable, channel)
     targets = [row["target"] for row in rows]
     result = _inventory_result(json.dumps(targets), json.dumps(rows), root, source, channel)
     assert result.returncode == 0, result.stderr
+    if channel != "canary" and capable:
+        # A source that ships the Linux ARM64 wheel cannot assemble without it, and an older one cannot add it.
+        other = _matrix_rows()[:5] if capable is True else _matrix_rows()
+        other_targets = json.dumps([row["target"] for row in other])
+        assert _inventory_result(other_targets, json.dumps(other), root, source, channel).returncode != 0
+
+
+@pytest.mark.parametrize("channel", ["stable", "alpha", "canary"])
+@pytest.mark.parametrize("capable", [False, "manifest", True])
+def test_platform_selection_matches_the_inventory_gate_for_each_source(qualified_sources, tmp_path, capable, channel):
+    root, source = qualified_sources[capable]
+    selector = _selector_step()
+    output = tmp_path / "outputs"
+    env = {"CHANNEL": channel, "SOURCE_SHA": source, "GITHUB_OUTPUT": str(output)}
+    env["NATIVE_WHEEL_MATRIX"] = selector["env"]["NATIVE_WHEEL_MATRIX"]
+    result = subprocess.run(
+        ["bash", "-c", selector["run"]], cwd=root, text=True, capture_output=True, env={**os.environ, **env}
+    )
+    assert result.returncode == 0, result.stderr
+    values = dict(line.split("=", 1) for line in output.read_text().splitlines())
+    assert json.loads(values["matrix"]) == _expected_rows(capable, channel)
 
 
 @pytest.mark.parametrize(

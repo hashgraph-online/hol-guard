@@ -350,6 +350,17 @@ fn planned_checkout<'a>(
     Some((spec, destination, chdir_cwd))
 }
 
+/// Whether Git would take the destination's last component as the branch name
+/// it creates for `git worktree add <path>`. `valid_destination_text` has
+/// already ruled out a backslash, so `/` is the only separator left to read.
+fn implied_branch(destination: &str) -> bool {
+    destination
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .is_some_and(valid_branch_name)
+}
+
 fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
     let arguments = if segment
         .arguments
@@ -419,17 +430,19 @@ fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {
             _ => return None,
         }
     }
-    // With neither a reference nor `--detach` Git would create a branch
-    // named after the destination, which stays reviewed.
-    match branch {
-        Some(value) if detach || !valid_branch_name(value) => return None,
-        None if !detach && reference.is_none() => return None,
-        _ => {}
-    }
     let destination = destination.filter(|value| valid_destination_text(value))?;
     // A quoted or escaped `~` stays a literal directory name.
     if destination.starts_with('~') && !super::directory_targets::home_targets_unquoted(segment) {
         return None;
+    }
+    // With neither a reference nor `--detach` Git checks out `HEAD` and names
+    // the branch it creates after the destination's last component. Git would
+    // munge a name it cannot use as written, so a name it would not take
+    // keeps review; the proof reads the name Git would write.
+    match branch {
+        Some(value) if detach || !valid_branch_name(value) => return None,
+        None if !detach && reference.is_none() && !implied_branch(destination) => return None,
+        _ => {}
     }
     // A bare name such as `main` or `feat/x` is accepted in every form.
     // Without `-b` and `--detach` Git checks out the existing branch of that

@@ -86,8 +86,10 @@ fn the_registry_verbs_and_a_bare_directory_keep_their_review() {
     }
 }
 
-/// Which package a verb compiles moves with a `cd` ahead of it, so a member
-/// of the workspace counts and a directory holding no manifest does not.
+/// Which package a verb compiles moves with a `cd` ahead of it, and the
+/// manifest is found the way cargo finds it: from the directory the command
+/// enters, then upward to the workspace root. A member directory holds its
+/// own manifest, and one that holds none still compiles against the root's.
 #[test]
 fn the_package_a_verb_compiles_moves_with_the_command() {
     let ws = package("cargo-nested");
@@ -103,7 +105,13 @@ fn the_package_a_verb_compiles_moves_with_the_command() {
                 "{reason}: no sandbox must require review"
             );
         }
-        let (reason, _) = outcome(harness, "cd docs && cargo test", &ws);
-        assert_ne!(reason, CONTAINED, "{harness}");
+        let (reason, minimum) = outcome(harness, "cd docs && cargo test", &ws);
+        assert_eq!(reason == CONTAINED, host(), "{reason} {harness}");
+        if !host() {
+            assert_eq!(
+                minimum, "review",
+                "{reason}: no sandbox must require review"
+            );
+        }
     }
 }

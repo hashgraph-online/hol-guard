@@ -100,6 +100,13 @@ from .update_subprocess import (
     UpdateSubprocessError,
     build_trusted_update_context,
 )
+from .windows_arm64_python import REASON_CODE as WINDOWS_ARM64_REASON_CODE
+from .windows_arm64_python import (
+    native_windows_arm64_python,
+    wheel_less_dependency_build_failed,
+    x64_python_candidates,
+    x64_python_route_message,
+)
 
 _TRUSTED_UPDATE_FAILURE_MESSAGES = {
     "update_native_resident_lock_failed": (
@@ -1076,6 +1083,15 @@ def _run_guard_update_unlocked(
                 )
                 payload.pop("retry_command", None)
                 return payload, 0
+            if native_windows_arm64_python() and wheel_less_dependency_build_failed(installer_output):
+                payload["status"] = "blocked"
+                payload["changed"] = False
+                payload["reason_code"] = WINDOWS_ARM64_REASON_CODE
+                payload["message"] = x64_python_route_message(installer, x64_python_candidates())
+                payload.pop("retry_command", None)
+                if trusted_wheel is not None:
+                    _retain_local_wheel_staging(payload)
+                return finish_update((payload, 1))
             conflict_message = _dependency_conflict_message(
                 installer_output,
             )

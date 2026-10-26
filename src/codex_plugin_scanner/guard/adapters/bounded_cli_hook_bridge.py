@@ -439,14 +439,27 @@ def run_bounded_cli_hook(
         return fail("HOL Guard blocked this action because hook output exceeded the safe size limit.")
     if result.returncode is None:
         return fail()
-    compact_payload = _json_object(result.stdout.strip())
-    if compact_payload is None and not _has_json_object_line(result.stdout):
+    # The CLI answers as the daemon would, so a Grok review gets the same
+    # in-hook approval wait as on the daemon path.
+    stdout, _stderr, exit_code = _apply_grok_bridge_approval_wait(
+        guard_home=guard_home,
+        harness=harness,
+        input_text=input_text,
+        stdout=result.stdout,
+        stderr="",
+        exit_code=result.returncode,
+        timeout_seconds=max(0.0, deadline - time.monotonic()),
+    )
+    if time.monotonic() >= deadline:
+        return fail()
+    compact_payload = _json_object(stdout.strip())
+    if compact_payload is None and not _has_json_object_line(stdout):
         return fail()
     if compact_payload is not None:
         _ = sys.stdout.write(json.dumps(compact_payload, ensure_ascii=True, separators=(",", ":")) + "\n")
-    elif result.stdout:
-        _ = sys.stdout.write(result.stdout)
-    return result.returncode
+    elif stdout:
+        _ = sys.stdout.write(stdout)
+    return exit_code
 
 
 def _is_config_argv(argv: Sequence[str]) -> bool:

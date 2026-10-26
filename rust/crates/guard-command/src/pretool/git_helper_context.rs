@@ -140,6 +140,12 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         // Reading the files the patch names refreshes the
                         // index, which starts a configured core.fsmonitor.
                         "apply" => true,
+                        // A status line is printed from the superproject,
+                        // whose index it reads, so a configured
+                        // core.fsmonitor there can start. The read forms are
+                        // the only ones that reach here, because the proof
+                        // that admits the subcommand screens them first.
+                        "submodule" => true,
                         _ => false,
                     }
                 })

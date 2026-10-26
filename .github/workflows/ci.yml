@@ -550,14 +550,21 @@ jobs:
     name: native-gates (${{ matrix.shard-index }})
     needs: native-command-evaluators
     runs-on: ubuntu-latest
-    # Includes checkout/setup plus the shard. Shards ran 195-293s of the old
-    # five-minute cap, and the gate gains cases with each false-positive fix,
-    # so a slower runner cancelled shards whose tests had all passed.
+    # Includes checkout/setup plus the shard. The gate gains cases with each
+    # false-positive fix, so a slower runner cancelled shards whose tests had
+    # all passed. The cap stays well above the measured shard so that keeps
+    # holding as the gate grows.
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        shard-index: [0, 1, 2, 3, 4, 5, 6, 7]
+        # The gate is the longest job on the critical path: every other Linux
+        # job waits behind native-command-evaluators, and this one then runs
+        # ~23900 cases. Each shard costs about 54s of checkout, setup, artifact
+        # download and collection before its first case, so widening past the
+        # thirties buys little while spending a runner per shard.
+        shard-index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+                      12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -600,7 +607,7 @@ jobs:
       - name: Benign false-positive and Gauntlet replay gates (model-free, native path)
         env:
           SHARD_INDEX: ${{ matrix.shard-index }}
-          SHARD_COUNT: 8
+          SHARD_COUNT: 24
         run: |
           # A collection failure must fail the step even when grep still prints nodes.
           set -o pipefail
@@ -609,8 +616,9 @@ jobs:
                  tests/test_guard_cli_hook_rpc_budget.py
                  tests/test_guard_command_corpus_benign_allow.py)
           uv run --no-sync pytest --collect-only -q "${gates[@]}" | grep '::' > gate-nodes.txt
-          # Every shard collects the same sorted list and keeps every eighth
-          # node, so the shards are disjoint and together cover the whole gate.
+          # Every shard collects the same sorted list and keeps every
+          # SHARD_COUNT-th node, so the shards are disjoint and together cover
+          # the whole gate.
           sort gate-nodes.txt | awk -v n="$SHARD_COUNT" -v i="$SHARD_INDEX" '(NR - 1) % n == i' > gate-shard.txt
           test -s gate-shard.txt
           echo "shard $SHARD_INDEX runs $(wc -l < gate-shard.txt) of $(wc -l < gate-nodes.txt) gate cases"
@@ -695,12 +703,6 @@ jobs:
             --deselect tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources \
             --deselect tests/test_guard_gauntlet_parallel.py::test_interrupt_during_spawn_still_reaps_the_started_worker \
             --deselect tests/test_guard_gauntlet_parallel.py::test_signal_during_cleanup_grace_still_force_kills \
-            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[artifact]' \
-            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[workspace]' \
-            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[publisher]' \
-            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[harness]' \
-            --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[global]' \
-            --deselect tests/test_guard_runtime.py::test_runtime_hook_integrity_rejection_outranks_valid_exact_one_shot_allow \
             --deselect tests/test_guard_headless_daemon_api.py::test_supply_chain_package_firewall_paid_install_and_test_roundtrip \
             --deselect tests/test_guard_shim_intercept_proofs.py::test_daemon_package_shim_test_uses_projected_shell_profile_path \
             --deselect tests/test_guard_continuation_runtime.py::test_codex_app_server_result_is_bounded_and_opaque \

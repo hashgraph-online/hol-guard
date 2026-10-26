@@ -79,7 +79,7 @@ fn passwd_home_stays_sensitive_when_the_caller_home_differs() {
     let fixture = fixture("guard-passwd-home");
     let caller = fixture.0.join("caller-home");
     fs::create_dir_all(&caller).unwrap();
-    let host = super::paths::host_home_directory().expect("account home");
+    let host = crate::workspace_roots::host_home_directory().expect("account home");
     let launch = json!({
         "command": ["python3", "-c", "print(1)"],
         "workspace": host,

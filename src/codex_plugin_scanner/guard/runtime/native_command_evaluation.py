@@ -16,7 +16,7 @@ from ..native_command_model import _canonical_command_from_native
 from ..native_pretool import review_pre_tool_native
 from .command_evaluation import CompositeCommandEvaluation, evaluate_command
 from .command_model import CanonicalCommand
-from .extension_control_runtime import ExtensionControlRuntimeSnapshot, current_extension_control_snapshot
+from .extension_control_runtime import ExtensionControlRuntimeSnapshot
 from .github_workflow_authorization import GitHubWorkflowAuthorization
 from .native_command_extension_evidence import NativeCommandExtensionEvidenceError
 
@@ -75,7 +75,7 @@ def native_command_review(
     The review carries the extension evidence the resident decided it on, so
     it can be resolved against ``extension_control_snapshot``.
     """
-    snapshot = extension_control_snapshot or current_extension_control_snapshot()
+    snapshot = extension_control_snapshot
     if snapshot is None or (
         snapshot.authority_failure is not None and not (admit_unenrolled and snapshot.awaiting_enrollment)
     ):

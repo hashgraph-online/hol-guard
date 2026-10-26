@@ -13,6 +13,8 @@
   --brand-purple: #b56cff;
   --brand-attention: #7c8cfd;
   --brand-attention-bg: #eef0ff;
+  /* Attention as text: #7c8cfd is about 3:1 on white, too light for small labels. */
+  --brand-attention-text: #4f5bd5;
   --border: 230 20% 91%;
   --input: 230 20% 91%;
   --ring: 263 85% 64%;
@@ -59,6 +61,7 @@
   --color-brand-purple: var(--brand-purple);
   --color-brand-attention: var(--brand-attention);
   --color-brand-attention-bg: var(--brand-attention-bg);
+  --color-brand-attention-text: var(--brand-attention-text);
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));

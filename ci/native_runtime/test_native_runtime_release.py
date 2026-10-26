@@ -20,6 +20,7 @@ TARGETS = {
     "macosx_11_0_arm64": "aarch64-apple-darwin",
     "win_amd64": "x86_64-pc-windows-msvc",
     "win_arm64": "aarch64-pc-windows-msvc",
+    "manylinux_2_17_aarch64": "aarch64-unknown-linux-musl",
 }
 
 
@@ -273,7 +274,7 @@ def test_plan_upload_copies_only_missing_artifacts(
         output_dir=tmp_path / "upload",
     )
 
-    assert len(planned) == 4
+    assert len(planned) == 5
     assert set(planned) == set(by_name) - existing_names
     assert {path.name for path in (tmp_path / "upload").iterdir()} == set(planned)
 
@@ -301,7 +302,7 @@ def test_plan_upload_recovers_when_base_artifacts_are_missing(
     assert native.name not in planned
     assert f"hol_guard-{VERSION}-py3-none-any.whl" in planned
     assert f"hol_guard-{VERSION}.tar.gz" in planned
-    assert len(planned) == 6
+    assert len(planned) == 7
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX dangling-symlink regression")
@@ -516,10 +517,11 @@ def test_canary_native_set_may_omit_windows_arm64(tmp_path: Path) -> None:
         release.local_native_hashes(dist, version=canary, source_sha=SOURCE_SHA)
 
 
-def test_release_native_set_requires_windows_arm64(tmp_path: Path) -> None:
+@pytest.mark.parametrize("platform", ["win_arm64", "manylinux_2_17_aarch64"])
+def test_release_native_set_requires_github_only_arm64_wheels(tmp_path: Path, platform: str) -> None:
     wheels = _native_set(tmp_path / "dist")
-    wheels["win_arm64"].unlink()
-    with pytest.raises(release.NativeReleaseError, match=r"missing=\['win_arm64'\]"):
+    wheels[platform].unlink()
+    with pytest.raises(release.NativeReleaseError, match=rf"missing=\['{platform}'\]"):
         release.local_native_hashes(tmp_path / "dist", version=VERSION, source_sha=SOURCE_SHA)
 
 

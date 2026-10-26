@@ -135,6 +135,7 @@ def build_workspace_audit_payload(
     fail_on: str = "high",
     before_workspace_dir: Path | None = None,
     after_workspace_dir: Path | None = None,
+    allow_cloud_audit: bool = True,
 ) -> tuple[dict[str, object], int]:
     runner = _lsc._runtime_runner_module()
 
@@ -180,7 +181,9 @@ def build_workspace_audit_payload(
     evaluation: dict[str, object]
     source = "local"
     fallback_reason: dict[str, object] | None = None
-    if _cloud_audit._should_use_cloud_workspace_audit(store=store, posture=posture):
+    # Background assessments pass ``allow_cloud_audit=False``: nothing leaves
+    # the device unless the user asked for this audit.
+    if allow_cloud_audit and _cloud_audit._should_use_cloud_workspace_audit(store=store, posture=posture):
         try:
             auth_context = _lsc._resolve_guard_sync_auth_context(store)
             workspace_id = store.get_cloud_workspace_id()

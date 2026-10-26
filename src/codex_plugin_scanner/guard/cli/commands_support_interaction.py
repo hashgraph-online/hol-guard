@@ -8,15 +8,11 @@ from __future__ import annotations
 import importlib
 from typing import TYPE_CHECKING
 
-from ..approval_hook_copy import _SIGNED_APPROVAL_LINK_UNAVAILABLE, authenticated_approval_review_url
-from ..approval_link_output import open_authenticated_approval_link
 from ..browser_opener import open_browser_url
-from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, bound_wait_timeout_seconds, process_identity_matches
-from ..runtime.approval_context import approval_context_tokens_validation_reason
-from . import commands_support_browser_wait as browser_wait
+from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, process_identity_matches
 
 if TYPE_CHECKING:
-    from ._commands_shared import _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS, _now
+    from ._commands_shared import _now
     from .commands_support_hook_payload import _browser_url_with_guard_params
 
 
@@ -28,28 +24,12 @@ def _runtime_artifacts_module():
     return importlib.import_module(".commands_support_runtime_artifacts", __package__)
 
 
-def _hook_state_module():
-    return importlib.import_module(".commands_support_hook_state", __package__)
-
-
 def _runtime_resolution_module():
     return importlib.import_module(".commands_support_runtime_resolution", __package__)
 
 
 def _optional_string(value: object | None) -> str | None:
     return _runtime_artifacts_module()._optional_string(value)
-
-
-def _set_codex_browser_operation_status(
-    response_payload: dict[str, object],
-    daemon_client: object | None,
-    status: str,
-) -> None:
-    operation = response_payload.get("operation")
-    if isinstance(operation, dict):
-        operation["status"] = status
-    response_payload["operation_status"] = status
-    _hook_state_module()._update_codex_browser_operation_status(response_payload, daemon_client, status)
 
 
 def _canonical_harness_name(value: str) -> str:
@@ -282,239 +262,10 @@ def _policy_write_requires_approval_gate(store: GuardStore, *, action: str, scop
         return True
     return gate.strict_all_decisions
 
-def _record_harness_usage_for_hook(
-    *,
-    store: GuardStore,
-    action_envelope: GuardActionEnvelope | None,
-    payload: Mapping[str, object],
-    policy_action: str | None,
-) -> None:
-    usage_payload = dict(payload)
-    if isinstance(policy_action, str) and policy_action:
-        usage_payload["policy_action"] = policy_action
-    record_harness_usage_events(
-        store=store,
-        action=action_envelope,
-        raw_payload=usage_payload,
-        occurred_at=_now(),
-    )
-
 def _emit(command: str, payload: dict[str, object], as_json: bool) -> None:
     from .render import emit_guard_payload
 
     emit_guard_payload(command, payload, as_json)
-
-def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
-    return args.harness == "copilot" and not getattr(args, "json", False)
-
-def _codex_browser_approval_decision(
-    *,
-    args: argparse.Namespace,
-    event_name: str,
-    policy_action: str,
-    response_payload: dict[str, object],
-    store: GuardStore,
-    config: GuardConfig,
-    browser_wait_bound: bool | None = None,
-    daemon_client: object | None = None,
-    expected_artifact_hash: str | None = None,
-    fresh_context_provider: Callable[[], Mapping[str, object] | None] | None = None,
-) -> str | None:
-    if (
-        browser_wait_bound is not True
-        and not _codex_can_use_browser_approval(
-            args, event_name=event_name, policy_action=policy_action
-        )
-        and not (
-            daemon_client is not None
-            and _codex_json_bridge_can_use_browser_approval(
-                args, event_name=event_name, policy_action=policy_action
-            )
-        )
-    ):
-        return None
-    request_ids = browser_wait.browser_wait_request_ids(response_payload, browser_wait_bound=browser_wait_bound)
-    if not request_ids:
-        return None
-    if browser_wait_bound is True:
-        # The authenticated outer bridge owns the approval wait. Returning the
-        # pending response here keeps the isolated daemon worker available.
-        return None
-    wait_timeout_seconds = _codex_browser_wait_timeout_seconds(
-        event_name=event_name,
-        configured_timeout=config.approval_wait_timeout_seconds,
-    )
-    if wait_timeout_seconds <= 0:
-        return None
-    if event_name == "PreToolUse":
-        _open_codex_live_approval(response_payload, guard_home=store.guard_home)
-    wait_result = wait_for_approval_requests(store=store, request_ids=request_ids, timeout_seconds=wait_timeout_seconds)
-    response_payload["approval_wait"] = wait_result
-    if not bool(wait_result.get("resolved")):
-        _set_codex_browser_operation_status(response_payload, daemon_client, "approval_wait_timeout")
-        response_payload["review_hint"] = (
-            "Approval is still pending in HOL Guard. Approve it in the browser, then retry the same Codex action."
-        )
-        return None
-    wait_items = wait_result.get("items")
-    resolved_items = [item for item in (wait_items if isinstance(wait_items, list) else []) if isinstance(item, dict)]
-    if any(str(item.get("resolution_action")) == "block" for item in resolved_items):
-        _set_codex_browser_operation_status(response_payload, daemon_client, "blocked")
-        _record_codex_live_hook_continuation(
-            response_payload=response_payload,
-            store=store,
-            request_ids=request_ids,
-            action="block",
-        )
-        response_payload["review_hint"] = "Browser decision saved. HOL Guard kept this Codex action blocked."
-        return "block"
-    fresh_artifact_id: str | None = None
-    fresh_artifact_hash = expected_artifact_hash
-    fresh_current_action: str | None = None
-    fresh_authoritative_action: str | None = None
-    fresh_terminal_action: str | None = None
-    exact_validation_failure: str | None = None
-    if fresh_context_provider is None:
-        exact_validation_failure = "fresh_context_unavailable"
-    else:
-        try:
-            fresh_context = fresh_context_provider()
-        except Exception:
-            fresh_context = None
-        if not isinstance(fresh_context, Mapping):
-            exact_validation_failure = "fresh_context_unavailable"
-        else:
-            fresh_artifact_id = _optional_string(fresh_context.get("artifact_id"))
-            fresh_artifact_hash = _optional_string(fresh_context.get("artifact_hash"))
-            fresh_current_action = _optional_string(fresh_context.get("current_action"))
-            fresh_authoritative_action = _optional_string(
-                fresh_context.get("authoritative_action")
-            )
-            if fresh_authoritative_action in {"block", "sandbox-required"}:
-                fresh_terminal_action = fresh_authoritative_action
-            elif fresh_current_action in {"block", "sandbox-required"}:
-                fresh_terminal_action = fresh_current_action
-            if fresh_artifact_id is None or fresh_artifact_hash is None:
-                exact_validation_failure = "fresh_context_incomplete"
-            elif fresh_current_action in {"block", "sandbox-required"}:
-                exact_validation_failure = "current_policy_became_terminal"
-            elif fresh_current_action not in {"allow", "warn", "review", "require-reapproval"}:
-                exact_validation_failure = "fresh_current_action_unrecognized"
-    if exact_validation_failure is None:
-        exact_validation_failure = _codex_browser_exact_resolution_failure(
-            response_payload=response_payload,
-            store=store,
-            request_ids=request_ids,
-            resolved_items=resolved_items,
-            expected_artifact_hash=fresh_artifact_hash,
-            expected_artifact_id=fresh_artifact_id,
-        )
-    if (
-        exact_validation_failure is None
-        and fresh_context_provider is not None
-        and fresh_authoritative_action != "allow"
-    ):
-        # The exact browser decision is evidence, not the launch authority.
-        # Re-evaluation must have successfully applied (and, for one-shot
-        # rows, atomically claimed) that evidence.  A renewed review or a
-        # concurrent saved block must never be overwritten by this waiter.
-        exact_validation_failure = "fresh_authoritative_action_not_allowed"
-    if exact_validation_failure is not None:
-        terminal_action = fresh_terminal_action or "block"
-        response_payload["approval_requests"] = resolved_items
-        _set_codex_browser_operation_status(response_payload, daemon_client, "blocked")
-        _record_codex_live_hook_continuation(
-            response_payload=response_payload,
-            store=store,
-            request_ids=request_ids,
-            action=terminal_action,
-        )
-        response_payload["browser_resolution_validation"] = exact_validation_failure
-        if terminal_action == "sandbox-required":
-            response_payload["review_hint"] = (
-                "HOL Guard rejected the browser approval because current policy now requires a sandbox. "
-                "This Codex action was not resumed."
-            )
-        else:
-            response_payload["review_hint"] = (
-                "HOL Guard rejected the browser approval because it did not match the exact current request. "
-                "This Codex action remains blocked."
-            )
-        return terminal_action
-    response_payload["approval_requests"] = resolved_items
-    _set_codex_browser_operation_status(response_payload, daemon_client, "completed")
-    _record_codex_live_hook_continuation(
-        response_payload=response_payload,
-        store=store,
-        request_ids=request_ids,
-        action="allow",
-    )
-    response_payload["browser_resolution_request_id"] = request_ids[0]
-    response_payload["review_hint"] = "Approval received in HOL Guard. Codex is resuming this action."
-    return "allow"
-
-
-def _codex_browser_exact_resolution_failure(
-    *,
-    response_payload: Mapping[str, object],
-    store: GuardStore,
-    request_ids: list[str],
-    resolved_items: list[dict[str, object]],
-    expected_artifact_hash: str | None,
-    expected_artifact_id: str | None = None,
-) -> str | None:
-    from ..native_context import bind_context_digest_home
-
-    bind_context_digest_home(getattr(store, "guard_home", None))
-    resolved_by_id = {
-        str(item.get("request_id")): item
-        for item in resolved_items
-        if isinstance(item.get("request_id"), str)
-    }
-    current_artifact_hash = expected_artifact_hash
-    if current_artifact_hash is None:
-        current_artifact_hash = _optional_string(response_payload.get("artifact_hash"))
-    current_artifact_id = expected_artifact_id or _optional_string(response_payload.get("artifact_id"))
-    if current_artifact_hash is None:
-        return "missing_current_approval_context"
-    for request_id in request_ids:
-        resolved_item = resolved_by_id.get(request_id)
-        stored_item = store.get_approval_request(request_id)
-        item = dict(stored_item) if isinstance(stored_item, Mapping) else None
-        if resolved_item is not None:
-            item = {**(item or {}), **resolved_item}
-        if item is None:
-            return "missing_resolved_request"
-        if str(item.get("resolution_action")) != "allow":
-            return "non_allow_resolution"
-        if str(item.get("policy_action")) not in {"review", "require-reapproval"}:
-            return "terminal_request_is_not_approvable"
-        if current_artifact_id is not None and str(item.get("artifact_id")) != current_artifact_id:
-            return "approval_artifact_changed"
-        if approval_context_tokens_validation_reason(
-            item.get("artifact_hash"),
-            current_artifact_hash,
-        ) is not None:
-            return "approval_context_changed"
-    return None
-
-
-def _record_codex_live_hook_continuation(
-    *,
-    response_payload: dict[str, object],
-    store: GuardStore,
-    request_ids: list[str],
-    action: str,
-) -> None:
-    from .codex_live_hook_completion import record_codex_live_hook_continuation
-
-    record_codex_live_hook_continuation(
-        response_payload=response_payload,
-        store=store,
-        request_ids=request_ids,
-        action=action,
-        now=_now(),
-    )
 
 def _codex_can_use_browser_approval(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
     return (
@@ -568,69 +319,6 @@ def _codex_hook_waits_for_browser_approval(
         )
     )
 
-def _codex_browser_wait_metadata(
-    *,
-    args: argparse.Namespace,
-    event_name: str,
-    policy_action: str,
-    config: GuardConfig,
-    payload: Mapping[str, object] | None = None,
-    json_daemon_bridge: bool = False,
-) -> dict[str, object]:
-    bridge_wait_process = _codex_bridge_wait_process(payload)
-    waits_for_browser = _codex_hook_waits_for_browser_approval(
-        args=args,
-        event_name=event_name,
-        policy_action=policy_action,
-        payload=payload,
-        json_daemon_bridge=json_daemon_bridge,
-    )
-    if not waits_for_browser:
-        return {"codex_hook_waits_for_browser_approval": False}
-    from ..live_process_identity import current_process_identity
-
-    wait_timeout_seconds = _codex_browser_wait_timeout_seconds(
-        event_name=event_name,
-        configured_timeout=config.approval_wait_timeout_seconds,
-        outer_wait_timeout_seconds=(
-            bound_wait_timeout_seconds(payload, maximum=MAX_APPROVAL_WAIT_TIMEOUT_SECONDS)
-            if bridge_wait_process is not None
-            else None
-        ),
-    )
-    started_at = datetime.now(timezone.utc)
-    deadline_at = started_at + timedelta(seconds=wait_timeout_seconds)
-    process_identity = bridge_wait_process or current_process_identity()
-    if process_identity is None:
-        return {
-            "codex_hook_waits_for_browser_approval": False,
-            "codex_browser_wait_unavailable_reason": "process_identity_unavailable",
-        }
-    return {
-        "codex_hook_waits_for_browser_approval": True,
-        "codex_browser_wait_started_at": started_at.isoformat(),
-        "codex_browser_wait_deadline_at": deadline_at.isoformat(),
-        "codex_browser_wait_timeout_seconds": wait_timeout_seconds,
-        "codex_browser_wait_process": process_identity,
-    }
-
-def _codex_browser_wait_timeout_seconds(
-    *,
-    event_name: str,
-    configured_timeout: int,
-    outer_wait_timeout_seconds: int | None = None,
-) -> int:
-    wait_timeout_seconds = min(
-        max(configured_timeout, 0),
-        MAX_APPROVAL_WAIT_TIMEOUT_SECONDS,
-    )
-    if outer_wait_timeout_seconds is not None:
-        return min(wait_timeout_seconds, outer_wait_timeout_seconds)
-    if event_name in {"UserPromptSubmit", "PreToolUse", "PostToolUse"}:
-        wait_timeout_seconds = min(wait_timeout_seconds, _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS)
-    return wait_timeout_seconds
-
-
 def _codex_bridge_wait_process(payload: Mapping[str, object] | None) -> dict[str, object] | None:
     if not isinstance(payload, Mapping):
         return None
@@ -651,38 +339,6 @@ def _attach_primary_approval_link(
         harness=harness,
         approval_center_url=approval_center_url,
     )
-
-def _bind_hook_blocked_operation_queue(
-    *,
-    harness: str,
-    approval_center_url: str,
-    response_payload: dict[str, object],
-    queued: list[dict[str, object]],
-    blocked_operation: Mapping[str, object] | None = None,
-) -> list[dict[str, object]]:
-    """Bind daemon operation metadata and the primary approval link into a hook response."""
-    if blocked_operation is not None:
-        operation = blocked_operation.get("operation")
-        if not isinstance(operation, dict):
-            operation = {}
-        operation_queue = blocked_operation.get("approval_requests")
-        if not isinstance(operation_queue, list):
-            operation_queue = []
-        queued = operation_queue
-        operation_id = _optional_string(operation.get("operation_id"))
-        if operation_id is not None:
-            response_payload["operation_id"] = operation_id
-        response_payload["operation"] = operation
-        approval_request_ids = operation.get("approval_request_ids")
-        if isinstance(approval_request_ids, list):
-            response_payload["approval_request_ids"] = approval_request_ids
-    response_payload["approval_requests"] = queued
-    _attach_primary_approval_link(
-        response_payload,
-        harness=_optional_string(harness) or harness,
-        approval_center_url=approval_center_url,
-    )
-    return queued
 
 def _primary_approval_lookup_kwargs(response_payload: dict[str, object], *, harness: str) -> dict[str, str | None]:
     return {
@@ -733,31 +389,15 @@ def _preferred_approval_review_url(response_payload: Mapping[str, object], *, ha
         )
     return approval_center_url
 
-def _open_codex_live_approval(response_payload: Mapping[str, object], *, guard_home: Path | None = None) -> None:
-    harness = _optional_string(response_payload.get("harness")) or "codex"
-    review_url = _preferred_approval_review_url(response_payload, harness=harness)
-    open_authenticated_approval_link(
-        review_url,
-        guard_home=guard_home,
-        authenticate=authenticated_approval_review_url,
-        unavailable_message=_SIGNED_APPROVAL_LINK_UNAVAILABLE,
-        open_browser=open_browser_url,
-        output_stream=sys.stderr,
-    )
-
 __all__ = [
-    "_apps_disconnect_confirm_command", "_attach_primary_approval_link", "_bind_hook_blocked_operation_queue",
+    "_apps_disconnect_confirm_command", "_attach_primary_approval_link",
     "_build_cisco_scan_options",
     "_codex_bridge_wait_process",
-    "_codex_browser_approval_decision",
-    "_codex_browser_wait_metadata",
-    "_codex_browser_wait_timeout_seconds",
     "_codex_can_use_browser_approval",
     "_codex_hook_waits_for_browser_approval",
     "_codex_json_bridge_can_use_browser_approval", "_emit",
-    "_guard_cloud_app_error_payload", "_guard_cloud_app_urls", "_open_codex_live_approval",
+    "_guard_cloud_app_error_payload", "_guard_cloud_app_urls",
     "_open_guard_cloud_app", "_policy_write_needs_approval_gate", "_policy_write_requires_approval_gate",
-    "_preferred_approval_review_url", "_primary_approval_lookup_kwargs", "_record_harness_usage_for_hook",
+    "_preferred_approval_review_url", "_primary_approval_lookup_kwargs",
     "_resolve_cisco_scan_options", "_run_apps_command", "_run_consumer_scan_with_mode",
-    "_should_emit_copilot_hook_response",
 ]

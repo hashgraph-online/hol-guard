@@ -444,7 +444,12 @@ def test_pi_post_tool_output_keeps_sensitive_batched_command_even_with_read_only
         "hook_event_name": "PostToolUse",
         "tool_name": "Bash",
         "tool_input": {"commands": ["kubectl get secret prod -o yaml", "rg foo src"]},
-        "stdout": "ok\n",
+        # The daemon withholds the output by what it carries, so the secret
+        # manifest the command prints is what keeps it from the model.
+        "stdout": (
+            "apiVersion: v1\ndata:\n  password: " + "c3VwZXItc2VjcmV0" + "LXZhbHVlLTEyMzQ1Njc4\n"
+            "kind: Secret\nmetadata:\n  name: prod\ntype: Opaque\n"
+        ),
         "source_scope": "project",
     }
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))

@@ -7,22 +7,17 @@ from __future__ import annotations
 
 import importlib
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from ..runtime.data_flow_sink import data_flow_sink_type
 from ..runtime.package_request_evaluation import strip_review_evidence_tail as _strip_review_evidence_tail
 
 if TYPE_CHECKING:
-    from ._commands_shared import _HOOK_DAEMON_UNREACHABLE_REASON_MARKER, _now
+    from ._commands_shared import _now
 
 
-from ..blocked_request_mode import is_unlinked_connector_setup_reason
-from ..models import GuardAction
-from ..native_data_flow import DataFlowArtifactNaming, detect_data_flow_exfiltration
-from ..native_hook_approval_context import native_hook_approval_context_token, runtime_hook_approval_context_inputs
 from ..runtime.approval_context import approval_context_tokens_validation_reason
-from ..runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
 from ..store import runtime_tool_action_exact_match_context
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
@@ -94,18 +89,6 @@ def _native_hook_reason(*values: object | None) -> str:
     from ..approval_hook_copy import join_native_hook_reason
 
     return join_native_hook_reason(*values)
-
-def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str:
-    reason = _native_hook_reason(*values)
-    if harness != "codex" or is_unlinked_connector_setup_reason(reason):
-        return reason
-    if "open hol guard to approve or keep this blocked:" in reason.lower():
-        return reason
-    if "approve it in hol guard, then retry." in reason.lower():
-        return reason
-    if _HOOK_DAEMON_UNREACHABLE_REASON_MARKER in reason.lower():
-        return f"{reason} Restart HOL Guard, then retry."
-    return f"{reason} Approve it in HOL Guard, then retry."
 
 def _native_approval_center_context(response_payload: dict[str, object], *, harness: str) -> str | None:
     review_url = _preferred_approval_review_url(response_payload, harness=harness)
@@ -206,30 +189,6 @@ def _approval_center_routed_message(message: str, review_context: str) -> str:
         return review_context
     return f"{_ensure_terminal_punctuation(normalized)} {review_context}"
 
-def _terminal_action_message(message: str) -> str:
-    normalized = _strip_cloud_inbox_urls(message)
-    normalized = _strip_legacy_approval_center_sentence(normalized)
-    normalized = _LOCAL_REVIEW_INSTRUCTION_RE.sub("", normalized)
-    normalized = _LOCAL_APPROVAL_REQUEST_URL_RE.sub("", normalized)
-    normalized = " ".join(normalized.split())
-    return _strip_review_evidence_tail(normalized)
-
-def _terminalize_runtime_action_copy(response_payload: dict[str, object]) -> None:
-    decision_v2 = response_payload.get("decision_v2_json")
-    if isinstance(decision_v2, dict):
-        harness_message = _optional_string(decision_v2.get("harness_message"))
-        if harness_message is not None:
-            decision_v2["harness_message"] = _terminal_action_message(harness_message)
-        decision_v2.pop("retry_instruction", None)
-    supply_chain_evaluation = response_payload.get("supply_chain_evaluation")
-    if isinstance(supply_chain_evaluation, dict):
-        user_copy = supply_chain_evaluation.get("user_copy")
-        if isinstance(user_copy, dict):
-            harness_message = _optional_string(user_copy.get("harness_message"))
-            if harness_message is not None:
-                user_copy["harness_message"] = _terminal_action_message(harness_message)
-            user_copy["dashboard_url"] = None
-
 def _strip_legacy_approval_center_sentence(message: str) -> str:
     lower_message = message.lower()
     start = lower_message.find("open hol guard to approve or keep this blocked:")
@@ -258,88 +217,6 @@ def _is_cloud_inbox_url(value: str) -> bool:
     parsed = urllib.parse.urlparse(value)
     return parsed.scheme in {"http", "https"} and parsed.path.rstrip("/") == "/guard/inbox"
 
-def _runtime_saved_policy_probe(
-    *,
-    harness: str,
-    artifact: GuardArtifact,
-    artifact_hash: str,
-    workspace: str | None,
-    risk_scoped: bool,
-    memory: bool,
-) -> dict[str, object]:
-    """Describe one saved-decision probe for the resident runtime lookup."""
-
-    probe: dict[str, object] = {
-        "harness": harness,
-        "artifact_id": artifact.artifact_id,
-        "artifact_hash": artifact_hash,
-        "workspace": workspace,
-        "publisher": artifact.publisher,
-        "exact_match_context": _runtime_artifact_exact_match_context(artifact),
-        "risk_scoped": risk_scoped,
-    }
-    if memory:
-        probe["memory"] = {
-            "command": artifact.command,
-            "artifact_type": artifact.artifact_type,
-            "artifact_name": artifact.name,
-        }
-    return probe
-
-
-def _runtime_saved_policy_decision(
-    *,
-    store: GuardStore,
-    harness: str,
-    artifact: GuardArtifact,
-    artifact_hash: str,
-    workspace: str | None,
-    legacy_artifact_hash: str,
-    legacy_workspace: str | None,
-    alias_harness: str,
-    alias_artifact: GuardArtifact | None,
-    alias_artifact_hash: str | None,
-    alias_workspace: str | None,
-    risk_classes: Sequence[str],
-    reuse: Mapping[str, object] | None = None,
-) -> tuple[Mapping[str, object], Mapping[str, object] | None, Mapping[str, object] | None]:
-    """Return the saved-decision lookup, the decision this artifact may use and,
-    with ``reuse``, the resident's ``saved_reuse`` ``{answer, query}``.
-
-    The resident composes the current-hash and legacy-hash lookups (a legacy
-    decision wins only when strictly more severe, so a new exact allow never
-    hides a retained pre-v1 block) and falls back to the Claude alias.
-    ``risk_classes`` are the resident's facts for ``artifact``; the Claude
-    alias differs from it only in identity, so they describe both. Nothing
-    is consumed: the runtime claims an accepted approval only after recomputing
-    all current policy and scanner inputs.
-    """
-
-    from ..native_context import bind_context_digest_home
-
-    bind_context_digest_home(getattr(store, "guard_home", None))
-    current = _runtime_saved_policy_probe(
-        harness=harness,
-        artifact=artifact,
-        artifact_hash=artifact_hash,
-        workspace=workspace,
-        risk_scoped=bool(risk_classes),
-        memory=True,
-    )
-    legacy = {**current, "artifact_hash": legacy_artifact_hash, "workspace": legacy_workspace}
-    alias = None
-    if alias_artifact is not None and alias_artifact_hash is not None:
-        alias = _runtime_saved_policy_probe(
-            harness=alias_harness,
-            artifact=alias_artifact,
-            artifact_hash=alias_artifact_hash,
-            workspace=alias_workspace,
-            risk_scoped=bool(risk_classes),
-            memory=False,
-        )
-    return store.resolve_runtime_saved_decision(current, legacy, alias, reuse)
-
-
 def _runtime_saved_allow_validation_reason(
     decision: Mapping[str, object],
     *,
@@ -352,129 +229,6 @@ def _runtime_saved_allow_validation_reason(
         return None
     stored_hash = _optional_string(decision.get("artifact_hash"))
     return approval_context_tokens_validation_reason(stored_hash, artifact_hash)
-
-
-def _runtime_hook_approval_context_token(
-    *,
-    artifact: GuardArtifact,
-    content_hash: str,
-    runtime_workspace: Path | None,
-    action_envelope: GuardActionEnvelope | None,
-    config: GuardConfig,
-    current_config_action: GuardAction,
-    trusted_cli_action: GuardAction | None,
-    untrusted_payload_action: GuardAction | None,
-    package_action: GuardAction | None,
-    data_flow_action: GuardAction | None,
-    scanner_action: GuardAction | None,
-    current_action: GuardAction,
-    risk_classes: Sequence[str],
-    data_flow_signals: Sequence[object],
-    scanner_evidence: Sequence[object],
-    workflow_approval_record: GitHubWorkflowApprovalRecord | None = None,
-) -> str:
-    """Bind a saved hook approval to the exact reviewed runtime context.
-
-    The resident composes the context dimensions and returns the token.
-    ``risk_classes`` are the resident's facts for ``artifact``.
-    """
-
-    inputs = runtime_hook_approval_context_inputs(
-        artifact=artifact,
-        content_hash=content_hash,
-        runtime_workspace=runtime_workspace,
-        action_envelope=action_envelope,
-        config=config,
-        policy_config=_runtime_hook_effective_policy_config(config),
-        evaluator_policy_version=_RUNTIME_HOOK_EVALUATOR_POLICY_VERSION,
-        composition={
-            "current_action": current_action,
-            "current_config_action": current_config_action,
-            "data_flow_action": data_flow_action,
-            "package_action": package_action,
-            "scanner_action": scanner_action,
-            "trusted_cli_action": trusted_cli_action,
-            "untrusted_payload_action": untrusted_payload_action,
-        },
-        current_action=current_action,
-        risk_classes=list(risk_classes),
-        data_flow_signals=data_flow_signals,
-        scanner_evidence=scanner_evidence,
-        workflow_approval_record=workflow_approval_record,
-    )
-    return native_hook_approval_context_token("runtime_hook_approval_context", inputs)
-
-
-def _runtime_hook_effective_policy_config(config: GuardConfig) -> dict[str, object]:
-    """Return effective settings that can change enforcement or risk evidence."""
-
-    return {
-        "artifact_actions": dict(config.artifact_actions or {}),
-        "changed_hash_action": config.changed_hash_action,
-        "default_action": config.default_action,
-        "harness_actions": dict(config.harness_actions or {}),
-        "harness_risk_actions": {
-            harness: dict(actions) for harness, actions in (config.harness_risk_actions or {}).items()
-        },
-        "install_owner": config.install_owner,
-        "managed_locked_settings": list(config.managed_locked_settings),
-        "managed_policy_hash": config.managed_policy_hash,
-        "managed_policy_status": config.managed_policy_status,
-        "mode": config.mode,
-        **(
-            {
-                "protection_posture": config.protection_posture,
-                "protection_posture_explicit": True,
-            }
-            if config.protection_posture_explicit
-            else {}
-        ),
-        "new_network_domain_action": config.new_network_domain_action,
-        "publisher_actions": dict(config.publisher_actions or {}),
-        "risk_actions": dict(config.risk_actions or {}),
-        "runtime_detector_disabled_ids": list(config.runtime_detector_disabled_ids),
-        "runtime_detector_registry": config.runtime_detector_registry,
-        "runtime_detector_timeout_ms": config.runtime_detector_timeout_ms,
-        "security_level": config.security_level,
-        "subprocess_action": config.subprocess_action,
-        "unknown_publisher_action": config.unknown_publisher_action,
-    }
-
-
-def _remembered_rule_rejection_reason(
-    *,
-    composer: Callable[..., dict[str, object]],
-    guard_home: Path | None,
-    response_payload: dict[str, object],
-    artifact: GuardArtifact,
-) -> str | None:
-    """Why the resident refused a remembered local rule, or ``None``.
-
-    Which rule states earn a reason, and the reason itself, are the resident's;
-    this only names the request and hands over the facts it reads them from. A
-    rejection is rare enough that asking about every reported state costs less
-    than a second copy of the rule that decides which states are worth asking
-    about.
-    """
-
-    rejection = response_payload.get("remembered_rule_rejection")
-    if not isinstance(rejection, Mapping):
-        return None
-    trust_status = rejection.get("trust_status")
-    remembered_rules = (
-        str(trust_status.get("remembered_rules") or "unknown") if isinstance(trust_status, Mapping) else "unknown"
-    )
-    answer = composer(
-        "remembered_rule_reason",
-        {
-            "remembered_rules": remembered_rules,
-            "integrity_message": _optional_string(rejection.get("integrity_message")),
-            "artifact_summary": _runtime_request_summary(artifact) or artifact.name,
-        },
-        guard_home=guard_home,
-    )
-    reason = answer["reason"]
-    return reason if isinstance(reason, str) else None
 
 
 def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None:
@@ -494,31 +248,6 @@ def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None
         wrapper_chain=normalized_wrapper_chain,
     )
 
-
-def _runtime_action_data_flow_signals(
-    action_envelope: GuardActionEnvelope | None,
-    *,
-    workspace: Path | None,
-    guard_home: Path | None = None,
-    naming: DataFlowArtifactNaming | None = None,
-) -> tuple[tuple[RiskSignalV2, ...], GuardArtifact | None]:
-    """The action's data-flow signals and the artifact they earn.
-
-    Both come from the one resident call that raised the signals, so the id the
-    review is saved under is derived once, by the side that found the flow.
-    """
-
-    if action_envelope is None:
-        return (), None
-    return detect_data_flow_exfiltration(
-        action_envelope, workspace=workspace, guard_home=guard_home, naming=naming
-    )
-
-def _runtime_data_flow_summary(signals: tuple[RiskSignalV2, ...]) -> str:
-    sink_type = _runtime_data_flow_sink_type(signals)
-    if signals:
-        return f"This command sends local secret to {sink_type}. Guard kept raw secret contents out of the evidence."
-    return f"This command sends local secret to {sink_type}."
 
 _runtime_data_flow_sink_type = data_flow_sink_type
 
@@ -668,10 +397,8 @@ __all__ = [
     "_guard_cli_settings_payload", "_guard_settings_doctor_payload", "_guard_settings_explain_payload",
     "_guard_settings_payload", "_is_cloud_inbox_url", "_localize_decision_v2_review_copy",
     "_localize_pending_approval_copy", "_native_approval_center_context", "_native_hook_reason",
-    "_native_hook_reason_for_harness", "_runtime_action_data_flow_signals",
     "_runtime_artifact_command_action_floor", "_runtime_artifact_policy_action",
-    "_runtime_data_flow_sink_type", "_runtime_data_flow_summary", "_runtime_detector_perf_payload",
+    "_runtime_data_flow_sink_type", "_runtime_detector_perf_payload",
     "_runtime_detector_registry_payload", "_strip_cloud_inbox_urls",
-    "_strip_legacy_approval_center_sentence", "_strip_review_evidence_tail", "_terminal_action_message",
-    "_terminalize_runtime_action_copy",
+    "_strip_legacy_approval_center_sentence", "_strip_review_evidence_tail",
 ]

@@ -57,14 +57,15 @@ BUNDLE_ROOT_PATH: Final = (
 )
 EXPECTED_TARGETS: Final[Mapping[str, str]] = {
     "manylinux_2_17_x86_64": "x86_64-unknown-linux-musl",
+    "manylinux_2_17_aarch64": "aarch64-unknown-linux-musl",
     "macosx_13_0_x86_64": "x86_64-apple-darwin",
     "macosx_11_0_arm64": "aarch64-apple-darwin",
     "win_amd64": "x86_64-pc-windows-msvc",
     "win_arm64": "aarch64-pc-windows-msvc",
 }
 EXPECTED_PLATFORMS: Final = frozenset(EXPECTED_TARGETS)
-# Pull request canaries skip the Windows ARM64 runner; alpha and stable releases always carry it.
-CANARY_OPTIONAL_PLATFORMS: Final = frozenset({"win_arm64"})
+# Pull request canaries skip the ARM64 Windows and Linux runners; alpha and stable releases always carry them.
+CANARY_OPTIONAL_PLATFORMS: Final = frozenset({"manylinux_2_17_aarch64", "win_arm64"})
 NATIVE_WHEEL_MANIFEST_PATH: Final = "codex_plugin_scanner/native-wheels.json"
 NATIVE_WHEEL_MANIFEST_SCHEMA: Final = "hol-guard-native-wheels.v1"
 _MAX_NATIVE_WHEEL_BYTES: Final = 256 * 1024 * 1024

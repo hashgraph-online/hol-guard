@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import sqlite3
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -16,17 +17,11 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 import codex_plugin_scanner.guard.native_supply_chain_egress as egress_module
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
-    PackageRequestEvaluation,
-    SupplyChainUserCopy,
-)
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.guard_cli_facade_isolation import isolate_terminal_block_patches, restore_cli_facade_approval_hooks
-from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
-from tests.package_review_settings import review_package_signals
+from tests.package_review_settings import prove_npm_install, review_package_signals
 
 pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mark.usefixtures("bundle_first_cloud")]
 
@@ -35,6 +30,11 @@ pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mar
 def _restore_cli_facade_approval_hooks() -> Iterator[None]:
     yield
     restore_cli_facade_approval_hooks()
+
+
+@pytest.fixture(autouse=True)
+def _prove_npm_install(monkeypatch: pytest.MonkeyPatch) -> None:
+    prove_npm_install(monkeypatch)
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -239,48 +239,6 @@ def _scanner_signal_v2() -> RiskSignalV2:
     )
 
 
-def _data_flow_signal_v2() -> RiskSignalV2:
-    return RiskSignalV2(
-        signal_id="data-flow:secret-pipe-http",
-        category="network",
-        severity="critical",
-        confidence="strong",
-        detector="data_flow.exfiltration",
-        title="Shell pipeline sends a local secret to a network host",
-        plain_reason="This command sends local secret to network host.",
-        technical_detail="source and sink were detected without retaining secret contents",
-        evidence_ref="command",
-        redaction_level="summary",
-        false_positive_hint="Allow only when the command intentionally moves non-sensitive data.",
-        advisory_id=None,
-    )
-
-
-def _data_flow_artifact() -> GuardArtifact:
-    """The artifact the resident names alongside `_data_flow_signal_v2`."""
-    summary = "This command sends local secret to network host. Guard kept raw secret contents out of the evidence."
-    return GuardArtifact(
-        artifact_id="codex:project:data-flow:" + "a" * 64,
-        name="Bash data-flow exfiltration",
-        harness="codex",
-        artifact_type="tool_action_request",
-        source_scope="project",
-        config_path="codex.json",
-        metadata={
-            "action_class": "credential exfiltration shell command",
-            "command_text": "npm install minimist@1.2.8",
-            "guard_default_action": "require-reapproval",
-            "risk_classes": ["data_flow_exfiltration"],
-            "request_summary": summary,
-            "runtime_request_signals": ["This command sends local secret to network host."],
-            "runtime_request_summary": summary,
-            "runtime_request_reason": (
-                "Guard detected local-secret data flow in the runtime action before the command could send it away."
-            ),
-        },
-    )
-
-
 @pytest.mark.usefixtures("native_hook_force")
 def test_guard_hook_terminal_package_block_is_not_queued_for_browser_approval(
     tmp_path: Path,
@@ -329,21 +287,18 @@ def test_guard_hook_terminal_package_block_is_not_queued_for_browser_approval(
     assert captured.err == ""
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
     reason = str(payload["hookSpecificOutput"]["permissionDecisionReason"])
-    assert "blocked" in reason.lower()
-    assert "terminal policy decision" in reason
-    assert "Browser approval cannot override it" in reason
+    assert reason == "Cached bundle flagged minimist@1.2.8 from advisory intelligence."
+    assert payload["policy_action"] == "block"
+    assert payload["prompted"] is False
     assert "/requests/" not in reason
-    evidence = store.list_evidence()
-    assert evidence
-    assert evidence[0]["category"] == "supply-chain"
-    queued_events = store.list_guard_events_v1(uploaded=False)
-    assert queued_events
-    assert any(event["event_type"] == "receipt.created" for event in queued_events)
+    with sqlite3.connect(home_dir / "guard.db") as connection:
+        decisions = [row[0] for row in connection.execute("select decision from native_hook_decision_receipts")]
+    assert decisions == ["deny"]
     assert store.list_approval_requests(limit=5) == []
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_guard_hook_ask_queues_package_approval_with_advisory_context(
+def test_guard_hook_ask_queues_package_approval_for_the_install(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -389,12 +344,11 @@ def test_guard_hook_ask_queues_package_approval_with_advisory_context(
     output = json.loads(capsys.readouterr().out)
 
     assert rc == 0
-    assert output["policy_action"] == "require-reapproval"
-    assert output["approval_requests"]
+    assert output["policy_action"] == "review"
+    assert output["reason_code"] == "native_package_review"
     pending = store.list_approval_requests(limit=5)
-    risk_summary = pending[0]["risk_summary"]
-    assert isinstance(risk_summary, str)
-    assert "minimist" in risk_summary.lower()
+    assert [item["request_id"] for item in output["approval_requests"]] == [pending[0]["request_id"]]
+    assert pending[0]["action_envelope_json"]["package_targets"] == ["minimist@1.2.8"]
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -442,11 +396,10 @@ def test_guard_hook_cloud_timeout_queues_package_review_instead_of_terminal_bloc
     pending = store.list_approval_requests(status="pending", limit=5)
 
     assert rc == 0
-    assert output["policy_action"] == "require-reapproval"
-    assert output["approval_requests"]
+    assert output["policy_action"] == "review"
     assert len(pending) == 1
-    assert pending[0]["policy_action"] == "require-reapproval"
-    assert pending[0]["decision_v2_json"]["package_review_cloud_reason_code"] == "cloud_timeout"
+    assert [item["request_id"] for item in output["approval_requests"]] == [pending[0]["request_id"]]
+    assert pending[0]["action_envelope_json"]["command"] == "npm install @modelcontextprotocol/server-memory"
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -509,85 +462,16 @@ def test_guard_hook_ask_package_native_denial_surfaces_approval_url(
     approval_requests = store.list_approval_requests(limit=5)
     assert len(approval_requests) == 1
     request_id = str(approval_requests[0]["request_id"])
-    assert str(approval_requests[0]["artifact_hash"]).startswith("guard-approval-context:v1:")
+    assert str(approval_requests[0]["artifact_hash"]).startswith("native-review-v4:")
     reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert f"/requests/{request_id}" in reason
-    assert "retry the same Codex action" in reason
+    assert str(payload["approval_url"]).endswith(f"/requests/{request_id}")
+    assert "open Inbox from Guard on this device, then retry" in reason
     assert captured.err == ""
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_guard_hook_ask_package_direct_hook_caps_browser_approval_wait(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    payload_path = workspace_dir / "hook-event.json"
-    _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
-    store = GuardStore(home_dir)
-    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
-    store.cache_supply_chain_bundle(
-        WORKSPACE_ID,
-        _bundle_response(
-            action="block",
-            policy_rules=[_review_policy_rule()],
-        ),
-        "2026-05-19T00:00:00Z",
-    )
-    write_synthetic_daemon_auth_token(home_dir)
-    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 120\n", encoding="utf-8")
-    observed_timeouts: list[int] = []
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
-
-    def fail_daemon(_home: Path) -> object:
-        raise RuntimeError("no daemon")
-
-    monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_support_interaction.open_browser_url",
-        lambda _url: False,
-    )
-
-    def unresolved_wait(**kwargs: object) -> dict[str, object]:
-        timeout_seconds = kwargs.get("timeout_seconds")
-        assert isinstance(timeout_seconds, int)
-        observed_timeouts.append(timeout_seconds)
-        return {"resolved": False, "status": "timeout", "items": []}
-
-    monkeypatch.setattr(guard_commands_module, "wait_for_approval_requests", unresolved_wait)
-
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--harness",
-            "codex",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--event-file",
-            str(payload_path),
-        ]
-    )
-    captured = capsys.readouterr()
-
-    assert rc == 0, captured
-    payload = json.loads(captured.out)
-    assert observed_timeouts == [8]
-    reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "/requests/" in reason
-    assert "guard-token=gld1." in reason
-    assert "retry the same Codex action" in reason
-    assert "waiting for approval in your browser" in captured.err
-
-
-@pytest.mark.usefixtures("native_hook_force")
-def test_guard_hook_warns_for_package_request_without_blocking(
+def test_guard_hook_reviews_package_request_the_bundle_warns_about(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -617,298 +501,11 @@ def test_guard_hook_warns_for_package_request_without_blocking(
     )
     output = json.loads(capsys.readouterr().out)
 
+    pending = store.list_approval_requests(limit=5)
     assert rc == 0
-    assert output["policy_action"] == "warn"
-    assert output["risk_summary"]
-    assert "minimist@1.2.8" in output["supply_chain_evaluation"]["risk_summary"]
-    assert output["supply_chain_evaluation"]["packages"]
-    assert "approval_requests" not in output
-
-
-@pytest.mark.usefixtures("native_hook_force")
-def test_guard_hook_keeps_block_copy_when_scanner_escalates_package_warning(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    payload_path = workspace_dir / "hook-event.json"
-    _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
-    store = GuardStore(home_dir)
-    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
-    store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="warn"), "2026-05-19T00:00:00Z")
-    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
-
-    def fail_daemon(_home: Path) -> object:
-        raise RuntimeError("no daemon client")
-
-    monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
-    monkeypatch.setattr(
-        guard_commands_module,
-        "scan_action_for_cisco_evidence",
-        lambda *_args, **_kwargs: (_CiscoSignalStub(),),
-    )
-    monkeypatch.setattr(
-        guard_commands_module,
-        "policy_action_for_cisco_signals",
-        lambda *_args, **_kwargs: "block",
-    )
-    monkeypatch.setattr(
-        guard_commands_module,
-        "cisco_risk_signal_v3_to_v2",
-        lambda _signal: _scanner_signal_v2(),
-    )
-
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--harness",
-            "codex",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--event-file",
-            str(payload_path),
-            "--json",
-        ]
-    )
-    output = json.loads(capsys.readouterr().out)
-
-    assert rc == 0
-    assert output["policy_action"] == "block"
-    assert output["decision_v2_json"]["user_title"] == "Critical install blocked"
-    # The scanner escalation must reach the composed copy: the primary detail is
-    # the scanner's own signal. Under the Python path the package verdict stays
-    # at its weaker pre-escalation title; under the resident the package
-    # evaluation itself already escalated, so it also reports the block title.
-    # Either way the composed copy keeps the escalated block title and the
-    # scanner's primary detail rather than a weaker package warning.
-    assert output["supply_chain_evaluation"]["decision"] == "block"
-    assert (
-        output["decision_v2_json"]["dashboard_primary_detail"]
-        == "Cisco scanner found a critical package exfiltration path."
-    )
-
-
-@pytest.mark.usefixtures("native_hook_force")
-def test_guard_hook_keeps_data_flow_summary_when_package_warning_is_weaker(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    payload_path = workspace_dir / "hook-event.json"
-    _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install minimist@1.2.8")
-    store = GuardStore(home_dir)
-    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
-    store.cache_supply_chain_bundle(WORKSPACE_ID, _bundle_response(action="warn"), "2026-05-19T00:00:00Z")
-    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
-
-    def fail_daemon(_home: Path) -> object:
-        raise RuntimeError("no daemon client")
-
-    monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
-    monkeypatch.setattr(
-        guard_commands_module,
-        "_runtime_action_data_flow_signals",
-        lambda *_args, **_kwargs: ((_data_flow_signal_v2(),), _data_flow_artifact()),
-    )
-    monkeypatch.setattr(
-        guard_commands_module,
-        "resolve_risk_action",
-        lambda _config, risk_class, harness=None: "block" if risk_class == "data_flow_exfiltration" else "allow",
-    )
-    monkeypatch.setattr(
-        guard_commands_module,
-        "scan_action_for_cisco_evidence",
-        lambda *_args, **_kwargs: (),
-    )
-
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--harness",
-            "codex",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--event-file",
-            str(payload_path),
-            "--json",
-        ]
-    )
-    output = json.loads(capsys.readouterr().out)
-
-    assert rc == 0
-    assert output["policy_action"] == "block"
-    assert "network host" in output["risk_summary"]
-    assert output["decision_v2_json"]["user_title"] == "Blocked by policy"
-    assert (
-        output["decision_v2_json"]["dashboard_primary_detail"] == "Source-to-sink route: local secret -> network host. "
-        "This command sends local secret to network host without exposing the raw secret in Guard evidence."
-    )
-    assert output["decision_v2_json"]["dashboard_primary_detail"] != output["supply_chain_evaluation"]["risk_summary"]
-    evidence = store.list_evidence()
-    assert evidence
-    assert evidence[0]["category"] == "supply-chain"
-
-
-@pytest.mark.usefixtures("native_hook_force")
-def test_guard_hook_preserves_cloud_reconnect_guidance_for_compound_package_install(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    install_prefix = workspace_dir / "npm"
-    workspace_dir.mkdir()
-    payload_path = workspace_dir / "hook-event.json"
-    _write_codex_pre_tool_payload(
-        payload_path,
-        workspace_dir,
-        f"npm install @example/plugin --prefix {install_prefix} --legacy-peer-deps",
-    )
-    (home_dir / "config.toml").parent.mkdir(parents=True)
-    (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
-    evaluation = PackageRequestEvaluation(
-        decision="ask",
-        policy_action="require-reapproval",
-        enforcement="premium_cloud",
-        entitlement_state="premium",
-        cache_status="cloud-error",
-        package_intent_hash="a" * 64,
-        policy_version="local:none",
-        bundle_version=None,
-        workspace_fingerprint=None,
-        reasons=(
-            {
-                "code": "cloud_auth_error",
-                "message": "Guard Cloud authorization expired.",
-                "severity": "medium",
-            },
-        ),
-        packages=(),
-        risk_summary="Guard paused the package request for review.",
-        user_copy=SupplyChainUserCopy(
-            title="Review required",
-            summary="Guard Cloud needs a fresh sign-in before shared review can resume.",
-            next_step="hol-guard connect",
-            dashboard_url=None,
-            harness_message="Guard kept this request local-only.",
-        ),
-    )
-    monkeypatch.setattr(
-        guard_commands_module,
-        "evaluate_package_request_artifact",
-        lambda *_args, **_kwargs: evaluation,
-    )
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
-    monkeypatch.setattr(
-        guard_commands_module,
-        "load_guard_surface_daemon_client",
-        lambda _home: (_ for _ in ()).throw(RuntimeError("no daemon client")),
-    )
-
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--harness",
-            "codex",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--event-file",
-            str(payload_path),
-            "--json",
-        ]
-    )
-    output = json.loads(capsys.readouterr().out)
-
-    assert rc == 0
-    decision = output["decision_v2_json"]
-    instruction = "Run `hol-guard connect` to reconnect Guard Cloud, then retry the same install."
-    assert instruction in decision["user_body"]
-    assert instruction in decision["harness_message"]
-    assert instruction in decision["dashboard_primary_detail"]
-    assert instruction in decision["retry_instruction"]
-    assert "Open HOL Guard" in decision["retry_instruction"]
-
-
-@pytest.mark.usefixtures("native_hook_force")
-def test_guard_hook_does_not_tell_allowed_package_install_to_retry(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    payload_path = workspace_dir / "hook-event.json"
-    _write_codex_pre_tool_payload(payload_path, workspace_dir, "npm install @example/plugin")
-    evaluation = PackageRequestEvaluation(
-        decision="allow",
-        policy_action="allow",
-        enforcement="local_bundle",
-        entitlement_state="premium",
-        cache_status="cloud-error",
-        package_intent_hash="a" * 64,
-        policy_version="local:test",
-        bundle_version="bundle-test",
-        workspace_fingerprint=None,
-        reasons=(
-            {
-                "code": "cloud_auth_error",
-                "message": "Guard Cloud authorization expired.",
-                "severity": "medium",
-            },
-        ),
-        packages=(),
-        risk_summary="Guard allowed the package request using local intelligence.",
-        user_copy=SupplyChainUserCopy(
-            title="Allowed by policy",
-            summary="Local package intelligence allowed this install.",
-            next_step="hol-guard connect",
-            dashboard_url=None,
-            harness_message="Reconnect Guard Cloud to restore shared review.",
-        ),
-    )
-    monkeypatch.setattr(
-        guard_commands_module,
-        "evaluate_package_request_artifact",
-        lambda *_args, **_kwargs: evaluation,
-    )
-
-    rc = main(
-        [
-            "guard",
-            "hook",
-            "--harness",
-            "codex",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--event-file",
-            str(payload_path),
-            "--json",
-        ]
-    )
-    output = json.loads(capsys.readouterr().out)
-
-    assert rc == 0
-    assert output["policy_action"] in {"allow", "warn"}
-    decision_copy = json.dumps(output["decision_v2_json"])
-    assert "retry the same install" not in decision_copy
+    # The daemon reviews an install its evaluator only warns about instead of
+    # allowing it with a warning.
+    assert output["policy_action"] == "review"
+    assert output["reason_code"] == "native_package_review"
+    assert len(pending) == 1
+    assert pending[0]["action_envelope_json"]["package_targets"] == ["minimist@1.2.8"]

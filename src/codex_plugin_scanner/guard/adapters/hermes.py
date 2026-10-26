@@ -44,6 +44,7 @@ from .hermes_state_paths import (
     remove_hermes_managed_files,
     validated_hermes_managed_paths,
 )
+from .mcp_servers import ManagedMcpServer, proxy_launcher_entry
 
 _HERMES_MANAGED_APPROVAL_TIER = "native-or-center"
 _HERMES_MANAGED_PROMPT_CHANNEL = "native"
@@ -486,9 +487,12 @@ def _overlay_servers(
     names_in_use: set[str] = set()
     for server_key, server in source_configs.items():
         overlay_name = _overlay_name(server_key, server, names_in_use)
-        overlay[overlay_name] = {
+        launcher = _stdio_launcher_entry(context=context, server_key=server_key, server=server) or {
             "command": str(Path(guard_cli_launcher())),
             "args": _mcp_proxy_command(context=context, server_key=server_key),
+        }
+        overlay[overlay_name] = {
+            **launcher,
             "transport": "stdio",
             "metadata": {
                 "guard_server_key": server_key,
@@ -497,6 +501,35 @@ def _overlay_servers(
             },
         }
     return overlay
+
+
+def _stdio_launcher_entry(
+    *,
+    context: HarnessContext,
+    server_key: str,
+    server: dict[str, object],
+) -> dict[str, object] | None:
+    """The proxy launch for a local stdio server, through the native relay when it is selected.
+
+    A remote server or a server without a launch command keeps the manifest-resolved
+    ``hermes mcp-proxy`` launch, which the relay does not carry.
+    """
+
+    command = server.get("command")
+    if isinstance(server.get("url"), str) or not isinstance(command, str) or not command.strip():
+        return None
+    managed = ManagedMcpServer(
+        harness="hermes",
+        name=str(server.get("name") or server_key),
+        source_scope="global",
+        config_path=str(server.get("config_path") or ""),
+        command=command,
+        args=tuple(_manifest_args(server.get("args"))),
+        transport="stdio",
+        env=_manifest_env(server.get("env")),
+        enabled=True,
+    )
+    return proxy_launcher_entry(proxy_command="hermes-mcp-proxy", context=context, server=managed)
 
 
 def _overlay_name(server_key: str, server: dict[str, object], names_in_use: set[str]) -> str:

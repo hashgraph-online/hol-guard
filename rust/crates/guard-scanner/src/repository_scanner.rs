@@ -239,8 +239,9 @@ fn looks_binary(path: &str, data: &[u8]) -> bool {
     data[..data.len().min(8192)].contains(&0)
 }
 
-/// Python `_decode_text`.
-fn decode_text<'a>(path: &str, data: &'a [u8]) -> Option<&'a str> {
+/// Python `_decode_text`: the text of a file that is neither a known binary
+/// type nor invalid UTF-8.
+pub fn decode_text<'a>(path: &str, data: &'a [u8]) -> Option<&'a str> {
     if looks_binary(path, data) {
         return None;
     }

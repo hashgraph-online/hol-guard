@@ -49,7 +49,7 @@ def test_consume_refuses_and_spends_nothing_without_the_resident(
 ) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     _resolved_allow(store, str(tmp_path))
-    monkeypatch.setattr(native_guard_store, "ensure_resident_prerequisite", lambda _home: False)
+    monkeypatch.setattr(native_guard_store, "ensure_resident_prerequisite", lambda _home, **_kwargs: False)
     kwargs = {
         "harness": "claude-code",
         "artifact_id": _ARTIFACT,

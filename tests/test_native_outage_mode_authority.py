@@ -76,7 +76,7 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
             worker.review_http_payload.return_value = None
         monkeypatch.setattr(cli, "HookWorker", lambda **_kwargs: worker)
         responses = []
-        monkeypatch.setattr(cli, "_emit", lambda _name, value, _json: responses.append(value))
+        monkeypatch.setattr(cli, "_emit_native_hook_json_document", lambda value, **_kwargs: responses.append(value))
         if failure == "worker_exception":
             response = cli.try_native_hook_authority(
                 payload=payload,

@@ -100,7 +100,11 @@ pub fn evaluate_package_request_artifact(
                 Some(triggers) => apply_review_triggers(deps, artifact, &triggers, result),
                 None => result,
             };
-            Ok(super::hold_unresolved_package_cwd(artifact, result))
+            Ok(super::hold_unresolved_package_cwd(
+                deps.identity,
+                artifact,
+                result,
+            ))
         }
         (None, Some(error)) => Err(error),
         (None, None) => Err(EvalError::Internal(

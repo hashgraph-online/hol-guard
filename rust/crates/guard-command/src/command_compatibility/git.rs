@@ -86,6 +86,10 @@ fn bounded_inspection(arguments: &[String]) -> bool {
         // A stash listing and a `show` of one entry print; every other
         // stash spelling moves work and keeps its workspace attribution.
         || (command == "stash" && crate::pretool::git_stash_reads::read_form(rest))
+        // A submodule status prints the recorded commit of each submodule the
+        // superproject's index names; the recursive walk and every other
+        // submodule spelling move work and keep their attribution.
+        || (command == "submodule" && crate::pretool::git_submodule_reads::read_form(rest))
         // A bisect session's log and a note's listing print; every other
         // spelling of either moves a ref, writes the notes ref or runs a
         // program the text names, and keeps its attribution.
@@ -205,6 +209,7 @@ pub(super) fn inspection_arguments<'a>(
         // `stash` reaches the worktree in every spelling but the two that
         // print: a listing and a `show` of one entry.
         Some("stash") => crate::pretool::git_stash_reads::read_form(&remaining[1..]),
+        Some("submodule") => crate::pretool::git_submodule_reads::read_form(&remaining[1..]),
         // A bisect session and a commit's notes each print in one grammar and
         // write in every other, so each is admitted only in that grammar.
         Some(record @ ("bisect" | "notes")) => {
@@ -222,6 +227,12 @@ pub(super) fn inspection_arguments<'a>(
 
 pub(super) fn fetch_origin_shaped(arguments: &[String]) -> bool {
     git_fetch::origin_shaped_arguments(arguments)
+}
+
+/// Whether a refresh's operands name a reach the proof can follow, and whether
+/// that reach is every configured remote rather than `origin` alone.
+pub(super) fn fetch_reach(arguments: &[String]) -> Option<bool> {
+    git_fetch::reach(arguments).map(|reach| reach == git_fetch::Reach::EveryRemote)
 }
 
 pub(super) fn routed_arguments<'a>(
@@ -475,8 +486,8 @@ pub(super) fn observe_with_contexts(
         // A trailing `2>&1` only merges the fetch's progress into stdout.
         let stripped = crate::pretool::without_stderr_merge(segment);
         let refresh = stripped.as_ref().unwrap_or(segment);
-        let plain = git_fetch::plain_origin_refresh(refresh, command_index)
-            || (routed_remote && git_fetch::routed_origin_refresh(refresh, command_index));
+        let plain = git_fetch::plain_refresh(refresh, command_index).is_some()
+            || (routed_remote && git_fetch::routed_refresh(refresh, command_index).is_some());
         if !(plain && crate::pretool::verified_origin_operation(refresh, proof_context)) {
             result.rule("command.git.unverified-fetch", index, !plain);
         }

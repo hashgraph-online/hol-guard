@@ -50,8 +50,6 @@ _ENTRY_POINTS: tuple[tuple[str, str, int], ...] = (
     (f"{_SERVICES}.benign_requests", "build_tool_action_request_artifact", 0),
     (f"{_SERVICES}.github_shell_capabilities", "classify_github_shell_capabilities", 0),
     (f"{_SERVICES}.source_edit_context", "low_risk_compound_developer_execution_context", 0),
-    (f"{_SERVICES}.shell_quote_parsing", "literal_cd_execution_context", 0),
-    (f"{_SERVICES}.docker_requests", "shell_execution_context_starts_with_literal_cd", 0),
     (f"{_SRC}.cli.commands_support_runtime_artifacts", "_hook_runtime_artifact", 1),
 )
 _OVERRIDE_GUARDS: tuple[tuple[str, str, str, str], ...] = (

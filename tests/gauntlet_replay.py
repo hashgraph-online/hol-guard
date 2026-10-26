@@ -25,6 +25,7 @@ from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_contained_test
     CONTAINED_TEST_HELPERS_SOURCE,
 )
 from tests.benign_fp_gate_connectors import connector_setup_failure
+from tests.benign_fp_gate_git import signed_checkout_include
 from tests.native_gate_retry import BUDGET_MISS_REASONS
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -179,12 +180,18 @@ _IDENTITY_GITCONFIG = "[user]\n\tname = Fixture Author\n\temail = fixture@exampl
 
 
 def write_global_gitconfig(kind: str, home: Path) -> None:
-    """Identity only for clean; the Gauntlet's LFS, gpg and hooksPath settings for realistic."""
+    """Identity only for clean; the Gauntlet's LFS, gpg and hooksPath settings for realistic.
+
+    The fixture's signed checkout keeps its own signing settings only because the
+    user's global config carries the same ones behind a conditional include, so
+    that line survives both environments; rewriting it away would leave that
+    repository standing for a shape no fixture built.
+    """
     text = _IDENTITY_GITCONFIG
     if kind == "realistic":
         text = LFS_GITCONFIG + text
         (home / ".config/git/hooks").mkdir(parents=True, exist_ok=True)
-    (home / ".gitconfig").write_text(text, encoding="utf-8", newline="\n")
+    (home / ".gitconfig").write_text(text + signed_checkout_include(home), encoding="utf-8", newline="\n")
 
 
 def omp_contained(case: ReplayCase, result: dict[str, object]) -> bool:

@@ -100,19 +100,6 @@ def note_capability_cause(connection: sqlite3.Connection, *, cli_id: str, identi
     return cursor.rowcount
 
 
-def implied_capabilities(connection: sqlite3.Connection) -> dict[str, tuple[str, str]]:
-    """``{cli_id: (identity_hash, capability)}`` for each CLI whose cause implies one."""
-
-    capability_causes = tuple(CAPABILITY_BY_CAUSE)
-    marks = ", ".join("?" for _ in capability_causes)
-    rows = connection.execute(
-        f"""select cli_id, identity_hash, first_blocked_cause from local_cli_observation
-            where surface = 'cli' and first_blocked_cause in ({marks})""",
-        capability_causes,
-    ).fetchall()
-    return {str(row[0]): (str(row[1]), CAPABILITY_BY_CAUSE[str(row[2])]) for row in rows}
-
-
 def _column_names(connection: sqlite3.Connection, table: str) -> set[str]:
     names: set[str] = set()
     for row in connection.execute(f"pragma table_info({table})").fetchall():
@@ -129,7 +116,6 @@ __all__ = [
     "ConnectorResolutionState",
     "connector_resolution_state",
     "ensure_local_cli_context_columns",
-    "implied_capabilities",
     "note_capability_cause",
     "validated_first_blocked_cause",
 ]

@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.astrix",
+  "version": "1.0.0",
+  "name": "Astrix MCP",
+  "description": "Reviews local Astrix tools for computing a repository blast radius, evaluating policy, and running impacted tests. The server is external and remains off until enabled by a local administrator.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.vivek5200",
+    "displayName": "Vivek",
+    "url": "https://github.com/vivek5200/astrix"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0B0F19"
+  },
+  "homepage": "https://github.com/vivek5200/astrix",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "direct-command",
+    "command": "astrix"
+  },
+  "riskClasses": [
+    "local-source-read",
+    "local-command-execution"
+  ],
+  "tools": [
+    {
+      "name": "astrix_get_blast_radius",
+      "state": "review"
+    },
+    {
+      "name": "astrix_evaluate_policy",
+      "state": "review"
+    },
+    {
+      "name": "astrix_run_impacted_tests",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/vivek5200/astrix",
+    "https://github.com/vivek5200/astrix/tree/main/astrix/pkg/mcp"
+  ],
+  "saferAlternatives": [
+    "Use the Astrix CLI commands directly when MCP access is not needed; astrix check and astrix graph provide local verification and impact analysis.",
+    "Keep the contribution disabled until a local administrator explicitly enables it, and review tool calls that inspect source or execute project tests."
+  ]
+}

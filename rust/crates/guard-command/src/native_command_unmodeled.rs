@@ -43,6 +43,8 @@ use crate::CanonicalCommandV1;
 
 #[path = "native_command_unmodeled_case.rs"]
 mod case_labels;
+#[path = "native_command_unmodeled_compound.rs"]
+mod compound;
 #[path = "native_command_unmodeled_expansion.rs"]
 mod expansion;
 #[path = "native_command_unmodeled_find_exec.rs"]
@@ -60,9 +62,9 @@ mod substitution;
 #[path = "native_command_unmodeled_xargs.rs"]
 mod xargs;
 use case_labels::without_case_labels;
-use find_exec::{find_exec_programs, EXEC_ACTIONS};
+use find_exec::{find_exec_programs, text_outside_exec_arguments, EXEC_ACTIONS};
 use link_makers::creates_links;
-pub(crate) use prefix::{launcher_body, prefix_reads_a_program_file};
+pub(crate) use prefix::{launcher_body, prefix_reads_a_program_file, Handover};
 use redirections::without_redirections;
 use shapes::{data_heredocs, without_lookups, without_plain_awk};
 pub(crate) use shapes::{python_is_builtin_only, python_stdin};
@@ -277,11 +279,20 @@ impl CompiledNativeCommandControls {
         let exec_names_program = exec_programs
             .as_ref()
             .is_some_and(|programs| !programs.is_empty());
+        // The words after the program an `-exec` names are that program's
+        // arguments, not command positions, so a name that appears only there
+        // runs nothing: `find src -exec echo sh {} \;` prints `sh`.
+        let outside_exec = if exec_names_program {
+            named_words(&joined_quotes(&text_outside_exec_arguments(&bare)))
+        } else {
+            BTreeSet::new()
+        };
         if INTERPRETERS.iter().any(|name| {
             interpreted.contains(*name)
                 && !(sourced_bounded && matches!(*name, "source" | "."))
                 && !(xargs_bounded && *name == "xargs")
                 && !(exec_names_program && EXEC_ACTIONS.contains(name))
+                && (!exec_names_program || outside_exec.contains(*name))
         }) {
             // An `xargs` whose operands are not in the text is not bounded by
             // reading a script file. `2>/dev/null xargs gh` still takes its
@@ -316,7 +327,12 @@ impl CompiledNativeCommandControls {
                 // command the prefix runs is the one the text already names,
                 // and its own programs count toward the owners below.
                 None if crate::pretool::prefixed_launch(command, context) => {}
-                None => return None,
+                None if compound::redirected_launch(command, context) => {}
+                None => named.extend(
+                    compound::listed_inline_sources(&bare, sourced_bounded, context)?
+                        .iter()
+                        .flat_map(|source| named_words(source)),
+                ),
             }
         }
         // The programs read out of an `xargs` or a `find -exec`. Reading one
@@ -477,9 +493,10 @@ impl CompiledNativeCommandControls {
 /// answers for the shape the scan already gave up on, and the question is
 /// only which program the text puts in command position.
 fn backgrounded_nested_executor(normalized: &str) -> bool {
-    let Some(foreground) = crate::pretool::foreground_job(normalized) else {
+    let Some(foreground) = crate::pretool::sequential_jobs(normalized) else {
         return false;
     };
+    let foreground = foreground.as_str();
     // Both of these name the program they run, so the floor below can still
     // bound them and backgrounding takes nothing away.
     if named_xargs_pipeline(foreground) || named_find_exec(foreground) {
@@ -551,7 +568,8 @@ fn named_xargs_pipeline(text: &str) -> bool {
 fn named_find_exec(text: &str) -> bool {
     let literal = unquoted_literal(text);
     find_exec_programs(text).is_some_and(|programs| !programs.is_empty())
-        && !text.contains(['<', '>', '`', '$', '\n'])
+        && !text.contains(['<', '>', '`', '\n'])
+        && (!text.contains('$') || compound::parameters_only_root_paths(text))
         && !moves_data(&literal)
 }
 
@@ -825,7 +843,10 @@ fn moves_data(literal: &str) -> bool {
     literal.contains(['<', '>', '`'])
         || literal.contains("$(")
         || command_words(literal).any(|word| {
-            (is_assignment(word) && !saves_job_pid(word) && !assigns_nothing(word))
+            (is_assignment(word)
+                && !saves_job_pid(word)
+                && !assigns_nothing(word)
+                && !compound::binds_a_shell_variable(word))
                 || matches!(
                     word,
                     "export" | "declare" | "typeset" | "readonly" | "local" | "unset" | "alias"

@@ -278,7 +278,7 @@ assert.equal(mutationState.effective.layers[0]?.controls.length, 1, "builder mus
 const extension: ExtensionCatalogItem = {
   schema_version: 2, extension_id: "command.git", name: "Git", description: "Protects source-control commands.",
   enabled: true, required: false, trust_class: "first-party", activation: "default-on",
-  publisher: { id: "hol", displayName: "Hashgraph Online" }, icon: { kind: "none" },
+  publisher: { id: "hol", displayName: "HOL" }, icon: { kind: "none" },
   source: "built-in", version: "1.2.3", aliases: ["command.scm"],
   dependencies: [], conflicts: [], delegated_protection: null, ecosystem_ids: ["git"], executables: ["git"],
   project_markers: [".git"], reference_urls: [], action_classes: ["git.history.rewrite"],
@@ -479,6 +479,15 @@ assert.match(extensionNavigationSource, /export function pushExtensionHistory/);
 assert.match(extensionNavigationSource, /export function replaceExtensionHistory/);
 assert.match(policyDetailSource, /id="extension-policy-tabpanel"[\s\S]*role="tabpanel"[\s\S]*aria-labelledby="extension-tab-policy"/);
 assert.match(policyDraftSource, /isCurrentExtensionPolicyDraft\(generation, draftGeneration\.current\)\) handleApiError/);
+assert.match(
+  policyDraftSource,
+  /phase === "apply"[\s\S]*protectionChangeErrorMessage\(caught, command, shell\)/,
+  "only apply, which may have committed, uses the uncertain-outcome wording",
+);
+assert.match(policyDraftSource, /knownProtectionChangeMessage\(caught, command, shell\)/);
+assert.match(policyDraftSource, /authorityRecoverySentence\(caught, command, shell\)/);
+assert.match(policyDraftSource, /const terminalCommands = props\.effective\.terminal_commands;/);
+assert.doesNotMatch(policyDraftSource, /setError\(caught instanceof Error \? caught\.message/);
 assert.match(policyDraftSource, /isCurrentExtensionPolicyDraft\(generation, draftGeneration\.current\)[\s\S]*Guard could not rebase this draft/);
 assert.match(
   policyDraftSource,

@@ -91,6 +91,11 @@ fn bounded_find_listings_do_not_admit_actions_or_sensitive_targets() {
     );
 }
 
+/// `[[ -f NAME ]]` is read as the `[ -f NAME ]` it asks: inside `[[ ]]` the
+/// shell splits no word and expands no glob, so the modeled form stands for
+/// at least the work the command does. Only a closed pair is read that way;
+/// an unclosed `[[`, a pair `&&` has already split, and an unmodeled
+/// predicate each keep their review.
 #[test]
 fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -105,6 +110,9 @@ fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
         "test -x src && echo searchable || echo closed",
         "test -s src/lib.rs && echo non-empty",
         "[ -f src/lib.rs ] && echo present || echo missing",
+        "[[ -f src/lib.rs ]] && echo present || echo missing",
+        "[[ -d src ]] && ls src",
+        "if [[ -f src/lib.rs ]]; then cat src/lib.rs; fi",
     ] {
         let decision =
             evaluate_pre_tool_with_context(&request(command), Some(root), Some(root)).unwrap();
@@ -125,6 +133,10 @@ fn bounded_file_predicates_preserve_compound_path_and_command_risks() {
         "test -w src/lib.rs",
         "[ -f .env ] && echo set",
         "[ -f src/lib.rs",
+        "[[ -f .env ]] && echo set",
+        "[[ -f src/lib.rs",
+        "[[ -f src/lib.rs && -f .env ]]",
+        "[[ -w src/lib.rs ]]",
     ] {
         let decision = evaluate_pre_tool_with_context(&request(command), Some(root), Some(root));
         assert!(

@@ -19,6 +19,11 @@ def linked_home(tmp_path: Path) -> tuple[Path, Path, Path]:
     return home, workspace, worktree
 
 
+@pytest.fixture(autouse=True)
+def _peel_from_the_resident(native_contained_wrapper_runtime: Path) -> None:
+    """Every peel here is the classifier's answer, asked of the session resident."""
+
+
 def test_relative_cd_into_a_sibling_root_peels_an_and_list(tmp_path: Path) -> None:
     home, workspace, worktree = linked_home(tmp_path)
     command = "cd ../project-report && node scripts/report.mjs && cat 'report out.md'"
@@ -48,8 +53,10 @@ def test_a_sequence_after_cd_into_a_sibling_root_peels_like_an_and_list(tmp_path
     assert peel_contained_wrapper(
         "cd ../project-report ; npm test && git status", workspace=workspace, home=home, cwd=workspace
     ) == ("npm test && git status", worktree.resolve(), None)
-    # The cd target is resolved before anything runs; a missing root runs nothing.
-    with pytest.raises(OSError):
+    # The cd target is resolved before anything runs, so a missing root is never
+    # peeled: the sink runs the text whole in the sandbox instead of the core in
+    # the session directory the shell would fall back to.
+    with pytest.raises((ValueError, OSError)):
         peel_contained_wrapper(f"cd {home / 'gone'}; npm test", workspace=workspace, home=home, cwd=workspace)
 
 

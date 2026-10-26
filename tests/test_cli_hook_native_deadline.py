@@ -106,3 +106,14 @@ def test_hint_parsing_rejects_non_finite_and_negative_seconds_then_uses_ms():
     assert set(junk) == {"edge_budget_seconds"}
     huge = RuntimeHookDeadline.cli_edge_kwargs({"guard_remaining_seconds": 600}, monotonic=clock)
     assert huge["deadline"] - 100.0 <= 10.0
+
+
+def test_cli_hook_without_a_hint_reviews_under_the_explicit_maximum():
+    from codex_plugin_scanner.guard.cli.commands_hook_native_authority import _cli_review_deadline
+
+    before = time.monotonic()
+    deadline = _cli_review_deadline({"hook_event_name": "PreToolUse"})
+    # The edge's own default is 0.75 s; a one-shot CLI hook gets the full budget.
+    assert 0.75 < deadline - before <= 10.0
+    hinted = _cli_review_deadline({"hook_event_name": "PreToolUse", "guard_remaining_ms": 2000})
+    assert hinted - before < 2.0

@@ -137,6 +137,7 @@ def assess_case(scenario: Scenario, case: dict[str, Any]) -> dict[str, Any]:
         calls,
         approval_retry=approval_retry_enabled(scenario),
         contained_ok=scenario.contained_ok,
+        benign_exit=frozenset(scenario.benign_exit_commands),
     )
     provider = case["inference"]
     rounds = provider.get("live_rounds", [])

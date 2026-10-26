@@ -13,11 +13,6 @@ from pathlib import Path
 from ..secret_sensitivity import classify_secret_path
 from .constants_core import (
     _COMMAND_KEYS,
-    _DOCKER_BUILD_ARG_SECRET_MARKERS,
-    _DOCKER_BUILD_ARG_TOKEN_PREFIXES,
-    _DOCKER_BUILD_OUTPUT_FLAGS,
-    _DOCKER_BUILDX_FLAG_OPTIONS,
-    _DOCKER_BUILDX_OPTIONS_WITH_VALUES,
     _FILE_WRITE_TOOL_NAMES,
     COMMAND_CANDIDATE_LIST_KEYS,
     COMMAND_SEQUENCE_KEYS,
@@ -126,137 +121,9 @@ def _collect_candidate_commands(value: object, results: list[str], *, depth: int
             _collect_candidate_commands(child, results, depth=depth + 1)
 
 
-def _docker_buildx_subcommand_index(args: list[str]) -> int | None:
-    index = 0
-    while index < len(args):
-        token = args[index]
-        if token == "--":
-            return index + 1 if index + 1 < len(args) else None
-        if _docker_buildx_option_has_value(token):
-            index += 1 if "=" in token else 2
-            continue
-        if _docker_buildx_flag_option_matches(token):
-            index += 1
-            continue
-        if token.startswith("-") and not token.startswith("--"):
-            index += 1
-            continue
-        return index
-    return None
-
-
-def _docker_buildx_option_has_value(token: str) -> bool:
-    return token in _DOCKER_BUILDX_OPTIONS_WITH_VALUES or any(
-        token.startswith(f"{option}=") for option in _DOCKER_BUILDX_OPTIONS_WITH_VALUES
-    )
-
-
-def _docker_buildx_flag_option_matches(token: str) -> bool:
-    return token in _DOCKER_BUILDX_FLAG_OPTIONS or any(
-        token.startswith(f"{option}=") for option in _DOCKER_BUILDX_FLAG_OPTIONS
-    )
-
-
-def _docker_build_output_flag_matches(token: str) -> bool:
-    if token in _DOCKER_BUILD_OUTPUT_FLAGS or any(token.startswith(f"{flag}=") for flag in _DOCKER_BUILD_OUTPUT_FLAGS):
-        return True
-    return token.startswith("-o") and len(token) > 2
-
-
-def _docker_build_arg_is_sensitive(value: str) -> bool:
-    key, separator, assigned_value = value.partition("=")
-    # Normalize after splitting to tolerate unusual shell tokenization.
-    normalized_key = key.strip()
-    return bool(
-        normalized_key
-        and (
-            # Bare build args pass through the caller's environment, so block
-            # them even when the variable name does not look secret-like.
-            not separator
-            or _docker_build_arg_name_is_sensitive(normalized_key)
-            or _docker_build_arg_value_is_sensitive(assigned_value.strip())
-        )
-    )
-
-
-def _docker_build_arg_name_is_sensitive(value: str) -> bool:
-    normalized = value.upper().replace("-", "_")
-    parts = normalized.split("_")
-    if any(part in _DOCKER_BUILD_ARG_SECRET_MARKERS for part in parts):
-        return True
-    substring_markers = _DOCKER_BUILD_ARG_SECRET_MARKERS - {"KEY"}
-    return any(marker in normalized for marker in substring_markers)
-
-
-def _docker_build_arg_value_is_sensitive(value: str) -> bool:
-    lowered = value.lower().strip("\"'")
-    if any(lowered.startswith(prefix) for prefix in _DOCKER_BUILD_ARG_TOKEN_PREFIXES):
-        return True
-    if "$(" in value or "`" in value:
-        return True
-    return any(_docker_build_arg_name_is_sensitive(variable_name) for variable_name in _shell_variable_names(value))
-
-
-def _shell_variable_names(value: str) -> tuple[str, ...]:
-    names: list[str] = []
-    index = 0
-    while index < len(value):
-        dollar_index = value.find("$", index)
-        if dollar_index == -1 or dollar_index + 1 >= len(value):
-            break
-        if value[dollar_index + 1] == "{":
-            closing_index = value.find("}", dollar_index + 2)
-            if closing_index == -1:
-                index = dollar_index + 2
-                continue
-            variable_name = _shell_braced_variable_name(value[dollar_index + 2 : closing_index])
-            if variable_name:
-                names.append(variable_name)
-            index = closing_index + 1
-            continue
-        variable_name, next_index = _shell_unbraced_variable_name(value, dollar_index + 1)
-        if variable_name:
-            names.append(variable_name)
-        index = next_index
-    return tuple(names)
-
-
-def _shell_braced_variable_name(value: str) -> str:
-    start = 1 if value.startswith("!") else 0
-    variable_name, _ = _shell_unbraced_variable_name(value, start)
-    return variable_name
-
-
-def _shell_unbraced_variable_name(value: str, start: int) -> tuple[str, int]:
-    if start >= len(value) or not (value[start].isalpha() or value[start] == "_"):
-        return "", start + 1
-    index = start + 1
-    while index < len(value) and (value[index].isalnum() or value[index] == "_"):
-        index += 1
-    return value[start:index], index
-
-
-def _normalized_shell_command_name(command_name: str) -> str:
-    normalized_command = command_name.replace("\\", "/").strip()
-    if "/" not in normalized_command:
-        return normalized_command.lower()
-    return normalized_command.rsplit("/", 1)[-1].lower()
-
-
 __all__ = [
     "_candidate_command_texts",
     "_collect_candidate_commands",
-    "_docker_build_arg_is_sensitive",
-    "_docker_build_arg_name_is_sensitive",
-    "_docker_build_arg_value_is_sensitive",
-    "_docker_build_output_flag_matches",
-    "_docker_buildx_flag_option_matches",
-    "_docker_buildx_option_has_value",
-    "_docker_buildx_subcommand_index",
-    "_normalized_shell_command_name",
-    "_shell_braced_variable_name",
-    "_shell_unbraced_variable_name",
-    "_shell_variable_names",
     "command_list_candidate_texts",
     "extract_sensitive_file_write_request",
 ]

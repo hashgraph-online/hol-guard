@@ -200,6 +200,18 @@ pub(super) fn stdin_filter_segment(segment: &crate::CommandSegmentV1) -> bool {
             || super::stdin_filters::safe_arguments(basename, &segment.arguments))
 }
 
+/// Whether no other step of the command line could create a file, directory or
+/// link before this one runs. A recursive walk of a name that is not there
+/// reads nothing, but only while the name stays missing, so the proof of an
+/// absent operand rests on this.
+fn no_peer_creates(model: &CanonicalCommandV1, segment: &crate::CommandSegmentV1) -> bool {
+    model
+        .segments
+        .iter()
+        .filter(|other| other.span != segment.span)
+        .all(|other| search::grep::creates_nothing(other, true))
+}
+
 pub(super) fn exact_safe_segment_with_context(
     model: &CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
@@ -301,10 +313,17 @@ pub(super) fn exact_safe_segment_with_context(
         "lsof" => super::safe_scalar::safe_lsof_arguments(&segment.arguments),
         "pkill" => super::process_stops::safe_pkill_arguments(&segment.arguments, context),
         "pg_isready" => super::safe_scalar::safe_pg_isready_arguments(&segment.arguments),
-        "ls" => {
-            super::listing_reads::safe_listing_segment(&segment.text, &segment.arguments, context)
-        }
-        "tree" => super::tree_reads::safe_tree_segment(&segment.arguments, context),
+        "ls" => super::listing_reads::safe_listing_segment(
+            &segment.text,
+            &segment.arguments,
+            context,
+            no_peer_creates(model, segment),
+        ),
+        "tree" => super::tree_reads::safe_tree_segment(
+            &segment.arguments,
+            context,
+            no_peer_creates(model, segment),
+        ),
         "test" => {
             safe_reads::safe_file_predicate_arguments(&segment.arguments, &segment.text, context)
         }

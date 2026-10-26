@@ -14,18 +14,25 @@ import { lazyWorkspace } from "./lazy-workspace";
 const SupplyChainWorkspace = lazyWorkspace("supply-chain-workspace", () =>
   import("./supply-chain-workspace").then((m) => ({ default: m.SupplyChainWorkspace }))
 );
+const SupplyChainWorkspaceDetails = lazyWorkspace("supply-chain-workspace-details", () =>
+  import("./supply-chain-workspace-details").then((m) => ({ default: m.SupplyChainWorkspaceDetails }))
+);
 const AuditWorkspace = lazyWorkspace("audit-workspace", () =>
   import("./audit-workspace").then((m) => ({ default: m.AuditWorkspace }))
+);
+const WorkspaceFindingsWorkspace = lazyWorkspace("workspace-findings-workspace", () =>
+  import("./workspace-findings-workspace").then((m) => ({ default: m.WorkspaceFindingsWorkspace }))
 );
 const FeedHealthWorkspace = lazyWorkspace("feed-health-workspace", () =>
   import("./feed-health-workspace").then((m) => ({ default: m.FeedHealthWorkspace }))
 );
 
-type HubTab = "supply-chain" | "audit" | "feed-health";
+type HubTab = "supply-chain" | "audit" | "workspaces" | "feed-health";
 
 const hubTabs: Array<{ value: HubTab; label: string }> = [
   { value: "supply-chain", label: "Supply Chain" },
   { value: "audit", label: "Audit" },
+  { value: "workspaces", label: "Workspaces" },
   { value: "feed-health", label: "Feed Health" },
 ];
 
@@ -34,7 +41,7 @@ export function hubTitleForTab(tab: HubTab): string {
 }
 
 function viewToTab(view: string): HubTab {
-  if (view === "supply-chain" || view === "audit" || view === "feed-health") {
+  if (view === "supply-chain" || view === "audit" || view === "workspaces" || view === "feed-health") {
     return view;
   }
   return "supply-chain";
@@ -78,6 +85,9 @@ export function SupplyChainHubWorkspace(props: {
     },
     [props.onNavigate]
   );
+  const handleAuditNavigate = useCallback(() => {
+    props.onNavigate("/audit");
+  }, [props.onNavigate]);
   const handleFixAll = useCallback(() => {
     firewallPanelRef.current?.fixAll();
   }, []);
@@ -95,10 +105,7 @@ export function SupplyChainHubWorkspace(props: {
         {tab === "supply-chain" && (
           <SupplyChainWorkspace
             snapshot={props.snapshot}
-            onGoHome={props.onGoHome}
-            onAuditNavigate={() => props.onNavigate("/audit")}
-            auditSnapshot={auditSession.auditSnapshot}
-            auditRunning={auditSession.auditRunning}
+            receipts={props.receipts}
             fixAllState={fixAllState}
             onFixAll={handleFixAll}
           />
@@ -109,6 +116,12 @@ export function SupplyChainHubWorkspace(props: {
             receipts={props.receipts}
             approvalGate={props.approvalGate}
             auditSession={auditSession}
+          />
+        )}
+        {tab === "workspaces" && (
+          <WorkspaceFindingsWorkspace
+            suggestedRoot={auditSession.auditWorkspaceDir || managedAuditWorkspaceDir || ""}
+            onChooseFolder={auditSession.handleChooseAuditWorkspace}
           />
         )}
         {tab === "feed-health" && (
@@ -133,6 +146,20 @@ export function SupplyChainHubWorkspace(props: {
           runAuditRef={auditSession.runAuditRef}
         />
       </div>
+      {/* Status, then the roster, then the facts behind it: DOM order matches
+          what the eye reads, so keyboard and screen-reader users meet the
+          manager rows before the supporting detail. */}
+      {tab === "supply-chain" && (
+        <Suspense fallback={null}>
+          <SupplyChainWorkspaceDetails
+            snapshot={props.snapshot}
+            onGoHome={props.onGoHome}
+            onAuditNavigate={handleAuditNavigate}
+            auditSnapshot={auditSession.auditSnapshot}
+            auditRunning={auditSession.auditRunning}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

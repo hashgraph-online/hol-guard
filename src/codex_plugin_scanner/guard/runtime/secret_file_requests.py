@@ -29,9 +29,6 @@ from .secret_file_request_services.constants_core import _SHELL_TOOL_NAMES as _S
 from .secret_file_request_services.constants_core import COMMAND_CANDIDATE_LIST_KEYS as COMMAND_CANDIDATE_LIST_KEYS
 from .secret_file_request_services.constants_core import COMMAND_LIST_KEYS as COMMAND_LIST_KEYS
 from .secret_file_request_services.constants_core import COMMAND_SEQUENCE_KEYS as COMMAND_SEQUENCE_KEYS
-from .secret_file_request_services.docker_requests import (
-    shell_execution_context_starts_with_literal_cd as shell_execution_context_starts_with_literal_cd,
-)
 from .secret_file_request_services.github_shell_capabilities import (
     classify_github_shell_capabilities as classify_github_shell_capabilities,
 )
@@ -42,9 +39,6 @@ from .secret_file_request_services.request_models import ToolActionRequestMatch 
 from .secret_file_request_services.request_models import _normalize_tool_name as _normalize_tool_name
 from .secret_file_request_services.request_models import classify_sensitive_path as classify_sensitive_path
 from .secret_file_request_services.request_models import is_file_read_tool_name as is_file_read_tool_name
-from .secret_file_request_services.shell_quote_parsing import (
-    literal_cd_execution_context as literal_cd_execution_context,
-)
 from .secret_file_request_services.source_edit_context import (
     low_risk_compound_developer_execution_context as low_risk_compound_developer_execution_context,
 )
@@ -230,7 +224,5 @@ __all__ = [
     "extract_sensitive_tool_action_request",
     "is_explicitly_benign_native_file_read_request",
     "is_file_read_tool_name",
-    "literal_cd_execution_context",
     "low_risk_compound_developer_execution_context",
-    "shell_execution_context_starts_with_literal_cd",
 ]

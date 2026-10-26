@@ -114,6 +114,10 @@ def _configure_guard_local_parsers(
     _add_guard_common_args(network_check_parser, suppress_defaults=True)
     network_check_parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS)
 
+    from .runtime_posture_command import configure_runtime_parser
+
+    configure_runtime_parser(guard_subparsers)
+
     dashboard_parser = guard_subparsers.add_parser(
         "dashboard",
         help="Open the local Guard dashboard in your browser",

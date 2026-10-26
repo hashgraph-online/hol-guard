@@ -103,7 +103,7 @@ export function ReleaseStatusBand(props: {
                 {copy.title}
               </span>
               {release ? (
-                <Tag tone={release.channel === "stable" ? "green" : "amber"}>
+                <Tag tone={release.channel === "stable" ? "green" : "attention"}>
                   {channelLabel(release.channel)}
                 </Tag>
               ) : null}

@@ -4,6 +4,12 @@
 //! the flat list admits the construct, and the conditional grants no
 //! authority of its own.
 //!
+//! A `case` statement is the same shape: one arm's list runs, so the lists
+//! every arm holds stand for whichever arm the word selects. The word and the
+//! patterns choose between those lists rather than running anything, so they
+//! are not carried into the flat list, and each is taken only when it plainly
+//! starts no command of its own.
+//!
 //! A loop is only the same shape when it is known to stop and its body cannot
 //! build up across iterations, because one flattened pass stands for every
 //! iteration. `while read NAME; do ...; done < FILE` is that shape, for a
@@ -48,6 +54,9 @@ pub(super) fn flatten(command: &str) -> Option<String> {
     if let Some(rest) = keyword(text, "while") {
         return flatten_loop(rest);
     }
+    if let Some(rest) = keyword(text, "case") {
+        return flatten_case(rest);
+    }
     None
 }
 
@@ -70,6 +79,152 @@ fn flatten_conditional(rest: &str) -> Option<String> {
             _ => return assemble(&parts, after_branch),
         }
     }
+}
+
+/// `case WORD in [(]PATTERN[|PATTERN]...) LIST ;; ... esac`.
+///
+/// One arm's list runs, so writing every arm's list out as one plain list
+/// runs at least as much as the construct ever can, which is the same reason
+/// a conditional's branches flatten.
+///
+/// The word and the patterns are not command lists and do not reach the flat
+/// list. Dropping text that could start a program would hide work, so each is
+/// taken only when it plainly starts none: no substitution in the word, and a
+/// pattern written as bare glob text, which also leaves the `)` that closes it
+/// the first one in the arm.
+fn flatten_case(rest: &str) -> Option<String> {
+    let (word, mut rest) = subject(rest)?;
+    if starts_a_command(word) {
+        return None;
+    }
+    let mut parts: Vec<(String, &'static str)> = Vec::new();
+    loop {
+        rest = rest.trim_start_matches([' ', '\t', '\n']);
+        if let Some(after) = closing(rest) {
+            return assemble(&parts, after);
+        }
+        let (pattern, body) = rest.split_once(')')?;
+        if !plain_pattern(pattern) {
+            return None;
+        }
+        let (list, after) = arm_list(body)?;
+        collect(&mut parts, list)?;
+        rest = after;
+    }
+}
+
+/// The word a `case` chooses on, and the text after the `in` that closes it.
+fn subject(rest: &str) -> Option<(&str, &str)> {
+    let (word, after) = rest.split_once([' ', '\t', '\n'])?;
+    let after = keyword(after.trim_start_matches([' ', '\t', '\n']), "in")?;
+    (!word.is_empty()).then_some((word, after))
+}
+
+/// Whether dropping this text would drop a command with it. A parameter the
+/// shell only expands carries none, and is kept out of the flat list the way
+/// a conditional keeps the expansions it held.
+///
+/// A process substitution runs its own command list before the `case` chooses
+/// anything, so `<(` and `>(` carry one as plainly as a backtick does.
+///
+/// Arithmetic carries one too. The shell evaluates a variable's value as an
+/// expression, and an array subscript in that value runs a command
+/// substitution the text in front of us never spells, so
+/// `x='a[$(id)]'; case $[x] in *) ls;; esac` runs `id`. `$((` holds a `$(`
+/// and is already read as carrying a command; the legacy `$[` spelling has to
+/// be named.
+fn starts_a_command(text: &str) -> bool {
+    text.contains('`')
+        || text.contains("$(")
+        || text.contains("$[")
+        || text.contains("<(")
+        || text.contains(">(")
+        || text
+            .match_indices("${")
+            .any(|(index, _)| !reads_a_value(&text[index + 2..]))
+}
+
+/// Whether this `${...}` only reads a value. `${NAME}` and `${#NAME}` do.
+/// Every other form does more than read: `${NAME@P}` expands the value as a
+/// prompt string, which runs a command substitution the value holds, and
+/// `${NAME:=word}` writes the variable that the lookup after it reads. The
+/// text of such a value is not in front of us, so the expansion is read as
+/// carrying a command rather than as inert.
+fn reads_a_value(rest: &str) -> bool {
+    let rest = rest.strip_prefix('#').unwrap_or(rest);
+    let Some(end) = rest.find('}') else {
+        return false;
+    };
+    let name = &rest[..end];
+    name.starts_with(|c: char| c.is_alphanumeric() || c == '_')
+        && name.chars().all(|c| c.is_alphanumeric() || c == '_')
+}
+
+/// A pattern the flat list may drop: bare glob text, after the optional `(`
+/// that may open it, holding nothing that runs and no `)` of its own.
+fn plain_pattern(pattern: &str) -> bool {
+    let pattern = pattern.trim();
+    let pattern = pattern.strip_prefix('(').unwrap_or(pattern).trim();
+    !pattern.is_empty()
+        && !pattern.contains(['`', '$', '"', '\'', '(', ')', ';', '&', '<', '>', '\n'])
+}
+
+/// An arm's command list, and the text the next pattern starts in.
+fn arm_list(body: &str) -> Option<(Vec<(String, &'static str)>, &str)> {
+    let (end, after) = arm_end(body)?;
+    let list = body[..end].trim().trim_end_matches([';', ' ', '\t', '\n']);
+    let text = format!("{list}; esac");
+    let (items, _, _) = body_items(&text, "", &["esac"])?;
+    Some((items, &body[after..]))
+}
+
+/// Where an arm's list ends: the `;;` that closes it, and where the arm after
+/// it starts. A `;&` or `;;&` arm runs the arm below it as well, which the
+/// list this builds does not say, so neither is taken. Quotes are followed so
+/// that a `;;` written inside one ends nothing.
+fn arm_end(body: &str) -> Option<(usize, usize)> {
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for (index, character) in body.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match quote {
+            Some('\'') => {
+                if character == '\'' {
+                    quote = None;
+                }
+            }
+            Some(_) => match character {
+                '\\' => escaped = true,
+                '"' => quote = None,
+                _ => {}
+            },
+            None => match character {
+                '\\' => escaped = true,
+                '\'' | '"' => quote = Some(character),
+                ';' => {
+                    let rest = &body[index..];
+                    if rest.starts_with(";;&") || rest.starts_with(";&") {
+                        return None;
+                    }
+                    if rest.starts_with(";;") {
+                        return Some((index, index + 2));
+                    }
+                }
+                _ => {}
+            },
+        }
+    }
+    None
+}
+
+/// Consume the `esac` that closes the construct, for the text that follows
+/// the last arm.
+fn closing(text: &str) -> Option<&str> {
+    let rest = text.strip_prefix("esac")?;
+    (rest.is_empty() || rest.starts_with([' ', '\t', '\n', ';', '<', '>'])).then_some(rest)
 }
 
 /// `while read NAME...; do LIST; done < FILE`, the one loop shape a single

@@ -182,7 +182,6 @@ from ..runtime.secret_file_requests import (
     extract_sensitive_file_write_request,
     extract_sensitive_file_write_request_artifact,
     extract_sensitive_tool_action_request,
-    literal_cd_execution_context,
 )
 from ..runtime.secret_sensitivity import (
     SecretContentMatch,
@@ -305,7 +304,7 @@ CopilotMcpGuardProxy = _load_lazy_export("..proxy", "CopilotMcpGuardProxy")
 CursorMcpGuardProxy = _load_lazy_export("..proxy", "CursorMcpGuardProxy")
 OpenCodeMcpGuardProxy = _load_lazy_export("..proxy", "OpenCodeMcpGuardProxy")
 RemoteGuardProxy = _load_lazy_export("..proxy", "RemoteGuardProxy")
-StdioGuardProxy = _load_lazy_export("..proxy", "StdioGuardProxy")
+ElicitationMcpGuardProxy = _load_lazy_export("..proxy", "ElicitationMcpGuardProxy")
 add_approval_parser = _load_lazy_export(".approval_commands", "add_approval_parser")
 run_approval_command = _load_lazy_export(".approval_commands", "run_approval_command")
 run_approval_open_command = _load_lazy_export(".approval_commands", "run_approval_open_command")

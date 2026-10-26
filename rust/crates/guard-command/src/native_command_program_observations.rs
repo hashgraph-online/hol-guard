@@ -259,8 +259,11 @@ impl NativeCommandProgram {
         };
         let mut observations = Vec::new();
         let mut evidence_items = 0usize;
+        let mut considered = 0usize;
+        let mut evaluated = 0usize;
         for index in candidates {
             state.check_deadline()?;
+            considered += 1;
             let rule = &self.rules[index];
             let extension = &self.extensions[rule.extension_index];
             if !active_extensions.contains(&extension.extension_id) {
@@ -269,6 +272,7 @@ impl NativeCommandProgram {
             let Some(matcher) = rule.matcher else {
                 continue;
             };
+            evaluated += 1;
             let mut uncertainty = Vec::new();
             let base = match state.evaluate(matcher) {
                 Ok(indices) => indices,
@@ -343,6 +347,7 @@ impl NativeCommandProgram {
             });
         }
         state.check_deadline()?;
+        super::work_stats::record_pass(considered, evaluated);
         Ok(NativeCommandObservationBatchV1 {
             observations,
             ..Default::default()

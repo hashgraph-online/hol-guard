@@ -9,7 +9,7 @@
 use crate::CommandSegmentV1;
 
 /// The longest chain the sink applies.
-pub(super) const MAX_FILTERS: usize = 3;
+pub(in crate::pretool) const MAX_FILTERS: usize = 3;
 
 /// Single-letter `grep` switches that change only which lines of standard
 /// input are printed and how. Recursion (`-r`), pattern files (`-f`), file
@@ -25,7 +25,11 @@ const RG_SWITCHES: &str = "FNSUacinosvwx";
 /// Options that take a line count, spelled alike by both programs.
 const GREP_COUNTS: &[&str] = &["-A", "-B", "-C", "-m"];
 
-fn bounded_count(value: &str) -> bool {
+/// Whether `value` is a line count small enough to be a filter's bound.
+///
+/// The sink's own peel reads its count from the command text, so it asks here
+/// rather than spelling the same bound a second time.
+pub(in crate::pretool) fn bounded_count(value: &str) -> bool {
     !value.is_empty() && value.len() <= 6 && value.bytes().all(|byte| byte.is_ascii_digit())
 }
 
@@ -42,6 +46,18 @@ pub(super) fn filter_stage(segment: &CommandSegmentV1, source: &str) -> bool {
         Some("head" | "tail") => head_tail_arguments(&segment.arguments),
         Some("grep" | "egrep" | "fgrep") => stdin_arguments(&segment.arguments, GREP_SWITCHES),
         Some("rg") => stdin_arguments(&segment.arguments, RG_SWITCHES),
+        _ => false,
+    }
+}
+
+/// Whether `program <arguments>` is a matcher reading only standard input.
+///
+/// The sink's own peel reads a stage from the command text rather than from a
+/// parsed segment, so it asks this directly.
+pub(in crate::pretool) fn matcher_stage(program: &str, arguments: &[String]) -> bool {
+    match program {
+        "grep" | "egrep" | "fgrep" => stdin_arguments(arguments, GREP_SWITCHES),
+        "rg" => stdin_arguments(arguments, RG_SWITCHES),
         _ => false,
     }
 }

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import csv
 import hashlib
+import inspect
 import io
 import json
 import os
@@ -124,6 +125,7 @@ def _build(
     runtime: Path | None = None,
     implementation_digest: str | None = None,
     base_program_digest: str | None = None,
+    max_runtime_bytes: int | None = None,
 ) -> Path:
     if wheel is None and implementation_digest is not None:
         wheel = _write_packaged_program_wheel(tmp_path)
@@ -138,6 +140,7 @@ def _build(
         rule_digest=_RULE_DIGEST,
         implementation_digest=implementation_digest,
         base_program_digest=base_program_digest,
+        **({} if max_runtime_bytes is None else {"max_runtime_bytes": max_runtime_bytes}),
     )
 
 
@@ -529,3 +532,60 @@ def test_builder_rejects_symlink_runtime(tmp_path: Path) -> None:
     link.symlink_to(target)
     with pytest.raises(NativeWheelError, match="regular non-symlink"):
         _build(tmp_path, runtime=link)
+
+
+def test_builder_keeps_the_shipped_runtime_bound_by_default() -> None:
+    default = inspect.signature(build_native_wheel).parameters["max_runtime_bytes"].default
+    assert default == wheel_builder._MAX_RUNTIME_BYTES == 128 * 1024 * 1024
+
+
+def test_builder_reports_the_runtime_size_it_refused(tmp_path: Path) -> None:
+    runtime = _write_runtime(tmp_path)
+    size = runtime.stat().st_size
+    with pytest.raises(NativeWheelError, match=f"runtime size {size} is outside the accepted bound of 8 bytes"):
+        _build(tmp_path, runtime=runtime, max_runtime_bytes=8)
+
+
+def test_builder_accepts_a_runtime_within_a_raised_bound(tmp_path: Path) -> None:
+    runtime = _write_runtime(tmp_path)
+    output = _build(tmp_path, runtime=runtime, max_runtime_bytes=runtime.stat().st_size)
+    assert output.is_file()
+    with zipfile.ZipFile(output) as archive:
+        assert archive.read(f"{wheel_builder._NATIVE_DIR}/hol-guard-runtime") == runtime.read_bytes()
+
+
+@pytest.mark.parametrize("bound", [0, -1, wheel_builder._MAX_UNPUBLISHED_RUNTIME_BYTES + 1])
+def test_builder_rejects_a_runtime_bound_outside_the_accepted_range(tmp_path: Path, bound: int) -> None:
+    with pytest.raises(NativeWheelError, match="runtime bound must be between"):
+        _build(tmp_path, max_runtime_bytes=bound)
+
+
+def test_builder_cli_carries_the_runtime_bound_through(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = _write_runtime(tmp_path)
+    wheel = _write_source_wheel(tmp_path)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "build_native_hol_guard_wheel.py",
+            "--wheel",
+            str(wheel),
+            "--runtime",
+            str(runtime),
+            "--output-dir",
+            str(tmp_path / "native"),
+            "--version",
+            _VERSION,
+            "--platform-tag",
+            _PLATFORM_TAG,
+            "--target",
+            _TARGET,
+            "--source-sha",
+            _SOURCE_SHA,
+            "--rule-digest",
+            _RULE_DIGEST,
+            "--max-runtime-bytes",
+            "8",
+        ],
+    )
+    with pytest.raises(NativeWheelError, match="is outside the accepted bound of 8 bytes"):
+        wheel_builder.main()

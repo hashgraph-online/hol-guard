@@ -62,6 +62,45 @@
         "harness": { "$ref": "#/$defs/itemHarness" },
         "hash": { "$ref": "#/$defs/nullableSha256Digest" }
       }
+    },
+    "code": { "type": "string", "pattern": "^[a-z0-9_]{1,64}$" },
+    "nullableCode": {
+      "oneOf": [{ "$ref": "#/$defs/code" }, { "type": "null" }]
+    },
+    "runtimeItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "family",
+        "version",
+        "identityAssurance",
+        "executableHash",
+        "os",
+        "arch",
+        "locationState",
+        "reason",
+        "locationHash",
+        "harnesses",
+        "advisoryIds"
+      ],
+      "properties": {
+        "family": { "$ref": "#/$defs/code" },
+        "version": { "type": ["string", "null"], "maxLength": 64 },
+        "identityAssurance": { "type": "string", "enum": ["vendor_verified", "locally_trusted", "self_reported", "unknown"] },
+        "executableHash": { "$ref": "#/$defs/nullableSha256Digest" },
+        "os": { "$ref": "#/$defs/code" },
+        "arch": { "$ref": "#/$defs/code" },
+        "locationState": { "type": "string", "enum": ["present", "missing", "unknown"] },
+        "reason": { "$ref": "#/$defs/nullableCode" },
+        "locationHash": { "$ref": "#/$defs/nullableSha256Digest" },
+        "harnesses": { "type": "array", "maxItems": 17, "uniqueItems": true, "items": { "$ref": "#/$defs/harness" } },
+        "advisoryIds": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        }
+      }
     }
   },
   "properties": {
@@ -165,6 +204,31 @@
         "status": { "type": "string", "enum": ["applied", "validated", "rejected", "none"] },
         "errorCode": { "type": ["string", "null"], "maxLength": 80 },
         "appliedAt": { "$ref": "#/$defs/nullableUtcTimestamp" }
+      }
+    },
+    "runtimes": {
+      "description": "Optional. Runtime executables configured tools would launch, described without running them. Coverage is observation only: running processes are not enumerated, so the scope is never complete and no runtime is reported safe.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "reason",
+        "coverage",
+        "scopeComplete",
+        "advisoriesAvailable",
+        "candidateLimitReached",
+        "unresolvedLaunches",
+        "items"
+      ],
+      "properties": {
+        "status": { "type": "string", "enum": ["ok", "partial", "unavailable"] },
+        "reason": { "$ref": "#/$defs/nullableCode" },
+        "coverage": { "const": "observed_only" },
+        "scopeComplete": { "const": false },
+        "advisoriesAvailable": { "type": "boolean" },
+        "candidateLimitReached": { "type": "boolean" },
+        "unresolvedLaunches": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "items": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/runtimeItem" } }
       }
     }
   }

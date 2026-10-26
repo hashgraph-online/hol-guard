@@ -39,12 +39,38 @@ fn trailing_group_unwraps_to_its_command_list() {
 }
 
 #[test]
+fn a_group_in_a_pipeline_reads_as_its_command_list() {
+    // Every element of a pipeline already runs in a child shell, so the
+    // subshell the parentheses open adds nothing the blanked text lacks.
+    for (grouped, ungrouped) in [
+        ("ls | (cat)", "ls |  cat"),
+        ("( ls ) | wc -l", "ls   | wc -l"),
+        ("(cd src) | wc -l", "cd src  | wc -l"),
+        ("npm test | (tee log)", "npm test |  tee log"),
+    ] {
+        assert_eq!(unwrap(grouped).as_deref(), Some(ungrouped), "{grouped}");
+    }
+}
+
+#[test]
+fn a_pipelined_group_of_more_than_one_command_keeps_its_review() {
+    // Blanking `( a; b ) | c` would pipe `b` alone, which is not the command
+    // that was submitted.
+    for command in [
+        "( cd src && ls ) | wc -l",
+        "(npm ci; npm test) | tee log",
+        "ls | (cd src && cat Cargo.toml)",
+    ] {
+        assert_eq!(unwrap(command), None, "{command}");
+    }
+}
+
+#[test]
 fn other_parentheses_keep_the_review() {
     for command in [
         "(cd src) && ls",
         "(ls) > out.txt",
         "(ls) &",
-        "ls | (cat)",
         "! (ls)",
         "echo $(ls)",
         "diff <(ls a) b",
@@ -132,5 +158,28 @@ fn a_group_no_recognizer_unwraps_keeps_its_unmodeled_review() {
         let decision = decision(command);
         assert_eq!(decision.minimum_action, "review", "{command}");
         assert_eq!(decision.command_model.confidence, "uncertain", "{command}");
+    }
+}
+
+#[test]
+fn a_conditional_list_group_is_not_flattened_for_execution() {
+    // `touch b` waits on `false` only while the parentheses hold it.
+    for command in [
+        "false && (touch a; touch b)",
+        "false || (touch a && touch b)",
+        "make &&\n(touch a | tee b)",
+    ] {
+        assert_eq!(super::unwrap_for_execution(command), None, "{command}");
+    }
+    for (command, expected) in [
+        ("(touch a; touch b)", "touch a; touch b"),
+        ("cd web && (pytest -q)", "cd web &&  pytest -q"),
+        ("cd web; (touch a; touch b)", "cd web;  touch a; touch b"),
+    ] {
+        assert_eq!(
+            super::unwrap_for_execution(command).as_deref(),
+            Some(expected),
+            "{command}"
+        );
     }
 }

@@ -64,6 +64,7 @@ from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .review_fixtures import GITHUB_REVIEW_CASE, GITHUB_STUB_CASES, WORKTREE_CASE, configure_github_review_controls
+from .runtime_cases import stage_runtime_cases
 from .script_cases import stage_script_cases
 from .session_folder import seed_session_folder, session_cwd
 from .source_identity import source_identity
@@ -158,6 +159,7 @@ def run_case(
     )
     stage_supply_chain(fixture.workspace, scenario.id)
     stage_script_cases(fixture.workspace, scenario.id, fixture.home, fixture.canary)
+    stage_runtime_cases(fixture.root / "guard-home", fixture.workspace, scenario.id)
     seed_session_folder(fixture.home, stage_directory(fixture.root), scenario.id)
     session = session_cwd(fixture.home, fixture.workspace, scenario.id)
     private = fixture.root / "private-evidence"

@@ -13,9 +13,7 @@ from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter, _remove_managed_block
 from codex_plugin_scanner.guard.adapters.grok_hooks import (
-    emit_grok_hook_response,
     grok_hook_response_from_guard,
-    prepare_grok_hook_payload,
 )
 from codex_plugin_scanner.guard.runtime.actions import normalize_grok_hook_payload
 
@@ -125,29 +123,6 @@ class TestGrokInstallUninstall:
 
 
 class TestGrokHookPayload:
-    def test_prepare_grok_hook_payload_maps_bash_fixture(self) -> None:
-        normalized = prepare_grok_hook_payload(_fixture("pretooluse_bash.json"))
-        assert normalized["hook_event_name"] == "PreToolUse"
-        assert normalized["tool_name"] == "Bash"
-        assert normalized["session_id"] == "session-redacted-001"
-
-    def test_prepare_grok_hook_payload_leaves_no_second_tool_name(self) -> None:
-        # Grok names the tool in ``toolName``. Writing the canonical name to
-        # ``tool_name`` and leaving the harness spelling behind it gives the
-        # payload two names for one call, which the generic extractor reports
-        # as ambiguous and the hook turns into a denial of ordinary work.
-        normalized = prepare_grok_hook_payload(_fixture("pretooluse_bash.json"))
-        assert {normalized[key] for key in ("tool_name", "toolName") if key in normalized} == {"Bash"}
-
-    def test_prepare_grok_hook_payload_agrees_on_the_mcp_tool_name(self) -> None:
-        normalized = prepare_grok_hook_payload(_fixture("pretooluse_mcp.json"))
-        names = {normalized[key] for key in ("tool_name", "toolName", "toolname", "tool") if key in normalized}
-        assert len(names) == 1
-
-    def test_prepare_grok_hook_payload_maps_read_fixture(self) -> None:
-        normalized = prepare_grok_hook_payload(_fixture("pretooluse_read_secret.json"))
-        assert normalized["tool_name"] == "Read"
-
     def test_normalize_grok_hook_payload_builds_shell_envelope(self, tmp_path: Path) -> None:
         envelope = normalize_grok_hook_payload(
             _fixture("pretooluse_bash.json"),
@@ -170,11 +145,6 @@ class TestGrokHookResponses:
     def test_unsatisfied_review_response_is_denied(self) -> None:
         payload = grok_hook_response_from_guard(policy_action="review", reason="Review in HOL Guard.")
         assert payload == {"decision": "deny", "reason": "Review in HOL Guard."}
-
-    def test_emit_grok_hook_response_writes_json_line(self) -> None:
-        stream = io.StringIO()
-        emit_grok_hook_response(policy_action="allow", reason="", output_stream=stream)
-        assert json.loads(stream.getvalue()) == {"decision": "allow"}
 
     def test_prompt_hook_preserves_native_policy_block(self, tmp_path: Path, native_hook_force: Path) -> None:
         import json as _json
@@ -280,18 +250,6 @@ class TestGrokFixturesAreRedacted:
 
 
 class TestGrokHookPayloadFixtures:
-    def test_edit_fixture_normalizes_to_edit_tool(self) -> None:
-        normalized = prepare_grok_hook_payload(_fixture("pretooluse_edit.json"))
-        assert normalized["tool_name"] == "Edit"
-
-    def test_mcp_fixture_preserves_server_metadata(self) -> None:
-        normalized = prepare_grok_hook_payload(_fixture("pretooluse_mcp.json"))
-        assert normalized["tool_name"] == "MCPTool"
-
-    def test_webfetch_fixture_normalizes_tool(self) -> None:
-        normalized = prepare_grok_hook_payload(_fixture("pretooluse_webfetch.json"))
-        assert normalized["tool_name"] == "WebFetch"
-
     def test_webfetch_envelope_keeps_web_tool_name(self, tmp_path: Path) -> None:
         envelope = normalize_grok_hook_payload(
             _fixture("pretooluse_webfetch.json"),
@@ -300,48 +258,6 @@ class TestGrokHookPayloadFixtures:
         )
         assert envelope.tool_name == "WebFetch"
         assert envelope.action_type in {"network_request", "config_change"}
-
-    def test_unknown_tool_is_preserved(self) -> None:
-        normalized = prepare_grok_hook_payload(_fixture("pretooluse_unknown_tool.json"))
-        assert normalized["tool_name"] == "custom_plugin_action"
-
-    def test_prompt_fixture_normalizes_event(self) -> None:
-        normalized = prepare_grok_hook_payload(_fixture("user_prompt_submit.json"))
-        assert normalized["hook_event_name"] == "UserPromptSubmit"
-
-    def test_malformed_payload_is_handled_safely(self) -> None:
-        normalized = prepare_grok_hook_payload({})
-        assert normalized == {}
-
-    def test_spawn_subagent_maps_prompt_and_type(self) -> None:
-        normalized = prepare_grok_hook_payload(_fixture("pretooluse_spawn_subagent.json"))
-        assert normalized["tool_name"] == "Task"
-        assert normalized["subagent_type"] == "explore"
-        assert "adapter layout" in str(normalized["prompt"])
-
-    def test_qualified_mcp_tool_maps_server_and_tool(self) -> None:
-        normalized = prepare_grok_hook_payload(_fixture("pretooluse_mcp_qualified.json"))
-        assert normalized["tool_name"] == "MCPTool"
-        assert normalized["mcp_server"] == "filesystem"
-        assert normalized["mcp_tool"] == "write_file"
-
-    def test_dispatcher_unwrap_aliases_inner_edit_tool(self) -> None:
-        normalized = prepare_grok_hook_payload(
-            {
-                "hookEventName": "pre_tool_use",
-                "toolName": "use_tool",
-                "toolInput": {
-                    "tool_name": "search_replace",
-                    "arguments": {"file_path": "src/app.py", "old_string": "a", "new_string": "b"},
-                },
-            }
-        )
-        assert normalized["tool_name"] == "Edit"
-
-    def test_subagent_start_is_observe_event(self) -> None:
-        normalized = prepare_grok_hook_payload(_fixture("subagent_start.json"))
-        assert normalized["hook_event_name"] == "SubagentStart"
-        assert normalized["subagent_type"] == "explore"
 
 
 class TestGrokActionEnvelopes:

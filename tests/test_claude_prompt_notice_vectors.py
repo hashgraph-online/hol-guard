@@ -1,4 +1,4 @@
-"""The Claude prompt notice vectors match the daemon's Python notice.
+"""The Claude prompt notice vectors match Guard's Python prompt copy.
 
 The resident's port replays ``claude_prompt_notice_vectors.json``; this test
 fails when the Python copy changes without re-recording the vectors.

@@ -47,10 +47,25 @@
 //! `--follow` stays out, and so does `--details`, which prints the extra
 //! attributes a logging driver was given.
 //!
+//! `docker volume ls`, `docker network ls`, `docker system df` and
+//! `docker stats --no-stream` are the daemon's own summaries over the
+//! connection `docker ps` already uses. They resolve no compose project, read
+//! no `.env`, print no container environment and start nothing. A volume
+//! listing is the one that cannot take `--format`: the default table prints a
+//! driver and a name, while `--format json` serializes the driver options a
+//! volume was created with, and a CIFS or NFS volume carries its credentials
+//! there. A stats reading must say `--no-stream`, because the streaming form
+//! never returns, which is why `logs --follow` is out as well.
+//!
 //! Still reviewed:
 //! - any option before the subcommand. `-H`/`--host`, `--context` and
 //!   `--config` move the client to another daemon or configuration, and
 //!   `--tls*` options read local key files.
+//! - `docker info`, whose output names the proxy the daemon was configured
+//!   with, and a proxy URL is written with its credentials in it. `top` prints
+//!   a container's process command lines and `history` the commands an image
+//!   was built from, both of which routinely hold a secret in an argument.
+//!   `search`, `manifest inspect` and `trust inspect` each query a registry.
 //! - `inspect`, which prints each container's environment, and every `compose`
 //!   verb that resolves the project, `compose ps` and `compose logs` among
 //!   them: resolution reads the project's `.env`, `COMPOSE_FILE`,
@@ -103,6 +118,29 @@ const CONTEXT_VALUES: [&str; 1] = ["--format"];
 const REGISTRY_FLAGS: [&str; 1] = ["--raw"];
 const REGISTRY_VALUES: [&str; 1] = ["--format"];
 
+/// A volume listing filters and may print names alone. It has no `--format`:
+/// the default table prints only a driver and a name, while `--format json`
+/// serializes the `--opt` values the volume was created with, and a CIFS or
+/// NFS volume is created with its credentials among them.
+const VOLUME_FLAGS: [&str; 3] = ["-q", "--quiet", "--help"];
+const VOLUME_VALUES: [&str; 2] = ["-f", "--filter"];
+/// A network listing prints an id, name, driver and scope. It has no `--all`
+/// of its own, and a `--format` template is held to those four fields: the
+/// record behind a row also carries the labels the network was created with.
+const NETWORK_FLAGS: [&str; 4] = ["-q", "--quiet", "--no-trunc", "--help"];
+const NETWORK_VALUES: [&str; 3] = ["-f", "--filter", "--format"];
+/// A disk-usage summary counts images, containers, volumes and the build
+/// cache. `--verbose` names each row the totals are made of, so a `--format`
+/// template is held to the totals: `.Volumes` reaches the verbose rows and
+/// the labels and creation options a volume carries.
+const DISK_FLAGS: [&str; 3] = ["-v", "--verbose", "--help"];
+const DISK_VALUES: [&str; 1] = ["--format"];
+/// A stats reading prints each container's CPU, memory, network and block
+/// counters. `--no-stream` is required, not optional: without it the command
+/// redraws until it is interrupted and never returns a result.
+const STATS_FLAGS: [&str; 5] = ["-a", "--all", "--no-stream", "--no-trunc", "--help"];
+const STATS_VALUES: [&str; 1] = ["--format"];
+
 /// Single-letter flags that may be clustered (`-aq`).
 const CONTAINER_SHORT: &str = "aqsl";
 const IMAGE_SHORT: &str = "aq";
@@ -110,6 +148,10 @@ const BUILDER_SHORT: &str = "";
 const PROJECT_SHORT: &str = "aq";
 const CONTEXT_SHORT: &str = "q";
 const REGISTRY_SHORT: &str = "";
+const VOLUME_SHORT: &str = "q";
+const NETWORK_SHORT: &str = "q";
+const DISK_SHORT: &str = "v";
+const STATS_SHORT: &str = "a";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Listing {
@@ -119,6 +161,10 @@ enum Listing {
     Projects,
     Contexts,
     Manifest,
+    Volumes,
+    Networks,
+    Disk,
+    Stats,
 }
 
 pub(super) fn safe_docker_segment(
@@ -177,6 +223,13 @@ pub(super) fn safe_docker_arguments(arguments: &[String]) -> bool {
         ["compose", "ls" | "list", rest @ ..] => (Listing::Projects, rest),
         ["context", "ls" | "list", rest @ ..] => (Listing::Contexts, rest),
         ["buildx", "imagetools", "inspect", rest @ ..] => (Listing::Manifest, rest),
+        ["volume", "ls" | "list", rest @ ..] => (Listing::Volumes, rest),
+        ["network", "ls" | "list", rest @ ..] => (Listing::Networks, rest),
+        ["system", "df", rest @ ..] => (Listing::Disk, rest),
+        // The streaming form never returns, so the word that bounds it has to
+        // be in the text. Whether it is a flag of its own, rather than the
+        // value of a preceding option, is settled while the options are read.
+        ["stats", rest @ ..] => (Listing::Stats, rest),
         _ => return super::docker_start::safe_start_arguments(&words),
     };
     listing_options_safe(listing, rest)
@@ -184,7 +237,11 @@ pub(super) fn safe_docker_arguments(arguments: &[String]) -> bool {
 
 fn listing_options_safe(listing: Listing, words: &[&str]) -> bool {
     let shared: &[&str] = match listing {
-        Listing::Contexts => &[],
+        Listing::Contexts
+        | Listing::Volumes
+        | Listing::Networks
+        | Listing::Disk
+        | Listing::Stats => &[],
         _ => &LISTING_FLAGS[..],
     };
     let (flags, values, short): (&[&str], &[&str], &str) = match listing {
@@ -194,8 +251,13 @@ fn listing_options_safe(listing: Listing, words: &[&str]) -> bool {
         Listing::Projects => (&NO_FLAGS[..], &PROJECT_VALUES[..], PROJECT_SHORT),
         Listing::Contexts => (&CONTEXT_FLAGS[..], &CONTEXT_VALUES[..], CONTEXT_SHORT),
         Listing::Manifest => (&REGISTRY_FLAGS[..], &REGISTRY_VALUES[..], REGISTRY_SHORT),
+        Listing::Volumes => (&VOLUME_FLAGS[..], &VOLUME_VALUES[..], VOLUME_SHORT),
+        Listing::Networks => (&NETWORK_FLAGS[..], &NETWORK_VALUES[..], NETWORK_SHORT),
+        Listing::Disk => (&DISK_FLAGS[..], &DISK_VALUES[..], DISK_SHORT),
+        Listing::Stats => (&STATS_FLAGS[..], &STATS_VALUES[..], STATS_SHORT),
     };
     let mut positionals = 0usize;
+    let mut bounded = false;
     let mut index = 0;
     while index < words.len() {
         let word = words[index];
@@ -208,6 +270,7 @@ fn listing_options_safe(listing: Listing, words: &[&str]) -> bool {
             continue;
         }
         if shared.contains(&word) || flags.contains(&word) {
+            bounded |= word == "--no-stream";
             continue;
         }
         let (name, inline) = match word.split_once('=') {
@@ -225,9 +288,13 @@ fn listing_options_safe(listing: Listing, words: &[&str]) -> bool {
                     None => return false,
                 },
             };
-            if !option_value_safe(name, value)
-                || (listing == Listing::Manifest && !manifest_format_safe(value))
-            {
+            if !option_value_safe(name, value) {
+                return false;
+            }
+            // Only a `--format` value is a template evaluated over the record
+            // behind a row. A filter value selects rows and prints nothing of
+            // its own, so the named-field rule does not apply to it.
+            if name == "--format" && !format_fields_safe(listing, value) {
                 return false;
             }
             continue;
@@ -239,11 +306,18 @@ fn listing_options_safe(listing: Listing, words: &[&str]) -> bool {
     // `docker images <repository[:tag]>` filters by one reference; the
     // container listing takes none. A manifest query names exactly one image.
     match listing {
-        Listing::Containers | Listing::Builders | Listing::Projects | Listing::Contexts => {
-            positionals == 0
-        }
+        Listing::Containers
+        | Listing::Builders
+        | Listing::Projects
+        | Listing::Contexts
+        | Listing::Volumes
+        | Listing::Networks
+        | Listing::Disk => positionals == 0,
         Listing::Images => positionals <= 1,
         Listing::Manifest => positionals == 1,
+        // A stats reading names the containers to count, or all of them, and
+        // only once a `--no-stream` of its own has bounded it.
+        Listing::Stats => bounded,
     }
 }
 
@@ -269,10 +343,31 @@ fn option_value_safe(name: &str, value: &str) -> bool {
     }
 }
 
-/// A manifest query's template reads only the published name, manifest and
-/// index. The image configuration (`.Image`) can carry a build-time credential
-/// in its environment, so it is not among them.
-fn manifest_format_safe(value: &str) -> bool {
+/// A `--format` template is evaluated over the whole record behind a row, not
+/// over the summary the listing prints, so a listing whose records carry
+/// labels or creation options admits only the fields its summary names.
+///
+/// A manifest query reads the published name, manifest and index. The image
+/// configuration (`.Image`) can carry a build-time credential in its
+/// environment, so it is not among them. A network row carries the labels it
+/// was created with, and a verbose disk summary reaches the volumes and their
+/// labels through `.Volumes`; both are left outside the named fields.
+fn format_fields_safe(listing: Listing, value: &str) -> bool {
+    let fields: &[&str] = match listing {
+        Listing::Manifest => &["Name", "Manifest", "Index"],
+        Listing::Networks => &["ID", "Name", "Driver", "Scope"],
+        Listing::Disk => &["Type", "TotalCount", "Active", "Size", "Reclaimable"],
+        _ => return true,
+    };
+    template_fields_safe(value, fields)
+}
+
+/// A format with no action at all is a named layout, and `json` serializes the
+/// whole record, so a template has to name the fields it prints.
+fn template_fields_safe(value: &str, fields: &[&str]) -> bool {
+    if !value.contains("{{") {
+        return false;
+    }
     let mut rest = value;
     while let Some(start) = rest.find("{{") {
         if rest[..start].contains("}}") {
@@ -282,7 +377,7 @@ fn manifest_format_safe(value: &str) -> bool {
         let Some(end) = after.find("}}") else {
             return false;
         };
-        if !manifest_action_safe(after[..end].trim()) {
+        if !template_action_safe(after[..end].trim(), fields) {
             return false;
         }
         rest = &after[end + 2..];
@@ -290,7 +385,7 @@ fn manifest_format_safe(value: &str) -> bool {
     !rest.contains("}}")
 }
 
-fn manifest_action_safe(action: &str) -> bool {
+fn template_action_safe(action: &str, fields: &[&str]) -> bool {
     let field = match action.strip_prefix("json") {
         Some(after) if after.starts_with(char::is_whitespace) => after.trim_start(),
         _ => action,
@@ -299,7 +394,7 @@ fn manifest_action_safe(action: &str) -> bool {
         return false;
     };
     let mut segments = path.split('.');
-    matches!(segments.next(), Some("Name" | "Manifest" | "Index"))
+    segments.next().is_some_and(|root| fields.contains(&root))
         && segments.all(|segment| {
             !segment.is_empty() && segment.bytes().all(|byte| byte.is_ascii_alphanumeric())
         })

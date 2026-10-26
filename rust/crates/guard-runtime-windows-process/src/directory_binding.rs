@@ -89,11 +89,42 @@ impl PrivateDirectoryBinding {
         source: &std::fs::File,
         destination: &OsStr,
     ) -> io::Result<()> {
+        self.rename_private_file(source, destination, true)
+    }
+
+    /// Publish an already-written private file at a child that must not exist.
+    ///
+    /// The rename clears `ReplaceIfExists`, so a destination created by a
+    /// concurrent writer survives and this call reports `AlreadyExists`. It is
+    /// the publish step for an object whose existing bytes are authority --
+    /// a signing key, say -- where overwriting is never the right recovery.
+    pub fn publish_new_private_file(
+        &mut self,
+        source: &std::fs::File,
+        destination: &OsStr,
+    ) -> io::Result<()> {
+        self.rename_private_file(source, destination, false)
+    }
+
+    fn rename_private_file(
+        &mut self,
+        source: &std::fs::File,
+        destination: &OsStr,
+        replace_existing: bool,
+    ) -> io::Result<()> {
         let destination_path = self.child_path(destination)?;
         validate_handle(source, false)?;
         verify_private_file(source)?;
         match open_inspect_private_file(&destination_path) {
-            Ok(existing) => drop(existing),
+            Ok(existing) => {
+                drop(existing);
+                if !replace_existing {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        "private destination already exists",
+                    ));
+                }
+            }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error),
         }
@@ -103,7 +134,8 @@ impl PrivateDirectoryBinding {
                 .expect("a directory binding always contains its final component"),
         );
         let renamed = open_rename_directory(&self.path).and_then(|rename_parent| {
-            let renamed = rename_into_directory(&rename_parent, source, destination);
+            let renamed =
+                rename_into_directory(&rename_parent, source, destination, replace_existing);
             drop(rename_parent);
             renamed
         });

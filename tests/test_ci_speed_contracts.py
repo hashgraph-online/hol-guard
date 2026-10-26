@@ -47,12 +47,13 @@ def test_downstream_publication_requires_successful_same_repository_release(file
     workflow = _workflow(filename)
     # PyYAML's YAML 1.1 loader parses the unquoted Actions key as True.
     trigger = workflow[True]
-    assert set(trigger) == {"workflow_run"}
+    assert set(trigger) == {"workflow_run", "workflow_dispatch"}
     assert trigger["workflow_run"] == {
         "workflows": ["Publish to PyPI"],
         "types": ["completed"],
-        "branches": ["main", "release/3.0"],
+        "branches": ["main", "release/3.0", "v[0-9]+.[0-9]+.[0-9]+"],
     }
+    assert trigger["workflow_dispatch"]["inputs"]["publication_run_id"]["required"] is True
     verifier = workflow["jobs"]["verify"]
     assert verifier["uses"] == "./.github/workflows/verify-mcp-release-source.yml"
     assert verifier["permissions"] == {"actions": "read", "contents": "read"}
@@ -107,13 +108,20 @@ def test_native_wheel_helpers_run_without_site_packages(script: str) -> None:
 
 def test_native_wheel_build_keeps_all_platforms_and_integrity_checks() -> None:
     job = native_wheel_job()
-    assert len(native_target_matrix(job)) == 5
+    assert len(native_target_matrix(job)) == 6
     selector = next(
         step for step in _workflow("publish.yml")["jobs"]["build"]["steps"] if step.get("id") == "native_wheel_matrix"
     )
     platforms = [leg["platform_tag"] for leg in json.loads(selector["env"]["NATIVE_WHEEL_MATRIX"])]
-    assert platforms == ["manylinux_2_17_x86_64", "macosx_13_0_x86_64", "macosx_11_0_arm64", "win_amd64", "win_arm64"]
-    assert 'select(.platform_tag != "win_arm64")' in selector["run"]
+    assert platforms == [
+        "manylinux_2_17_x86_64",
+        "macosx_13_0_x86_64",
+        "macosx_11_0_arm64",
+        "win_amd64",
+        "win_arm64",
+        "manylinux_2_17_aarch64",
+    ]
+    assert 'select(.platform_tag != "win_arm64" and .platform_tag != "manylinux_2_17_aarch64")' in selector["run"]
     commands = "\n".join(step.get("run", "") for step in job["steps"])
     assert "uv sync" not in commands
     assert "pip install" not in commands

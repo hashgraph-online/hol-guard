@@ -57,26 +57,6 @@ def _canonical_harness_name(value: str) -> str:
     return _runtime_resolution_module()._canonical_harness_name(value)
 
 
-def _update_codex_browser_operation_status(
-    response_payload: dict[str, object],
-    daemon_client: object | None,
-    status: str,
-) -> None:
-    operation_id = response_payload.get("operation_id")
-    if daemon_client is None or not isinstance(operation_id, str) or not operation_id:
-        return
-    update_operation_status = getattr(daemon_client, "update_operation_status", None)
-    if not callable(update_operation_status):
-        return
-    with suppress(Exception):
-        update_operation_status(operation_id=operation_id, status=status)
-
-
-def _emit_claude_permission_request_passthrough(*, output_stream: TextIO | None = None) -> None:
-    if output_stream is not None:
-        output_stream.write("")
-
-
 def _claude_pending_permission_index_key(session_id: str) -> str:
     return f"claude_pending_permissions:{session_id}"
 
@@ -249,24 +229,6 @@ def _load_single_claude_pending_permission(
     if pending is None or not isinstance(pending_key, str):
         return None
     return pending_key, pending
-
-
-def _load_claude_pending_permission(
-    store: GuardStore,
-    payload: dict[str, object],
-    artifact: GuardArtifact,
-    artifact_hash: str,
-) -> dict[str, object] | None:
-    session_id = _optional_string(payload.get("session_id"))
-    if session_id is None:
-        return None
-    return _load_verified_claude_pending_permission(
-        store,
-        session_id=session_id,
-        artifact_id=artifact.artifact_id,
-        expected_artifact_hash=artifact_hash,
-        expected_command=_claude_artifact_command_binding(artifact),
-    )
 
 
 def _remove_claude_pending_permission(
@@ -477,8 +439,6 @@ __all__ = [
     "_cursor_conversation_id",
     "_cursor_native_shell_is_approved",
     "_cursor_shell_command_from_payload",
-    "_emit_claude_permission_request_passthrough",
-    "_load_claude_pending_permission",
     "_load_claude_pending_permission_index",
     "_load_claude_permission_notice",
     "_load_cursor_native_shell_allowance",
@@ -493,5 +453,4 @@ __all__ = [
     "_remove_claude_pending_permission",
     "_store_cursor_pending_shell_index",
     "_store_cursor_pending_shell_state",
-    "_update_codex_browser_operation_status",
 ]

@@ -250,6 +250,19 @@
         ]
       },
       {
+        "id": "workspace-assessment-async",
+        "category": "async_control_plane",
+        "reason": "Background workspace assessments: a daemon worker thread polls worktrees the user admitted or registered a harness install for, queues runs in SQLite and runs the local supply-chain audit and the native secret scan against a native content snapshot, and matches the runtimes the worktree's configured tools would launch, identified by the native runtime probe without running them, against cached runtime advisories as observation-only findings. The dashboard routes under /v1/supply-chain/workspace-* read results, admit, pause, queue and cancel runs, and prepare, apply and verify a reviewed one-line dependency version edit that the user applies explicitly. None of it is reached from hook admission, decision, consume or dispatch; snapshot hashing runs in the native workspace-snapshot command, and the manifest scan, edit planning, diff and conditional file replacement of a fix run in the native workspace-fix command.",
+        "path": [
+          "src/codex_plugin_scanner/guard/workspace_assessment_*.py",
+          "src/codex_plugin_scanner/guard/workspace_secret_findings.py",
+          "src/codex_plugin_scanner/guard/native_workspace_snapshot.py",
+          "src/codex_plugin_scanner/guard/native_workspace_fix.py",
+          "src/codex_plugin_scanner/guard/store_workspace_assessment_schema.py",
+          "src/codex_plugin_scanner/guard/daemon/workspace_assessment_api.py"
+        ]
+      },
+      {
         "id": "cloud-command-queue",
         "category": "async_control_plane",
         "reason": "Guard Cloud command-queue worker and executors; remote job processing, not request-path enforcement. runtime/command_capability.py holds the queue capability verification and job authorization; its only in-scope caller is approvals._build_runtime_snapshot, which adds the informational cloud_command_capability field to the approval-center runtime snapshot. That snapshot is built only by the dashboard runtime read route and the `approvals` CLI status read, never from hook admission, decision, consume or dispatch. Through it the module was the sole in-scope importer of review_contracts and review_signature_verification, which leave scope with it.",
@@ -263,7 +276,7 @@
       {
         "id": "extension-authoring",
         "category": "offline_authoring",
-        "reason": "Extension/contribution authoring, discovery, probing and custom-extension profile management (offline builder or dashboard control plane). Modules the hook evaluation calls synchronously (package_json_scripts, custom_extension_suggestion, mcp_server_contribution, extension_contribution) stay in scope; only continuity sync, catalog sync/handshake and builder/control surfaces are excluded.",
+        "reason": "Extension/contribution authoring, discovery, probing and custom-extension profile management (offline builder or dashboard control plane). Modules the hook evaluation calls synchronously (package_json_scripts, mcp_server_contribution, extension_contribution) stay in scope; only continuity sync, catalog sync/handshake and builder/control surfaces are excluded.",
         "path": [
           "src/codex_plugin_scanner/guard/extension_builder/*",
           "src/codex_plugin_scanner/guard/cli/extension_builder_commands.py",
@@ -448,6 +461,27 @@
         ]
       },
       {
+        "id": "plugin-kit-cli",
+        "category": "separate_product_cli",
+        "reason": "hol-guard plugin argument parsing and text rendering for the Plugin Kit; not a Guard runtime route. Detection, checks, packaging and file writes run in the native plugin-kit command. cli.py reaches the package only through main() for the `plugin` subcommand.",
+        "path": [
+          "src/codex_plugin_scanner/guard/plugin_kit/cli.py",
+          "src/codex_plugin_scanner/guard/plugin_kit/__init__.py"
+        ]
+      },
+      {
+        "id": "plugin-telemetry-cli",
+        "category": "separate_product_cli",
+        "reason": "hol-guard telemetry plugins: opt-in consent, the device key file, the public index download and the weekly report POST. Not a Guard runtime route. Installed-plugin discovery, listing matching and counting keys run in the native plugin-telemetry command. cli.py reaches the package only through main() for the `telemetry` subcommand, and the daemon only through send_if_due, which does nothing until opt-in. hol-guard plugin updates downloads the public listing and release indexes and the native updates request compares installed versions on the device; it sends nothing and runs only when the user runs it.",
+        "path": [
+          "src/codex_plugin_scanner/guard/plugin_telemetry/__init__.py",
+          "src/codex_plugin_scanner/guard/plugin_telemetry/cli.py",
+          "src/codex_plugin_scanner/guard/plugin_telemetry/report.py",
+          "src/codex_plugin_scanner/guard/plugin_telemetry/state.py",
+          "src/codex_plugin_scanner/guard/plugin_telemetry/updates.py"
+        ]
+      },
+      {
         "id": "secrets-cli",
         "category": "separate_product_cli",
         "reason": "hol-guard-secrets argument parsing and text rendering; separate product entry point, not a Guard runtime route. Detection, repository/staged scans and pre-commit hooks run in the native secrets-cli command. public_rule_catalog.py is the static public rule listing; cli.py reaches the package only through main() for the `secrets` subcommand.",
@@ -522,6 +556,19 @@
           "src/codex_plugin_scanner/guard/protection_capabilities.py"
         ],
         "reason": "Static protection-capability payloads for the dashboard and settings views. Its only callers are daemon/server_common.py's _settings_response_payload (called only from server_dashboard_runtime_read.py, server_control_repair.py and server_control_sync.py), server_dashboard_runtime_read.py and the excluded approvals runtime snapshot; no hook or tool request reads it."
+      },
+      {
+        "category": "offline_reporting",
+        "id": "runtime-identity-posture",
+        "path": [
+          "src/codex_plugin_scanner/guard/runtime_identity_assessment.py",
+          "src/codex_plugin_scanner/guard/runtime_identity_candidates.py",
+          "src/codex_plugin_scanner/guard/runtime_identity_probe.py",
+          "src/codex_plugin_scanner/guard/runtime_posture.py",
+          "src/codex_plugin_scanner/guard/runtime_advisory_bundle.py",
+          "src/codex_plugin_scanner/guard/cli/runtime_posture_command.py"
+        ],
+        "reason": "Read-only `guard runtime posture` report: discovers configured MCP servers, sends their launches to the native runtime-identity probe and assessment (launch resolution, shebang following, signed-bundle verification and the decision logic live in Rust), passes the locally cached supply-chain bundle and its sync context through unparsed, and formats the result. Reached only from the CLI dispatcher for that subcommand; no hook, approval, allow or deny path reads it."
       }
     ],
     "reviewed_runtime": [
@@ -531,8 +578,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/adapters/_modules/cline/__init__.py",
-          "src/codex_plugin_scanner/guard/adapters/_modules/devin/__init__.py",
           "src/codex_plugin_scanner/guard/adapters/_modules/pi/__init__.py",
           "src/codex_plugin_scanner/guard/adapters/_modules/zcode/__init__.py"
         ],
@@ -589,12 +634,10 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/cli/codex_live_hook_completion.py",
           "src/codex_plugin_scanner/guard/cli/commands.py",
           "src/codex_plugin_scanner/guard/cli/commands_lifecycle_gate.py",
           "src/codex_plugin_scanner/guard/cli/commands_router.py",
           "src/codex_plugin_scanner/guard/cli/commands_support.py",
-          "src/codex_plugin_scanner/guard/cli/commands_support_apply_patch_policy.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_claude_approval.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_codex_commands.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_codex_git_config.py",
@@ -602,7 +645,6 @@
           "src/codex_plugin_scanner/guard/cli/commands_support_codex_prompt_attachments.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_codex_reads.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_connect.py",
-          "src/codex_plugin_scanner/guard/cli/commands_support_observe_queue.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_permission_store.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_prompts.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_runtime_artifact_policy.py",
@@ -702,7 +744,6 @@
           "src/codex_plugin_scanner/guard/consumer/service.py",
           "src/codex_plugin_scanner/guard/consumer/native_decision_projection.py",
           "src/codex_plugin_scanner/guard/store_approval_projection.py",
-          "src/codex_plugin_scanner/guard/cli/commands_hook_decision_copy.py",
           "src/codex_plugin_scanner/guard/inventory_item_description.py",
           "src/codex_plugin_scanner/guard/local_cli_grant_decision.py",
           "src/codex_plugin_scanner/guard/local_cli_hook.py",
@@ -712,7 +753,6 @@
           "src/codex_plugin_scanner/guard/runtime_transition_hook_probe.py",
           "src/codex_plugin_scanner/guard/skill_document_evidence.py",
           "src/codex_plugin_scanner/guard/store_extension_control_manifest.py",
-          "src/codex_plugin_scanner/guard/store_mcp_workflows.py",
           "src/codex_plugin_scanner/guard/store_policy_list.py",
           "src/codex_plugin_scanner/guard/text.py",
           "src/codex_plugin_scanner/guard/trust_metadata_boundary.py",
@@ -787,6 +827,7 @@
         "path": [
           "src/codex_plugin_scanner/guard/adapters/claude_code.py",
           "src/codex_plugin_scanner/guard/aibom_detection.py",
+          "src/codex_plugin_scanner/guard/artifact_native_fields.py",
           "src/codex_plugin_scanner/guard/codex_config.py",
           "src/codex_plugin_scanner/guard/inventory_agent_types.py",
           "src/codex_plugin_scanner/guard/inventory_contract_constants.py",
@@ -799,7 +840,7 @@
           "src/codex_plugin_scanner/guard/skill_directory_identity_contract.py",
           "src/codex_plugin_scanner/marketplace_support.py"
         ],
-        "reason": "Reviewed: claude_code adapter and its inventory/skill-directory and aibom detection helpers. The Claude hook client no longer imports them; they load lazily from the frozen hook and the adapter registry for install, inventory and approval flows, not per tool call."
+        "reason": "Reviewed: claude_code adapter and its inventory/skill-directory and aibom detection helpers, and the raw artifact fields aibom detection sends to the resident. The Claude hook client no longer imports them; they load lazily from the frozen hook and the adapter registry for install, inventory and approval flows, not per tool call."
       },
       {
         "path": [
@@ -812,7 +853,7 @@
           "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
           "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py"
         ],
-        "reason": "Reviewed: GitHub workflow capability preflight and approval records. commands_hook_native_eval.py imports github_workflow_runtime to resolve the workflow capability preflight on a native hook call, and commands_support_runtime_policy.py reads GitHubWorkflowApprovalRecord when it resolves runtime policy, so both are hook-path runtime and stay counted. approvals.py used to pull them in eagerly; they are now reached only through these lazy hook-path imports."
+        "reason": "Reviewed: GitHub workflow capability preflight and approval records. approvals.py issues the workflow capability when an approval resolves, approval_once_eligibility.py reads whether a workflow approval needs local one-shot authority, and commands_support_runtime_policy.py reads GitHubWorkflowApprovalRecord when it resolves runtime policy, so both are approval-path runtime and stay counted."
       },
       {
         "path": [
@@ -868,7 +909,21 @@
         "path": [
           "src/codex_plugin_scanner/guard/cli/native_hook_exit_code.py"
         ],
-        "reason": "Reviewed and retained in runtime scope: the per-harness verdict exit-status table. The JSON document now carries the status the resident's directive decided, so commands_support_hook_payload no longer imports this table at load; commands_hook_native_availability still reaches it lazily to map a native-unavailable fail-closed deny onto the harness's own exit contract. That fallback runs exactly when the resident cannot answer, so the table stays counted as runtime until the native runtime owns the unavailable lane too."
+        "reason": "Reviewed and retained in runtime scope: the per-harness verdict exit-status table. The JSON document now carries the status the resident's directive decided, so commands_support_hook_payload no longer imports this table at load; commands_hook_native_authority uses it to give every hook answer, the fail-safe one included, the harness's own exit contract, so the table stays counted as runtime."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/runtime/direct_vitest.py",
+          "src/codex_plugin_scanner/guard/runtime/package_evidence_common.py",
+          "src/codex_plugin_scanner/guard/runtime/jsonc.py"
+        ],
+        "reason": "Reviewed and retained in runtime scope: the retired Python literal-cd parser imported these at load, so they counted as eager. They are now reached lazily: direct_vitest presents the resident's direct local tool context to the support-artifact command, and package_evidence_common with its bounded JSONC decoder reads lockfile integrity for the contained Node tool lane. They run while Guard prepares a contained run, so they stay counted as runtime."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/daemon/claude_turn_events.py"
+        ],
+        "reason": "Reviewed and retained in runtime scope: the resident hook worker reaches this lazily for Claude Code PostToolUse and Stop. It records the user's answer to the HOL Guard approval question and discards a session's unanswered prompts when the turn ends; the native edge still decides every verdict."
       }
     ],
     "tests": {
@@ -2116,7 +2171,7 @@
           ".zcode",
           ".paseo"
         ],
-        "evidence": "Adapter registry: _adapters() imports each module named in the literal _ADAPTER_SPECS table with import_module(module_name, __package__) and instantiates the named class. Targets list every module in that table (.pi holds two classes). Decision: follow. Adapters normalize harness payloads into hook requests and get_adapter(harness).approval_flow() is called from hook handling (commands_hook_native_review and commands_hook_native_copilot), so the registry is on the hook path and hook-path authority is never excluded. The modules listed in the adapter registry reviewed_runtime entry join the scope. Install, setup and config methods keep their reviewed function-level exclusions (install_config, not hook path)."
+        "evidence": "Adapter registry: _adapters() imports each module named in the literal _ADAPTER_SPECS table with import_module(module_name, __package__) and instantiates the named class. Targets list every module in that table (.pi holds two classes). Decision: follow. Adapters normalize harness payloads into hook requests and get_adapter(harness).approval_flow() is called from hook handling (commands_hook_native_review), so the registry is on the hook path and hook-path authority is never excluded. The modules listed in the adapter registry reviewed_runtime entry join the scope. Install, setup and config methods keep their reviewed function-level exclusions (install_config, not hook path)."
       },
       {
         "path": "src/codex_plugin_scanner/guard/cli/_commands_shared.py",

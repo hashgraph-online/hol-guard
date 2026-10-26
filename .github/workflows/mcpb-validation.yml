@@ -5,7 +5,8 @@ on:
     branches: [main, release/3.0]
     paths:
       - "distributions/mcpb/**"
-      - ".github/tools/mcpb-cli/**"
+      - "scripts/ci/pack_mcpb.py"
+      - "tests/test_pack_mcpb.py"
       - ".github/workflows/mcpb-validation.yml"
 
 permissions:
@@ -23,15 +24,8 @@ jobs:
           persist-credentials: false
       - name: Validate Python wrapper
         run: python -m compileall -q distributions/mcpb/server
-      - name: Validate and pack with pinned MCPB CLI
-        env:
-          NPM_CONFIG_IGNORE_SCRIPTS: "true"
+      - name: Pack the MCP bundle
         run: |
           set -euo pipefail
-          npm ci --ignore-scripts --prefix .github/tools/mcpb-cli
-          node .github/tools/mcpb-cli/harden-forge.cjs
-          MCPB_CLI="$GITHUB_WORKSPACE/.github/tools/mcpb-cli/node_modules/.bin/mcpb"
-          "$MCPB_CLI" validate distributions/mcpb
-          "$MCPB_CLI" pack distributions/mcpb "$RUNNER_TEMP/hol-guard.mcpb"
-          "$MCPB_CLI" info "$RUNNER_TEMP/hol-guard.mcpb"
+          python3 scripts/ci/pack_mcpb.py distributions/mcpb "$RUNNER_TEMP/hol-guard.mcpb"
           test -s "$RUNNER_TEMP/hol-guard.mcpb"

@@ -115,7 +115,7 @@ pub(super) fn evaluate_with_bundle(
     }
     let direct_identities: Vec<_> = packages
         .iter()
-        .map(|package| result_package_identity(deps, package))
+        .map(|package| result_package_identity(deps.identity, package))
         .collect();
     for package in transitive_lockfile_results(
         deps,
@@ -126,7 +126,7 @@ pub(super) fn evaluate_with_bundle(
         now_timestamp,
     ) {
         if package_result_has_incomplete_lockfile(&package)
-            || !direct_identities.contains(&result_package_identity(deps, &package))
+            || !direct_identities.contains(&result_package_identity(deps.identity, &package))
         {
             packages.push(package);
         }

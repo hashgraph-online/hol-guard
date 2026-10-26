@@ -137,3 +137,39 @@ fn replays_every_recorded_consume_scenario() {
     }
     assert!(calls >= 80, "only {calls} recorded calls");
 }
+
+/// The retry sends the command as run; the resolved row holds it with
+/// credentials masked. The exact binding is `artifact_hash`, so the masked
+/// row still answers the retry.
+#[test]
+fn a_masked_stored_target_still_answers_the_raw_retry() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let scenario = vectors["scenarios"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|scenario| scenario["name"] == "once_allow_then_replay")
+        .unwrap();
+    let first = &scenario["calls"][0];
+    assert_eq!(first["result"], true);
+    let sent = first["args"]["launch_target"].as_str().unwrap().to_owned();
+    let raw = format!("{sent} -H \"Authorization: Bearer secret-token-value\"");
+    let stored = guard_command::redacted_command_tokens::redact_text(&raw).text;
+    assert_ne!(stored, raw);
+    let home = temp_home("masked-target");
+    let db = home.join("guard.db");
+    seed(&db, &vectors);
+    let mut rows = scenario["rows"].clone();
+    for row in rows.as_array_mut().unwrap() {
+        if row["launch_target"] == sent.as_str() {
+            row["launch_target"] = Value::from(stored.clone());
+        }
+    }
+    insert_rows(&Connection::open(&db).unwrap(), "approval_requests", &rows);
+    let mut args = first["args"].clone();
+    args["launch_target"] = Value::from(raw);
+    let reply = consume(&home, &args);
+    assert_eq!(reply["status"], "ok", "{reply}");
+    assert_eq!(reply["payload"], true);
+    std::fs::remove_dir_all(home).unwrap();
+}

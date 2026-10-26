@@ -44,6 +44,13 @@ regexes = [
 id = "generic-api-key"
 
 [[rules.allowlists]]
+description = "Historical synthetic packaged-binary scanner fixture, not a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/test_security_binaries\.py$''']
+regexes = ['''^[\t\r\n ]*SECRET_LINE = 'const token = "sk-proj-abcdefghijklmnopqrstuvwxyz0123456789";\\n'[\t\r\n ]*$''']
+
+[[rules.allowlists]]
 description = "Pinned public token-fixture SHA-256, not a credential"
 condition = "AND"
 regexTarget = "line"
@@ -126,6 +133,15 @@ paths = ['''(?:^|/)contributions/command\-sources/migration\-manifest\.json$''']
 regexes = [
   '''^[\t\r\n ]*"command\.api\-gateway\.json": "c435d78e882f941c989aa097e875b0c61dafbd13523f515b03f1d967636031aa",[\t\r\n ]*$''',
   '''^[\t\r\n ]*"command\.kubernetes\-secrets\.json": "cfd8b77be9464f35df79497d0db382b55288620d1c5decfadb9b83e45da0d92f",[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Recorded provider-catalog fingerprint in the MCP provider read parity vectors, a SHA-256 of the catalog rows rather than a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-runtime/testdata/guard_store/mcp_provider_read_vectors\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"catalog_token": "8d638ce7441755dda07242b347ddc6c5c13b0d7e107c61a7ae41223d466402cd",?[\t\r\n ]*$''',
 ]
 
 [[rules.allowlists]]

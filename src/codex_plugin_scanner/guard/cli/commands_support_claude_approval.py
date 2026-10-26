@@ -7,7 +7,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ..runtime.package_request_evaluation import PackageRequestEvaluation
     from ._commands_shared import _now
     from .commands_support_hook_state import (
         _load_single_claude_pending_permission,
@@ -15,8 +14,6 @@ if TYPE_CHECKING:
     )
     from .commands_support_permission_store import _persist_claude_native_permission_policy
     from .commands_support_runtime_artifacts import _hook_event_name, _optional_string
-    from .commands_support_runtime_policy import _runtime_artifact_policy_action
-    from .commands_support_runtime_resolution import _canonical_harness_name
 
 
 from ..native_claude_guard_question import ClaudeGuardQuestionVerdict, claude_guard_question_verdict
@@ -140,78 +137,12 @@ def _claude_permission_notice_prefers_ask_user_question(notice: dict[str, object
     return rendered if isinstance(rendered, bool) else True
 
 
-def _claude_permission_request_artifact_policy(
-    *,
-    config: GuardConfig,
-    store: GuardStore,
-    args: argparse.Namespace,
-    runtime_artifact: GuardArtifact,
-    runtime_workspace: Path | None,
-) -> tuple[dict[str, object], PackageRequestEvaluation | None]:
-    """The artifact policy facts the resident asked for, and the package evaluation.
-
-    The resident composes the verdict from these; the evaluation is kept only
-    for the reason the response shows.
-    """
-
-    config_action = _runtime_artifact_policy_action(config, runtime_artifact, args.harness, guard_home=store.guard_home)
-    package_evaluation = None
-    if runtime_artifact.artifact_type == "package_request":
-        package_evaluation = evaluate_package_request_artifact(
-            artifact=runtime_artifact,
-            store=store,
-            workspace_dir=runtime_workspace,
-        )
-    facts: dict[str, object] = {
-        "config_action": config_action,
-        "package_action": None if package_evaluation is None else package_evaluation.policy_action,
-    }
-    return facts, package_evaluation
-
-
-def _claude_permission_request_reason_stub(
-    *,
-    args: argparse.Namespace,
-    runtime_artifact: GuardArtifact,
-    artifact_action: str,
-    package_evaluation: PackageRequestEvaluation | None,
-) -> dict[str, object]:
-    """The fields the artifact's review reason is rendered from."""
-
-    stub: dict[str, object] = {
-        "harness": _canonical_harness_name(args.harness),
-        "policy_action": artifact_action,
-        "risk_summary": (
-            package_evaluation.risk_summary
-            if package_evaluation is not None
-            else artifact_risk_summary(runtime_artifact)
-        ),
-    }
-    if package_evaluation is not None:
-        stub["decision_v2_json"] = {
-            "harness_message": package_evaluation.user_copy.harness_message,
-        }
-    return stub
-
-
-def _claude_permission_request_terminal_notice(
-    *,
-    payload: dict[str, object],
-    native_reason: str,
-) -> str:
-    return _claude_approval_text("permission_request_terminal_notice", payload=payload, reason=native_reason)
-
-
 def _claude_permission_request_system_message(
     *,
     payload: dict[str, object],
     native_reason: str,
 ) -> str:
     return _claude_approval_text("permission_request_system_message", payload=payload, reason=native_reason)
-
-
-def _claude_permission_request_additional_context(native_reason: str) -> str:
-    return _claude_approval_text("permission_request_additional_context", reason=native_reason)
 
 
 def _claude_permission_prompt_system_message(
@@ -226,30 +157,12 @@ def _claude_permission_prompt_additional_context(notice: dict[str, object] | Non
     return _claude_approval_text("permission_prompt_additional_context", notice=notice)
 
 
-def _claude_permission_prompt_terminal_notice(
-    *,
-    payload: dict[str, object],
-    notice: dict[str, object] | None,
-) -> str:
-    return _claude_approval_text("permission_prompt_terminal_notice", payload=payload, notice=notice)
-
-
-def _claude_native_pretooluse_terminal_notice(*, payload: dict[str, object], reason: str) -> str:
-    return _claude_approval_text("native_pretooluse_terminal_notice", payload=payload, reason=reason)
-
-
 __all__ = [
     "_claude_guard_approval_question_message",
     "_claude_guard_question_verdict",
-    "_claude_native_pretooluse_terminal_notice",
     "_claude_permission_notice_prefers_ask_user_question",
     "_claude_permission_prompt_additional_context",
     "_claude_permission_prompt_system_message",
-    "_claude_permission_prompt_terminal_notice",
-    "_claude_permission_request_additional_context",
-    "_claude_permission_request_artifact_policy",
-    "_claude_permission_request_reason_stub",
     "_claude_permission_request_system_message",
-    "_claude_permission_request_terminal_notice",
     "_persist_claude_guard_question_decision",
 ]

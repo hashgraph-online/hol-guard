@@ -24,7 +24,6 @@ def _answer(monkeypatch: pytest.MonkeyPatch, reply: object, seen: list[dict[str,
         return reply
 
     monkeypatch.setattr(client, "_call", fake_call)
-    monkeypatch.setattr(client, "_control_snapshot", lambda: None)
 
 
 @pytest.mark.parametrize(

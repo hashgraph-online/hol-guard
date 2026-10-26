@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..daemon.native_review_allow_hint import reviewed_command_extension_allow_hint
 from ..native_codex_tool_output import codex_tool_output_native
 from ..native_context import bound_context_digest_home
-from ..native_data_flow import DataFlowArtifactNaming
 from ..native_path_anchor import anchor_to_process_directory
 from ..native_prompt import merge_prompt_artifacts
 from ..native_rich_command_model import NativeCommandModelError
@@ -21,7 +21,6 @@ from ..native_sensitive_request import (
 from ..native_tool_action_identity import NativeToolActionIdentityError
 from ..runtime.command_decision_adapter import effect_decision_to_dict
 from ..runtime.direct_vitest import direct_local_typescript_execution_context
-from ..runtime.extension_allow_hint import compute_extension_allow_hint
 from ..runtime.native_command_evaluation import NativeCommandEvaluation, review_command_native
 from ._commands_shared import *
 from .commands_parser_helpers import *
@@ -364,14 +363,13 @@ def _hook_runtime_artifact_with_native(
                 native_extension_evidence=(native_review.payload if native_review is not None else None),
                 native_evaluation=(native_review.evaluation if native_review is not None else None),
                 extension_allow_hint=(
-                    compute_extension_allow_hint(
-                        native_review.evaluation,
-                        command_text=raw_command_text,
+                    reviewed_command_extension_allow_hint(
+                        raw_command_text,
+                        native_result=native_review.payload,
                         snapshot=native_review.snapshot,
-                        native_evidence=native_review.payload,
+                        guard_home=guard_home,
                         cwd=workspace,
                         home_dir=home_dir,
-                        guard_home=guard_home,
                     )
                     if native_review is not None and raw_command_text is not None
                     else None
@@ -416,34 +414,59 @@ def _runtime_protected_file_write_paths(
     return protected_paths
 
 
-def _runtime_data_flow_naming(
-    *,
-    harness: str,
-    payload: dict[str, object],
-    action_envelope: GuardActionEnvelope | None,
-    home_dir: Path,
-    workspace: Path | None,
-) -> DataFlowArtifactNaming | None:
-    """How the resident should name the artifact for this action's data flow.
+_CODEX_PROMPT_SECRET_KEY_MARKERS = ("TOKEN", "SECRET", "PASSWORD", "PASS", "API_KEY", "API-KEY", "AUTH", "CREDENTIAL")
 
-    The naming is this side's to supply because only this side knows which
-    policy file a review would cite and whether the scope is the project or the
-    global install. An event that carries no action gets none: there is nothing
-    to review, so the resident is asked for the signals alone.
+
+# How large the whole packed request may be once a tool response joins the
+# flattened text, under the resident's own `CODEX_POST_TOOL_OUTPUT_MAX_BYTES`
+# of `6 * 1024 * 1024 - 64 * 1024`. The margin leaves room for the framing the
+# transport adds after this side has encoded the body.
+_CODEX_POST_TOOL_REQUEST_BUDGET = 4 * 1024 * 1024
+
+# How deeply a tool response may nest before this side keeps it back. The
+# resident's walk reads five levels, so nothing below that is scanned anyway,
+# and a response nested past the decoder's own recursion limit would cost the
+# review rather than widen it.
+_CODEX_TOOL_RESPONSE_MAX_NESTING = 64
+
+
+def _codex_json_nesting_exceeds(value: object, limit: int, depth: int = 0) -> bool:
+    """Whether ``value`` nests deeper than ``limit`` containers."""
+
+    if depth > limit:
+        return True
+    if isinstance(value, Mapping):
+        return any(_codex_json_nesting_exceeds(child, limit, depth + 1) for child in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_codex_json_nesting_exceeds(child, limit, depth + 1) for child in value)
+    return False
+
+
+def _codex_tool_response_within_budget(body: Mapping[str, object], value: object) -> object | None:
+    """The tool response to send whole beside ``body``, or ``None`` when it cannot travel.
+
+    The response is kept back whenever adding it would cost the review rather
+    than widen it: when the packed request would pass the resident's bound,
+    when the response nests past what the decoder accepts, or when it holds
+    something this side cannot encode at all, such as a lone surrogate or a
+    non-finite number. In every one of those cases the request still carries
+    the flattened text every caller sent before the resident could read the
+    response itself.
     """
 
-    if action_envelope is None:
+    if value is None:
         return None
-    canonical_harness = _canonical_harness_name(harness)
-    return DataFlowArtifactNaming(
-        harness=canonical_harness,
-        config_path=str(_runtime_policy_path(canonical_harness, home_dir, workspace, payload=payload)),
-        source_scope=_coalesce_string(payload.get("source_scope"), "project"),
-        tool_name=action_envelope.tool_name,
-    )
-
-
-_CODEX_PROMPT_SECRET_KEY_MARKERS = ("TOKEN", "SECRET", "PASSWORD", "PASS", "API_KEY", "API-KEY", "AUTH", "CREDENTIAL")
+    if _codex_json_nesting_exceeds(value, _CODEX_TOOL_RESPONSE_MAX_NESTING):
+        return None
+    packed = dict(body)
+    packed["tool_response"] = value
+    try:
+        encoded = json.dumps(packed, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError):
+        return None
+    if len(encoded) > _CODEX_POST_TOOL_REQUEST_BUDGET:
+        return None
+    return value
 
 
 def _codex_post_tool_output_review(
@@ -464,20 +487,30 @@ def _codex_post_tool_output_review(
     if stdout_text:
         response_text = f"{response_text}\n{stdout_text}".strip() if response_text else stdout_text
     tool_label = _coalesce_string(payload.get("tool_name"), "Bash")
+    body: dict[str, object] = {
+        "harness_label": harness_label,
+        "tool_label": tool_label,
+        "tool_name": payload.get("tool_name"),
+        "tool_input": payload.get("tool_input"),
+        "arguments": payload.get("arguments"),
+        "tool_input_present": "tool_input" in payload,
+        "response_text": response_text,
+        "cwd": None if cwd is None else anchor_to_process_directory(cwd),
+        "home_dir": None if home_dir is None else anchor_to_process_directory(home_dir),
+        "deadline_ms": 8_000,
+    }
+    # The flattened text is still sent, because only this side knows what it
+    # appended to the response. The response itself travels whole beside it so
+    # the resident decides what the scan reads, rather than trusting whichever
+    # caller flattened it. It travels only when it fits: the resident refuses a
+    # request over its bound, and a refused review is worse than the flattened
+    # text every caller sent before the resident could read the response.
+    whole_response = _codex_tool_response_within_budget(body, payload.get("tool_response"))
+    if whole_response is not None:
+        body["tool_response"] = whole_response
     answer = codex_tool_output_native(
         "post_tool_output",
-        body={
-            "harness_label": harness_label,
-            "tool_label": tool_label,
-            "tool_name": payload.get("tool_name"),
-            "tool_input": payload.get("tool_input"),
-            "arguments": payload.get("arguments"),
-            "tool_input_present": "tool_input" in payload,
-            "response_text": response_text,
-            "cwd": None if cwd is None else anchor_to_process_directory(cwd),
-            "home_dir": None if home_dir is None else anchor_to_process_directory(home_dir),
-            "deadline_ms": 8_000,
-        },
+        body=body,
         timeout_seconds=9.0,
     )
     if not answer.allowed or answer.value is None or answer.error_code is not None:
@@ -531,6 +564,5 @@ __all__ = [
     "_hook_runtime_artifact",
     "_merged_prompt_runtime_artifact",
     "_optional_string",
-    "_runtime_data_flow_naming",
     "_string_list",
 ]

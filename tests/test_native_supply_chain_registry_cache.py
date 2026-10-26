@@ -227,8 +227,7 @@ def test_a_review_still_downloading_stops_quietly_for_a_retry(monkeypatch: pytes
         deadlines.append(registry_cache._WAIT_DEADLINE.get())
         raise RegistryDeadlineError
 
-    monkeypatch.setattr(package_review.os, "name", "posix")
-    monkeypatch.setattr(package_review, "npm_install_proof", lambda *_args, **_kwargs: ("10.9.0", True))
+    monkeypatch.setattr(package_review, "package_review_plan", lambda *_args, **_kwargs: (object(), True))
     monkeypatch.setattr(package_review, "_evaluate", evaluate)
     monkeypatch.setattr(
         package_review,

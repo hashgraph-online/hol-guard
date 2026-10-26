@@ -27,16 +27,3 @@ def embedded_script_evidence_entries(command_text: str | None) -> list[dict[str,
     if not isinstance(command_text, str) or not command_text.strip():
         return []
     return list(call("embedded_script_evidence", command_text))
-
-
-def command_has_embedded_script(command_text: str | None) -> bool:
-    """True when the command carries an inline script body via heredoc.
-
-    Reading the heredoc rows to test them for emptiness would carry every
-    script body across the boundary only to discard it, so the native helper
-    answers the question itself. The owner of the parse is the owner of the
-    answer, as it already is for the evidence entries above.
-    """
-    if not isinstance(command_text, str):
-        return False
-    return bool(call("has_embedded_script", command_text))

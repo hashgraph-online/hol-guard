@@ -76,7 +76,7 @@ fn sibling_root(command: &str, context: PathContext<'_>) -> Option<std::path::Pa
 
 #[cfg(unix)]
 fn exact_shape(command: &str, workspace: &Path) -> bool {
-    crate::restricted_pytest::workspace_exact_shape(command, workspace).is_some()
+    crate::pretool::workspace_exact_shape(command, workspace).is_some()
 }
 
 #[cfg(not(unix))]

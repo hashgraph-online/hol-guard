@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..daemon.background_diagnostics import failure_detail, record_background_event
+from ..daemon.background_diagnostics import failure_detail, record_background_event, record_background_notice
 from ..file_identity import full_stat_identity
 from ..native_resident_client import native_resident_client_request
 from ..native_runtime import _isolated_environment, native_runtime_status
@@ -55,6 +55,10 @@ PREPARING = "native discovery preparing"
 # toward a failing preparation.
 _RETRYABLE_FAILURES = frozenset({"native discovery transport unavailable", "native discovery runtime changed"})
 _failures = 0
+# The publication last noted as built for another engine. The note is made
+# when the current publication changes, not on every refresh; the pointer only
+# moves forward, so a move back to an older publication is noted as a change.
+_noted_engine_mismatch: str | None = None
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -258,8 +262,34 @@ def _prepare_ready(home):
         request_refresh(home)
 
 
+def _engine_mismatch_with_nothing_kept(refresh_error, restore_error):
+    """The refresh met a publication for another engine and no older view was kept."""
+
+    from .current_refresh import PublicationEngineMismatchError
+
+    if isinstance(refresh_error, PublicationEngineMismatchError) and (
+        str(restore_error) == "discovery_current_cached_publication_unavailable"
+    ):
+        return refresh_error
+    return None
+
+
+def _note_engine_mismatch(mismatch) -> None:
+    """Say once, when the current publication changes, that it was built for another engine."""
+
+    global _noted_engine_mismatch
+    with _ready_lock:
+        if _noted_engine_mismatch == mismatch.publication_id:
+            return
+    # A refresh can run before the daemon installs its sink. Only a note that
+    # was written counts, so the daemon still gets one once it is listening.
+    if record_background_notice("catalog_publication_engine_pending", mismatch.describe()):
+        with _ready_lock:
+            _noted_engine_mismatch = mismatch.publication_id
+
+
 def _refresh(home, store):
-    global _handle, _refresh_worker, _failures
+    global _handle, _refresh_worker, _failures, _noted_engine_mismatch
     refresh_error = None
     try:
         from .current_refresh import refresh, restore
@@ -282,12 +312,19 @@ def _refresh(home, store):
                     # A published view proves preparation works again, so an
                     # older streak must not survive a later invalidation.
                     _failures = 0
+                    if refresh_error is None:
+                        _noted_engine_mismatch = None
     except Exception as error:
         # Complete previous view and active protection remain independent, so
         # this stays non-fatal; it is recorded because a publication that never
         # refreshes is otherwise indistinguishable from one that never ran.
         if refresh_error is None:
             record_background_event("catalog_publication_refresh_failed", failure_detail(error))
+        elif (mismatch := _engine_mismatch_with_nothing_kept(refresh_error, error)) is not None:
+            # Expected on a released core once `main` publishes with another
+            # compiler, and nothing older was kept: the installed catalog keeps
+            # serving. It is a state to note, not a failure every five minutes.
+            _note_engine_mismatch(mismatch)
         else:
             # A failed fallback only says no complete view was kept. The
             # refresh failure is what says why the catalog cannot update.

@@ -16,14 +16,9 @@ if TYPE_CHECKING:
 
 
 from ..action_lattice import coerce_guard_action
-from ..blocked_request_mode import is_unlinked_connector_setup_reason
 from ..package_firewall_entitlement import package_firewall_entitlement_or_denied
 from ._commands_shared import *
 from .commands_parser_helpers import *
-
-
-def _hook_payload_module():
-    return importlib.import_module(".commands_support_hook_payload", __package__)
 
 
 def _runtime_policy_module():
@@ -259,153 +254,6 @@ def _prompt_request_classes(artifact: GuardArtifact) -> set[str]:
     values = prompt_classes if isinstance(prompt_classes, list) else [artifact.metadata.get("prompt_request_class")]
     return {str(item) for item in values if isinstance(item, str) and item.strip()}
 
-def _prompt_request_reason(
-    artifact: GuardArtifact,
-    response_payload: dict[str, object],
-    *,
-    composer: Callable[..., dict[str, object]],
-    guard_home: Path | None,
-) -> str:
-    """What the resident says a flagged prompt request asks for.
-
-    The classes are read out of the artifact; which of them decides the copy,
-    and what that copy is, belong to the resident.
-    """
-
-    prompt_summary = artifact.metadata.get("prompt_summary")
-    harness = response_payload.get("harness")
-    policy_action = response_payload.get("policy_action")
-    answer = composer(
-        "prompt_request_reason",
-        {
-            "harness": harness if isinstance(harness, str) else None,
-            "prompt_classes": sorted(_prompt_request_classes(artifact)),
-            "prompt_summary": prompt_summary if isinstance(prompt_summary, str) else None,
-            "policy_action": policy_action if isinstance(policy_action, str) else None,
-        },
-        guard_home=guard_home,
-    )
-    return str(answer["reason"])
-
-
-def _runtime_artifact_native_reason(
-    artifact: GuardArtifact,
-    response_payload: dict[str, object],
-    *,
-    composer: Callable[..., dict[str, object]],
-    guard_home: Path | None,
-) -> str:
-    guidance = response_payload.get("blocked_request_guidance")
-    if isinstance(guidance, str) and guidance.strip():
-        return guidance.strip()
-    decision_message = _decision_v2_harness_message(response_payload)
-    if decision_message is not None and _should_use_decision_v2_harness_message(response_payload, decision_message):
-        return decision_message
-    if artifact.artifact_type == "prompt_request":
-        return _prompt_request_reason(
-            artifact,
-            response_payload,
-            composer=composer,
-            guard_home=guard_home,
-        )
-    path_class = artifact.metadata.get("path_class")
-    tool_name = artifact.metadata.get("tool_name")
-    if isinstance(path_class, str) and isinstance(tool_name, str):
-        harness = response_payload.get("harness")
-        policy_action = response_payload.get("policy_action")
-        if harness == "claude-code" and policy_action == "require-reapproval":
-            return (
-                f"HOL Guard intercepted Claude's attempt to use {tool_name} for {path_class} to protect your local "
-                "secrets. The approval flow came from HOL Guard, not from Claude alone. HOL Guard will ask you to "
-                "choose Allow once, Allow during this session, or Keep blocked before Claude retries this action."
-            )
-        harness_label = "Claude" if harness == "claude-code" else "Codex" if harness == "codex" else "the harness"
-        return (
-            f"HOL Guard blocked {harness_label}'s attempt to use {tool_name} for {path_class} to protect your "
-            "local secrets. "
-            "This request cannot continue in the current approval flow."
-        )
-    request_signals = artifact.metadata.get("runtime_request_signals")
-    if (
-        response_payload.get("policy_action")
-        in {"review", "require-reapproval", "sandbox-required", "block"}
-        and isinstance(request_signals, list)
-        and "tool output contains credential-looking material" in request_signals
-    ):
-        secret_source = artifact.metadata.get("secret_source_family")
-        if isinstance(secret_source, str) and secret_source.strip():
-            return (
-                "HOL Guard blocked this tool output because it contains sensitive content from "
-                f"{secret_source.strip()}. The command already ran; review the flagged output "
-                "in the approval center before trusting it."
-            )
-        request_summary = artifact.metadata.get("runtime_request_summary")
-        if (
-            isinstance(request_summary, str)
-            and request_summary.strip()
-            and not request_summary.startswith("Requests a sensitive native tool action")
-        ):
-            return request_summary.strip()
-        return (
-            "HOL Guard blocked this tool output because it may contain sensitive content. "
-            "The command already ran; review the flagged output in the approval center "
-            "before trusting it."
-        )
-    risk_summary = response_payload.get("risk_summary")
-    if isinstance(risk_summary, str) and risk_summary.strip():
-        trimmed_summary = risk_summary.strip()
-        if len(trimmed_summary) > 180:
-            trimmed_summary = f"{trimmed_summary[:177].rstrip()}..."
-        action_class = artifact.metadata.get("action_class")
-        if (
-            action_class == "credential exfiltration shell command"
-            and "credential-looking output" not in trimmed_summary.lower()
-        ):
-            trimmed_summary = f"{trimmed_summary} Guard also detected credential-looking output."
-        return f"HOL Guard flagged this request: {trimmed_summary}"
-    return "HOL Guard flagged this request for review."
-
-def _decision_v2_harness_message(response_payload: dict[str, object]) -> str | None:
-    decision_v2 = response_payload.get("decision_v2_json")
-    if not isinstance(decision_v2, Mapping):
-        return None
-    message = decision_v2.get("harness_message")
-    if isinstance(message, str) and message.strip():
-        return message.strip()
-    return None
-
-def _decision_v2_has_data_flow_signal(response_payload: dict[str, object]) -> bool:
-    decision_v2 = response_payload.get("decision_v2_json")
-    if not isinstance(decision_v2, Mapping):
-        return False
-    signals = decision_v2.get("signals")
-    if not isinstance(signals, list):
-        return False
-    for item in signals:
-        if not isinstance(item, Mapping):
-            continue
-        detector = item.get("detector")
-        signal_id = item.get("signal_id")
-        if detector == "data_flow.exfiltration":
-            return True
-        if isinstance(signal_id, str) and signal_id.startswith("data-flow:"):
-            return True
-    return False
-
-def _should_use_decision_v2_harness_message(response_payload: dict[str, object], message: str) -> bool:
-    if _decision_v2_has_data_flow_signal(response_payload):
-        return True
-    generic_prefixes = (
-        "HOL Guard blocked this action.",
-        "HOL Guard wants this action reviewed and run in a sandboxed path.",
-    )
-    if any(message.startswith(prefix) for prefix in generic_prefixes):
-        return False
-    return not message.startswith((
-        "HOL Guard needs a fresh approval because this action changed.",
-        "HOL Guard needs a fresh approval before this action can run.",
-    ))
-
 def _claude_prompt_additional_context(
     *,
     harness: str,
@@ -492,14 +340,6 @@ def _codex_prompt_block_system_message(*, policy_action: str, native_reason: Cal
         return None
     return f"HOL Guard paused your Codex prompt. {reason}"
 
-def _copilot_hook_reason(*values: object | None) -> str:
-    reason = _native_hook_reason(*values)
-    if reason.startswith("Guard "):
-        reason = f"HOL {reason}"
-    if "approve" in reason.lower() or is_unlinked_connector_setup_reason(reason):
-        return reason
-    return f"{reason} Approve it in HOL Guard, then retry."
-
 def _guard_rerun_command(args: argparse.Namespace) -> str:
     command = ["hol-guard", "run", str(args.harness)]
     _append_guard_context_args(command, args)
@@ -544,59 +384,6 @@ def _write_json_line(payload: dict[str, object], *, output_stream: TextIO | None
     stream.write(f"{json.dumps(payload, separators=(',', ':'))}\n")  # codeql[py/clear-text-logging-sensitive-data]
     stream.flush()
 
-def _emit_copilot_hook_response(
-    *,
-    policy_action: str,
-    reason: str,
-    approval_reuse: dict[str, object] | None = None,
-    scanner_evidence: tuple[dict[str, object], ...] = (),
-    output_stream: TextIO | None = None,
-) -> None:
-    # Copilot's command-hook contract only accepts its native transport
-    # fields. The exact Guard action is persisted in Guard receipts/events;
-    # this payload intentionally carries only Copilot's binary disposition,
-    # which the resident composes. A render the resident cannot answer falls
-    # back to the fixed disposition for the action class, so an unreachable
-    # resident never turns a blocking action into one Copilot would run.
-    hook_payload = _hook_payload_module()
-    params: dict[str, object] = {"policy_action": policy_action, "reason": reason}
-    if approval_reuse is not None:
-        params["approval_reuse"] = approval_reuse
-    if scanner_evidence:
-        params["scanner_evidence"] = list(scanner_evidence)
-    rendered = hook_payload._render_cli("copilot_hook_response", "copilot", params)
-    payload: dict[str, object] = dict(rendered[1]) if rendered is not None and rendered[1] else {}
-    if not payload:
-        blocked = policy_action in hook_payload._BLOCKING_ACTIONS
-        payload["permissionDecision"] = "deny" if blocked else "allow"
-        if blocked:
-            payload["permissionDecisionReason"] = reason
-        if approval_reuse is not None:
-            payload["approval_reuse"] = approval_reuse
-        if scanner_evidence:
-            payload["scanner_evidence"] = list(scanner_evidence)
-    _write_json_line(payload, output_stream=output_stream)
-
-def _emit_copilot_permission_request_response(
-    *,
-    behavior: str,
-    message: str | None = None,
-    interrupt: bool | None = None,
-    approval_reuse: dict[str, object] | None = None,
-    scanner_evidence: tuple[dict[str, object], ...] = (),
-    output_stream: TextIO | None = None,
-) -> None:
-    payload: dict[str, object] = {"behavior": behavior}
-    if isinstance(message, str) and message.strip():
-        payload["message"] = message.strip()
-    if isinstance(interrupt, bool):
-        payload["interrupt"] = interrupt
-    if approval_reuse is not None:
-        payload["approval_reuse"] = approval_reuse
-    if scanner_evidence:
-        payload["scanner_evidence"] = list(scanner_evidence)
-    _write_json_line(payload, output_stream=output_stream)
-
 __all__ = [
     "_append_guard_context_args",
     "_claude_prompt_additional_context",
@@ -604,12 +391,7 @@ __all__ = [
     "_claude_prompt_intercept_message",
     "_claude_prompt_system_message",
     "_codex_prompt_block_system_message",
-    "_copilot_hook_reason",
     "_current_effective_risk_actions",
-    "_decision_v2_harness_message",
-    "_decision_v2_has_data_flow_signal",
-    "_emit_copilot_hook_response",
-    "_emit_copilot_permission_request_response",
     "_guard_approvals_command",
     "_guard_diff_command",
     "_guard_rerun_command",
@@ -617,9 +399,7 @@ __all__ = [
     "_prompt_requires_hard_block",
     "_run_approval_password_settings_command",
     "_run_approval_totp_settings_command",
-    "_runtime_artifact_native_reason",
     "_shell_join",
-    "_should_use_decision_v2_harness_message",
     "_update_guard_cli_settings",
     "_write_json_line",
 ]

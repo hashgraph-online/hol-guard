@@ -173,3 +173,52 @@ def test_unknown_managed_revision_is_distinct_from_initial_zero() -> None:
         ]
         == 0
     )
+
+
+def _discovery_pending_for(monkeypatch, completed_catalog, attempts: int, message: str) -> list[int]:
+    from codex_plugin_scanner.guard.catalog_delivery.discovery import PREPARING
+
+    completed_catalog.completed = False
+    ready = extension_catalog_pages.prepare_installed_catalog_view
+    calls: list[int] = []
+
+    def prepare(*args, **kwargs):
+        calls.append(len(calls))
+        if len(calls) <= attempts:
+            raise ValueError(message or PREPARING)
+        return ready(*args, **kwargs)
+
+    monkeypatch.setattr(extension_catalog_pages, "prepare_installed_catalog_view", prepare)
+    monkeypatch.setattr(managed_controls_sync, "_DISCOVERY_READY_POLL_SECONDS", 0)
+    monkeypatch.setenv("GUARD_EXTENSION_CATALOG_SYNC_V1", "true")
+    return calls
+
+
+def test_one_shot_sync_waits_for_discovery_started_by_its_own_request(monkeypatch, tmp_path, completed_catalog) -> None:
+    calls = _discovery_pending_for(monkeypatch, completed_catalog, attempts=3, message="")
+    posture = runner._managed_controls_runtime_sync_posture(
+        GuardStore(tmp_path / "guard-home"), generated_at="2026-08-25T00:00:00Z"
+    )
+    assert len(calls) == 4
+    assert posture["managedControlsCapabilities"] == ["extension-catalog.v2"]
+    assert posture["extensionCatalogDigest"] == "c" * 64
+
+
+def test_discovery_still_pending_after_the_wait_advertises_no_catalog(monkeypatch, tmp_path, completed_catalog) -> None:
+    _discovery_pending_for(monkeypatch, completed_catalog, attempts=10**6, message="")
+    monkeypatch.setattr(managed_controls_sync, "DISCOVERY_READY_WAIT_SECONDS", 0)
+    posture = runner._managed_controls_runtime_sync_posture(
+        GuardStore(tmp_path / "guard-home"), generated_at="2026-08-25T00:00:00Z"
+    )
+    assert posture == {"managedControlsCapabilities": []}
+
+
+def test_failing_discovery_is_not_retried(monkeypatch, tmp_path, completed_catalog) -> None:
+    from codex_plugin_scanner.guard.catalog_delivery.discovery import PREPARATION_FAILING
+
+    calls = _discovery_pending_for(monkeypatch, completed_catalog, attempts=10**6, message=PREPARATION_FAILING)
+    posture = runner._managed_controls_runtime_sync_posture(
+        GuardStore(tmp_path / "guard-home"), generated_at="2026-08-25T00:00:00Z"
+    )
+    assert len(calls) == 1
+    assert posture == {"managedControlsCapabilities": []}

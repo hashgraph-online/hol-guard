@@ -641,7 +641,7 @@ def apply_approval_resolution(
         )
         temporary_mcp_result, temporary_mcp_resolved_ids = store.apply_temporary_mcp_grant_resolution(
             request_id=request_id,
-            decisions=[temporary_decision],
+            decision=temporary_decision,
             selection=temporary_mcp_selection,
             reason=reason,
             resolved_at=resolved_at,

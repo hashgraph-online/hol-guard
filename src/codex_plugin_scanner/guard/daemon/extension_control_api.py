@@ -241,7 +241,9 @@ class ExtensionControlApiService:
         Only an authority that is protected and has moved forward replaces the
         snapshot. A read that comes back unenrolled, degraded, or behind this
         process must not take protection away from a running daemon; refreshing
-        is here to catch up with another writer, not to downgrade.
+        is here to catch up with another writer, not to downgrade. A protected
+        read does replace a snapshot that is not protected, at any revision:
+        that is the authority healing, not falling behind.
 
         A protected read for a catalog the snapshot was not built for also
         replaces it, whatever its revision says. The view was read for the
@@ -270,9 +272,10 @@ class ExtensionControlApiService:
             )
             if view.health is not AuthorityHealth.PROTECTED:
                 return current
-            if view.catalog_digest == current.catalog_digest and (view.revision, view.managed_revision) <= (
-                current.revision,
-                current.managed_revision,
+            if (
+                current.health is AuthorityHealth.PROTECTED
+                and view.catalog_digest == current.catalog_digest
+                and (view.revision, view.managed_revision) <= (current.revision, current.managed_revision)
             ):
                 return current
             if apply_locked:
@@ -486,6 +489,11 @@ class ExtensionControlApiService:
         # Resolve authority before metadata preparation can perform transfer IO.
         current = self._live_snapshot(read_only=True)
         if current.health is not AuthorityHealth.PROTECTED:
+            # A shared read cannot roll back a transition an earlier failed
+            # save left prepared, so read once more as the writer before
+            # refusing this one.
+            current = self._live_snapshot()
+        if current.health is not AuthorityHealth.PROTECTED:
             raise ExtensionControlApiError(423, "authority_unavailable")
         try:
             targets = request_metadata(self._store, request_registry, raw)
@@ -626,6 +634,9 @@ class ExtensionControlApiService:
         except ExtensionControlProofError as exc:
             raise ExtensionControlApiError(409, "proof_invalid") from exc
         except (ExtensionControlAuthorityError, ValueError) as exc:
+            # Name the refusal without a traceback: the daemon log must not
+            # carry paths from the store.
+            _LOGGER.warning("Extension-control apply refused: %s", type(exc).__name__, exc_info=False)
             raise ExtensionControlApiError(409, "authority_conflict") from exc
         self._registry = registry
         self.catalog_digest = registry.catalog_digest

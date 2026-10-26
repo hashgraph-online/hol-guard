@@ -1,0 +1,172 @@
+{
+  "agent-plugins/mcp.json": {
+    "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+    "mcpServers": {
+      "weather": {
+        "type": "streamable-http",
+        "url": "https://weather.example/mcp"
+      }
+    }
+  },
+  "agent-plugins/plugin.json": {
+    "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+    "description": "Forecasts and alerts for Gemini CLI.",
+    "name": "weather-tools",
+    "repository": "https://github.com/acme/weather-tools",
+    "version": "0.3.0"
+  },
+  "claude-code/.claude-plugin/plugin.json": {
+    "description": "Forecasts and alerts for Gemini CLI.",
+    "name": "weather-tools",
+    "repository": "https://github.com/acme/weather-tools",
+    "version": "0.3.0"
+  },
+  "claude-code/.mcp.json": {
+    "mcpServers": {
+      "weather": {
+        "type": "http",
+        "url": "https://weather.example/mcp"
+      }
+    }
+  },
+  "codex/.codex-plugin/plugin.json": {
+    "description": "Forecasts and alerts for Gemini CLI.",
+    "mcpServers": "./.mcp.json",
+    "name": "weather-tools",
+    "repository": "https://github.com/acme/weather-tools",
+    "version": "0.3.0"
+  },
+  "codex/.mcp.json": {
+    "mcpServers": {
+      "weather": {
+        "type": "http",
+        "url": "https://weather.example/mcp"
+      }
+    }
+  },
+  "cursor/.cursor/mcp.json": {
+    "mcpServers": {
+      "weather": {
+        "url": "https://weather.example/mcp"
+      }
+    }
+  },
+  "gemini-cli/GEMINI.md": "sha256:89b5c17f8fa7889546be6002db5589484d2530b1eeb3253ff24cbbd49078b7d4",
+  "gemini-cli/gemini-extension.json": {
+    "contextFileName": "GEMINI.md",
+    "description": "Forecasts and alerts for Gemini CLI.",
+    "mcpServers": {
+      "weather": {
+        "httpUrl": "https://weather.example/mcp"
+      }
+    },
+    "name": "weather-tools",
+    "version": "0.3.0"
+  },
+  "hol.provenance.json": {
+    "files": [
+      {
+        "path": "agent-plugins/mcp.json",
+        "sha256": "38decfc6420826254a2501914bfc3f21c190c998bf7f75a9446a2b225df3f176"
+      },
+      {
+        "path": "agent-plugins/plugin.json",
+        "sha256": "28e1299f20f422911d68a9be7320cc44bd0bd16b63eb4f2d97192cf44b2b8bd6"
+      },
+      {
+        "path": "claude-code/.claude-plugin/plugin.json",
+        "sha256": "e78f7020269f42b01f1c82635035523fdc665861e3dfb376bf1589668d8365f7"
+      },
+      {
+        "path": "claude-code/.mcp.json",
+        "sha256": "04281be3dad684e1ab9a12283ae6e99205f19c4cc027b2c18ba8a5bbbce41032"
+      },
+      {
+        "path": "codex/.codex-plugin/plugin.json",
+        "sha256": "3b660939f381cdb7e3810d159bbb0b98d13b9e481d1f8306344008cbb81c533c"
+      },
+      {
+        "path": "codex/.mcp.json",
+        "sha256": "04281be3dad684e1ab9a12283ae6e99205f19c4cc027b2c18ba8a5bbbce41032"
+      },
+      {
+        "path": "cursor/.cursor/mcp.json",
+        "sha256": "02511176acc7917d87097bc685e9b4cc208214c49cba72946fade27cdbad6f2d"
+      },
+      {
+        "path": "gemini-cli/GEMINI.md",
+        "sha256": "89b5c17f8fa7889546be6002db5589484d2530b1eeb3253ff24cbbd49078b7d4"
+      },
+      {
+        "path": "gemini-cli/gemini-extension.json",
+        "sha256": "46ab694e671074362fa82f1c1bb1667344338af2211b3a7359e8e88d0edf65e8"
+      },
+      {
+        "path": "mcp-registry/server.json",
+        "sha256": "c650e004762a801ce779a4dc36cd8081e4ef497b532349ee0886bae7ab7cd64b"
+      },
+      {
+        "path": "opencode/opencode.json",
+        "sha256": "1b42cb263b03b13febfed6958edd320ae18774f25a3904c9836873f64595aad8"
+      },
+      {
+        "path": "vscode/.vscode/mcp.json",
+        "sha256": "c7e5f19efe939eb77ebf40f209249744aedf154e09dd0d1680ad2a38eaf08fb8"
+      }
+    ],
+    "generator": {
+      "name": "hol-guard plugin-kit",
+      "version": "<version>"
+    },
+    "plugin": {
+      "name": "weather-tools",
+      "version": "0.3.0"
+    },
+    "repository": "https://github.com/acme/weather-tools",
+    "runtimes": [
+      "claude-code",
+      "codex",
+      "gemini-cli",
+      "cursor",
+      "vscode",
+      "opencode",
+      "mcp-registry",
+      "agent-plugins"
+    ],
+    "schema": "hol.plugin-kit.provenance.v1",
+    "source_digest": "sha256:0bd1d0dc8893fa7d8a8dcb2b95ccd1c6c76c1a0f8c9bc11e69db3855db55e3bc"
+  },
+  "mcp-registry/server.json": {
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+    "description": "Forecasts and alerts for Gemini CLI.",
+    "name": "io.github.acme/weather-tools",
+    "remotes": [
+      {
+        "type": "streamable-http",
+        "url": "https://weather.example/mcp"
+      }
+    ],
+    "repository": {
+      "source": "github",
+      "url": "https://github.com/acme/weather-tools"
+    },
+    "version": "0.3.0"
+  },
+  "opencode/opencode.json": {
+    "$schema": "https://opencode.ai/config.json",
+    "mcp": {
+      "weather": {
+        "type": "remote",
+        "url": "https://weather.example/mcp"
+      }
+    }
+  },
+  "vscode/.vscode/mcp.json": {
+    "servers": {
+      "weather": {
+        "type": "http",
+        "url": "https://weather.example/mcp"
+      }
+    }
+  }
+}

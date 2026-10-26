@@ -17,21 +17,6 @@ CODEX_BROWSER_WAIT_PROCESS_KEY = "guard_codex_browser_wait_process"
 CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY = "guard_codex_browser_wait_timeout_seconds"
 
 
-def bound_wait_timeout_seconds(
-    payload: Mapping[str, object] | None,
-    *,
-    maximum: int,
-) -> int | None:
-    """Return the authenticated bridge's bounded wait budget."""
-
-    if not isinstance(payload, Mapping):
-        return None
-    value = payload.get(CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY)
-    if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= maximum:
-        return None
-    return value
-
-
 def current_process_identity() -> dict[str, object] | None:
     """Capture an opaque identity that distinguishes PID reuse."""
 
@@ -131,7 +116,6 @@ def _linux_proc_stat(pid: int) -> str | None:
 __all__ = [
     "CODEX_BROWSER_WAIT_PROCESS_KEY",
     "CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY",
-    "bound_wait_timeout_seconds",
     "current_process_identity",
     "process_identity_matches",
     "process_start_token",

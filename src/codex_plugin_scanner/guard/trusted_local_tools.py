@@ -235,37 +235,6 @@ def local_tool_grant_decision(
 _GRANT_REUSING_ACTIONS: frozenset[GuardAction] = frozenset({"review", "require-reapproval"})
 
 
-def matching_local_tool_grant(
-    *,
-    store: object,
-    harness: str,
-    eligibility: LocalToolApprovalEligibility | None,
-    current_action: GuardAction,
-) -> dict[str, object] | None:
-    """The saved grant a reviewable command may reuse, or ``None``.
-
-    The resident derives each target's selector and decides which row counts as
-    a grant; the recomputed action travels with the probe so the gate on it is
-    applied in the same place.
-
-    A command the policy already allowed or blocked cannot reuse a grant, so it
-    is answered here rather than paying for the evidence load and the resident
-    round trip that answer would need. The resident applies the same gate.
-    """
-    if eligibility is None or current_action not in _GRANT_REUSING_ACTIONS:
-        return None
-    resolver = getattr(store, "resolve_local_tool_grant", None)
-    if not callable(resolver):
-        return None
-    decision = resolver(
-        harness,
-        tool_identity_hash=eligibility.tool_identity_hash,
-        capability=eligibility.capability,
-        current_action=current_action,
-    )
-    return dict(cast(Mapping[str, object], decision)) if isinstance(decision, Mapping) else None
-
-
 def local_tool_grant_selector(
     eligibility: LocalToolApprovalEligibility,
     *,

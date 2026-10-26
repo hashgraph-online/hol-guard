@@ -11,6 +11,10 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+use crate::workspace_roots::{
+    host_home_directory, workspace_admissible, workspace_is_broad_or_sensitive_for_home,
+};
+
 // ---------------------------------------------------------------------------
 // `restricted_pytest_model.py` literals consumed by this module (:31-89).
 // ---------------------------------------------------------------------------
@@ -38,12 +42,6 @@ const PROJECT_WORKSPACE_MARKERS: &[&str] = &[
     "tox.ini",
     "package.json",
 ];
-
-static SENSITIVE_HOME_ROOT_NAMES: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
-    HashSet::from([
-        ".aws", ".azure", ".config", ".docker", ".gnupg", ".kube", ".ssh", "Library",
-    ])
-});
 
 static TRUSTED_EXECUTABLE_ROOTS: LazyLock<Vec<PathBuf>> = LazyLock::new(|| {
     vec![
@@ -241,14 +239,12 @@ pub fn evaluate_with_deadline(
     mapping::evaluate(operation, input, deadline).unwrap_or_else(|| evaluate(operation, input))
 }
 pub use authority::evaluate;
-pub(crate) use environment::forwarded_setting;
 pub(crate) use launch_roots::launches_outside_exec_roots;
 pub use mapping::evidence as mapping_evidence;
 /// The Windows planner in `guard-runtime` decides the same question about the
 /// same argv, so it reads it here rather than keeping a second copy.
 pub use validation::python_args_target_pytest;
 pub use workspace::workspace_script_reads;
-pub(crate) use workspace::{exact_shape as workspace_exact_shape, workspace_admissible};
 pub(crate) use workspace_linux::available as linux_workspace_sandbox_available;
 #[cfg(test)]
 mod parity_tests;

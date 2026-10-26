@@ -26,14 +26,27 @@ pub(super) fn parse_scoped(output: &[u8]) -> Option<(GitConfig, GitConfig)> {
         if key.is_empty() {
             return None;
         }
-        let key = key.to_ascii_lowercase();
-        if matches!(scope, "local" | "worktree") {
-            repository
-                .entry(key.clone())
-                .or_default()
-                .push(value.to_owned());
+        // Git lowercases a key's section and variable but keeps the case of a
+        // subsection, so `remote.Origin` and `remote.origin` are two remotes.
+        // Every exact lookup reads the lowercased key, so that one is always
+        // recorded; a remote whose name is not already lowercase is recorded a
+        // second time under its own spelling, so a reader counting remotes
+        // sees it rather than the one it was folded onto.
+        let lowered = key.to_ascii_lowercase();
+        let spelled = key
+            .strip_prefix("remote.")
+            .and_then(|rest| rest.rsplit_once('.'))
+            .map(|(name, variable)| format!("remote.{name}.{}", variable.to_ascii_lowercase()))
+            .filter(|spelled| *spelled != lowered);
+        for key in std::iter::once(lowered).chain(spelled) {
+            if matches!(scope, "local" | "worktree") {
+                repository
+                    .entry(key.clone())
+                    .or_default()
+                    .push(value.to_owned());
+            }
+            effective.entry(key).or_default().push(value.to_owned());
         }
-        effective.entry(key).or_default().push(value.to_owned());
     }
     Some((effective, repository))
 }
@@ -334,4 +347,50 @@ pub(super) fn rewritten_remote_url(config: &GitConfig, url: &str) -> Option<Stri
         Some((length, base, _)) => format!("{base}{}", &url[length..]),
         None => url.to_owned(),
     })
+}
+
+/// Whether `origin` is the only remote the repository can reach: no key in
+/// another remote's subsection, and no `branch.<name>.remote` naming anything
+/// else. A refresh that names no remote resolves one through
+/// `branch.<current>.remote`, and `--all` walks every configured remote, so
+/// both reach only `origin` when this holds. A `branch.<name>.remote` that is
+/// not a configured remote name is a URL Git fetches directly, which the
+/// origin URL proof does not cover either way.
+///
+/// Any `remote.<name>.<variable>` key builds a remote, not just `.url`: a
+/// remote with no URL falls back to its own name as a local path, and one
+/// with `uploadpack` or `vcs` names a program `--all` would run. A key with
+/// no subsection, such as `remote.pushdefault`, configures no remote.
+pub(super) fn only_origin_remote(effective: &GitConfig) -> bool {
+    effective.iter().all(|(key, values)| {
+        if let Some(name) = key
+            .strip_prefix("remote.")
+            .and_then(|rest| rest.rsplit_once('.'))
+            .map(|(name, _)| name)
+        {
+            return name == "origin";
+        }
+        if key.starts_with("branch.") && key.ends_with(".remote") {
+            return values.iter().all(|value| value.trim() == "origin");
+        }
+        true
+    })
+}
+
+/// Remotes can also be files under `remotes/` or `branches/` in the common
+/// directory, which the configuration listing never shows. A directory this
+/// cannot read counts as holding one.
+pub(super) fn legacy_remotes_absent(common_dir: &std::path::Path) -> Option<bool> {
+    for directory in ["remotes", "branches"] {
+        match std::fs::read_dir(common_dir.join(directory)) {
+            Ok(mut entries) => {
+                if entries.next().is_some() {
+                    return Some(false);
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return None,
+        }
+    }
+    Some(true)
 }

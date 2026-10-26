@@ -26,14 +26,21 @@ def test_native_review_asks_the_resident_for_the_review_binding_once(
     result, receipt = _verdict()
     worker, _store = _hook_worker(tmp_path, monkeypatch, result, receipt)
     bindings: list[str | None] = []
-    real = hook_native_review_approval.native_review_binding
+    real_evidence = hook_native_review_approval.native_review_evidence
+    real_binding = hook_native_review_approval.native_review_binding
 
-    def counting(*args: Any, **kwargs: Any) -> str | None:
-        binding = real(*args, **kwargs)
+    def counting_evidence(**kwargs: Any) -> tuple[str | None, str | None, str | None]:
+        evidence = real_evidence(**kwargs)
+        bindings.append(evidence[0])
+        return evidence
+
+    def counting_binding(*args: Any, **kwargs: Any) -> str | None:
+        binding = real_binding(*args, **kwargs)
         bindings.append(binding)
         return binding
 
-    monkeypatch.setattr(hook_native_review_approval, "native_review_binding", counting)
+    monkeypatch.setattr(hook_native_review_approval, "native_review_evidence", counting_evidence)
+    monkeypatch.setattr(hook_native_review_approval, "native_review_binding", counting_binding)
     # The Claude permission notice runs after the response is rendered; keep this count on the hook deadline path.
     monkeypatch.setattr(hook_worker_native, "record_claude_permission_notice_for_native_review", lambda *_a, **_k: None)
     response = worker.review_http_payload(

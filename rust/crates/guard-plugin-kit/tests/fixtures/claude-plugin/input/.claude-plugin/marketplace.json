@@ -1,0 +1,13 @@
+{
+  "name": "acme",
+  "owner": {
+    "name": "Acme Labs"
+  },
+  "plugins": [
+    {
+      "name": "pdf-tools",
+      "source": "./",
+      "description": "Fill PDF forms and extract text from PDFs."
+    }
+  ]
+}

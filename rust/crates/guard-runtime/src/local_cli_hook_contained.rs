@@ -186,9 +186,12 @@ pub(crate) fn unverified_action(request: &LocalCliHookRequestV1) -> &str {
 
 /// `has_local_cli_block_rules`; an unreadable store counts as having one.
 pub(crate) fn has_block_rules(request: &LocalCliHookRequestV1) -> bool {
-    let Ok(path) =
-        crate::local_store_read::require_store_path(&request.store_path, &request.guard_home)
-    else {
+    has_block_rules_at(&request.store_path, &request.guard_home)
+}
+
+/// `has_block_rules` for the store at `store_path` under `guard_home`.
+pub(crate) fn has_block_rules_at(store_path: &str, guard_home: &str) -> bool {
+    let Ok(path) = crate::local_store_read::require_store_path(store_path, guard_home) else {
         return true;
     };
     let connection = match crate::local_store_read::open_read_only(&path) {

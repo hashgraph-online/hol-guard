@@ -6,20 +6,15 @@ import hashlib
 import json
 import os
 from collections.abc import Mapping
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
-    _runtime_hook_approval_context_token,
-)
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime import approval_context as approval_context_module
 from codex_plugin_scanner.guard.runtime.approval_context import (
-    approval_context_tokens_validation_reason,
     build_runtime_launch_identity,
     resolved_runtime_launch_argv,
 )
@@ -44,78 +39,6 @@ def _fake_launcher(workspace: Path, name: str) -> Path:
 def _mapping(value: object) -> Mapping[str, object]:
     assert isinstance(value, Mapping)
     return value
-
-
-def _main_context_token(*, artifact: GuardArtifact, workspace: Path, config: GuardConfig) -> str:
-    return _runtime_hook_approval_context_token(
-        artifact=artifact,
-        content_hash="unchanged-artifact-content",
-        runtime_workspace=workspace,
-        action_envelope=None,
-        config=config,
-        current_config_action="review",
-        trusted_cli_action=None,
-        untrusted_payload_action=None,
-        package_action=None,
-        data_flow_action=None,
-        scanner_action=None,
-        current_action="review",
-        risk_classes=(),
-        data_flow_signals=(),
-        scanner_evidence=(),
-    )
-
-
-@pytest.mark.parametrize(
-    ("launcher_name", "launch_args", "entrypoint_relative"),
-    (
-        ("python", ("server.py", "--stdio"), "server.py"),
-        ("python", ("-m", "localpkg", "--stdio"), "localpkg/__main__.py"),
-        ("node", ("server.js", "--stdio"), "server.js"),
-        ("bash", ("server.sh", "--stdio"), "server.sh"),
-    ),
-)
-def test_main_runtime_context_rejects_saved_identity_after_only_interpreted_entrypoint_bytes_change(
-    tmp_path: Path,
-    launcher_name: str,
-    launch_args: tuple[str, ...],
-    entrypoint_relative: str,
-    native_context_digest: Path,
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    launcher = _fake_launcher(workspace, launcher_name)
-    entrypoint = workspace / entrypoint_relative
-    entrypoint.parent.mkdir(parents=True, exist_ok=True)
-    _replace_file(entrypoint, b"entrypoint version one\n")
-    artifact = GuardArtifact(
-        artifact_id=f"codex:project:{launcher_name}-entrypoint",
-        name=f"{launcher_name} entrypoint",
-        harness="codex",
-        artifact_type="mcp_server",
-        source_scope="project",
-        config_path=str(workspace / ".codex" / "config.toml"),
-        command=str(launcher),
-        args=launch_args,
-        transport="stdio",
-    )
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace,
-        default_action="review",
-    )
-
-    approved_token = _main_context_token(artifact=artifact, workspace=workspace, config=config)
-    unchanged_token = _main_context_token(artifact=artifact, workspace=workspace, config=config)
-    assert approved_token == unchanged_token
-
-    _replace_file(entrypoint, b"entrypoint version two\n")
-    changed_token = _main_context_token(artifact=artifact, workspace=workspace, config=config)
-
-    assert changed_token != approved_token
-    assert approval_context_tokens_validation_reason(approved_token, changed_token) == (
-        "approval_reuse_identity_changed"
-    )
 
 
 def test_unresolved_interpreted_entrypoint_is_non_reusable_even_when_launch_vector_is_unchanged(
@@ -311,95 +234,6 @@ def test_inline_launch_identity_is_opaque_stable_and_secret_change_bound(tmp_pat
     assert first != changed
     assert first_secret not in serialized
     assert second_secret not in serialized
-
-
-def test_main_runtime_context_handles_structured_mcp_executable_path_with_spaces(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    launcher = _fake_launcher(workspace / "runtime dir Δ", "node")
-    entrypoint = workspace / "server ü.js"
-    _replace_file(entrypoint, b"console.log('one');\n")
-    artifact = GuardArtifact(
-        artifact_id="codex:project:spaced-mcp-server",
-        name="spaced MCP server",
-        harness="codex",
-        artifact_type="mcp_server",
-        source_scope="project",
-        config_path=str(workspace / ".codex" / "config.toml"),
-        command=str(launcher),
-        args=(entrypoint.name,),
-        transport="stdio",
-    )
-    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace, default_action="review")
-
-    first = _main_context_token(artifact=artifact, workspace=workspace, config=config)
-    unchanged = _main_context_token(artifact=artifact, workspace=workspace, config=config)
-    assert first == unchanged
-
-    _replace_file(entrypoint, b"console.log('two');\n")
-    assert _main_context_token(artifact=artifact, workspace=workspace, config=config) != first
-
-
-def test_main_runtime_context_binds_configured_environment_values_without_exposing_them(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    launcher = _fake_launcher(workspace, "node")
-    entrypoint = workspace / "server.js"
-    _replace_file(entrypoint, b"console.log('server');\n")
-    first_secret = "configured-secret-value-one"
-    second_secret = "configured-secret-value-two"
-    artifact = GuardArtifact(
-        artifact_id="codex:project:environment-bound-mcp-server",
-        name="environment-bound MCP server",
-        harness="codex",
-        artifact_type="mcp_server",
-        source_scope="project",
-        config_path=str(workspace / ".codex" / "config.toml"),
-        command=str(launcher),
-        args=(entrypoint.name,),
-        transport="stdio",
-        metadata={"env": {"TOKEN": first_secret}, "env_keys": ["TOKEN"]},
-    )
-    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace, default_action="review")
-
-    first = _main_context_token(artifact=artifact, workspace=workspace, config=config)
-    unchanged = _main_context_token(artifact=artifact, workspace=workspace, config=config)
-    changed = _main_context_token(
-        artifact=replace(artifact, metadata={"env": {"TOKEN": second_secret}, "env_keys": ["TOKEN"]}),
-        workspace=workspace,
-        config=config,
-    )
-
-    assert first == unchanged
-    assert changed != first
-    assert first_secret not in first
-    assert second_secret not in changed
-
-
-def test_unavailable_code_loading_environment_value_disables_main_context_reuse(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    launcher = _fake_launcher(workspace, "node")
-    entrypoint = workspace / "server.js"
-    _replace_file(entrypoint, b"console.log('server');\n")
-    artifact = GuardArtifact(
-        artifact_id="claude-code:project:hidden-node-options",
-        name="hidden NODE_OPTIONS MCP server",
-        harness="claude-code",
-        artifact_type="mcp_server",
-        source_scope="project",
-        config_path=str(workspace / ".mcp.json"),
-        command=str(launcher),
-        args=(entrypoint.name,),
-        transport="stdio",
-        metadata={"env_keys": ["NODE_OPTIONS"], "env_values_hash": "a" * 64},
-    )
-    config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace, default_action="review")
-
-    first = _main_context_token(artifact=artifact, workspace=workspace, config=config)
-    second = _main_context_token(artifact=artifact, workspace=workspace, config=config)
-
-    assert first != second
 
 
 @pytest.mark.parametrize(

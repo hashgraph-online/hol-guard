@@ -47,8 +47,8 @@ _HASHNET_SEARCH_SCHEMA_V2 = {
     },
     "required": ["query"],
 }
-_HASHNET_SEARCH_DESCRIPTION_V1 = "Search the Hashgraph Online registry."
-_HASHNET_SEARCH_DESCRIPTION_V2 = "Search the Hashgraph Online registry and return metadata."
+_HASHNET_SEARCH_DESCRIPTION_V1 = "Search the HOL registry."
+_HASHNET_SEARCH_DESCRIPTION_V2 = "Search the HOL registry and return metadata."
 
 
 class TestHashnetMcpKnownSafeStdio:

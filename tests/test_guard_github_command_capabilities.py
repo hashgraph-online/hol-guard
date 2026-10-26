@@ -5,9 +5,8 @@ from typing import Final
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.github_capability_contract import GitHubCommandCapability
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
-from tests.native_github_capability_support import github_cli_assessment
+from tests.native_github_capability_support import GitHubCommandCapability, github_cli_assessment
 
 
 def _text(*parts: str) -> str:
@@ -51,7 +50,12 @@ GITHUB_CAPABILITY_CASES = (
     (("ssh-key", "list"), "read_remote", "github.command.proven-access-read"),
     (("gpg-key", "list"), "read_remote", "github.command.proven-access-read"),
     (("ssh-key", "delete", "123"), "access_remote", "github.command.access-mutation"),
-    (("run", "cancel", "--help"), "workflow_remote", "github.command.workflow-mutation"),
+    (("run", "cancel", "--help"), "read_local", "github.command.local-help"),
+    (
+        ("run", "rerun", "42", "--job", "--help"),
+        "workflow_remote",
+        "github.command.workflow-mutation",
+    ),
     (
         ("run", "rerun", "31707639186", "--repo", "hashgraph-online/hol-guard", "--failed"),
         "routine_workflow_remote",
@@ -536,7 +540,12 @@ GITHUB_REVIEW_FLOORS: Final[tuple[tuple[str, str], ...]] = (
         (("ssh-key", "list"), "read_remote", "github.command.proven-access-read"),
         (("gpg-key", "list"), "read_remote", "github.command.proven-access-read"),
         (("ssh-key", "delete", "123"), "access_remote", "github.command.access-mutation"),
-        (("run", "cancel", "--help"), "workflow_remote", "github.command.workflow-mutation"),
+        (("run", "cancel", "--help"), "read_local", "github.command.local-help"),
+        (
+            ("run", "rerun", "42", "--job", "--help"),
+            "workflow_remote",
+            "github.command.workflow-mutation",
+        ),
         (
             ("--repo", "example/project", "workflow", "view", "release.yml"),
             "read_remote",

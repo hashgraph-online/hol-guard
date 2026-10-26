@@ -27,7 +27,7 @@ _OPERATION = "mcp_relay_server_report"
 _RESULT_SCHEMA = "guard-mcp-relay-server-report-result.v1"
 _TIMEOUT_SECONDS = 2.0
 # The harnesses whose MCP proxy the relay replaces.
-_RELAY_HARNESSES = frozenset({"codex", "copilot", "cursor", "opencode"})
+_RELAY_HARNESSES = frozenset({"codex", "copilot", "cursor", "hermes", "opencode"})
 
 
 def report_mcp_relay_server(

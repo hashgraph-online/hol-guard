@@ -6,7 +6,7 @@ import {
   HiMiniExclamationTriangle,
   HiMiniMagnifyingGlass,
 } from "react-icons/hi2";
-import { ActionButton, EmptyState } from "./approval-center-primitives";
+import { ActionButton } from "./approval-center-primitives";
 import type { PackageFirewallActionType, PackageFirewallStatusResponse } from "./guard-types";
 import {
   ActionResultPanel,
@@ -61,6 +61,21 @@ function GlobalActionsBar({ anyPending, pendingOp, onAudit, onSync }: GlobalActi
   );
 }
 
+const FAILURE_SUBJECTS: Record<FirewallOpKey, string> = {
+  install: "Enabling protection",
+  repair: "Repairing protection",
+  test: "The intercept test",
+  remove: "Removing protection",
+  audit: "The audit",
+  sync: "The sync",
+  fix_all: "Restoring protection",
+};
+
+export function describeFirewallFailure(failed: FirewallFailedOp): string {
+  const subject = FAILURE_SUBJECTS[failed.op] ?? "The action";
+  return `${subject} failed${failed.manager !== null ? ` for ${failed.manager}` : ""}`;
+}
+
 function FailureBanner({ failed }: { failed: FirewallFailedOp }) {
   return (
     <div
@@ -71,7 +86,7 @@ function FailureBanner({ failed }: { failed: FirewallFailedOp }) {
       <HiMiniExclamationTriangle className="mt-0.5 h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />
       <div className="min-w-0">
         <p className="text-sm font-medium text-brand-dark">
-          {failed.op} failed{failed.manager !== null ? ` for ${failed.manager}` : ""}
+          {describeFirewallFailure(failed)}
         </p>
         <p className="mt-0.5 text-xs text-slate-600">{failed.message}</p>
       </div>
@@ -171,24 +186,7 @@ export function FirewallControlsView({
   }, [data, managerFilter, noDetectedManagers, statusFilter]);
 
   return (
-    <div className="space-y-4 px-4 py-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-medium text-brand-dark">Package tools on this device</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
-            Detect, protect, test, and repair each package manager Guard can watch.
-          </p>
-        </div>
-        {showGlobalActions && (
-          <GlobalActionsBar
-            anyPending={anyPending}
-            pendingOp={pendingOp}
-            onAudit={onAudit}
-            onSync={onSync}
-          />
-        )}
-      </div>
-
+    <div className="space-y-4">
       <ActivationSummary
         activationAssistError={activationAssistError}
         lastAuditProofAt={data.last_audit_proof_at}
@@ -204,8 +202,8 @@ export function FirewallControlsView({
         <ActionResultPanel completed={lastCompleted} onDismiss={onDismissResult} />
       )}
 
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 sm:flex-none sm:w-44">
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex min-h-11 w-full min-w-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 sm:min-h-9 sm:w-48 sm:shrink-0">
           <HiMiniMagnifyingGlass className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
           <input
             type="search"
@@ -216,13 +214,16 @@ export function FirewallControlsView({
             className="min-w-0 flex-1 bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
           />
         </div>
+        {/* One row on phones that scrolls sideways, so the filters never
+            push the first manager below the fold. */}
+        <div className="-mx-1 flex min-w-0 gap-2 overflow-x-auto px-1 py-0.5">
         {(["all", "protected", "actionable", "unprotected"] as const).map((s) => (
           <button
             key={s}
             type="button"
             onClick={() => onStatusFilterChange(s)}
             aria-pressed={statusFilter === s}
-            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${
+            className={`inline-flex min-h-11 shrink-0 items-center rounded-full px-3.5 text-xs font-medium transition-colors sm:min-h-8 focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${
               statusFilter === s
                 ? "bg-brand-blue text-white"
                 : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
@@ -237,30 +238,33 @@ export function FirewallControlsView({
               : "Unprotected"}
           </button>
         ))}
+        </div>
       </div>
 
       {filteredManagers.length === 0 ? (
-        <EmptyState
-          title={
-            noDetectedManagers && managerFilter.length === 0 && statusFilter === "all"
+        <div className="border-y border-slate-200 py-6">
+          <h3 className="text-sm font-semibold text-brand-dark">
+            {noDetectedManagers && managerFilter.length === 0 && statusFilter === "all"
               ? "No package managers detected"
-              : "No package managers found"
-          }
-          body={
-            noDetectedManagers && managerFilter.length === 0 && statusFilter === "all"
+              : "No package managers found"}
+          </h3>
+          <p className="mt-1 max-w-[68ch] text-sm leading-6 text-slate-600">
+            {noDetectedManagers && managerFilter.length === 0 && statusFilter === "all"
               ? "Guard did not find npm, pip, pnpm, or other supported managers on this PATH. Install a package manager, open a new shell, then refresh status."
-              : "No package managers match the current filter, or Guard has not detected any on this machine."
-          }
-          tone="teach"
-        />
+              : "No package managers match the current filter, or Guard has not detected any on this machine."}
+          </p>
+        </div>
       ) : (
-        <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3" role="list" aria-label="Package manager controls">
+        // One ruled row per manager, read as a ledger rather than a card grid.
+        <ul
+          className="min-w-0 divide-y divide-slate-200 border-y border-slate-200"
+          aria-label="Package manager controls"
+        >
           {filteredManagers.map((manager) => {
             const shim = data.package_shims.find((s) => s.manager === manager);
             return (
               <ManagerRow
                 key={manager}
-                layout="card"
                 manager={manager}
                 shim={shim}
                 actions={data.actions}
@@ -278,6 +282,18 @@ export function FirewallControlsView({
               />
             );
           })}
+        </ul>
+      )}
+
+      {/* Audit and Sync act on the whole roster, so they close it. */}
+      {showGlobalActions && (
+        <div className="flex justify-end">
+          <GlobalActionsBar
+            anyPending={anyPending}
+            pendingOp={pendingOp}
+            onAudit={onAudit}
+            onSync={onSync}
+          />
         </div>
       )}
     </div>

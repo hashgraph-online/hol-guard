@@ -226,3 +226,54 @@ fn path_for_resolution_keeps_windows_drive_letter_entries() {
         r"C:\tools\node;D:\bin"
     );
 }
+
+#[test]
+fn runner_launches_fetch_the_selected_package() {
+    let spec = |command: &str| {
+        let tokens: Vec<String> = command.split_whitespace().map(str::to_owned).collect();
+        exec_package_spec(&tokens)
+    };
+    for (command, package) in [
+        (
+            "npx -p flagged-package@1.0.0 node --version",
+            "flagged-package@1.0.0",
+        ),
+        (
+            "npx --package flagged-package@1.0.0 node",
+            "flagged-package@1.0.0",
+        ),
+        (
+            "npx --package=flagged-package@1.0.0 node",
+            "flagged-package@1.0.0",
+        ),
+        ("npx --yes flagged-package@1.0.0", "flagged-package@1.0.0"),
+        ("bunx --bun flagged-package@1.0.0", "flagged-package@1.0.0"),
+        ("bunx -p flagged-package@1.0.0 run", "flagged-package@1.0.0"),
+        // Options after the executable are its own, not the runner's.
+        ("npx tsc -p tsconfig.json", "tsc"),
+        ("bunx vitest --package other", "vitest"),
+        // A runner option's value names a registry or a directory.
+        (
+            "npx --registry https://registry.example flagged-package",
+            "flagged-package",
+        ),
+        (
+            "npx --cache /tmp/npm-cache flagged-package",
+            "flagged-package",
+        ),
+        ("bunx --cwd app flagged-package", "flagged-package"),
+    ] {
+        assert_eq!(spec(command).as_deref(), Some(package), "{command}");
+    }
+    assert_eq!(spec("npx --yes"), None);
+    assert_eq!(spec("npx -p"), None);
+    assert_eq!(spec("npx --registry"), None);
+    let packages = |command: &str| {
+        let tokens: Vec<String> = command.split_whitespace().map(str::to_owned).collect();
+        runner_packages(&tokens)
+    };
+    assert_eq!(
+        packages("npx -p left-pad -p flagged-package node"),
+        ["left-pad", "flagged-package"]
+    );
+}

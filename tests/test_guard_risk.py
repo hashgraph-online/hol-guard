@@ -31,10 +31,6 @@ from codex_plugin_scanner.guard.risk import (
 )
 from codex_plugin_scanner.guard.runtime.actions import normalize_codex_hook_payload
 from codex_plugin_scanner.guard.runtime.git_execution_safety import git_binary_path_is_trusted
-from codex_plugin_scanner.guard.runtime.secret_file_request_services.shell_static_safety import (
-    _path_text_is_within_root_text,
-    _script_has_aliased_risky_import,
-)
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     classify_sensitive_path,
@@ -3705,10 +3701,6 @@ def test_tool_action_request_classifier_detects_rm_with_attached_stdin_redirecti
     assert request.action_class == "destructive shell command"
 
 
-def test_script_has_aliased_risky_import_ignores_null_byte_parse_failures():
-    assert not _script_has_aliased_risky_import("print('ok')\x00from pathlib import Path as P")
-
-
 def test_tool_action_request_classifier_allows_python_time_sleep_one_liner(tmp_path, monkeypatch):
     _prefer_guard_interpreter_on_path(monkeypatch)
     request = extract_sensitive_tool_action_request(
@@ -4402,18 +4394,6 @@ def test_tool_action_request_classifier_detects_fd_prefixed_curl_heredoc_upload(
         "credential exfiltration shell command",
         "shell file upload command",
     }
-
-
-def test_path_text_is_within_root_text_preserves_windows_case_insensitivity(monkeypatch):
-    def fake_normcase(value: str) -> str:
-        return value.replace("\\", "/").lower()
-
-    monkeypatch.setattr("os.path.normcase", fake_normcase)
-
-    assert _path_text_is_within_root_text(
-        "C:\\Users\\Michael\\Workspace\\config.toml",
-        "c:\\users\\michael\\workspace",
-    )
 
 
 def test_tool_action_request_classifier_detects_nested_relative_curl_config_file_upload(tmp_path):

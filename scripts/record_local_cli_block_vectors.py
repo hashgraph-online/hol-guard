@@ -172,7 +172,7 @@ def block_outcome(harness: str, result: dict[str, object], name: str) -> dict[st
 
     with (
         mock.patch.object(block, "_has_block_rules", return_value=True),
-        mock.patch.object(block, "_matching_grant", return_value=(identity(name), "blocked")),
+        mock.patch.object(block, "_rule_verdict", return_value=("blocked", name)),
         mock.patch.object(block, "store_guard_home", return_value=None),
         mock.patch.object(saved, "render_pre_tool", capture),
     ):

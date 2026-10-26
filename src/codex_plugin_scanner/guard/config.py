@@ -7,40 +7,43 @@ import sqlite3
 import tempfile
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, fields, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import cast
+from typing import TypeGuard, cast, get_args
 
-from .action_lattice import normalize_guard_action
 from .approval_gate import ApprovalGateGrant, public_config, require_settings_write
 from .approval_wait_limits import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS  # noqa: F401 - re-exported
-from .config_constants import VALID_RISK_ACTION_KEYS, VALID_SECURITY_LEVELS
+from .config_constants import (
+    VALID_GUARD_ACTIONS,
+    VALID_RISK_ACTION_KEYS,
+    VALID_SECURITY_LEVELS,
+)
 from .config_file_io import ConfigFileTrustError
 from .config_mutation import notify_native_policy_mutation, record_posture_change_if_needed
 from .guard_home_state import database_has_custom_extension_state
 from .harness_posture import (
     HARNESS_POSTURES_KEY,
     effective_harness_postures,
-    harness_posture_override,
     harness_posture_status,
     harness_watch_auto_revert_due,
     managed_locks_harness_postures,
-    stricter_risk_action,
 )
 from .mdm.contracts import ManagedPolicy, ManagedPolicyState
-from .mdm.policy import apply_managed_policy, fail_closed_managed_policy, load_managed_policy
+from .mdm.policy import fail_closed_managed_policy, load_managed_policy
 from .models import GuardAction, GuardMode
-from .native_guard_config import load_native_guard_config, update_native_guard_config
+from .native_guard_config import (
+    load_native_guard_config,
+    resolve_native_guard_config,
+    update_native_guard_config,
+)
 from .presentation_mode import PRESENTATION_SCHEMA_VERSION
 from .protection_events import record_harness_posture_changes_if_needed
 from .protection_posture import (
     DEFAULT_PROTECTION_POSTURE,
     DEFAULT_WATCH_AUTO_REVERT_HOURS,
-    POSTURE_RISK_ACTIONS,
-    coerce_loaded_protection_posture,
-    derive_protection_posture,
-    resolve_posture_defaults,
+    VALID_PROTECTION_POSTURES,
 )
 
 DEFAULT_GUARD_DIRNAME = ".hol-guard"
@@ -101,183 +104,12 @@ GUARD_HOME_METADATA_FILES = frozenset(
 GUARD_DB_BACKUP_TIMEOUT_SECONDS = 5.0
 GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
 
-VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
 DEFAULT_SECURITY_LEVEL = "balanced"
-SECURITY_LEVEL_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
-    "relaxed": {
-        "local_secret_read": "warn",
-        "credential_exfiltration": "warn",
-        "data_flow_exfiltration": "warn",
-        "destructive_shell": "warn",
-        "encoded_execution": "warn",
-        "network_egress": "allow",
-        "prompt_injection": "warn",
-        "mcp_dangerous_tool": "warn",
-        "malicious_skill": "warn",
-        "package_script": "warn",
-        "persistence": "warn",
-        "guard_bypass": "warn",
-        "cloud_advisory": "allow",
-        "encoded_exfiltration": "warn",
-        "package_unknown": "allow",
-        "package_lockfile_drift": "allow",
-        "package_direct_source": "allow",
-        "package_custom_registry": "allow",
-        "package_install": "allow",
-        "low_trust_artifact": "warn",
-    },
-    "gentle": {
-        "local_secret_read": "warn",
-        "credential_exfiltration": "warn",
-        "data_flow_exfiltration": "warn",
-        "destructive_shell": "warn",
-        "encoded_execution": "warn",
-        "network_egress": "allow",
-        "prompt_injection": "warn",
-        "mcp_dangerous_tool": "warn",
-        "malicious_skill": "warn",
-        "package_script": "warn",
-        "persistence": "warn",
-        "guard_bypass": "warn",
-        "cloud_advisory": "allow",
-        "encoded_exfiltration": "warn",
-        "package_unknown": "allow",
-        "package_lockfile_drift": "allow",
-        "package_direct_source": "allow",
-        "package_custom_registry": "allow",
-        "package_install": "allow",
-        "low_trust_artifact": "warn",
-    },
-    "balanced": {
-        "local_secret_read": "require-reapproval",
-        "credential_exfiltration": "require-reapproval",
-        "data_flow_exfiltration": "require-reapproval",
-        "destructive_shell": "require-reapproval",
-        "encoded_execution": "require-reapproval",
-        "network_egress": "warn",
-        "prompt_injection": "require-reapproval",
-        "mcp_dangerous_tool": "require-reapproval",
-        "malicious_skill": "require-reapproval",
-        "package_script": "warn",
-        "persistence": "require-reapproval",
-        "guard_bypass": "block",
-        "cloud_advisory": "warn",
-        "encoded_exfiltration": "require-reapproval",
-        "package_unknown": "allow",
-        "package_lockfile_drift": "allow",
-        "package_direct_source": "allow",
-        "package_custom_registry": "allow",
-        "package_install": "allow",
-        "low_trust_artifact": "require-reapproval",
-    },
-    "strict": {
-        "local_secret_read": "require-reapproval",
-        "credential_exfiltration": "require-reapproval",
-        "data_flow_exfiltration": "block",
-        "destructive_shell": "require-reapproval",
-        "encoded_execution": "require-reapproval",
-        "network_egress": "require-reapproval",
-        "prompt_injection": "block",
-        "mcp_dangerous_tool": "block",
-        "malicious_skill": "block",
-        "package_script": "require-reapproval",
-        "persistence": "block",
-        "guard_bypass": "block",
-        "cloud_advisory": "require-reapproval",
-        "encoded_exfiltration": "block",
-        "package_unknown": "block",
-        "package_lockfile_drift": "require-reapproval",
-        "package_direct_source": "require-reapproval",
-        "package_custom_registry": "allow",
-        "package_install": "allow",
-        "low_trust_artifact": "require-reapproval",
-    },
-    "paranoid": {
-        "local_secret_read": "block",
-        "credential_exfiltration": "block",
-        "data_flow_exfiltration": "block",
-        "destructive_shell": "block",
-        "encoded_execution": "block",
-        "network_egress": "block",
-        "prompt_injection": "block",
-        "mcp_dangerous_tool": "block",
-        "malicious_skill": "block",
-        "package_script": "block",
-        "persistence": "block",
-        "guard_bypass": "block",
-        "cloud_advisory": "block",
-        "encoded_exfiltration": "block",
-        "package_unknown": "block",
-        "package_lockfile_drift": "block",
-        "package_direct_source": "block",
-        "package_custom_registry": "block",
-        "package_install": "block",
-        "low_trust_artifact": "block",
-    },
-    "custom": {
-        "local_secret_read": "require-reapproval",
-        "credential_exfiltration": "require-reapproval",
-        "data_flow_exfiltration": "require-reapproval",
-        "destructive_shell": "require-reapproval",
-        "encoded_execution": "require-reapproval",
-        "network_egress": "warn",
-        "prompt_injection": "require-reapproval",
-        "mcp_dangerous_tool": "require-reapproval",
-        "malicious_skill": "require-reapproval",
-        "package_script": "warn",
-        "persistence": "require-reapproval",
-        "guard_bypass": "block",
-        "cloud_advisory": "warn",
-        "encoded_exfiltration": "require-reapproval",
-        "package_unknown": "allow",
-        "package_lockfile_drift": "allow",
-        "package_direct_source": "allow",
-        "package_custom_registry": "allow",
-        "package_install": "allow",
-        "low_trust_artifact": "require-reapproval",
-    },
-}
 VALID_RECEIPT_REDACTION_LEVELS = frozenset({"full", "partial", "none"})
 
 
 class GuardHomeMigrationError(RuntimeError):
     """Raised when legacy Guard state cannot be migrated safely."""
-
-
-def _coerce_risk_action_map(payload: object) -> dict[str, GuardAction]:
-    if not isinstance(payload, dict):
-        return {}
-    action_map: dict[str, GuardAction] = {}
-    for key, value in payload.items():
-        if not isinstance(key, str) or key not in VALID_RISK_ACTION_KEYS:
-            continue
-        action = _action_map_value(value)
-        resolved_action = normalize_guard_action(action, unknown_action="require-reapproval")
-        action_map[key] = resolved_action
-    return action_map
-
-
-def _action_map_value(value: object) -> object:
-    if not isinstance(value, dict):
-        return value
-    if "action" in value:
-        return value.get("action")
-    if "default_action" in value:
-        return value.get("default_action")
-    return value
-
-
-def _coerce_harness_risk_action_map(payload: object) -> dict[str, dict[str, GuardAction]]:
-    if not isinstance(payload, dict):
-        return {}
-    action_map: dict[str, dict[str, GuardAction]] = {}
-    for harness, value in payload.items():
-        if not isinstance(harness, str) or not harness.strip():
-            continue
-        harness_actions = _coerce_risk_action_map(value)
-        if harness_actions:
-            action_map[harness] = harness_actions
-    return action_map
 
 
 @dataclass(frozen=True, slots=True)
@@ -402,12 +234,6 @@ def resolve_guard_home_for_user_home(user_home: Path) -> Path:
             return legacy_home
         return canonical_home
     return canonical_home
-
-
-def _coerce_loaded_receipt_redaction_level(value: object) -> str:
-    if isinstance(value, str) and value in VALID_RECEIPT_REDACTION_LEVELS:
-        return value
-    return "full"
 
 
 def _effective_managed_policy(managed_state: ManagedPolicyState) -> ManagedPolicy | None:
@@ -621,48 +447,53 @@ def _write_guard_config_change(guard_home: Path, kind: str, value: object) -> No
     )
 
 
-def _coerce_loaded_security_level(value: object) -> str:
-    if isinstance(value, str) and value in VALID_SECURITY_LEVELS:
-        return value
-    return DEFAULT_SECURITY_LEVEL
+def _resolved_risk_actions(config: GuardConfig, harness: str | None) -> dict[str, GuardAction]:
+    """Every risk class's action for ``harness``, resolved by the native runtime."""
+
+    result = resolve_native_guard_config(
+        "risk_actions",
+        {"facts": risk_action_config_facts(config), "harness": harness},
+    )
+    resolved = result.get("risk_actions")
+    # Every risk class must come back with an action: a missing class would
+    # read as "no configured action" and skip its floor.
+    if not _is_risk_action_map(resolved) or set(resolved) != VALID_RISK_ACTION_KEYS:
+        raise ConfigFileTrustError("native_guard_config_invalid")
+    return resolved
 
 
-def _coerce_loaded_guard_mode(value: object, fallback: GuardMode) -> GuardMode:
-    if value == "observe":
-        return "observe"
-    if value == "prompt":
-        return "prompt"
-    if value == "enforce":
-        return "enforce"
-    return fallback
-
-
-def _coerce_loaded_guard_action(value: object, fallback: GuardAction | None) -> GuardAction | None:
-    if value is None:
-        return fallback
-    return normalize_guard_action(value, unknown_action="require-reapproval")
-
-
-def _coerce_loaded_guard_action_or_default(value: object, fallback: GuardAction) -> GuardAction:
-    resolved = _coerce_loaded_guard_action(value, None)
-    return resolved if resolved is not None else fallback
-
-
-def _coerce_loaded_bool(value: object) -> bool:
-    return value if isinstance(value, bool) else False
-
-
-def _posture_or_level_defaults(config: GuardConfig) -> dict[str, GuardAction]:
-    managed_locks_level = "security_level" in config.managed_locked_settings
-    if config.protection_posture_explicit and not managed_locks_level:
-        posture_defaults = resolve_posture_defaults(config.protection_posture)
-        if posture_defaults is not None:
-            return posture_defaults
-    return SECURITY_LEVEL_RISK_ACTIONS.get(config.security_level, SECURITY_LEVEL_RISK_ACTIONS[DEFAULT_SECURITY_LEVEL])
+def _is_risk_action_map(value: object) -> TypeGuard[dict[str, GuardAction]]:
+    return isinstance(value, dict) and all(
+        isinstance(key, str)
+        and key in VALID_RISK_ACTION_KEYS
+        and isinstance(action, str)
+        and action in VALID_GUARD_ACTIONS
+        for key, action in value.items()
+    )
 
 
 def _effective_risk_actions(config: GuardConfig) -> dict[str, GuardAction]:
-    return {**_posture_or_level_defaults(config), **dict(config.risk_actions or {})}
+    return _resolved_risk_actions(config, None)
+
+
+def risk_action_config_facts(config: GuardConfig) -> dict[str, object]:
+    """The configuration fields the resident resolves a risk class under.
+
+    Sent instead of a resolved action so the resident owns the verdict. The
+    maps go over as they were loaded: ``harness_risk_actions`` keyed the way
+    the caller spells its harness and ``harness_postures`` canonically, which
+    is how :func:`resolve_risk_action` reads each of them.
+    """
+
+    return {
+        "security_level": config.security_level,
+        "protection_posture": config.protection_posture,
+        "protection_posture_explicit": bool(config.protection_posture_explicit),
+        "managed_locked_settings": list(config.managed_locked_settings),
+        "risk_actions": dict(config.risk_actions or {}),
+        "harness_risk_actions": {name: dict(actions) for name, actions in (config.harness_risk_actions or {}).items()},
+        "harness_postures": dict(config.harness_postures or {}),
+    }
 
 
 def resolve_risk_action(config: GuardConfig, risk_class: str | None, *, harness: str | None) -> GuardAction | None:
@@ -670,21 +501,26 @@ def resolve_risk_action(config: GuardConfig, risk_class: str | None, *, harness:
 
     if not isinstance(risk_class, str) or risk_class not in VALID_RISK_ACTION_KEYS:
         return None
-    harness_actions = (
-        config.harness_risk_actions.get(harness)
-        if isinstance(harness, str) and config.harness_risk_actions is not None
-        else None
-    )
-    if harness_actions is not None and risk_class in harness_actions:
-        resolved = harness_actions[risk_class]
-    elif config.risk_actions is not None and risk_class in config.risk_actions:
-        resolved = config.risk_actions[risk_class]
-    else:
-        resolved = _posture_or_level_defaults(config).get(risk_class)
-    if harness_posture_override(config, harness) == "extra_careful":
-        # A per-harness Extra careful override only ever strengthens.
-        return stricter_risk_action(resolved, POSTURE_RISK_ACTIONS["extra_careful"].get(risk_class))
-    return resolved
+    return _resolved_risk_actions(config, harness if isinstance(harness, str) else None).get(risk_class)
+
+
+# The fields composing a synced payload and the managed policy may change.
+_OVERLAID_FIELDS = (
+    "mode",
+    "security_level",
+    "protection_posture",
+    "protection_posture_explicit",
+    "default_action",
+    "unknown_publisher_action",
+    "changed_hash_action",
+    "new_network_domain_action",
+    "subprocess_action",
+    "risk_actions",
+    "harness_risk_actions",
+    "telemetry",
+    "sync",
+    "receipt_redaction_level",
+)
 
 
 def overlay_synced_guard_policy(
@@ -693,111 +529,72 @@ def overlay_synced_guard_policy(
 ) -> GuardConfig:
     if not isinstance(payload, dict):
         return config
-    next_mode = config.mode
-    raw_mode = payload.get("mode")
-    if config.mode != "observe" and isinstance(raw_mode, str) and raw_mode in VALID_GUARD_MODES:
-        next_mode = raw_mode
-    default_action = _coerce_action_value(payload.get("defaultAction"), config.default_action)
-    unknown_publisher_action = _coerce_action_value(
-        payload.get("unknownPublisherAction"),
-        config.unknown_publisher_action,
-    )
-    changed_hash_action = _coerce_action_value(
-        payload.get("changedHashAction"),
-        config.changed_hash_action,
-    )
-    new_network_domain_action = _coerce_action_value(
-        payload.get("newNetworkDomainAction"),
-        config.new_network_domain_action,
-    )
-    subprocess_action = _coerce_action_value(
-        payload.get("subprocessAction"),
-        config.subprocess_action,
-    )
-    sync_enabled = payload.get("syncEnabled")
-    cloud_redaction_level = payload.get("receiptRedactionLevel")
-    overlaid = replace(
-        config,
-        mode=next_mode,
-        default_action=default_action,
-        unknown_publisher_action=unknown_publisher_action,
-        changed_hash_action=changed_hash_action,
-        new_network_domain_action=new_network_domain_action,
-        subprocess_action=subprocess_action,
-        sync=bool(sync_enabled) if isinstance(sync_enabled, bool) else config.sync,
-        receipt_redaction_level=(
-            cloud_redaction_level
-            if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS
-            else config.receipt_redaction_level
-        ),
-    )
-    return _reapply_managed_config(overlaid)
+    return _overlay(config, payload)
 
 
 def _reapply_managed_config(config: GuardConfig) -> GuardConfig:
     if config.managed_policy is None:
         return config
-    local = {
-        "mode": config.mode,
-        "security_level": config.security_level,
-        "default_action": config.default_action,
-        "unknown_publisher_action": config.unknown_publisher_action,
-        "changed_hash_action": config.changed_hash_action,
-        "new_network_domain_action": config.new_network_domain_action,
-        "subprocess_action": config.subprocess_action,
-        "risk_actions": config.risk_actions or {},
-        "harness_risk_actions": config.harness_risk_actions or {},
-        "telemetry": config.telemetry,
-        "sync": config.sync,
-        "receipt_redaction_level": config.receipt_redaction_level,
+    return _overlay(config, None)
+
+
+def _overlay(config: GuardConfig, payload: dict[str, object] | None) -> GuardConfig:
+    """Compose ``payload`` and the managed policy onto ``config`` natively."""
+
+    loaded: dict[str, object] = {name: getattr(config, name) for name in _OVERLAID_FIELDS}
+    loaded["risk_actions"] = dict(config.risk_actions or {})
+    loaded["harness_risk_actions"] = {
+        name: dict(actions) for name, actions in (config.harness_risk_actions or {}).items()
     }
-    if config.protection_posture_explicit:
-        local["protection_posture"] = config.protection_posture
-    composed = apply_managed_policy(local, config.managed_policy)
-    composed_mode = _coerce_loaded_guard_mode(composed.get("mode"), config.mode)
-    composed_level = _coerce_loaded_security_level(composed.get("security_level"))
-    composed_posture = coerce_loaded_protection_posture(composed.get("protection_posture"))
-    managed_locks_level = "security_level" in config.managed_locked_settings
-    if managed_locks_level:
-        next_posture = derive_protection_posture(composed_mode, composed_level)
-        next_explicit = False
-    elif composed_posture is not None:
-        next_posture = composed_posture
-        next_explicit = True
-    else:
-        next_posture = derive_protection_posture(composed_mode, composed_level)
-        next_explicit = False
-    return replace(
-        config,
-        mode=composed_mode,
-        protection_posture=next_posture,
-        protection_posture_explicit=next_explicit,
-        security_level=composed_level,
-        default_action=_coerce_loaded_guard_action_or_default(composed.get("default_action"), config.default_action),
-        unknown_publisher_action=_coerce_loaded_guard_action_or_default(
-            composed.get("unknown_publisher_action"), config.unknown_publisher_action
-        ),
-        changed_hash_action=_coerce_loaded_guard_action_or_default(
-            composed.get("changed_hash_action"), config.changed_hash_action
-        ),
-        new_network_domain_action=_coerce_loaded_guard_action_or_default(
-            composed.get("new_network_domain_action"), config.new_network_domain_action
-        ),
-        subprocess_action=_coerce_loaded_guard_action_or_default(
-            composed.get("subprocess_action"), config.subprocess_action
-        ),
-        risk_actions=_coerce_risk_action_map(composed.get("risk_actions")),
-        harness_risk_actions=_coerce_harness_risk_action_map(composed.get("harness_risk_actions")),
-        telemetry=_coerce_loaded_bool(composed.get("telemetry", config.telemetry)),
-        sync=_coerce_loaded_bool(composed.get("sync", config.sync)),
-        receipt_redaction_level=_coerce_loaded_receipt_redaction_level(
-            composed.get("receipt_redaction_level", config.receipt_redaction_level)
-        ),
+    loaded["managed_locked_settings"] = list(config.managed_locked_settings)
+    result = resolve_native_guard_config(
+        "overlay",
+        {"config": loaded, "payload": payload, "managed": _native_managed_input(config.managed_policy)},
+    )
+    overlaid = result.get("config")
+    if not isinstance(overlaid, dict) or not all(
+        name in overlaid and _OVERLAID_FIELD_VALID[name](overlaid[name]) for name in _OVERLAID_FIELDS
+    ):
+        raise ConfigFileTrustError("native_guard_config_invalid")
+    return replace(config, **{name: overlaid[name] for name in _OVERLAID_FIELDS})
+
+
+def _is_action(value: object) -> bool:
+    return isinstance(value, str) and value in VALID_GUARD_ACTIONS
+
+
+def _is_one_of(allowed: frozenset[str] | set[str]) -> Callable[[object], bool]:
+    return lambda value: isinstance(value, str) and value in allowed
+
+
+def _is_bool(value: object) -> bool:
+    return isinstance(value, bool)
+
+
+def _is_harness_risk_action_maps(value: object) -> bool:
+    return isinstance(value, dict) and all(
+        isinstance(name, str) and _is_risk_action_map(actions) for name, actions in value.items()
     )
 
 
-def _coerce_action_value(value: object, fallback: GuardAction) -> GuardAction:
-    return _coerce_loaded_guard_action_or_default(value, fallback)
+# What the loaded config holds in each overlaid field; a native answer that
+# does not fit is refused rather than stored.
+_OVERLAID_FIELD_VALID = {
+    "mode": _is_one_of(frozenset(get_args(GuardMode))),
+    "security_level": _is_one_of(VALID_SECURITY_LEVELS),
+    "protection_posture": _is_one_of(VALID_PROTECTION_POSTURES),
+    "protection_posture_explicit": _is_bool,
+    "default_action": _is_action,
+    "unknown_publisher_action": _is_action,
+    "changed_hash_action": _is_action,
+    "new_network_domain_action": _is_action,
+    "subprocess_action": _is_action,
+    "risk_actions": _is_risk_action_map,
+    "harness_risk_actions": _is_harness_risk_action_maps,
+    "telemetry": _is_bool,
+    "sync": _is_bool,
+    "receipt_redaction_level": _is_one_of(VALID_RECEIPT_REDACTION_LEVELS),
+}
 
 
 def _existing_legacy_guard_home(user_home: Path) -> Path | None:

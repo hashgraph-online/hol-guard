@@ -90,7 +90,9 @@ def gh_stub_script(log: Path) -> str:
         'case "$*" in\n'
         '*graphql*) printf \'%s\\n\' \'{"data":{"resolveReviewThread":{"thread":{"isResolved":true}}}}\' ;;\n'
         '*/replies*) printf \'%s\\n\' \'{"id":456,"body":"reply recorded"}\' ;;\n'
-        '*search/issues*) printf \'%s\n\' \'{"total_count":1,"incomplete_results":false,"items":[{"number":12,"title":"Add metrics","state":"open","html_url":"https://github.com/example-org/example-repo/pull/12","pull_request":{}}]}\' ;;\n'
+        '*search/issues*) printf \'%s\n\' \'{"total_count":1,"incomplete_results":false,'
+        '"items":[{"number":12,"title":"Add metrics","state":"open",'
+        '"html_url":"https://github.com/example-org/example-repo/pull/12","pull_request":{}}]}\' ;;\n'
         '*) printf \'%s\\n\' \'[{"id":123,"user":{"login":"reviewer"},"body":"Please rename the helper"}]\' ;;\n'
         "esac\n"
         "exit 0\n"
@@ -106,13 +108,13 @@ def gh_stub_python(log: Path) -> str:
         "    log.write(''.join(arg + '\\x1f' for arg in args) + '\\n')\n"
         "joined = ' '.join(args)\n"
         "if 'graphql' in joined:\n"
-        "    out = '{\"data\":{\"resolveReviewThread\":{\"thread\":{\"isResolved\":true}}}}'\n"
+        '    out = \'{"data":{"resolveReviewThread":{"thread":{"isResolved":true}}}}\'\n'
         "elif '/replies' in joined:\n"
-        "    out = '{\"id\":456,\"body\":\"reply recorded\"}'\n"
+        '    out = \'{"id":456,"body":"reply recorded"}\'\n'
         "elif 'search/issues' in joined:\n"
-        "    out = '{\"total_count\":1,\"incomplete_results\":false,\"items\":[{\"number\":12,\"title\":\"Add metrics\",\"state\":\"open\",\"html_url\":\"https://github.com/example-org/example-repo/pull/12\",\"pull_request\":{}}]}'\n"
+        '    out = \'{"total_count":1,"incomplete_results":false,"items":[{"number":12,"title":"Add metrics","state":"open","html_url":"https://github.com/example-org/example-repo/pull/12","pull_request":{}}]}\'\n'
         "else:\n"
-        "    out = '[{\"id\":123,\"user\":{\"login\":\"reviewer\"},\"body\":\"Please rename the helper\"}]'\n"
+        '    out = \'[{"id":123,"user":{"login":"reviewer"},"body":"Please rename the helper"}]\'\n'
         "sys.stdout.buffer.write(out.encode() + b'\\n')\n"
     )
 
@@ -192,11 +194,14 @@ def worktree_checks(fixture_home: Path, workspace: Path, scenario_id: str, befor
 
 def configure_github_review_controls(daemon: Any, guard_home: Path) -> dict[str, Any]:
     """Sign the GitHub extension and every one of its permissions as enabled."""
-    from codex_plugin_scanner.guard.runtime.github_capability_contract import github_capability_contracts
+    from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
     from .extension_adapters import configure_extension_controls
 
-    permissions = [contract.permission_id for contract in github_capability_contracts()]
+    extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get(GITHUB_EXTENSION_ID)
+    if extension is None:
+        raise RuntimeError(f"built-in command extension is missing: {GITHUB_EXTENSION_ID}")
+    permissions = [permission.permission_id for permission in extension.permissions]
     revision = configure_extension_controls(daemon, guard_home, GITHUB_EXTENSION_ID, enabled_permissions=permissions)
     return {
         "extension_id": GITHUB_EXTENSION_ID,

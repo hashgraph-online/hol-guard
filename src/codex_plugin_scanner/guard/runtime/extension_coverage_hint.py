@@ -10,6 +10,9 @@ extension matched which step. It is read straight out of the evidence the
 resident already returned, so it costs no re-review and promises nothing. It
 carries catalog identifiers and the matched executable basename only, and it
 never implies that allowing one step's permission settles the others.
+
+The resident computes it (``extension_coverage_hint.rs``); this module only
+checks a stored hint's shape and carries it on an allow hint.
 """
 
 from __future__ import annotations
@@ -39,114 +42,6 @@ def _segment_index(value: object) -> int | None:
 
 def _catalog_id(value: object) -> str | None:
     return value if isinstance(value, str) and _CATALOG_ID.fullmatch(value) else None
-
-
-def _evidence_segments(observation: Mapping[str, object]) -> dict[int, str | None]:
-    """Segment indexes this observation matched, with the executable each named."""
-
-    found: dict[int, str | None] = {}
-    effective = observation.get("effective_segment_indexes")
-    for raw in effective if isinstance(effective, (list, tuple)) else ():
-        index = _segment_index(raw)
-        if index is not None:
-            found.setdefault(index, None)
-    evidence = observation.get("matcher_evidence")
-    for item in evidence if isinstance(evidence, list) else ():
-        if not isinstance(item, Mapping):
-            continue
-        entry = cast("Mapping[str, object]", item)
-        index = _segment_index(entry.get("segment_index"))
-        if index is None:
-            continue
-        executable = entry.get("executable")
-        named = executable if isinstance(executable, str) and _EXECUTABLE.fullmatch(executable) else None
-        if found.get(index) is None:
-            found[index] = named
-        else:
-            found.setdefault(index, named)
-    return found
-
-
-def _segment_total(native_result: Mapping[str, object]) -> int | None:
-    """How many steps the command has, when the review modelled them.
-
-    The hook edge sometimes answers with a command model that carries only the
-    normalized text, so this is absent as often as it is present. Covered steps
-    alone cannot tell a one-step command from the first step of three, which is
-    the difference between "an extension covers this command" and "the rest
-    still comes back for review".
-    """
-
-    model = native_result.get("command_model")
-    if not isinstance(model, Mapping):
-        return None
-    segments = cast("Mapping[str, object]", model).get("segments")
-    if not isinstance(segments, list):
-        return None
-    total = len(cast("list[object]", segments))
-    return total if 0 < total <= MAX_SEGMENT_TOTAL else None
-
-
-def compute_extension_coverage_hint(
-    native_result: Mapping[str, object],
-    *,
-    catalog_digest: str | None = None,
-) -> dict[str, object] | None:
-    """Return which extension matched which step of ``native_result``, or None.
-
-    Returns None when no extension observed the command at all, so a command no
-    extension governs changes nothing on the review screen.
-    """
-
-    evidence = native_result.get("command_extensions")
-    if not isinstance(evidence, Mapping) or evidence.get("evaluation_error"):
-        return None
-    binding = evidence.get("binding")
-    digest = catalog_digest
-    if digest is None and isinstance(binding, Mapping):
-        value = binding.get("catalog_digest")
-        digest = value if isinstance(value, str) else None
-    if digest is None or not _DIGEST.fullmatch(digest):
-        return None
-    segments: dict[int, dict[str, object]] = {}
-
-    def record(index: int, executable: str | None, key: str, value: str | None) -> None:
-        segment = segments.setdefault(
-            index,
-            {"index": index, "executable": executable, "extension_ids": [], "rule_ids": [], "permission_ids": []},
-        )
-        if segment["executable"] is None and executable is not None:
-            segment["executable"] = executable
-        if value is None:
-            return
-        ids = cast("list[str]", segment[key])
-        if value not in ids:
-            ids.append(value)
-
-    for source, id_key in (("observations", "rule_ids"), ("permission_observations", "permission_ids")):
-        items = evidence.get(source)
-        for item in items if isinstance(items, list) else ():
-            if not isinstance(item, Mapping):
-                continue
-            observation = cast("Mapping[str, object]", item)
-            extension_id = _catalog_id(observation.get("extension_id"))
-            if extension_id is None:
-                continue
-            owned = _catalog_id(observation.get("rule_id" if id_key == "rule_ids" else "permission_id"))
-            for index, executable in sorted(_evidence_segments(observation).items()):
-                record(index, executable, "extension_ids", extension_id)
-                record(index, executable, id_key, owned)
-    if not segments:
-        return None
-    hint: dict[str, object] = {
-        "schema": EXTENSION_COVERAGE_HINT_SCHEMA,
-        "catalog_digest": digest,
-        "segments": [segments[index] for index in sorted(segments)],
-    }
-    total = _segment_total(native_result)
-    if total is not None:
-        hint["segment_total"] = total
-    return validated_extension_coverage_hint(hint)
 
 
 def _validated_segment(value: object) -> dict[str, object] | None:
@@ -234,7 +129,6 @@ __all__ = [
     "MAX_COVERED_SEGMENTS",
     "MAX_SEGMENT_IDS",
     "MAX_SEGMENT_TOTAL",
-    "compute_extension_coverage_hint",
     "validated_extension_coverage_hint",
     "with_extension_coverage",
 ]

@@ -159,6 +159,7 @@ export function viewTitle(view: AppView): string {
   if (view === "audit") return "Audit";
   if (view === "policy") return "Rules & exceptions";
   if (view === "feed-health") return "Feed Health";
+  if (view === "workspaces") return "Workspaces";
   if (view === "about") return "About";
   if (view === "releases") return "Releases";
   if (view === "extensions") return "Extensions";
@@ -211,6 +212,9 @@ export function resolveView(pathname: string): AppView {
   }
   if (pathname === "/feed-health") {
     return "feed-health";
+  }
+  if (pathname === "/workspaces") {
+    return "workspaces";
   }
   if (pathname === "/about") {
     return "about";
@@ -497,6 +501,7 @@ export function App() {
 
   useEffect(() => {
     const needsReceipts =
+      view === "home" ||
       view === "evidence" ||
       view === "app-detail" ||
       view === "supply-chain" ||
@@ -1040,6 +1045,7 @@ export function App() {
           <HomeWorkspace
             requests={requests}
             runtime={runtime}
+            receipts={receipts.kind === "ready" ? receipts.items : undefined}
             policies={policies}
             onOpenInbox={handleOpenInbox}
             onOpenFleet={handleOpenFleet}
@@ -1154,6 +1160,7 @@ export function App() {
                   cloudState: runtime.snapshot.cloud_state ?? "unknown",
                   cloudStateLabel: runtime.snapshot.cloud_state_label ?? "Unknown",
                   syncConfigured: runtime.snapshot.sync_configured ?? false,
+                  syncHealth: runtime.snapshot.cloud_sync_health?.state ?? null,
                   pendingCount: runtime.snapshot.pending_count ?? 0,
                   receiptCount: runtime.snapshot.receipt_count ?? 0,
                   protectedAppCount: 0,

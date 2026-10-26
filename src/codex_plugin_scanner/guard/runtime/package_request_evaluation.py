@@ -7,7 +7,6 @@ view arrives in and writes the evidence rows it implies.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 from ..models import GuardAction, GuardArtifact
@@ -15,7 +14,6 @@ from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_evidence import EvidenceRecord
 from .restricted_archive_download import RestrictedArchiveDownload
-from .supply_chain_package_identity import PackageIdentityError, canonical_package_identity
 
 
 def _optional_string(value: object) -> str | None:
@@ -120,10 +118,17 @@ def _persist_evidence(
         return
     if evaluation.decision == "monitor" and not evaluation.record_monitor_evidence:
         return
-    for package in evaluation.packages:
-        if not _should_record_package(package, evaluation.decision):
-            continue
-        evidence_id = _evidence_id(evaluation.package_intent_hash, package)
+    recordable = [package for package in evaluation.packages if _should_record_package(package, evaluation.decision)]
+    # The resident derives every evidence id and sends them in the order it
+    # would record them. Recomputing them here would be a second oracle, and a
+    # count that disagrees means the two sides no longer agree about which
+    # packages this evaluation covers, so no row is written at all.
+    if len(recordable) != len(evaluation.evidence_ids):
+        raise ValueError(
+            "native evaluation carried "
+            f"{len(evaluation.evidence_ids)} evidence ids for {len(recordable)} recorded packages"
+        )
+    for evidence_id, package in zip(evaluation.evidence_ids, recordable, strict=True):
         store.add_evidence(
             EvidenceRecord(
                 evidence_id=evidence_id,
@@ -170,45 +175,3 @@ def _reason_severity(package: dict[str, object]) -> str:
 def _should_record_package(package: dict[str, object], decision: str) -> bool:
     package_decision = str(package.get("decision") or decision)
     return package_decision in {"block", "ask", "warn"} or decision == "monitor"
-
-
-def _evidence_id(package_intent_hash: str, package: dict[str, object]) -> str:
-    decision = str(package.get("decision") or "monitor")
-    dependency_path = _optional_string(package.get("dependencyPath")) or "direct"
-    identity_payload = {
-        "decision": decision,
-        "dependency_path": dependency_path,
-        "package_identity": _result_package_identity(package),
-        "package_intent_hash": package_intent_hash,
-    }
-    encoded = json.dumps(identity_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return f"evidence-{stable_digest_hex(encoded, length=16)}"
-
-
-def _result_package_identity(package: dict[str, object]) -> tuple[str, str, str, str, str, str]:
-    ecosystem = _optional_string(package.get("ecosystem"))
-    name = _optional_string(package.get("name")) or "package"
-    namespace = _optional_string(package.get("namespace"))
-    version = _optional_string(package.get("resolvedVersion")) or _optional_string(package.get("requestedVersion"))
-    if ecosystem is not None:
-        try:
-            identity = canonical_package_identity(
-                ecosystem=ecosystem,
-                namespace=namespace,
-                name=name,
-                version=version or "*",
-            )
-            return (
-                "canonical",
-                identity.ecosystem,
-                identity.namespace or "",
-                identity.name,
-                identity.version,
-                "",
-            )
-        except PackageIdentityError:
-            pass
-    opaque_sha256 = stable_digest_hex(
-        json.dumps(package, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
-    )
-    return ("opaque", ecosystem or "", namespace or "", name, version or "", opaque_sha256)

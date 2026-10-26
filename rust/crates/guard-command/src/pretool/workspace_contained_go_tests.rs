@@ -115,9 +115,16 @@ fn the_module_a_verb_builds_moves_with_the_command() {
                 "{reason}: no sandbox must require review"
             );
         }
-        // `docs` is no module, so go would resolve imports through the proxy.
-        let (reason, _) = outcome(harness, "cd docs && go build ./...", &ws);
-        assert_ne!(reason, CONTAINED, "{harness}");
+        // `docs` holds no module of its own, so go ascends to the one at the
+        // workspace root and builds against the sources beside it.
+        let (reason, minimum) = outcome(harness, "cd docs && go build ./...", &ws);
+        assert_eq!(reason == CONTAINED, host(), "{reason} {harness}");
+        if !host() {
+            assert_eq!(
+                minimum, "review",
+                "{reason}: no sandbox must require review"
+            );
+        }
     }
 }
 

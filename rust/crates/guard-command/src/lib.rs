@@ -149,12 +149,14 @@ pub mod github_workflow_lineage;
 #[cfg(test)]
 mod github_workflow_lineage_tests;
 pub mod github_workflow_operations;
+pub mod harness_attribution;
 mod harness_config_names;
 pub mod harness_identity;
 mod home_path_text;
 #[cfg(test)]
 mod home_path_text_parity_tests;
 pub mod homebrew_intent;
+pub mod hook_config_risk;
 mod inline_shell_quoting;
 pub mod jsonc;
 #[cfg(unix)]
@@ -168,8 +170,10 @@ mod launch_identity_common;
 pub mod launch_identity_environment;
 #[cfg(windows)]
 mod launch_identity_windows;
+pub mod launch_screen;
 pub mod local_tool_eligibility;
 pub mod mcp_arguments;
+pub mod mcp_config_risk;
 pub mod mcp_launch_environment;
 pub mod mcp_runtime_evidence;
 pub mod mcp_skill_firewall;
@@ -190,6 +194,7 @@ pub mod ordered_json;
 #[cfg(unix)]
 pub mod package_context_build;
 pub mod package_execution_context;
+mod package_extension_ids;
 pub mod package_intent_common;
 pub mod package_intent_parser;
 pub mod package_manager_command;
@@ -455,6 +460,8 @@ pub mod target_identities;
 pub mod workspace_inventory;
 #[cfg(test)]
 mod workspace_path_guard_tests;
+#[cfg(unix)]
+mod workspace_roots;
 
 // RTM-014/017/020/023 pending modules — compile signal only until legs complete.
 pub mod aibom_reporting;
@@ -481,6 +488,8 @@ pub mod egress_caller_policy;
 pub mod egress_proxy_credentials;
 mod egress_spool;
 pub mod false_positive_rules;
+#[cfg(unix)]
+mod forwarded_settings;
 pub mod guard_sync_transport;
 #[path = "adapters/hook/hook_adapter_envelope.rs"]
 pub mod hook_adapter_envelope;
@@ -552,9 +561,11 @@ pub mod shims;
 pub mod signals;
 pub mod skill_content_risk;
 pub mod skill_dependency_manifest;
+pub mod skill_document_text_evidence;
 pub mod skill_identity;
 pub mod strict_json;
 pub mod supply_chain_bundle;
+pub mod supply_chain_bundle_cache_trust;
 pub mod supply_chain_package_identity;
 pub mod supply_chain_risk;
 pub mod supply_chain_support;

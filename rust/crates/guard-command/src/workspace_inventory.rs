@@ -47,6 +47,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::LazyLock;
 
+pub use guard_contracts::python_strip;
 use serde_json::{Map, Value};
 
 use crate::local_supply_chain::{unquote, LocalSupplyChainError};
@@ -154,30 +155,6 @@ pub static SEVERITY_RANK: LazyLock<BTreeMap<&'static str, i64>> = LazyLock::new(
 // ---------------------------------------------------------------------------
 // Python primitive fidelity helpers.
 // ---------------------------------------------------------------------------
-
-/// CPython `str.strip()` whitespace set: ASCII controls 0x09-0x0d and
-/// 0x1c-0x1f plus every Unicode code point whose `isspace` is true. Rust's
-/// `trim` misses 0x1c-0x1f.
-fn is_python_space(ch: char) -> bool {
-    matches!(
-        ch,
-        '\u{09}'..='\u{0d}'
-            | ' '
-            | '\u{1c}'..='\u{1f}'
-            | '\u{85}'
-            | '\u{a0}'
-            | '\u{1680}'
-            | '\u{2000}'..='\u{200a}'
-            | '\u{2028}'..='\u{2029}'
-            | '\u{202f}'
-            | '\u{205f}'
-            | '\u{3000}'
-    )
-}
-
-pub fn python_strip(text: &str) -> &str {
-    text.trim_matches(is_python_space)
-}
 
 /// CPython truthiness for JSON-shaped values (`bool(value)`).
 fn python_truthy(value: &Value) -> bool {

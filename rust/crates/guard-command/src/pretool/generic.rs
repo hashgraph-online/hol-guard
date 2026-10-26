@@ -76,6 +76,21 @@ pub fn venv_activation_target(command: &str, context: super::PathContext<'_>) ->
     venv_activation_projection::project(command, context)
 }
 
+/// The command the pre-tool pass answered for, when it read through the
+/// call's own wrapping, or `None` when the call is its own answer. A trailing
+/// subshell or brace group runs exactly the command list inside it and is
+/// decided as that list, and an activation hands its verdict to the command
+/// after it. A sink that plans the call again from its snapshot plans this
+/// text: the group's own text models no command, so `(.venv/bin/pytest -q)`
+/// reached the pytest planner with its parenthesis still attached. A group
+/// whose flattened list would run more than the group does, such as
+/// `false && (a; b)`, keeps its own text: the sink executes what it plans.
+pub fn contained_target(command: &str, context: super::PathContext<'_>) -> Option<String> {
+    let ungrouped = super::runnable_ungrouped_command_list(command);
+    let text = ungrouped.as_deref().unwrap_or(command);
+    venv_activation_target(text, context).or(ungrouped)
+}
+
 /// Bounded caller-supplied context, never authenticated provider facts.
 pub struct UntrustedCommandContext {
     pub command: Option<String>,
@@ -905,6 +920,14 @@ fn evaluate_envelope(
             result.minimum_action.as_str(),
             "allow" | "warn" | "review"
         )
+        && !git_read_order_settled_by_allow(
+            controls,
+            command_model,
+            &result,
+            floor_context,
+            deadline,
+            execution_environment,
+        )
     {
         result.minimum_action = "require-reapproval".into();
         result.policy_action = "require-reapproval".into();
@@ -1034,6 +1057,7 @@ fn evaluate_envelope(
     super::git_remote_ops::settle_fast_forward(
         &mut result,
         command_model,
+        controls,
         super::PathContext {
             home_dir,
             cwd,
@@ -1093,6 +1117,51 @@ fn extension_rule_matched(result: &PreToolResultV1) -> bool {
             .iter()
             .any(|row| !row.effective_segment_indexes.is_empty())
     })
+}
+
+/// Whether the user's extension permissions settle a Git floor that rests on
+/// the order of the command's steps alone.
+///
+/// That floor has two meanings. A Git read whose own configuration names a
+/// pager, diff driver or textconv helper, or whose configuration could not be
+/// read, has a program Guard cannot see waiting for it, and keeps its review
+/// however much the user allowed. The other meaning is narrower: every Git
+/// read in the command was proven helper-free against the configuration Guard
+/// read for it, and what is unproven is only that an earlier step leaves that
+/// configuration as the read found it. That is a judgment of the command's
+/// shape, which a user who allowed each of its steps has already settled, the
+/// same way an explicit Allow settles the shape judgments the controls
+/// themselves raise.
+///
+/// The floor is raised after the controls run, so it cannot read the Allow off
+/// the result's reason and asks the controls instead. `minimum_action` must
+/// still be plain allow: anything the controls or an earlier Rust proof raised
+/// — unsettled extension uncertainty among it — means the Allow did not carry
+/// the command, and the floor stands.
+fn git_read_order_settled_by_allow(
+    controls: Option<&CompiledNativeCommandControls>,
+    command_model: Option<&crate::CanonicalCommandV1>,
+    result: &PreToolResultV1,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
+    let (Some(controls), Some(model), Some(observations)) =
+        (controls, command_model, result.command_extensions.as_ref())
+    else {
+        return false;
+    };
+    result.minimum_action == "allow"
+        && result.action.bounded
+        && !result.action.sensitive_target
+        && super::git_read_floor::unsettled_steps_before_reads(
+            model,
+            context,
+            deadline,
+            execution_environment,
+        )
+        .is_some()
+        && controls.explicit_allow_covers_command(model, observations, context)
 }
 
 /// The Git floor's reason when every Git read was proven helper-free on its

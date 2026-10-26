@@ -191,6 +191,19 @@ class StoreCloudEventsMixin:
 
             review_event_wake_signal(self.path).notify()
 
+    def insert_sync_payload_if_absent(self, state_key: str, payload: Mapping[str, object], now: str) -> None:
+        """Store ``payload`` only when ``state_key`` has no row; an existing row always wins."""
+
+        with self._connect() as connection:
+            connection.execute(
+                """
+                insert into sync_state (state_key, payload_json, updated_at)
+                values (?, ?, ?)
+                on conflict(state_key) do nothing
+                """,
+                (state_key, json.dumps(payload), now),
+            )
+
     def get_sync_payload(self, state_key: str) -> dict[str, object] | list[object] | None:
         with self._connect() as connection:
             row = connection.execute(

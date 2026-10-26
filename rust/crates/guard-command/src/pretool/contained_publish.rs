@@ -155,7 +155,7 @@ fn clean_evidence(result: &PreToolResultV1) -> bool {
 /// The sandbox runs the checks exactly as written, with no `git init` split.
 #[cfg(unix)]
 fn launches(checks: &str, workspace: &std::path::Path) -> bool {
-    crate::restricted_pytest::workspace_exact_shape(checks, workspace).is_some_and(|shape| {
+    crate::pretool::workspace_exact_shape(checks, workspace).is_some_and(|shape| {
         shape.bootstrap.is_none() && shape.prefix.is_none() && shape.remainder.is_none()
     })
 }

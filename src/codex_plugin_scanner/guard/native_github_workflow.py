@@ -19,11 +19,9 @@ from __future__ import annotations
 
 import itertools
 import json
-import os
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
 
 from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
 from .native_resident_client import native_resident_client_request
@@ -46,14 +44,6 @@ _DEFAULT_TIMEOUT_SECONDS = 9.0
 
 
 @dataclass(frozen=True, slots=True)
-class GitHubWorkflowDescriptor:
-    """The native verdict for one hook command: its approval record and identity."""
-
-    record: GitHubWorkflowApprovalRecord
-    command_identity: str
-
-
-@dataclass(frozen=True, slots=True)
 class GitHubWorkflowLineage:
     """The identities a validated lineage yields; the store rows stay behind."""
 
@@ -63,46 +53,6 @@ class GitHubWorkflowLineage:
     record: GitHubWorkflowApprovalRecord
     capability_id: str
     nonce: str
-
-
-def github_workflow_describe_native(
-    command_text: str,
-    *,
-    workspace: Path | None,
-    config_path: str,
-    configuration: Mapping[str, object],
-    sandbox: Mapping[str, object],
-    policy_version: str,
-    environment: Mapping[str, str] | None = None,
-    timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
-) -> GitHubWorkflowDescriptor | None:
-    """Describe an exactly bindable GitHub workflow command, or return ``None``."""
-    if workspace is None or not _may_name_gh(command_text):
-        return None
-    envelope = _resident_envelope(
-        {
-            "mode": "describe",
-            "command_text": command_text,
-            "workspace": os.fspath(workspace),
-            "config_path": config_path,
-            "configuration": dict(configuration),
-            "sandbox": dict(sandbox),
-            "environment": dict(os.environ if environment is None else environment),
-            "policy_version": policy_version,
-        },
-        timeout_seconds=timeout_seconds,
-    )
-    if envelope is None or envelope.get("code") != "ok":
-        return None
-    record_payload = envelope.get("record")
-    identity = envelope.get("command_identity")
-    if not isinstance(record_payload, dict) or not isinstance(identity, str) or not identity:
-        return None
-    try:
-        record = GitHubWorkflowApprovalRecord.from_dict(record_payload)
-    except (TypeError, ValueError):
-        return None
-    return GitHubWorkflowDescriptor(record=record, command_identity=identity)
 
 
 def github_workflow_persisted_command_matches(
@@ -180,16 +130,6 @@ def github_workflow_validated_lineage(
         capability_id=capability_id,
         nonce=nonce,
     )
-
-
-def _may_name_gh(command_text: str) -> bool:
-    """Cheap negative filter: a ``gh`` executable path cannot be spelled without these letters.
-
-    The resident parser decides everything else. Quote and escape characters
-    are dropped first so an obscured spelling still reaches the resident; a
-    command that cannot contain the two letters never costs a round trip.
-    """
-    return "gh" in command_text.translate({ord("'"): None, ord('"'): None, ord("\\"): None})
 
 
 def _resident_envelope(fields: dict[str, object], *, timeout_seconds: float) -> dict[str, object] | None:

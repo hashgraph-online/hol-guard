@@ -242,3 +242,5 @@ b6926bac2ef58d0794d1df6e2bb9ee401d8ac18b:tests/test_guard_runtime.py:generic-api
 # credential keyword the generic rule reads as proximity; the test now spells
 # the prefix without one.
 8319742b46f30e0e6928d9dbb122fa5fc1c156d4:rust/crates/guard-scanner/src/prose_answer_value.rs:generic-api-key:396
+# Synthetic bearer token in a credential-masking test (rewritten in the next commit), not a credential.
+363b7be8220e73b5884dcfd90d27dffdbe3846fc:rust/crates/guard-runtime/src/hook_direct_lifecycle_tests.rs:curl-auth-header:375

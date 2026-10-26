@@ -1,54 +1,29 @@
-import { Surface, Badge } from "../../approval-center-primitives";
 import { ABOUT_TRUST_CONTRACT_CLAIMS } from "../about-content";
-import type { AboutRuntimeSummary } from "../about-types";
-import { AboutRuntimeProofStrip } from "./about-runtime-proof-strip";
+import { Callout } from "./machine-figure";
 
-const toneClasses: Record<string, string> = {
-  blue: "border-brand-blue/30 bg-brand-blue/[0.04]",
-  green: "border-brand-green/30 bg-brand-green-bg/20",
-  purple: "border-brand-purple/20 bg-brand-purple/[0.03]",
-  slate: "border-brand-dark/10 bg-surface-1",
-};
-
-const badgeTones: Record<string, "info" | "success" | "attention" | "default"> = {
-  blue: "info",
-  green: "success",
-  purple: "attention",
-  slate: "default",
-};
-
-export function TrustContractPanel({
-  runtimeSummary,
-}: {
-  runtimeSummary: AboutRuntimeSummary | null;
-}) {
+/**
+ * The legend to Fig. 1. Each claim carries the number of the callout that
+ * marks it on the figure, so the promise and the part of the device it is
+ * about can be read together.
+ */
+export function TrustContractPanel() {
   return (
-    <Surface className="h-full" tone="accent">
-      <div className="mb-5 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-brand-dark">
-          Trust Contract
-        </h2>
-        <Badge tone="success">Local-first</Badge>
-      </div>
-      <div className="space-y-3">
-        {ABOUT_TRUST_CONTRACT_CLAIMS.map((claim) => (
-          <div
-            key={claim.id}
-            className={`rounded-lg border p-3 ${toneClasses[claim.tone] ?? toneClasses.slate}`}
-          >
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-brand-dark">
-                {claim.title}
-              </h3>
-              <Badge tone={badgeTones[claim.tone] ?? "default"}>{claim.proofLabel}</Badge>
+    <div>
+      <h2 id="about-trust-heading" className="text-2xl font-semibold tracking-[-0.02em] text-brand-dark">
+        Trust Contract
+      </h2>
+      <ol className="mt-5 grid gap-x-8 border-t border-brand-dark/10 sm:grid-cols-2 xl:grid-cols-4">
+        {ABOUT_TRUST_CONTRACT_CLAIMS.map((claim, index) => (
+          <li key={claim.id} className="border-b border-brand-dark/10 py-4 xl:border-b-0">
+            <div className="flex items-center gap-2.5">
+              <Callout n={index + 1} />
+              <h3 className="text-sm font-semibold text-brand-dark">{claim.title}</h3>
             </div>
-            <p className="text-xs leading-5 text-brand-dark/75">
-              {claim.body}
-            </p>
-          </div>
+            <p className="mt-2 text-sm leading-6 text-brand-dark/75">{claim.body}</p>
+            <p className="mt-2 text-xs font-semibold text-brand-dark">{claim.proofLabel}</p>
+          </li>
         ))}
-      </div>
-      <AboutRuntimeProofStrip summary={runtimeSummary} />
-    </Surface>
+      </ol>
+    </div>
   );
 }

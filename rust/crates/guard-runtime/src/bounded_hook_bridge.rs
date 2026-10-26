@@ -32,6 +32,7 @@ use crate::bounded_hook_bridge_render::{
     FAILURE_REASON,
 };
 use crate::claude_hook_bridge_http::remaining;
+use crate::codex_hook_bridge_direct_resident::DirectMiss;
 use crate::hook_bridge_daemon_start::{await_daemon, start_daemon, Attempt, TRANSPORT_FAILURE};
 use crate::hook_env_stamp::{current_environment, stamp_hook_input_text, Stamp};
 use crate::pyjson::{self, PyVal, SurrogateMapped};
@@ -47,7 +48,7 @@ pub(crate) use input::read_hook_input;
 mod daemon;
 use daemon::post_hook;
 pub(crate) use daemon::{
-    daemon_target, post_hook_reply, transport_deadline, DaemonTarget, PostFailure,
+    daemon_target, post_hook_reply_missed, transport_deadline, DaemonTarget, PostFailure,
 };
 
 pub(crate) const BRIDGE_COMMAND: &str = "bounded-hook-bridge";
@@ -198,9 +199,10 @@ pub(crate) fn route_hook(config: &BridgeConfig, raw: &[u8], deadline: Instant) -
     } else {
         DAEMON_BUDGET
     };
-    if let Some(route) = direct_route(config, &prepared, deadline, budget) {
-        return route;
-    }
+    let miss = match direct_route(config, &prepared, deadline, budget) {
+        Ok(route) => return route,
+        Err(miss) => miss,
+    };
     let left = remaining(deadline);
     let failed = match daemon_target(&config.guard_home, &config.harness) {
         None => None,
@@ -209,7 +211,13 @@ pub(crate) fn route_hook(config: &BridgeConfig, raw: &[u8], deadline: Instant) -
             let Some(transport) = transport_deadline(deadline, left, budget) else {
                 return prepared.failed();
             };
-            match post_hook(&target, &config.harness, &prepared.data, transport) {
+            match post_hook(
+                &target,
+                &config.harness,
+                &prepared.data,
+                transport,
+                Some(miss),
+            ) {
                 Some(answer) => {
                     let rendered = prepared.render(&config.harness, &answer);
                     return answered_route(rendered, &prepared, deadline);
@@ -218,7 +226,7 @@ pub(crate) fn route_hook(config: &BridgeConfig, raw: &[u8], deadline: Instant) -
             }
         }
     };
-    restarted_route(config, prepared, deadline, budget, failed.as_ref())
+    restarted_route(config, prepared, deadline, budget, failed.as_ref(), miss)
 }
 
 /// The route once no daemon answered: start one with the configured
@@ -230,6 +238,7 @@ fn restarted_route(
     deadline: Instant,
     budget: Duration,
     failed: Option<&DaemonTarget>,
+    miss: DirectMiss,
 ) -> Route {
     // An empty command (no home to start the daemon for) fails closed.
     if config.start_command.is_empty()
@@ -247,7 +256,13 @@ fn restarted_route(
     });
     let answer = started.and_then(|target| {
         let transport = transport_deadline(deadline, remaining(deadline), budget)?;
-        post_hook(&target, &config.harness, &prepared.data, transport)
+        post_hook(
+            &target,
+            &config.harness,
+            &prepared.data,
+            transport,
+            Some(miss),
+        )
     });
     let Some(answer) = answer else {
         return prepared.failed();
@@ -271,13 +286,13 @@ fn answered_route(rendered: Option<Rendered>, prepared: &Prepared, deadline: Ins
 }
 
 /// The route for a hook a live resident answered directly, rendered as the
-/// daemon's identical answer would be, or `None` to ask the daemon.
+/// daemon's identical answer would be, or why the daemon is asked instead.
 fn direct_route(
     config: &BridgeConfig,
     prepared: &Prepared,
     deadline: Instant,
     budget: Duration,
-) -> Option<Route> {
+) -> Result<Route, DirectMiss> {
     let rpc_deadline = deadline.min(Instant::now() + (remaining(deadline) / 2).min(budget));
     let answer = crate::codex_hook_bridge_direct::bounded_direct_answer(
         &config.harness,
@@ -291,7 +306,7 @@ fn direct_route(
     let rendered = pyjson::parse_mapping_lone_surrogates(&answer)
         .ok()
         .and_then(|parsed| prepared.render(&config.harness, &parsed));
-    Some(answered_route(rendered, prepared, deadline))
+    Ok(answered_route(rendered, prepared, deadline))
 }
 
 pub(crate) fn write_stdout(text: &str) {

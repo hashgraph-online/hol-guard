@@ -42,7 +42,7 @@ pub(super) fn allowed_executables(
     let venv_root = venv_root.as_deref();
     if allowed.iter().any(|path| {
         !allowed_executable_path(path, workspace, workspace_launcher || venv_root.is_some())
-            && !venv_root.is_some_and(|root| venv::in_bin(path, root))
+            && !venv_root.is_some_and(|root| venv::in_launcher(path, root, executable))
     }) {
         return Err(RestrictedPytestError::new(
             PYTEST_INVALID_COMMAND_REASON_CODE,
@@ -51,7 +51,7 @@ pub(super) fn allowed_executables(
     }
     if allowed
         .iter()
-        .any(|path| !executable_symlink_chain_is_approved(path, workspace, venv_root))
+        .any(|path| !executable_symlink_chain_is_approved(path, workspace, venv_root, executable))
     {
         return Err(RestrictedPytestError::new(
             PYTEST_INVALID_COMMAND_REASON_CODE,
@@ -203,6 +203,7 @@ pub(super) fn executable_symlink_chain_is_approved(
     path: &Path,
     workspace: &Path,
     venv_root: Option<&Path>,
+    executable: &Path,
 ) -> bool {
     let mut current = path_absolute(path);
     for _depth in 0..16 {
@@ -215,7 +216,7 @@ pub(super) fn executable_symlink_chain_is_approved(
             && !path_is_within_any_lexically(&current, &TRUSTED_EXECUTABLE_ROOTS)
             && !approved_user_python_runtime(&current)
             && !venv_root.is_some_and(|root| {
-                venv::in_bin(&current, root)
+                venv::in_launcher(&current, root, executable)
                     || super::developer_shim::is_in_developer_dir_lexically(&current)
             })
         {

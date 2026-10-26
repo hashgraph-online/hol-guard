@@ -454,6 +454,13 @@ def evaluate_package_request_native(
         if downloads:
             evaluation = replace(evaluation, external_archive_downloads=tuple(downloads))
         _persist_evidence(store=store, artifact=artifact, evaluation=evaluation, now=_now_text(now))
+    except ValueError:
+        # The recorder refuses a reply whose evidence ids do not cover the
+        # packages it would record. That disagreement is about this
+        # evaluation's own contents, so the request is held rather than
+        # carried out on a view the two sides read differently.
+        _cleanup(downloads)
+        return unavailable_block_evaluation(artifact)
     except BaseException:
         _cleanup(downloads)
         raise

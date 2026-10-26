@@ -252,6 +252,21 @@ fn a_local_store_with_the_decision_is_read() {
         shape(&connection).readable(&published()).unwrap(),
         Some(true)
     );
+    assert_eq!(
+        shape(&connection).bundle_identities(SIGNED_AT),
+        Ok(Vec::new())
+    );
+    // An empty bundle authorizes none of the rows saved from it.
+    connection
+        .execute_batch(
+            "insert into policy_decisions (harness, scope, action, source, created_at, updated_at)
+             values ('*', 'global', 'block', 'policy-bundle', 'x', 'x');",
+        )
+        .unwrap();
+    assert_eq!(
+        shape(&connection).bundle_identities(SIGNED_AT),
+        Ok(Vec::new())
+    );
 }
 
 #[test]
@@ -263,7 +278,7 @@ fn a_store_the_lookup_reads_differently_defers() {
         ),
         (
             "bundle",
-            "insert into sync_state values ('policy_bundle', '{}', 'x');
+            "insert into sync_state values ('policy_bundle', 'not json', 'x');
              insert into policy_decisions (harness, scope, action, source, created_at, updated_at)
              values ('*', 'global', 'block', 'policy-bundle', 'x', 'x');",
         ),
@@ -289,7 +304,8 @@ fn a_store_the_lookup_reads_differently_defers() {
         assert!(
             !(store.supported().unwrap()
                 && !store.grants().unwrap()
-                && store.readable(&published()).unwrap().is_some()),
+                && store.readable(&published()).unwrap().is_some()
+                && store.bundle_identities(SIGNED_AT).is_ok()),
             "{tag}"
         );
     }

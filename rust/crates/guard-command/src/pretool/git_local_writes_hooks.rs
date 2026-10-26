@@ -31,7 +31,7 @@ pub(super) const CHECKOUT_HOOKS: &[&str] = &[
 /// the route proof dropped it.
 pub(super) fn write_hooks(
     original: &CommandSegmentV1,
-) -> Option<(&'static [&'static str], Option<String>)> {
+) -> Option<(&'static [&'static str], Option<start::Target>)> {
     let stripped = super::super::segment_proof::without_stderr_merge(original);
     let segment = stripped.as_ref().unwrap_or(original);
     if segment.executable.as_deref() != Some("git")
@@ -70,5 +70,5 @@ pub(super) fn write_hooks(
         return Some((hooks, None));
     }
     let point = start::start_point(&segment.arguments)?;
-    Some((CHECKOUT_HOOKS, Some(point.to_owned())))
+    Some((CHECKOUT_HOOKS, Some(point)))
 }

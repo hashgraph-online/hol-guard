@@ -12,7 +12,7 @@ export function DataBoundaryPanel() {
       />
       <div className="mt-6 hidden md:block">
         <div className="overflow-hidden rounded-xl border border-brand-dark/10">
-          <div className="grid grid-cols-[1fr_180px_180px_180px] border-b border-brand-dark/10 bg-surface-1 px-4 py-2.5">
+          <div className="grid grid-cols-[minmax(0,1.1fr)_repeat(3,minmax(0,1fr))] gap-x-6 border-b border-brand-dark/10 bg-surface-1 px-4 py-2.5">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-dark/75">Data</span>
             <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-dark/75">Local by default</span>
             <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-dark/75">Syncs only when enabled</span>
@@ -21,7 +21,7 @@ export function DataBoundaryPanel() {
           {ABOUT_DATA_BOUNDARY_ROWS.map((row) => (
             <div
               key={row.id}
-              className="grid grid-cols-[1fr_180px_180px_180px] border-b border-brand-dark/10 px-4 py-3 last:border-b-0"
+              className="grid grid-cols-[minmax(0,1.1fr)_repeat(3,minmax(0,1fr))] gap-x-6 border-b border-brand-dark/10 px-4 py-3 last:border-b-0"
             >
               <span className="text-sm font-medium text-brand-dark">{row.label}</span>
               <span className="text-sm text-brand-dark/75">{row.localDefault}</span>

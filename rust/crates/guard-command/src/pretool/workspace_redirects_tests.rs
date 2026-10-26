@@ -154,7 +154,7 @@ fn the_sink_plans_every_wrapped_call_the_edge_contains() {
     let ws = workspace("redirect-wrapped", true);
     for command in ["npm run build 2>&1", "npm run build 2>&1 | tail -20"] {
         assert!(
-            crate::restricted_pytest::workspace_exact_shape(command, &ws).is_some(),
+            crate::pretool::workspace_exact_shape(command, &ws).is_some(),
             "{command}"
         );
     }
@@ -168,7 +168,7 @@ fn the_sink_plans_every_wrapped_call_the_edge_contains() {
     ] {
         if reason("claude-code", command, &ws, true) == CONTAINED {
             assert!(
-                crate::restricted_pytest::workspace_exact_shape(command, &ws).is_some(),
+                crate::pretool::workspace_exact_shape(command, &ws).is_some(),
                 "{command}"
             );
         }
@@ -193,7 +193,7 @@ fn the_sink_plans_package_directory_calls_whole_from_the_root() {
         // Planned whatever the host's containment, so the check never
         // depends on the edge classifying the call as contained first.
         assert!(
-            crate::restricted_pytest::workspace_exact_shape(command, &ws).is_some(),
+            crate::pretool::workspace_exact_shape(command, &ws).is_some(),
             "{command}"
         );
     }

@@ -5,9 +5,7 @@ from __future__ import annotations
 import hashlib
 import threading
 from collections import OrderedDict
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
-from contextvars import ContextVar
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from ..native_command_control_authority_io import NativeCommandControlAuthorityUnavailableError
@@ -19,10 +17,6 @@ _NO_CONTROL_DIGEST = hashlib.sha256(b"hol.guard.extension-control:none:v1").hexd
 # from every runtime snapshot digest, so no binding can ever match it.
 _UNANSWERED_DIGEST = hashlib.sha256(b"hol.guard.extension-control:unanswered:v1").hexdigest()
 _MAX_PROTECTED_FLOORS = 32
-_ACTIVE_SNAPSHOT: ContextVar[ExtensionControlRuntimeSnapshot | None] = ContextVar(
-    "guard_extension_control_runtime_snapshot",
-    default=None,
-)
 
 
 class ExtensionControlSnapshotUnavailableError(NativeCommandControlAuthorityUnavailableError):
@@ -253,28 +247,10 @@ class ExtensionControlRuntime:
             _ = floors.popitem(last=False)
 
 
-@contextmanager
-def use_extension_control_snapshot(snapshot: ExtensionControlRuntimeSnapshot) -> Iterator[None]:
-    token = _ACTIVE_SNAPSHOT.set(snapshot)
-    try:
-        yield
-    finally:
-        _ACTIVE_SNAPSHOT.reset(token)
-
-
-def current_extension_control_snapshot() -> ExtensionControlRuntimeSnapshot | None:
-    return _ACTIVE_SNAPSHOT.get()
-
-
 def current_extension_control_binding_digest() -> str:
-    snapshot = current_extension_control_snapshot()
-    return _NO_CONTROL_DIGEST if snapshot is None else snapshot.effective_digest
-
-
-def extension_control_policy_version(base_version: str) -> str:
-    if not isinstance(base_version, str) or not base_version.strip():
-        raise ValueError("base policy version is required")
-    return f"{base_version}@{current_extension_control_binding_digest()}"
+    # No hook path carries an extension-control snapshot, so every approval
+    # binds the fixed no-control digest.
+    return _NO_CONTROL_DIGEST
 
 
 def _layer_payload(layer: ExtensionControlLayer) -> dict[str, object]:

@@ -7,18 +7,12 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _runtime_artifact_policy_action
-from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtensionRegistry,
     risk_classes_for_command_action,
 )
 from codex_plugin_scanner.guard.runtime.command_inspection import command_extensions_payload
-from codex_plugin_scanner.guard.runtime.extension_control_authority import (
-    AuthorityHealth,
-    ExtensionControlAuthorityView,
-)
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
@@ -27,10 +21,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ControlTargetKind,
     ExtensionControl,
     ExtensionControlLayer,
-)
-from codex_plugin_scanner.guard.runtime.extension_control_runtime import (
-    ExtensionControlRuntimeSnapshot,
-    use_extension_control_snapshot,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     ToolActionRequestMatch,
@@ -583,46 +573,6 @@ def test_runtime_artifact_applies_global_extension_lockdown(tmp_path: Path) -> N
     assert any(reason["source"] == "control" for reason in decision_plane["reasons"] if isinstance(reason, dict))
 
 
-def test_runtime_artifact_uses_active_extension_control_authority(tmp_path: Path) -> None:
-    command = "rm -rf ./build"
-    request = extract_sensitive_tool_action_request(
-        "Shell",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
-    layer = ExtensionControlLayer(
-        schema_version=CONTROL_SCHEMA_VERSION,
-        kind=ControlLayerKind.LOCAL_ADMIN,
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        global_lockdown=True,
-        controls=(),
-    )
-    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(
-            health=AuthorityHealth.PROTECTED,
-            revision=1,
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            layers=(layer,),
-        )
-    )
-
-    assert request is not None
-    with use_extension_control_snapshot(snapshot):
-        artifact = build_tool_action_request_artifact(
-            "codex",
-            request,
-            config_path="config.toml",
-            source_scope="project",
-        )
-
-    assert artifact.metadata["command_action_floor"] == "block"
-    assert artifact.metadata["extension_control_resolution"] == {
-        "blocked": True,
-        "failures": [],
-    }
-
-
 def _github_permission_layer(permission_id: str, state: ControlState) -> ExtensionControlLayer:
     return ExtensionControlLayer(
         schema_version=CONTROL_SCHEMA_VERSION,
@@ -636,257 +586,6 @@ def _github_permission_layer(permission_id: str, state: ControlState) -> Extensi
             ),
         ),
     )
-
-
-@pytest.mark.parametrize(
-    "command",
-    (
-        (
-            "gh api -X PUT repos/example/project/pulls/5115/merge -f merge_method=squash "
-            '--field commit_title="feat: bounded title (#5115)"'
-        ),
-        "gh pr merge 5115 --repo example/project --squash --auto",
-    ),
-)
-def test_explicit_github_merge_permission_allows_exact_merge_through_runtime_artifact(
-    command: str,
-    tmp_path: Path,
-) -> None:
-    request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
-    layer = _github_permission_layer("command.github.permission.merge-remote", ControlState.ENABLED)
-    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(
-            health=AuthorityHealth.PROTECTED,
-            revision=7,
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            layers=(layer,),
-        )
-    )
-
-    assert request is not None
-    with use_extension_control_snapshot(snapshot):
-        artifact = build_tool_action_request_artifact(
-            "codex",
-            request,
-            config_path="config.toml",
-            source_scope="project",
-        )
-
-    assert artifact.metadata["command_action_floor"] == "allow"
-    assert artifact.metadata["extension_control_resolution"] == {
-        "blocked": False,
-        "failures": [],
-        "explicitly_enabled_permission_ids": ["command.github.permission.merge-remote"],
-    }
-    decision_plane = artifact.metadata["command_decision_plane"]
-    assert isinstance(decision_plane, dict)
-    assert decision_plane["proof_routes"] == ["verified"]
-    assert decision_plane["controlling_reasons"] == [
-        {
-            "source": "assurance",
-            "reason_code": "native.explicit-benign",
-            "action_floor": "allow",
-            "segment_ref": None,
-            "operation_ref": None,
-        },
-        {
-            "source": "control",
-            "reason_code": "control.explicitly-enabled-permission",
-            "action_floor": "allow",
-            "segment_ref": None,
-            "operation_ref": None,
-        },
-    ]
-
-
-@pytest.mark.parametrize("executable", ("gh", "gh.exe"))
-def test_explicit_github_content_permission_applies_without_matcher_owned_rule(tmp_path: Path, executable: str) -> None:
-    command = f'{executable} pr edit 123 --repo example/project --title "fix: corrected title"'
-    request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
-    layer = _github_permission_layer("command.github.permission.content-remote", ControlState.ENABLED)
-    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(
-            health=AuthorityHealth.PROTECTED,
-            revision=8,
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            layers=(layer,),
-        )
-    )
-
-    assert request is not None
-    with use_extension_control_snapshot(snapshot):
-        artifact = build_tool_action_request_artifact(
-            "codex",
-            request,
-            config_path="config.toml",
-            source_scope="project",
-        )
-
-    assert artifact.metadata["command_action_floor"] == "allow"
-    assert artifact.metadata["extension_control_resolution"] == {
-        "blocked": False,
-        "failures": [],
-        "explicitly_enabled_permission_ids": ["command.github.permission.content-remote"],
-    }
-
-
-@pytest.mark.parametrize(
-    ("health", "state"),
-    (
-        (AuthorityHealth.PROTECTED, ControlState.ENABLED),
-        (AuthorityHealth.PROTECTED, ControlState.DISABLED),
-        (AuthorityHealth.TAMPERED, ControlState.ENABLED),
-    ),
-)
-def test_github_pr_create_body_file_requires_native_file_proof_before_proposal_permission(
-    tmp_path: Path,
-    health: AuthorityHealth,
-    state: ControlState,
-) -> None:
-    from codex_plugin_scanner.guard.native_shell_request_authority import shell_request_authority
-
-    home_dir = tmp_path / "home"
-    workspace = home_dir / "CascadeProjects" / "hashgraph-online"
-    body_directory = home_dir / "CascadeProjects" / "hol-guard-protection-posture"
-    workspace.mkdir(parents=True)
-    body_directory.mkdir()
-    body_file = body_directory / "PR_BODY_PROTECTION.md"
-    body_file.write_text("## Summary\n- Add the protection posture.\n", encoding="utf-8")
-    command = (
-        "gh pr create --repo hashgraph-online/hol-guard --base release/3.0 "
-        "--head feat/protection-posture "
-        "--title 'feat(guard): add protection_posture with dual-write to mode and level' "
-        "--body-file ~/CascadeProjects/hol-guard-protection-posture/PR_BODY_PROTECTION.md"
-    )
-    # The native body-file proof models POSIX paths only, so Windows fails closed.
-    safe_body = shell_request_authority(
-        "_gh_pr_create_uses_safe_static_body_file",
-        {"command_text": command, "cwd": workspace, "home_dir": home_dir},
-    )
-    assert safe_body is (sys.platform != "win32")
-    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(
-            health=health,
-            revision=9,
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            layers=(_github_permission_layer("command.github.permission.propose-remote", state),),
-        )
-    )
-
-    with use_extension_control_snapshot(snapshot):
-        request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=workspace, home_dir=home_dir)
-
-    # Host discovery can recognize the file, but the offline native request
-    # does not bind its contents or identity. Proposal permission cannot remove
-    # the independent file-derived content capability's review requirement.
-    assert request is not None
-    assert request.action_class == "GitHub content mutation command"
-
-
-def test_explicit_git_force_push_permission_allows_matcher_owned_rule(tmp_path: Path) -> None:
-    command = "git push --force origin feature"
-    request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
-    layer = _github_permission_layer("command.git.permission.force-push", ControlState.ENABLED)
-    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(
-            health=AuthorityHealth.PROTECTED,
-            revision=8,
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            layers=(layer,),
-        )
-    )
-
-    assert request is not None
-    with use_extension_control_snapshot(snapshot):
-        artifact = build_tool_action_request_artifact(
-            "codex",
-            request,
-            config_path="config.toml",
-            source_scope="project",
-        )
-
-    assert artifact.metadata["command_action_floor"] == "allow"
-    assert artifact.metadata["extension_control_resolution"] == {
-        "blocked": False,
-        "failures": [],
-        "explicitly_enabled_permission_ids": ["command.git.permission.force-push"],
-    }
-
-
-def test_explicit_permission_allow_cannot_override_explicit_policy(
-    tmp_path: Path, native_approval_reuse_runtime
-) -> None:
-    command = "gh pr merge 5115 --repo example/project --squash --auto"
-    request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
-    layer = _github_permission_layer("command.github.permission.merge-remote", ControlState.ENABLED)
-    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(
-            health=AuthorityHealth.PROTECTED,
-            revision=9,
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            layers=(layer,),
-        )
-    )
-
-    assert request is not None
-    with use_extension_control_snapshot(snapshot):
-        artifact = build_tool_action_request_artifact(
-            "codex",
-            request,
-            config_path="config.toml",
-            source_scope="project",
-        )
-    risk_classes = artifact.metadata["risk_classes"]
-    assert isinstance(risk_classes, list) and risk_classes
-    base = dict(guard_home=tmp_path / "guard", workspace=tmp_path, default_action="review")
-
-    assert (
-        _runtime_artifact_policy_action(
-            GuardConfig(**base, artifact_actions={artifact.artifact_id: "block"}),
-            artifact,
-            "codex",
-            guard_home=native_approval_reuse_runtime,
-        )
-        == "block"
-    )
-    assert (
-        _runtime_artifact_policy_action(
-            GuardConfig(**base, risk_actions={str(risk_classes[0]): "block"}),
-            artifact,
-            "codex",
-            guard_home=native_approval_reuse_runtime,
-        )
-        == "allow"
-    )
-
-
-def test_explicit_permission_allow_requires_protected_authority(tmp_path: Path) -> None:
-    command = "gh pr merge 5115 --repo example/project --squash --auto"
-    request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
-    layer = _github_permission_layer("command.github.permission.merge-remote", ControlState.ENABLED)
-    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(
-            health=AuthorityHealth.UNENROLLED,
-            revision=0,
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            layers=(layer,),
-        )
-    )
-
-    assert request is not None
-    with use_extension_control_snapshot(snapshot):
-        artifact = build_tool_action_request_artifact(
-            "codex",
-            request,
-            config_path="config.toml",
-            source_scope="project",
-        )
-
-    assert artifact.metadata["command_action_floor"] == "block"
-    assert artifact.metadata["extension_control_resolution"] == {
-        "blocked": True,
-        "failures": ["authority-unavailable"],
-    }
 
 
 def test_discovery_artifact_cannot_authorize_unbound_permission_layers(tmp_path: Path) -> None:
@@ -1011,47 +710,6 @@ def test_managed_github_merge_block_dominates_local_allow(tmp_path: Path) -> Non
     }
 
 
-def test_managed_routine_merge_block_still_gates_merged_branch_cleanup(tmp_path: Path) -> None:
-    command = (
-        "gh pr merge 5134 --repo example/project --squash --delete-branch && "
-        "gh pr view 5134 --repo example/project --json state,mergedAt,mergeCommit,url"
-    )
-    layer = ExtensionControlLayer(
-        schema_version=CONTROL_SCHEMA_VERSION,
-        kind=ControlLayerKind.SIGNED_CLOUD,
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        global_lockdown=False,
-        controls=(
-            ExtensionControl(
-                target=ControlTarget(
-                    ControlTargetKind.PERMISSION,
-                    "command.github.permission.routine-merge-remote",
-                ),
-                state=ControlState.DISABLED,
-            ),
-        ),
-    )
-    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        ExtensionControlAuthorityView(
-            health=AuthorityHealth.PROTECTED,
-            revision=10,
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            layers=(layer,),
-        )
-    )
-
-    with use_extension_control_snapshot(snapshot):
-        request = extract_sensitive_tool_action_request(
-            "Shell",
-            {"command": command},
-            cwd=tmp_path,
-            home_dir=tmp_path,
-        )
-
-    assert request is not None
-    assert request.action_class == "GitHub routine pull-request merge command"
-
-
 def test_inspection_and_runtime_artifact_share_canonical_wrapper_evidence(tmp_path: Path) -> None:
     command = "sudo --command-timeout 10 git push origin main --force"
     payload = inspect_command(command, cwd=tmp_path, home_dir=tmp_path)
@@ -1070,7 +728,6 @@ def test_inspection_and_runtime_artifact_share_canonical_wrapper_evidence(tmp_pa
 
 
 def test_inspection_parses_each_command_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import sys
 
     from codex_plugin_scanner.guard.runtime import command_model
 

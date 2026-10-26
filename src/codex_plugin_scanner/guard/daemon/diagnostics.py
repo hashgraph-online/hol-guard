@@ -133,6 +133,11 @@ class DaemonDiagnostics:
 
         return self._enqueue(self._record(logging.ERROR, event, detail=detail))
 
+    def record_background_notice(self, event: str, detail: str) -> bool:
+        """Positional info adapter for an expected background state."""
+
+        return self.record(event, detail=detail)
+
     def record_exception(
         self,
         event: str,

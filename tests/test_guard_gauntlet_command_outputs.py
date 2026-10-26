@@ -15,6 +15,8 @@ from ci.gauntlet.command_outputs import OUTPUT_SCENARIOS
 from ci.gauntlet.evidence import assess_case
 from ci.gauntlet.fixtures import SECURITY_NOTES, SOURCE, SOURCE_FILES, create_fixture, filesystem_checks
 from ci.gauntlet.proofs import required_checks
+from ci.gauntlet.runtime_cases import OUTPUT as RUNTIME_OUTPUT
+from ci.gauntlet.runtime_cases import stage_runtime_cases
 from ci.gauntlet.script_cases import report_output, stage_script_cases
 from tests.test_guard_gauntlet_workflow_boundaries import _case, _through_live_log_redaction
 
@@ -59,6 +61,8 @@ OUTPUTS = {
     "stdin-sed-transformation": ["ordinary-workflow-public\nsecond-line\n"],
     "script-node-project-report": [report_output()],
     "script-python-project-report": [report_output()],
+    "runtime-patched-launch-quiet": [RUNTIME_OUTPUT],
+    "runtime-unknown-balanced-quiet": [RUNTIME_OUTPUT],
 }
 CHECKED_OUTPUTS = [
     (identifier, index) for identifier, outputs in OUTPUTS.items() for index, output in enumerate(outputs) if output
@@ -254,6 +258,7 @@ def test_real_ordinary_shell_outputs_survive_the_live_redaction_boundary(tmp_pat
         pytest.skip("This exact stdin-operand regression requires GNU sed")
     fixture = create_fixture(tmp_path / "space café's output fixture")
     stage_script_cases(fixture.workspace, identifier)
+    stage_runtime_cases(fixture.root / "guard-home", fixture.workspace, identifier)
     scenario = CATALOG[identifier]
     rendered = scenario.render({"home": str(fixture.home), "workspace": str(fixture.workspace)})
     environment = {"PATH": os.environ["PATH"], "HOME": str(fixture.home), "GIT_CONFIG_NOSYSTEM": "1"}

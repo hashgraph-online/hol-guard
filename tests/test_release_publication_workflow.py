@@ -50,6 +50,7 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
         "build-native-guard-wheel-macos-arm64",
         "build-native-guard-wheel-windows-x64",
         "build-native-guard-wheel-windows-arm64",
+        "build-native-guard-wheel-linux-arm64",
         "publish-installed-bundle-assets",
     ]
     assert "needs.build.result == 'success'" in assemble["if"]
@@ -394,6 +395,20 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
     )
     assert "scripts/pypi_project_storage.py --fail-if-over-limit" in alpha_quota["run"]
     assert "packaging==25.0" in alpha_quota["run"]
+    scanner_quota = next(
+        step for step in alpha_steps if step.get("name") == "Skip plugin-scanner when its PyPI project is over quota"
+    )
+    assert "--project plugin-scanner" in scanner_quota["run"]
+    assert "--pending-dir dist-plugin-scanner" in scanner_quota["run"]
+    assert scanner_quota["if"] == (
+        "steps.pypi.outputs.plugin_scanner_upload == 'true' && needs.build.outputs.release_train == 'main'"
+    )
+    scanner_publish = next(step for step in alpha_publishers if step["with"]["packages-dir"] == "dist-plugin-scanner/")
+    assert scanner_publish["if"] == (
+        "steps.pypi.outputs.plugin_scanner_upload == 'true' && steps.scanner_quota.outputs.blocked != 'true'"
+    )
+    assert alpha_verify["env"]["SCANNER_QUOTA_BLOCKED"] == "${{ steps.scanner_quota.outputs.blocked }}"
+    assert '"${SCANNER_QUOTA_BLOCKED}" == "true"' in alpha_verify["run"]
 
 
 def test_repair_runs_reuse_attested_release_wheels_instead_of_rebuilt_ones() -> None:

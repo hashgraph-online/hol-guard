@@ -70,6 +70,29 @@ fn an_undocumented_word_leaves_the_launcher_in_place() {
     }
 }
 
+/// A program spelled as a path is handed over. What comes out is
+/// `<program> <arguments>`, which the parser reads exactly as it reads those
+/// words written without the launcher, and `nice` and `stdbuf` change neither
+/// the user, the root nor the directory it runs in. So
+/// `nice -n 10 .venv/bin/pytest -q` reaches the route `.venv/bin/pytest -q`
+/// already reaches instead of being reviewed for the launcher alone.
+#[test]
+fn a_path_behind_the_launcher_is_read_as_the_bare_command() {
+    for (command, program) in [
+        ("nice -n 10 .venv/bin/pytest -q", 3),
+        ("stdbuf -oL .venv/bin/pytest -q", 2),
+        ("exec .venv/bin/pytest -q", 1),
+        ("nice ./node_modules/.bin/eslint src", 1),
+        ("stdbuf -oL /usr/local/bin/cargo test", 2),
+    ] {
+        assert_eq!(
+            launcher_program(&words(command), 0),
+            Some(program),
+            "{command} was not read past its launcher"
+        );
+    }
+}
+
 /// A script file or an interpreter behind the prefix is a program whose own
 /// text was never read, so the prefix stays and the command keeps the
 /// unmodelled failure the scan already gives it.

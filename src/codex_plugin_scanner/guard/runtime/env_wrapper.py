@@ -9,19 +9,12 @@ from pathlib import Path
 from ..native_rich_command_model import NativeCommandModelError, request, string_tuple
 
 __all__ = [
-    "ENV_SPLIT_MAX_BYTES",
-    "ENV_SPLIT_MAX_EXPANSIONS",
-    "ENV_TOKEN_MAX_COUNT",
     "EnvEnvironmentDelta",
     "EnvOptionEffects",
     "EnvSplitExpansion",
     "EnvWrapperParseResult",
     "parse_env_wrapper",
 ]
-
-ENV_SPLIT_MAX_BYTES = 8192
-ENV_SPLIT_MAX_EXPANSIONS = 4
-ENV_TOKEN_MAX_COUNT = 256
 
 
 @dataclass(frozen=True, slots=True)

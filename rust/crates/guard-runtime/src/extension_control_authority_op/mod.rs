@@ -365,9 +365,39 @@ impl Ctx<'_> {
             if !interrupted {
                 return Err(tampered("extension control authority rollback detected"));
             }
+            // The commit sealed the anchor and then died before the row said
+            // so. Nothing here is left for a person to decide: `resume_plan`
+            // re-verifies the prepared row's transition record and sealed
+            // snapshot under the authority key, pins every field of both, and
+            // the anchor authenticates the same digest independently, so the
+            // revision that was already authorised is finished rather than
+            // held. Only a shape that proof cannot settle still reports
+            // `recovery-required`, which is what the explicit recovery verb is
+            // for. Without this the authority stays unhealthy for good: the
+            // abandoned-row rollback needs the anchor to still sit on the
+            // committed head, and this anchor has moved past it, so every
+            // later command is blocked until a person runs that verb.
+            //
+            // A commit retrying its own request is the one caller this is not
+            // for: it settles that row under the single-use proof it still
+            // holds, and finishing the row out from under it would leave that
+            // proof reserved against a committed transition, which reads as a
+            // replay. It is the only caller that asks for a read with
+            // `rollback_attempted` already set, which is how it says the
+            // prepared row is its own; a read that set the flag by rolling a
+            // row back cannot be here, since that shape leaves the anchor on
+            // the committed head and this one has moved past it.
+            if !self.request.rollback_attempted && !self.request.resume_attempted {
+                return Ok(Read::Action(json!({
+                    "action": "resume_pending",
+                    "revision": revision + 1,
+                    "current_revision": revision,
+                    "stored_catalog_digest": &stored_catalog_digest,
+                })));
+            }
             return recovery();
         }
-        if self.pending_transition(revision + 1)?.is_some() {
+        if let Some(pending) = self.pending_transition(revision + 1)? {
             if !self.request.rollback_attempted {
                 return Ok(Read::Action(json!({
                     "action": "roll_back_abandoned",
@@ -376,9 +406,46 @@ impl Ctx<'_> {
                     "anchor": anchor.to_value(),
                 })));
             }
-            return recovery();
+            // The caller asked and the row is still here: either its own retry
+            // window has not run out, or the caller reads under a shared lease
+            // and cannot write at all. Neither says anything about the
+            // authority this read already authenticated. A prepare the anchor
+            // never moved past carries nothing the device enforces, so the
+            // committed snapshot below it is served and the row is left to the
+            // next writer, which holds the lock exclusively and discards it
+            // once its window closes. Reporting recovery here instead would
+            // stop every command on the device -- with no approval to offer,
+            // since there is no decision left to make -- until a writer
+            // happened to run. A pending row of any other shape is a state
+            // this read may not discount, and still needs explicit recovery.
+            if !self.pending_carries_no_authority(&pending)? {
+                return recovery();
+            }
         }
         if anchor.phase != Phase::Committed {
+            // The anchor already seals this revision and this digest: the
+            // commit got as far as sealing its head and died before the row
+            // and the anchor said the revision was closed. That is the same
+            // interrupted commit as above, caught one step later, when the
+            // snapshot row had already advanced to the sealed revision. The
+            // proof is no weaker here than there: the sealed snapshot was
+            // verified under the authority key and every field of it pinned
+            // against the row before this point, and `resume_plan` verifies
+            // the prepared row's transition record independently before it
+            // settles anything, so finishing the phase authorises nothing the
+            // anchor had not already authorised. A prepared anchor is left
+            // alone, since nothing has sealed a head for it to finish.
+            if anchor.phase == Phase::Anchored
+                && !self.request.rollback_attempted
+                && !self.request.resume_attempted
+            {
+                return Ok(Read::Action(json!({
+                    "action": "resume_pending",
+                    "revision": revision,
+                    "current_revision": revision,
+                    "stored_catalog_digest": &stored_catalog_digest,
+                })));
+            }
             return recovery();
         }
         self.validate_transition_chain(revision, &row_str(row, "snapshot_digest")?)?;
@@ -436,12 +503,19 @@ impl Ctx<'_> {
         // forth faster than a dashboard draft can be applied.
         let oscillates = mode.allow_migration
             && self.migration_oscillates(revision, catalog_digest, stored_catalog_digest)?;
+        // The source read serves the committed view while a prepare that
+        // decides nothing still holds the next revision. Migrating now would
+        // insert a second transition at that occupied revision, so the
+        // migration waits for the writer that discards the row and the read
+        // is served rebound in memory meanwhile.
+        let next_occupied =
+            mode.allow_migration && self.pending_transition(revision + 1)?.is_some();
         let Some(current_manifest) = self.current_manifest() else {
             return Ok(Read::NeedManifest);
         };
         let (layers, retired_targets) =
             self.rebound_catalog_layers(&previous, catalog_digest, current_manifest)?;
-        if !mode.allow_migration || oscillates {
+        if !mode.allow_migration || oscillates || next_occupied {
             return Ok(Read::View(View {
                 catalog_digest: catalog_digest.to_owned(),
                 layers,

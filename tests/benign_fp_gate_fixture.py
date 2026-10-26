@@ -53,7 +53,7 @@ from tests.benign_fp_gate_configs import KUBECONFIG, LFS_GITCONFIG
 from tests.benign_fp_gate_connectors import write_connectors
 from tests.benign_fp_gate_developer_checkout import head_commit, write_developer_checkout
 from tests.benign_fp_gate_feature_app import build_feature_app, feature_app_path
-from tests.benign_fp_gate_git import _git, _session_worktree, _stopped_rebase
+from tests.benign_fp_gate_git import _git, _session_worktree, _signed_checkout, _stopped_rebase
 from tests.benign_fp_gate_hooked_clone import hooked_worktree_path, write_hooked_clone
 from tests.benign_fp_gate_long_lived_clone import write_long_lived_clones
 from tests.benign_fp_gate_projects import (
@@ -159,6 +159,7 @@ class BenignFixture:
             "tmp_org": self.tmp_org,
             "org_rebase": self.org.parent / "app-portal-rebase",
             "org_rebase_exec": self.org.parent / "app-portal-rebase-exec",
+            "signed_app": self.home / "Code" / "signed" / "app-signed",
             # A checkout whose `.gitignore` re-includes a hidden template, as most application repositories do.
             "ignore_negation": self.home / "Code" / "ignore-rules" / "billing-api",
             "feature_app": feature_app_path(self.home),
@@ -407,6 +408,7 @@ def build_fixture(root: Path) -> BenignFixture:
     write_hooked_clone(org, home, _git)
     # Years-old clones gaining sibling worktrees, one with a post-checkout hook.
     write_long_lived_clones(home, _git)
+    _signed_checkout(home)
     _stopped_rebase(org, home, "app-portal-rebase")
     # A rebase started with an `exec` step keeps that program in its saved todo list.
     _stopped_rebase(org, home, "app-portal-rebase-exec", "-x", "true")

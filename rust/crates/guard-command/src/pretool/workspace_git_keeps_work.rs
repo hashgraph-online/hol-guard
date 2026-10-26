@@ -3,13 +3,16 @@
 //! `switch`, `checkout`, `stash`, `reset` and `restore` stay out of the sandbox
 //! because most of their forms overwrite files the sandbox cannot restore. A
 //! few spellings leave every change reachable: creating a branch at `HEAD`
-//! keeps the working tree as it is, a plain stash push records the changes in
-//! `refs/stash`, where `git stash pop` brings them back, and `reset --soft`,
-//! `reset --mixed` and `restore --staged` move `HEAD` and the index while the
-//! working tree keeps every byte it had. Start points, pathspecs, force and
-//! merge options, the stash subcommands that drop or apply entries, and every
-//! form that writes the working tree — `reset --hard`, `--merge` and `--keep`,
-//! and `restore` without `--staged` or with `--worktree` — keep their review.
+//! keeps the working tree as it is, a stash push records the changes in
+//! `refs/stash`, where `git stash pop` brings them back — named paths included,
+//! since a pathspec keeps strictly less work than the bare form and the entry
+//! still holds every change it moves — and `reset --soft`, `reset --mixed` and
+//! `restore --staged` move `HEAD` and the index while the working tree keeps
+//! every byte it had. Start points, force and merge options, a pathspec given
+//! to anything but `stash push`, the stash subcommands that drop or apply
+//! entries, and every form that writes the working tree — `reset --hard`,
+//! `--merge` and `--keep`, and `restore` without `--staged` or with
+//! `--worktree` — keep their review.
 use crate::CanonicalCommandV1;
 use guard_contracts::NativeCommandObservationV1;
 
@@ -45,7 +48,8 @@ pub(super) fn keeps_work(
         })
 }
 
-/// `switch -c NAME`, `checkout -b NAME`, `stash [push] [-q] [-u] [-m MSG]`,
+/// `switch -c NAME`, `checkout -b NAME`,
+/// `stash [push] [-q] [-u] [-k|-S] [-m MSG] [--] [PATH...]`,
 /// `reset [-q] [--soft|--mixed] [REV] [-- PATH...]`, or
 /// `restore --staged [-q] [--] PATH...`. Leading Git options such as `-c` or
 /// `-C` are refused: they can point the command at another repository or
@@ -54,23 +58,39 @@ pub(in crate::pretool) fn keeping_arguments(arguments: &[String]) -> bool {
     let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
     match words.as_slice() {
         ["switch", "-c" | "--create", name] | ["checkout", "-b", name] => branch_name(name),
-        ["stash", rest @ ..] => stash_push(rest.strip_prefix(&["push"]).unwrap_or(rest)),
+        ["stash", rest @ ..] => match rest.strip_prefix(&["push"]) {
+            Some(after) => stash_push(after, true),
+            None => stash_push(rest, false),
+        },
         ["reset", rest @ ..] => index_only_reset(rest),
         ["restore", rest @ ..] => index_only_restore(rest),
         _ => false,
     }
 }
 
-fn stash_push(mut options: &[&str]) -> bool {
+/// `git stash [push]` with the options that only choose how much of the
+/// working tree moves into the entry, and the pathspecs that narrow it to
+/// named paths. A pathspec keeps strictly less work than the unbounded form
+/// does, and Git resolves it inside the repository, so the stash entry still
+/// holds every change the command moves. `--keep-index` and `--staged` leave
+/// more behind, not less. An unread option is refused.
+///
+/// `pushed` records whether the caller spelled `push` out. Without it a bare
+/// word is a subcommand, not a pathspec — `git stash drop` discards an entry,
+/// and Git itself refuses to assume `push` for it — so only an explicit `--`
+/// introduces pathspecs there.
+fn stash_push(mut options: &[&str], pushed: bool) -> bool {
     while let Some((first, rest)) = options.split_first() {
         options = match *first {
             "-q" | "--quiet" | "-u" | "--include-untracked" => rest,
+            "-k" | "--keep-index" | "--no-keep-index" | "-S" | "--staged" => rest,
             "-m" | "--message" => match rest.split_first() {
                 Some((_, after)) => after,
                 None => return false,
             },
             value if value.starts_with("--message=") => rest,
-            _ => return false,
+            "--" => return operands(rest),
+            _ => return pushed && operands(options),
         };
     }
     true

@@ -17,6 +17,8 @@ guard-google-identity = { path = "../guard-google-identity" }
 guard-hook-core = { path = "../guard-hook-core" }
 guard-policy-snapshot = { path = "../guard-policy-snapshot" }
 guard-policy-bundle = { path = "../guard-policy-bundle" }
+guard-plugin-kit = { path = "../guard-plugin-kit" }
+guard-plugin-telemetry = { path = "../guard-plugin-telemetry" }
 guard-rule-contract = { path = "../guard-rule-contract" }
 guard-adapter-detection = { path = "../guard-adapter-detection" }
 guard-runtime-pyjson = { path = "../guard-runtime-pyjson" }
@@ -56,7 +58,7 @@ sysinfo.workspace = true
 guard-archive = { version = "0.1.0", path = "../guard-archive" }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["signal", "resource", "socket", "net", "user", "mount"] }
+nix = { workspace = true, features = ["signal", "resource", "socket", "net", "user", "mount", "hostname"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 guard-seatbelt = { path = "../guard-seatbelt" }

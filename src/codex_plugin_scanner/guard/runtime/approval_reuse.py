@@ -22,7 +22,7 @@ never grant reuse.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Literal, cast
 
 from ..action_lattice import is_guard_action
@@ -106,29 +106,6 @@ class ApprovalReuseDecision:
         if self.saved_artifact_hash_is_context_token is not None:
             evidence["saved_artifact_hash_is_context_token"] = self.saved_artifact_hash_is_context_token
         return evidence
-
-
-def with_saved_artifact_hash_provenance(
-    reuse: ApprovalReuseDecision,
-    stored_artifact_hash: object,
-) -> ApprovalReuseDecision:
-    """Record whether the saved approval was bound to the context-token contract.
-
-    A rejected saved approval whose stored hash predates the context-token
-    format is stale-format evidence: it could never have bound to the current
-    request, so its rejection is housekeeping rather than the invalidation of
-    a live approval.  Emit layers use this non-secret flag to distinguish the
-    two cases without exposing either hash value.
-    """
-
-    if not isinstance(stored_artifact_hash, str) or not stored_artifact_hash:
-        return reuse
-    from .approval_context import approval_context_token_is_well_formed
-
-    return replace(
-        reuse,
-        saved_artifact_hash_is_context_token=approval_context_token_is_well_formed(stored_artifact_hash),
-    )
 
 
 def approval_reuse_authority_unavailable(current_action: object) -> ApprovalReuseDecision:

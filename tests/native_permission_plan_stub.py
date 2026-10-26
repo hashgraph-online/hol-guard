@@ -1,7 +1,7 @@
 """Answer a Claude-native approval's persist plan the way the resident does.
 
-The resident decides what a native approval saves (see
-``test_native_permission_persist_parity.py`` and the Rust replay suite). A test
+The resident decides what a native approval saves (see the Rust
+``hook_decision_native_permission_persist_tests`` replay suite). A test
 that cares what the *store* does with a plan, not how the plan is decided,
 answers it here instead of starting a resident.
 """

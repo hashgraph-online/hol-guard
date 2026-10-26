@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.consumer.service import artifact_hash
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact, package_request_policy_hash
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, PolicyDecision
+from codex_plugin_scanner.guard.native_mcp_proxy_decision import NativeMcpProxyDecisionError, native_package_answer
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.proxy.runtime_mcp import CodexMcpGuardProxy, RuntimeMcpGuardProxy
@@ -42,20 +43,38 @@ def _native_package_proxy_home(tmp_path: Path, native_mcp_probe) -> None:
 
 
 def test_package_decision_v2_ignores_malformed_reason_items(tmp_path: Path) -> None:
-    evaluation = SimpleNamespace(
-        reasons=("malformed", {"code": "cloud_timeout", "message": "Cloud timed out."}),
-        user_copy=SimpleNamespace(
-            title="Review package request",
-            summary="Current package safety data was unavailable.",
-            harness_message="Review the package request.",
-        ),
+    answer = native_package_answer(
+        "queue_package",
+        tool_name="install_package",
+        server_name="registry",
+        guard_home=tmp_path / "guard-home",
+        policy_action="require-reapproval",
+        evaluation={
+            "reasons": ["malformed", {"code": "cloud_timeout", "message": "Cloud timed out."}],
+            "risk_summary": "Current package safety data was unavailable.",
+            "user_copy": {
+                "title": "Review package request",
+                "summary": "Current package safety data was unavailable.",
+                "harness_message": "Review the package request.",
+            },
+        },
     )
 
-    decision = RuntimeMcpGuardProxy._package_decision_v2(
-        evaluation, "require-reapproval", guard_home=tmp_path / "guard-home"
-    )
-
+    decision = answer["decision_v2"]
     assert [signal["signal_id"] for signal in decision["signals"]] == ["supply-chain.cloud_timeout"]
+    assert decision["user_title"] == "Review package request"
+    assert answer["risk_signals"] == ["", "Cloud timed out."]
+
+
+def test_a_package_answer_the_resident_does_not_render_fails_closed(tmp_path: Path) -> None:
+    with pytest.raises(NativeMcpProxyDecisionError):
+        native_package_answer(
+            "terminal_tool",
+            tool_name="install_package",
+            server_name="registry",
+            guard_home=tmp_path / "guard-home",
+            policy_action="allow",
+        )
 
 
 def test_package_resolution_helpers_ignore_malformed_reason_items() -> None:

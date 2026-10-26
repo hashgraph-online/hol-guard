@@ -493,6 +493,11 @@ fn a_backgrounded_script_launch_reaches_review_instead_of_a_hard_block() {
         "python3 app.py &",
         "bash scripts/run.sh &",
         "node dist/index.js --port 3000 &",
+        // A job followed by another command runs the programs the same text
+        // runs with `;` in place of the `&`.
+        "node server.js & echo started",
+        "python3 app.py & sleep 2 && echo ready",
+        "node server.js & node worker.js &",
     ] {
         let result = evaluate_in(&binding, command, home.path(), &project);
         // The sandbox is the better of the two answers: a contained launch runs
@@ -515,17 +520,31 @@ fn a_backgrounded_script_launch_reaches_review_instead_of_a_hard_block() {
     }
 }
 
-/// Only the trailing `&` of a single job is read this way. A second job, a
-/// redirect into a name this text does not hold, a shell running a program
-/// spelled in its own argument, and a download carried into a shell all keep
-/// the failure they had, in the same verified context.
+/// A background job runs in a subshell, so its `cd` never moves the commands
+/// after it. Reading `cd sub && node server.js & node ../worker.js` as a list
+/// would resolve `../worker.js` from `sub`, so the list reading is refused and
+/// the command never reaches a quiet allow on the strength of that path.
+#[test]
+fn a_background_cd_is_not_read_as_moving_the_next_job() {
+    let (home, project) = verified_context();
+    let binding = binding_with_layers(serde_json::json!([]));
+    let command = "cd sub && node server.js & node ../worker.js";
+    let result = evaluate_in(&binding, command, home.path(), &project);
+    assert_ne!(result.minimum_action, "allow", "{command}");
+    assert!(!result.explicitly_benign, "{command}");
+}
+
+/// Only a job-ending `&` is read this way. A redirect into a name this text
+/// does not hold, a shell running a program spelled in its own argument
+/// (whether that job is backgrounded or follows one), and a download carried
+/// into a shell all keep the failure they had, in the same verified context.
 #[test]
 fn backgrounding_admits_nothing_beyond_a_single_trailing_job() {
     let (home, project) = verified_context();
     let binding = binding_with_layers(serde_json::json!([]));
     for (command, reason) in [
         (
-            "node server.js & node worker.js &",
+            "node server.js & eval \"$PAYLOAD\"",
             "native_command_extension_evaluation_failed",
         ),
         (
@@ -667,3 +686,6 @@ fn a_stderr_merging_pipe_decides_like_the_pipeline_it_spells() {
         assert_eq!(left.reason_code, right.reason_code, "{merged}");
     }
 }
+
+#[path = "native_command_compound_launch_tests.rs"]
+mod compound_launch;

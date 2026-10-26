@@ -22,14 +22,12 @@ fn observations(command: &str) -> NativeCommandObservationBatchV1 {
 }
 
 #[test]
-fn declarative_help_does_not_erase_an_independent_workflow_capability() {
+fn a_declarative_help_variant_and_the_capability_grammar_agree_about_help() {
+    // The catalog neutralises its own rule through the `help` safe variant.
+    // Until the grammar read the same flag, it still attributed
+    // `command.github.workflow` to the same words, so printing the help of a
+    // command that cancels a run raised a review card for cancelling one.
     let observed = observations("gh run cancel --help");
-    let workflow = observed
-        .observations
-        .iter()
-        .find(|item| item.rule_id == "command.github.workflow")
-        .unwrap();
-    assert_eq!(workflow.effective_segment_indexes, [0]);
     let help = observed
         .observations
         .iter()
@@ -37,6 +35,27 @@ fn declarative_help_does_not_erase_an_independent_workflow_capability() {
         .unwrap();
     assert!(help.effective_segment_indexes.is_empty());
     assert!(!help.safe_variants.is_empty());
+    assert!(!observed
+        .observations
+        .iter()
+        .any(|item| item.rule_id == "command.github.workflow"));
+}
+
+#[test]
+fn a_declarative_help_variant_never_erases_the_run_it_describes() {
+    let observed = observations("gh run cancel 12345");
+    let workflow = observed
+        .observations
+        .iter()
+        .find(|item| item.rule_id == "command.github.workflow")
+        .unwrap();
+    assert_eq!(workflow.effective_segment_indexes, [0]);
+    let administration = observed
+        .observations
+        .iter()
+        .find(|item| item.rule_id == "command.cicd.github.run-administration")
+        .unwrap();
+    assert_eq!(administration.effective_segment_indexes, [0]);
 }
 
 #[test]

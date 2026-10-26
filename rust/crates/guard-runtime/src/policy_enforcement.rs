@@ -73,6 +73,7 @@ use policy_enforcement_reason::{policy_override_reason, NO_SCRIPT_INSTALL_ALTERN
 #[path = "policy_enforcement_admission.rs"]
 mod policy_enforcement_admission;
 pub(crate) use policy_enforcement_admission::AdmittedPolicySnapshot;
+pub(crate) use policy_enforcement_helpers::risk_action;
 
 #[path = "policy_enforcement_business.rs"]
 mod policy_enforcement_business;

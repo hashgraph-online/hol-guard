@@ -281,6 +281,15 @@ class HookWorker(HookWorkerNativeMixin):
             from .claude_permission_request import claude_permission_request_response
 
             return claude_permission_request_response(self.store, payload)
+        if harness.strip().lower().replace("_", "-") == "claude-code" and event_name in {"PostToolUse", "Stop"}:
+            from .claude_turn_events import claude_guard_question_answer, claude_turn_stop
+
+            if event_name == "Stop":
+                claude_turn_stop(self.store, payload)
+            else:
+                answered = claude_guard_question_answer(self.store, payload)
+                if answered is not None:
+                    return answered
         if (
             event_name == "PermissionRequest"
             and harness.strip().lower().replace("_", "-") in _PERMISSION_PASSTHROUGH_HARNESSES

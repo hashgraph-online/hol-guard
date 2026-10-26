@@ -259,6 +259,7 @@ pub(super) fn workspace_exec_roots(
     search_path: &str,
     home: Option<&Path>,
     workspace: &Path,
+    text: Option<&str>,
     go: bool,
     cargo: bool,
     maven: bool,
@@ -295,6 +296,23 @@ pub(super) fn workspace_exec_roots(
         for root in accepted {
             if !roots.contains(&root) {
                 roots.push(root);
+            }
+        }
+    }
+    // A venv the command starts by its own path, such as `.venv/bin/pytest`,
+    // never reaches the loop above when the session's PATH does not name it.
+    // The install its launchers link to becomes an executable root; its `bin`
+    // stays off the sandbox PATH, so a bare name still resolves inside the
+    // sandbox to the file the session resolved outside it. Only the venvs
+    // `text` starts a program from are read: a command that names none is
+    // planned without the interpreter prefixes the others link out to.
+    for bin in super::venv::workspace_resident_bins(workspace, text) {
+        let Some((_, installs)) = workspace_venv(&bin, workspace) else {
+            continue;
+        };
+        for install in installs {
+            if !roots.contains(&install) {
+                roots.push(install);
             }
         }
     }
@@ -593,6 +611,7 @@ mod tests {
             &format!("{}:relative/bin", link.display()),
             Some(&home.0),
             Path::new("/nonexistent-workspace"),
+            None,
             false,
             false,
             false,
@@ -608,10 +627,24 @@ mod tests {
         let Some(cache) = host_go_module_cache() else {
             return;
         };
-        let (without, _) =
-            workspace_exec_roots("", None, Path::new("/nonexistent"), false, false, false);
-        let (with, _) =
-            workspace_exec_roots("", None, Path::new("/nonexistent"), true, false, false);
+        let (without, _) = workspace_exec_roots(
+            "",
+            None,
+            Path::new("/nonexistent"),
+            None,
+            false,
+            false,
+            false,
+        );
+        let (with, _) = workspace_exec_roots(
+            "",
+            None,
+            Path::new("/nonexistent"),
+            None,
+            true,
+            false,
+            false,
+        );
         assert!(!without.contains(&cache));
         assert!(with.contains(&cache));
     }
@@ -625,10 +658,24 @@ mod tests {
         if caches.is_empty() {
             return;
         }
-        let (without, _) =
-            workspace_exec_roots("", None, Path::new("/nonexistent"), false, false, false);
-        let (with, _) =
-            workspace_exec_roots("", None, Path::new("/nonexistent"), false, true, false);
+        let (without, _) = workspace_exec_roots(
+            "",
+            None,
+            Path::new("/nonexistent"),
+            None,
+            false,
+            false,
+            false,
+        );
+        let (with, _) = workspace_exec_roots(
+            "",
+            None,
+            Path::new("/nonexistent"),
+            None,
+            false,
+            true,
+            false,
+        );
         for (_, cache) in &caches {
             assert!(!without.contains(cache));
             assert!(with.contains(cache));
@@ -646,10 +693,24 @@ mod tests {
         let Some(repository) = host_maven_repository() else {
             return;
         };
-        let (without, _) =
-            workspace_exec_roots("", None, Path::new("/nonexistent"), false, false, false);
-        let (with, _) =
-            workspace_exec_roots("", None, Path::new("/nonexistent"), false, false, true);
+        let (without, _) = workspace_exec_roots(
+            "",
+            None,
+            Path::new("/nonexistent"),
+            None,
+            false,
+            false,
+            false,
+        );
+        let (with, _) = workspace_exec_roots(
+            "",
+            None,
+            Path::new("/nonexistent"),
+            None,
+            false,
+            false,
+            true,
+        );
         assert!(!without.contains(&repository));
         assert!(with.contains(&repository));
         let dists = host_maven_wrapper_dists();

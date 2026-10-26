@@ -11,6 +11,7 @@
 //! sees or which override applies is evaluated outside the runtime.
 
 use crate::hook_cli_claude_text::claude_approval_copy;
+use crate::hook_cli_emit::cli_hook_emit_document;
 use guard_command::hook_responses::cli_documents::{
     cli_document, cli_response, copilot_hook_response, CliOutcome,
 };
@@ -19,8 +20,8 @@ use guard_command::hook_responses::{
 };
 use guard_contracts::{
     artifact_id_from_event, cursor_after_shell_observed, cursor_observer_event_for_payload,
-    evaluation_has_terminal_policy_action, HookRenderRequestV1, HookRenderResultV1,
-    HOOK_RENDER_MAX_BYTES, HOOK_RENDER_RESULT_SCHEMA,
+    evaluation_has_terminal_policy_action, hook_render_max_bytes, HookRenderRequestV1,
+    HookRenderResultV1, HOOK_RENDER_RESULT_SCHEMA,
 };
 use serde_json::{json, Value};
 
@@ -29,7 +30,7 @@ use crate::package_authority_op::request_digest_with_limit;
 pub(crate) fn evaluate_hook_render_request(
     request: &HookRenderRequestV1,
 ) -> Result<Vec<u8>, String> {
-    let request_sha256 = request_digest_with_limit(request, HOOK_RENDER_MAX_BYTES)
+    let request_sha256 = request_digest_with_limit(request, hook_render_max_bytes(&request.kind))
         .map_err(|_| "native_hook_render_too_large".to_owned())?;
     let (status, code, payload) = match render(request) {
         Ok(payload) => ("ok".to_owned(), "ok".to_owned(), Some(payload)),
@@ -150,6 +151,23 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
         let mut document = Object::new();
         document.insert("document".into(), Value::Object(stdout_document));
         document.insert("exit_code".into(), json!(exit_code));
+        return Ok(cli_payload(CliOutcome::Document(document)));
+    }
+    if request.kind == "cli_hook_emit" {
+        // The `hol-guard hook` command prints the daemon's answer and exits
+        // with the status that answer means to the harness. Reading which
+        // verdict the answer gave is the resident's call, not the printer's.
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let event_name = params
+            .get("event_name")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        let response_json = params
+            .get("response_json")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        let document = cli_hook_emit_document(harness, event_name, response_json)
+            .ok_or("native_hook_render_unrenderable")?;
         return Ok(cli_payload(CliOutcome::Document(document)));
     }
     if matches!(

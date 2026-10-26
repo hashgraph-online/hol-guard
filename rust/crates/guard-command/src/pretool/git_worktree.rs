@@ -94,9 +94,24 @@ pub(super) fn worktree_add_execution_free(
     {
         return Some(false);
     }
-    // Without `-b` no branch is created, so there is no name that could
-    // already exist.
-    if let Some(branch) = branch {
+    // Without `-b`, `--detach` or a reference Git creates a branch named
+    // after the destination's last component. `worktree.guessRemote` would
+    // start that branch from a remote-tracking branch of the same name
+    // instead of `HEAD`, which is not the tree the proof below reads.
+    let implied = if attach && reference.is_none() {
+        if facts.guess_remote {
+            return Some(false);
+        }
+        let Some(name) = destination.file_name().and_then(|value| value.to_str()) else {
+            return Some(false);
+        };
+        Some(name)
+    } else {
+        None
+    };
+    // Without `-b` and outside that form no branch is created, so there is no
+    // name that could already exist.
+    if let Some(branch) = branch.or(implied) {
         let branch_ref = format!("refs/heads/{branch}");
         let (status, output) = git_query_with_args(
             &base,

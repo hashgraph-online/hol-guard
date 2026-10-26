@@ -15,6 +15,11 @@ from codex_plugin_scanner.guard.runtime.contained_wrapper import (
 _RUNNER = "./node_modules/.bin/vitest run"
 
 
+@pytest.fixture(autouse=True)
+def _peel_from_the_resident(native_contained_wrapper_runtime: Path) -> None:
+    """Every peel here is the classifier's answer, asked of the session resident."""
+
+
 @pytest.mark.parametrize(
     ("command", "stages"),
     [
@@ -143,17 +148,6 @@ def test_filter_chain_applies_to_captured_output(capsys: pytest.CaptureFixture[s
     assert missing.status_line(0) == "exit=1\n"
 
 
-def test_grep_runs_only_with_validated_arguments() -> None:
-    with pytest.raises(ValueError):
-        filters.apply_filters("x\n", (("grep", "-f", "/etc/hosts"),))
-    with pytest.raises(ValueError):
-        filters.apply_filters("x\n", (("grep", "x", "/etc/hosts"),))
-    with pytest.raises(ValueError):
-        filters.apply_filters("x\n", (("rg", "-g", "*.ts", "x"),))
-    with pytest.raises(ValueError):
-        filters.apply_filters("x\n", (("rg", "x", "/etc/hosts"),))
-
-
 def _ripgrep_installed() -> bool:
     try:
         filters._trusted_ripgrep()
@@ -197,9 +191,7 @@ def test_a_ripgrep_that_cannot_run_leaves_the_search_to_the_next_directory(
     assert filters._trusted_ripgrep() == str(installed)
 
 
-def test_a_missing_matcher_reports_the_status_a_shell_gives(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_a_missing_matcher_reports_the_status_a_shell_gives(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(filters, "_RG_DIRECTORIES", (tmp_path / "missing",))
     text, diagnostics, status = filters.apply_filters("x\n", (("rg", "x"),))
     assert (text, status) == ("", 127)

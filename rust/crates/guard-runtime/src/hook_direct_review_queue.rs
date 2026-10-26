@@ -300,7 +300,7 @@ fn facts<'a>(context: &Context<'a>, result: &Object) -> Option<Facts<'a>> {
     let review = &binding.review;
     let mode = review.blocked_request_mode.as_deref()?;
     // `native_package_review_response` may settle a package review first.
-    if !package::left_to_queue(cfg!(windows), context.recorded_payload, result) {
+    if !package::left_to_queue(context.recorded_payload, result) {
         return None;
     }
     // `_native_review_artifact_id` names the notice's artifact with the

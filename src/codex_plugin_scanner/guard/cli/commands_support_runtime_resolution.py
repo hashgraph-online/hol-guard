@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from ..runtime.composio_contract import composio_names_a_wrapper
+from ..adapters.mcp_servers import ManagedMcpServer, proxy_process_env, stable_mcp_server_identifier
 from ..runtime.mcp_protection import McpServerIdentity
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
 from ..native_cli_runtime_support import cli_runtime_support as _native_cli_support
@@ -84,40 +84,12 @@ def _prompt_scan_path_exists(path: Path) -> bool:
         return path.is_file()
     return False
 
-def _legacy_claude_alias_runtime_artifact(
-    *,
-    artifact: GuardArtifact,
-    requested_harness: str,
-    home_dir: Path,
-    workspace: Path | None,
-) -> GuardArtifact | None:
-    if requested_harness == artifact.harness:
-        return None
-    if requested_harness != "claude" or artifact.harness != "claude-code":
-        return None
-    legacy_prefix = "claude-code:"
-    if not artifact.artifact_id.startswith(legacy_prefix):
-        return None
-    return replace(
-        artifact,
-        artifact_id=f"claude:{artifact.artifact_id[len(legacy_prefix) :]}",
-        harness="claude",
-        config_path=str(_runtime_policy_path("claude", home_dir, workspace)),
-    )
-
 def _is_copilot_permission_request(payload: dict[str, object]) -> bool:
     from ..daemon.hook_availability_policy import hook_event_is_permission_request as _perm
     return any(
         isinstance(payload.get(key), str) and _perm(str(payload.get(key)))
         for key in ("hook_name", "hook_event_name", "hookEventName")
     )
-
-def _copilot_hook_stage(payload: dict[str, object]) -> str | None:
-    for key in ("hook_name", "hook_event_name", "hookEventName"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip().lower()
-    return None
 
 @dataclass(frozen=True, slots=True)
 class _CopilotMcpRuntimeServer:
@@ -130,73 +102,6 @@ def _copilot_identity_dto(value: dict[str, Any]) -> McpServerIdentity:
     fields: dict[str, Any] = dict(value)
     fields["env_keys"] = tuple(fields["env_keys"])
     return McpServerIdentity(**fields)
-
-
-def _copilot_runtime_tool_call(
-    *, payload: dict[str, object], home_dir: Path, workspace: Path | None,
-    config: GuardConfig | None = None, preferred_workspace_config: str | None = None,
-    store: GuardStore | None = None,
-) -> tuple[GuardArtifact, str, object] | None:
-    tool_name = payload.get("tool_name")
-    if (
-        not isinstance(tool_name, str) or not tool_name.strip()
-        or ("/" not in tool_name and not tool_name.startswith("mcp_"))
-    ):
-        return None
-    fields = ("tool_schema", "toolSchema", "input_schema", "inputSchema", "schema",
-              "tool_description", "toolDescription", "description")
-    projection = {key: payload[key] for key in (*fields, "tool_name", "source_scope") if key in payload}
-    for key in ("tool", "tool_definition", "toolDefinition"):
-        value = payload.get(key)
-        if isinstance(value, Mapping):
-            projection[key] = {name: value[name] for name in fields if name in value}
-    calls = payload.get("toolCalls")
-    if isinstance(calls, list):
-        projection["toolCalls"] = [
-            {name: item[name] for name in (*fields, "name") if name in item}
-            for item in calls if isinstance(item, Mapping)
-        ]
-    result = _native_cli_support("resolve_tool", {
-        "payload": projection, "home_dir": str(home_dir),
-        "workspace": str(workspace) if workspace is not None else None,
-        "preferred": preferred_workspace_config, "launch_cwd": str(workspace or Path.cwd()),
-        "environment": dict(os.environ),
-        "caller_cwd": str(Path.cwd()),
-    }, guard_home=store.guard_home if store is not None else None)
-    if result is None:
-        return None
-    server, identity, metadata = result["server"], result["identity"], result["metadata"]
-    runtime_name = result["tool_name"]
-    server_identity = identity["server_identity"]
-    artifact = build_tool_call_artifact(
-        harness="copilot", server_name=server["server_name"], tool_name=runtime_name,
-        source_scope=server["source_scope"], config_path=server["config_path"], transport=identity["transport"],
-        server_identity=_copilot_identity_dto(server_identity),
-        server_fingerprint=identity["fingerprint"], tool_schema=metadata["schema"],
-        tool_description=metadata["description"],
-        provider_catalog_hash=(
-            store.read_mcp_provider_authority_hash()
-            if store is not None and composio_names_a_wrapper(runtime_name)
-            else None
-        ),
-    )
-    arguments = payload.get("tool_input", payload.get("arguments"))
-    artifact_hash = build_tool_call_hash(artifact, arguments, workspace=workspace or Path.cwd(), config=config)
-    return artifact, artifact_hash, arguments
-
-
-
-
-
-def _resolve_copilot_workspace_root(workspace: Path | None) -> Path | None:
-    if workspace is None:
-        return None
-    result = _native_cli_support("workspace_root", {
-        "workspace": str(workspace),
-        "caller_cwd": str(Path.cwd()),
-    })
-    return Path(result) if result is not None else None
-
 
 
 def _copilot_runtime_server_identity(
@@ -336,29 +241,10 @@ def _queue_claude_native_approval_gate_fallback(
     )
     return queued
 
-def _runtime_capabilities_summary(artifact: GuardArtifact) -> str:
-    if artifact.artifact_type == "package_request":
-        package_manager = artifact.metadata.get("package_manager")
-        if isinstance(package_manager, str) and package_manager:
-            return f"package request • {package_manager}"
-        return "package request"
-    tool_name = artifact.metadata.get("tool_name")
-    if isinstance(tool_name, str) and tool_name:
-        if artifact.artifact_type == "tool_action_request":
-            return f"tool action request • {tool_name}"
-        return f"file read request • {tool_name}"
-    return "file read request"
-
 def _runtime_request_summary(artifact: GuardArtifact) -> str | None:
     summary = artifact.metadata.get("request_summary")
     if isinstance(summary, str) and summary:
         return summary
-    return None
-
-def _runtime_requested_path(artifact: GuardArtifact) -> str | None:
-    normalized_path = artifact.metadata.get("normalized_path")
-    if isinstance(normalized_path, str) and normalized_path:
-        return normalized_path
     return None
 
 def _canonical_harness_name(harness: str) -> str:
@@ -400,6 +286,39 @@ def _server_env(server: dict[str, object]) -> dict[str, str]:
         return {}
     return {str(key): value for key, value in env.items() if isinstance(key, str) and isinstance(value, str)}
 
+def _serve_hermes_stdio_proxy(
+    *,
+    context: HarnessContext,
+    store: GuardStore,
+    config,
+    server_name: str,
+    command: list[str],
+    source_scope: str,
+    config_path: str,
+    server_id: str | None,
+    server_env_keys: tuple[str, ...],
+) -> int:
+    def current_config() -> GuardConfig:
+        local_config = load_guard_config(context.guard_home, workspace=context.workspace_dir)
+        return overlay_synced_guard_policy(local_config, _synced_policy_payload(store))
+
+    # The relay prompts inline for any client that declares elicitation, as this proxy does.
+    proxy = ElicitationMcpGuardProxy(
+        harness="hermes",
+        server_name=server_name,
+        command=command,
+        context=context,
+        store=store,
+        config=config,
+        source_scope=source_scope,
+        config_path=config_path,
+        transport="stdio",
+        server_id=server_id,
+        server_env_keys=server_env_keys,
+        current_config_provider=current_config,
+    )
+    return proxy.serve()
+
 def _run_hermes_mcp_proxy(
     *,
     args: argparse.Namespace,
@@ -407,6 +326,29 @@ def _run_hermes_mcp_proxy(
     store: GuardStore,
     config,
 ) -> int:
+    server_command = getattr(args, "server_command", None)
+    if server_command:
+        # The relay-style launch carries the server on its argv, like the other harnesses.
+        server_name = getattr(args, "server_name", None)
+        config_path = getattr(args, "config_path", None)
+        if not server_name or config_path is None:
+            print("Guard Hermes MCP proxy needs --server-name and --config-path with --command.", file=sys.stderr)
+            return 2
+        return _serve_hermes_stdio_proxy(
+            context=context,
+            store=store,
+            config=config,
+            server_name=server_name,
+            command=[server_command, *list(getattr(args, "server_args", []))],
+            source_scope=getattr(args, "source_scope", "project"),
+            config_path=config_path,
+            server_id=getattr(args, "server_id", None),
+            server_env_keys=tuple(getattr(args, "server_env_keys", ())),
+        )
+    server_key = getattr(args, "server", None)
+    if not server_key:
+        print("Guard Hermes MCP proxy needs --server or --command.", file=sys.stderr)
+        return 2
     managed_install = _managed_install_for(store, "hermes")
     if managed_install is None:
         print("Guard is not managing Hermes in this Guard home.", file=sys.stderr)
@@ -418,15 +360,15 @@ def _run_hermes_mcp_proxy(
     if not isinstance(manifest.get("servers"), dict):
         print("Hermes managed install has no MCP server manifest.", file=sys.stderr)
         return 2
-    server = _managed_manifest_server(managed_install, str(args.server))
+    server = _managed_manifest_server(managed_install, str(server_key))
     if server is None:
-        print(f"Unknown Hermes MCP server: {args.server}", file=sys.stderr)
+        print(f"Unknown Hermes MCP server: {server_key}", file=sys.stderr)
         return 2
     transport = str(server.get("transport") or "stdio")
     if transport == "http":
         base_url = server.get("url")
         if not isinstance(base_url, str) or not base_url:
-            print(f"Hermes MCP server {args.server} is missing a remote URL.", file=sys.stderr)
+            print(f"Hermes MCP server {server_key} is missing a remote URL.", file=sys.stderr)
             return 2
         proxy = RemoteGuardProxy(base_url=base_url, allow_insecure_localhost=True)
         for raw_line in sys.stdin:
@@ -448,33 +390,36 @@ def _run_hermes_mcp_proxy(
             if response is not None:
                 print(json.dumps(response, separators=(",", ":")), flush=True)
         return 0
-    approval_center_url = schedule_guard_daemon_ensure(
-        context.guard_home,
-        home_dir=context.home_dir,
-    )
     command = _server_command(server)
     if len(command) == 0:
-        print(f"Hermes MCP server {args.server} is missing a launch command.", file=sys.stderr)
+        print(f"Hermes MCP server {server_key} is missing a launch command.", file=sys.stderr)
         return 2
-
-    def current_stdio_config() -> GuardConfig:
-        local_config = load_guard_config(context.guard_home, workspace=context.workspace_dir)
-        return overlay_synced_guard_policy(local_config, _synced_policy_payload(store))
-
-    proxy = StdioGuardProxy(
-        command=command,
-        cwd=context.workspace_dir,
-        guard_store=store,
-        guard_config=config,
-        approval_center_url=approval_center_url,
+    # An overlay written before the relay launch resolves its server from the manifest;
+    # the proxy reads the server's environment values from this process, as it does for
+    # every other harness.
+    env = proxy_process_env(_server_env(server))
+    os.environ.update(env)
+    identity = ManagedMcpServer(
         harness="hermes",
-        env=_server_env(server),
-        current_config_provider=current_stdio_config,
+        name=str(server.get("name") or server_key),
+        source_scope="global",
+        config_path=str(server.get("config_path") or ""),
+        command=command[0],
+        args=tuple(command[1:]),
+        transport="stdio",
+        env=env,
+        enabled=True,
     )
-    return proxy.run_stream(
-        input_stream=sys.stdin,
-        output_stream=sys.stdout,
-        error_stream=sys.stderr,
+    return _serve_hermes_stdio_proxy(
+        context=context,
+        store=store,
+        config=config,
+        server_name=identity.name,
+        command=command,
+        source_scope=identity.source_scope,
+        config_path=identity.config_path,
+        server_id=stable_mcp_server_identifier(identity),
+        server_env_keys=tuple(sorted(env)),
     )
 
 def _server_command(server: dict[str, object]) -> list[str]:
@@ -488,14 +433,13 @@ def _server_command(server: dict[str, object]) -> list[str]:
     return command_parts
 
 __all__ = [
-    "_canonical_harness_name", "_copilot_hook_stage",
-    "_copilot_runtime_tool_call",
-    "_expand_prompt_scan_path", "_is_copilot_permission_request", "_legacy_claude_alias_runtime_artifact",
+    "_canonical_harness_name",
+    "_expand_prompt_scan_path", "_is_copilot_permission_request",
     "_managed_install_for", "_managed_manifest_server",
     "_prompt_scan_path_exists", "_queue_claude_native_approval_gate_fallback",
     "_redact_codex_prompt_secret_assignments",
-    "_resolve_copilot_workspace_root", "_resolve_prompt_scan_path", "_run_hermes_mcp_proxy",
-    "_runtime_capabilities_summary", "_runtime_detection", "_runtime_policy_path", "_runtime_request_summary",
-    "_runtime_requested_path", "_server_command", "_server_env", "_server_headers",
+    "_resolve_prompt_scan_path", "_run_hermes_mcp_proxy",
+    "_runtime_detection", "_runtime_policy_path", "_runtime_request_summary",
+    "_server_command", "_server_env", "_server_headers",
     "_truncate_codex_display_text",
 ]

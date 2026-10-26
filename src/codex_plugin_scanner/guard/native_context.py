@@ -286,7 +286,7 @@ def _resolve_existing_digest_home(guard_home: Path | None) -> Path:
     return _resolve_digest_home(None)
 
 
-def ensure_resident_prerequisite(guard_home: Path) -> bool:
+def ensure_resident_prerequisite(guard_home: Path, *, store: Any | None = None) -> bool:
     """Establish the resident's on-disk prerequisite for ``guard_home``.
 
     The resident refuses every request until the owner-private verifier key
@@ -303,6 +303,13 @@ def ensure_resident_prerequisite(guard_home: Path) -> bool:
     secret-store master that their guard home was never given.  Returns
     ``False`` when a missing prerequisite cannot be created, which callers
     report as an unavailable runtime rather than a crash.
+
+    ``store`` is the already-open store the caller is about to use.  The
+    verifier key is derived from the policy-integrity master, so it has to come
+    from the same secret store that signs the home's rows: opening a second
+    store here would read whatever secret store that new instance resolves,
+    which is not necessarily the caller's.  Callers that hold a store pass it;
+    the rest still get one opened for them.
     """
 
     try:
@@ -328,9 +335,9 @@ def ensure_resident_prerequisite(guard_home: Path) -> bool:
 
         # Provisioning the resident key must not prime policy decisions or
         # refresh signed store state on the evaluation hot path.
-        store = GuardStore(guard_home, prime_policy_integrity=False)
+        owner = GuardStore(guard_home, prime_policy_integrity=False) if store is None else store
         phase = "provision_key"
-        provision_native_verifier_key_for_store(store)
+        provision_native_verifier_key_for_store(owner)
     except Exception as error:
         # Nothing to fall back to: the resident is the only authority for these
         # digests, so an unprovisionable home is an unavailable runtime. The

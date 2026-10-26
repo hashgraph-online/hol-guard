@@ -244,12 +244,27 @@ fn a_store_without_saved_rows_answers_as_empty() {
 }
 
 #[test]
-fn a_cached_bundle_defers_and_remote_rows_are_read() {
+fn a_cached_bundle_keeps_only_its_rows_and_remote_rows_are_read() {
     let (home, connection) = guard_home("bundle");
     sync_state(&connection, "policy_bundle", "{}");
     // Without a policy-bundle row, the bundle's identities match nothing.
     assert!(read(&home, &binding(), |saved| saved.is_none()).unwrap());
+    // An empty bundle authorizes no row, so its saved block is dropped.
     decide(&connection, "artifact", "block", None, "policy-bundle");
+    let dropped = read(&home, &binding(), |saved| {
+        let saved = saved.expect("bundle row");
+        assert!(saved.bundle_identities.is_empty());
+        saved.answer(&policy_need(ARTIFACT, None)).unwrap()
+    })
+    .unwrap();
+    assert_eq!(dropped["decision"], Value::Null);
+    // A bundle the resident cannot read is left to the proxy.
+    connection
+        .execute(
+            "update sync_state set payload_json = 'not json' where state_key = 'policy_bundle'",
+            [],
+        )
+        .unwrap();
     let deferred = read(&home, &binding(), |_| ()).err();
     assert_eq!(deferred, Some("mcp_relay_saved_remote_policy"));
     // The lookup never serves a cloud-sync row, and serves a signed memory

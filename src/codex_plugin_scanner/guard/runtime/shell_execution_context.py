@@ -336,26 +336,6 @@ def shell_execution_context_hash(context: ShellExecutionContext) -> str:
     return result[0]
 
 
-def shell_execution_context_metadata(context: ShellExecutionContext) -> dict[str, object]:
-    """Return bounded metadata suitable for runtime artifacts and approval identity."""
-
-    binding = context.native
-    wire = _context_wire(context)
-    if binding is not None and dict(binding.wire) == wire:
-        return dict(binding.metadata)
-    result = native_shell_hashes(wire)
-    if isinstance(result, NativeRequestContextFailure):
-        effective = [str(path) for path in context.effective_cwds]
-        return {
-            "shell_execution_context_hash": _unbound_hash("shell-context"),
-            "shell_execution_context_complete": False,
-            "shell_execution_context_reason_code": SHELL_CWD_NATIVE_UNAVAILABLE,
-            "shell_execution_effective_cwds": effective,
-            "effective_cwd": effective[-1] if effective else None,
-        }
-    return dict(result[2])
-
-
 __all__ = [
     "SHELL_CWD_AMBIGUOUS_STACK",
     "SHELL_CWD_MISSING_DIRECTORY",
@@ -375,6 +355,5 @@ __all__ = [
     "ShellExecutionSegment",
     "model_shell_execution_context",
     "shell_execution_context_hash",
-    "shell_execution_context_metadata",
     "validate_shell_execution_segment",
 ]

@@ -112,7 +112,17 @@
   "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py",
   "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/read_only_filters.py",
   "src/codex_plugin_scanner/guard/runtime/extension_control_resolver.py",
-  "src/codex_plugin_scanner/guard/inventory_contract_scans.py"
+  "src/codex_plugin_scanner/guard/inventory_contract_scans.py",
+  "src/codex_plugin_scanner/guard/runtime/skill_paths.py",
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_quote_parsing.py",
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/docker_requests.py",
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_tokenization.py",
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_static_safety.py",
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_quote_tokens.py",
+  "src/codex_plugin_scanner/guard/runtime/executable_resolution.py",
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/constants_patterns.py",
+  "src/codex_plugin_scanner/guard/runtime/github_capability_contract.py",
+  "src/codex_plugin_scanner/guard/runtime/github_capability_interaction.py"
  ],
  "retired_tests": [
   {
@@ -7345,6 +7355,71 @@
    ],
    "status": "native_behavior_ported_requires_ci",
    "rationale": "The budget assertion itself is ported: bound_fs::Directory::entries refuses an overflowing scan and leaves later scans intact, which the native test proves with real directory entries instead of the fake scandir iterator this test installed. The declared-output capture walk the assertion ran through is gone with runtime/containment_outputs.py; the native contained-execution path captures only stdout.bin and stderr.bin from its own run directory."
+  },
+  {
+   "old_node": "tests/test_hook_source_skill_read.py::test_supported_omp_scheme_matrix_is_complete",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Compared PI_INLINE_RESOURCE_SCHEMES to a literal copy of itself. No production module imported runtime/skill_paths.py; skill:// document resolution is resolve_known_skill_doc_path in codex_output_source_paths.rs."
+  },
+  {
+   "old_node": "tests/test_guard_shell_static_path_boundaries.py::test_windows_root_and_drive_relative_operands_cannot_supply_containment_proof",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Nothing in the product called the Python literal-cd parser: cli/_commands_shared.py imported literal_cd_execution_context but never used it, so the shell_static_safety, shell_quote_parsing, shell_quote_tokens, shell_tokenization and docker_requests chain was unreachable. This test pinned the dead Python _shell_token_escapes_root under PureWindowsPath. The native static-safety helpers in sfrs_static_safety.rs stay pinned by the recorded vectors in sfrs_conformance.rs."
+  },
+  {
+   "old_node": "tests/test_guard_risk.py::test_script_has_aliased_risky_import_ignores_null_byte_parse_failures",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Nothing in the product called the Python literal-cd parser: cli/_commands_shared.py imported literal_cd_execution_context but never used it, so the shell_static_safety, shell_quote_parsing, shell_quote_tokens, shell_tokenization and docker_requests chain was unreachable. This test pinned the dead Python _script_has_aliased_risky_import treating a NUL byte as a parse failure."
+  },
+  {
+   "old_node": "tests/test_guard_risk.py::test_path_text_is_within_root_text_preserves_windows_case_insensitivity",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Nothing in the product called the Python literal-cd parser: cli/_commands_shared.py imported literal_cd_execution_context but never used it, so the shell_static_safety, shell_quote_parsing, shell_quote_tokens, shell_tokenization and docker_requests chain was unreachable. This test pinned the dead Python _path_text_is_within_root_text under a faked os.path.normcase."
+  },
+  {
+   "old_node": "tests/test_guard_contained_wrapper.py::test_the_owner_question_is_left_to_native_authority_on_windows",
+   "replacement_nodes": [
+    "rust/crates/guard-command/tests/pretool_windows_sibling_project_root.rs::tests_in_a_sibling_checkout_under_the_profile_are_contained_on_windows"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Python answered the Windows owner question with an unconditional yes and this test pinned that stand-in. The runtime now asks guard_runtime_windows_process::owned_by_current_user for the real owner SID, which the native suite proves against a sibling checkout under the profile."
+  },
+  {
+   "old_node": "tests/test_guard_contained_wrapper.py::test_windows_does_not_accept_a_checkout_under_the_temporary_root",
+   "replacement_nodes": [
+    "rust/crates/guard-command/tests/pretool_windows_sibling_project_root.rs::tests_in_a_sibling_checkout_under_the_profile_are_contained_on_windows"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "The Windows base set is the profile alone. The native test proves the same boundary without faking os.name: a checkout outside the profile stays under review, and a junction out of the profile does not widen it."
+  },
+  {
+   "old_node": "tests/test_guard_contained_sibling_anchor.py::test_without_posix_owners_no_sibling_root_is_proven",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/pretool/workspace_contained_sibling_tests.rs::a_temporary_or_enclosing_repository_is_no_sibling_root"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Deleting os.getuid simulated a host with no POSIX owners. Rust states that case in the type system instead: the cfg(not(any(unix, windows))) sibling_project_root arm returns None, and the native suite covers the proofs the unix arm does make."
+  },
+  {
+   "old_node": "tests/test_windows_contained_node_build.py::test_windows_peels_a_relative_cd_into_the_workspace",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/pretool/contained_wrapper_plan_tests.rs::a_relative_cd_inside_the_workspace_is_peeled_only_without_a_sandbox"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Patching sys.platform asked the Python peel what Windows would do. The plan now carries the sink's host rule as data, so one native test exercises both arms: the relative cd is peeled where there is no workspace sandbox, and left whole where there is."
+  },
+  {
+   "old_node": "tests/test_guard_contained_wrapper_filters.py::test_grep_runs_only_with_validated_arguments",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/pretool/contained_output_filters.rs::grep_naming_a_file_or_reading_patterns_is_not_a_filter",
+    "rust/crates/guard-command/src/pretool/contained_output_filters.rs::ripgrep_spelling_its_own_valued_options_is_not_a_filter"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Argument validation for the filter stage is the classifier's, not the sink's: a grep naming a file or reading patterns, and a ripgrep spelling its own valued options, never reach the filter chain at all, so the native tests replace the ValueError the Python sink used to raise."
   }
  ],
  "preserved_tests": [
@@ -8192,10 +8267,28 @@
    ],
    "native_replacements": [
     "rust/crates/guard-command/src/verified_npm.rs",
-    "rust/crates/guard-runtime/src/verified_npm_op.rs"
+    "rust/crates/guard-runtime/src/package_review_plan_op.rs"
    ],
    "base_commit": "e309ad05c1bad4069f8ab4aa0a056c73bad5052f",
-   "remaining_role": "Parses the install command shape and settles the review; the npm proof and the output-filter resolution run in the resident and are applied without being re-derived."
+   "remaining_role": "Settles the review from the package evaluator's verdict; the npm proof and the output-filter resolution run in the resident and are applied without being re-derived."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+   "source_sha256": "edd6b9c6ff38e77c8b2c7ef7314027838bbb5122ed702b74bc1a63fff1978d69",
+   "forbidden_symbols": [
+    "_FILTERED_COMMAND",
+    "_SIMPLE_COMMAND",
+    "_OUTPUT_FILTER",
+    "_filter_programs",
+    "npm_install_proof",
+    "parse_package_intent",
+    "build_package_request_artifact"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/package_review_plan_op.rs"
+   ],
+   "base_commit": "6bf9f88edec5328884d18b3e9afbe1ef8342aada",
+   "remaining_role": "Evaluates the request artifact the resident's package_review_plan op builds and applies the verdict: a block always, an allow only when the resident proved the npm that runs. The command lookup (Copilot toolArgs included), shape check, intent parse and artifact build run in the resident."
   }
  ],
  "retired_bodies": [

@@ -141,18 +141,23 @@ fn matching_decision(
     if !binding_pattern().is_match(artifact_hash) {
         return Ok(json!(false));
     }
+    // `tool_call` rows store the launch target with credentials masked; a row
+    // written before masking still holds it as sent, so either form matches.
+    // The exact binding is `artifact_hash`.
+    let masked_target = guard_command::redacted_command_tokens::redact_text(launch_target).text;
     let rows = query_all(
         connection,
         "select request_id, resolved_at, resolution_action, resolution_scope \
          from approval_requests \
          where status = 'resolved' and harness = ? and artifact_id = ? and artifact_name = ? \
-           and artifact_hash = ? and launch_target = ? and workspace is ?",
+           and artifact_hash = ? and launch_target in (?, ?) and workspace is ?",
         &[
             Value::from(harness),
             Value::from(artifact_id),
             Value::from(artifact_name),
             Value::from(artifact_hash),
             Value::from(launch_target),
+            Value::from(masked_target),
             workspace.map_or(Value::Null, Value::from),
         ],
     )?;

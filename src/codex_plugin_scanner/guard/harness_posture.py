@@ -16,9 +16,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
-from .action_lattice import most_restrictive_guard_action
 from .adapters.contracts import HARNESS_CONTRACTS, contract_for
-from .models import GuardAction
 from .protection_posture import (
     VALID_PROTECTION_POSTURES,
     coerce_protection_posture,
@@ -148,14 +146,6 @@ def effective_harness_posture(config: GuardConfig, harness: object) -> str:
     return max(baseline, override, key=lambda posture: _POSTURE_STRENGTH.get(posture, 1))
 
 
-def harness_is_recording_only(config: GuardConfig | None, harness: object) -> bool:
-    """True when hooks for this harness record but never stop (Watch)."""
-
-    if config is None:
-        return False
-    return effective_harness_posture(config, harness) == "watch"
-
-
 def config_for_harness(config: GuardConfig, harness: object) -> GuardConfig:
     """Config as one harness sees it, for runtime paths that read ``mode``.
 
@@ -204,14 +194,6 @@ def harness_watch_auto_revert_due(
         if current - entered >= timedelta(hours=config.watch_auto_revert_hours):
             due.append(harness)
     return tuple(sorted(due))
-
-
-def stricter_risk_action(base: GuardAction | None, floor: GuardAction | None) -> GuardAction | None:
-    if base is None:
-        return floor
-    if floor is None:
-        return base
-    return most_restrictive_guard_action(base, floor, unknown_action="block")
 
 
 def harness_posture_summary(config: GuardConfig) -> dict[str, object]:
@@ -270,7 +252,6 @@ __all__ = [
     "effective_harness_posture",
     "effective_harness_postures",
     "global_effective_posture",
-    "harness_is_recording_only",
     "harness_posture_line",
     "harness_posture_override",
     "harness_posture_status",

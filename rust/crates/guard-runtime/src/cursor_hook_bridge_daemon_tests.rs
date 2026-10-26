@@ -16,6 +16,7 @@ use super::*;
 use crate::claude_hook_bridge_fixture::{
     closed_port, read_request, write_private, write_response, GuardHome, Request as DaemonRequest,
 };
+use crate::codex_hook_bridge_direct_resident::{DirectMiss, DIRECT_MISS_HEADER};
 use crate::cursor_hook_bridge_response::{ALLOW_STDOUT, UNAVAILABLE_STDOUT};
 
 const TOKEN: &str = "cursor-daemon-token-fixture";
@@ -161,6 +162,27 @@ fn the_daemon_is_sent_the_clients_request() {
     assert_eq!(sent["hook_event_name"], "PreToolUse");
     assert_eq!(sent["cursor_source_hook_event"], "beforeShellExecution");
     assert!(sent.get("hook_env").is_none());
+}
+
+#[test]
+fn the_daemon_is_told_why_the_resident_did_not_answer() {
+    // A home with no resident state: the bridge names the miss it saw.
+    let (_, request, _home) = ask("miss", SHELL, 200, r#"{"policy_action":"allow"}"#);
+    let sent = request.header(DIRECT_MISS_HEADER).expect("a miss reason");
+    assert!(!sent.is_empty());
+    for miss in [DirectMiss::Defer, DirectMiss::Send, DirectMiss::NoResident] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let daemon = serve_once(listener, 200, r#"{"policy_action":"allow"}"#.to_owned());
+        let home = daemon_home(miss.code(), "127.0.0.1", port, true);
+        let client = client_for(&home, Duration::from_secs(20));
+        let prepared = prepared_request(&client, SHELL).unwrap();
+        let answered = daemon::daemon_reply(&client, &prepared, Err(miss));
+        assert_eq!(answered, Reply::Answered(ALLOW_STDOUT.to_owned(), 0));
+        let request = daemon.join().unwrap().expect("the daemon was asked");
+        assert_eq!(request.header(DIRECT_MISS_HEADER), Some(miss.code()));
+        assert_eq!(request.header("X-Guard-Token"), Some(TOKEN));
+    }
 }
 
 #[test]

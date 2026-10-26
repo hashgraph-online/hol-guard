@@ -1,6 +1,5 @@
 tests/test_native_command_evaluation_bridge.py
 tests/test_native_command_evaluation_integration.py
-tests/test_native_command_caller_migration.py
 tests/test_native_command_extension_evidence.py
 tests/test_guard_command_activity_hook_integration.py
 tests/test_guard_command_backup_extensions.py
@@ -35,7 +34,6 @@ tests/test_guard_protection_recovery.py
 tests/test_guard_git_pathspec_resolution.py
 tests/test_guard_github_failed_run_rerun.py
 tests/test_guard_github_workflow_authorization.py
-tests/test_guard_github_workflow_runtime_eval.py
 tests/test_guard_index_inspection_classification.py
 tests/test_guard_origin_fetch_classification.py
 tests/test_guard_read_only_git_audit.py

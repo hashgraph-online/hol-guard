@@ -18,7 +18,9 @@ pub const NATIVE_EXACT_ACTION_REQUEST_SCHEMA: &str = "guard-native-exact-action-
 /// Schema discriminator for the result.
 pub const NATIVE_EXACT_ACTION_RESULT_SCHEMA: &str = "guard-native-exact-action-result.v1";
 /// Capability advertised by the runtime when this operation is available.
-pub const NATIVE_EXACT_ACTION_FEATURE: &str = "native-exact-action-v4";
+pub const NATIVE_EXACT_ACTION_FEATURE: &str = "native-exact-action-v5";
+/// Same wire schema, before one query answered a review's binding and token together.
+pub const NATIVE_EXACT_ACTION_V4_FEATURE: &str = "native-exact-action-v4";
 /// Inventory alone did not establish bound script delivery.
 pub const NATIVE_EXACT_ACTION_V3_FEATURE: &str = "native-exact-action-v3";
 /// Same wire schema, before complete interpreter-resource identity.
@@ -106,6 +108,13 @@ pub enum NativeExactActionQueryV1 {
         extension_control_digest: String,
         budget_ms: u64,
     },
+    /// A review's retry binding and exact-action answer in one ask. `binding`
+    /// must be a ReviewBinding and `action` an ExactAction; each is answered
+    /// exactly as it would be on its own.
+    ReviewEvidence {
+        binding: Box<NativeExactActionQueryV1>,
+        action: Box<NativeExactActionQueryV1>,
+    },
     /// The short-lived binding that fences a retry of one review.
     ReviewBinding {
         harness: String,
@@ -148,6 +157,12 @@ pub enum NativeExactActionPayloadV1 {
     },
     ReviewBinding {
         binding: Option<String>,
+    },
+    /// The ReviewBinding and ExactAction answers of a ReviewEvidence query.
+    ReviewEvidence {
+        binding: Option<String>,
+        token: Option<String>,
+        once_only_reason: Option<String>,
     },
 }
 

@@ -1,4 +1,3 @@
-import { Surface } from "../../approval-center-primitives";
 import { ABOUT_PATH_CARDS } from "../about-content";
 import { AboutExternalLink } from "./about-external-link";
 import { AboutSectionHeading } from "./about-section-heading";
@@ -13,20 +12,15 @@ const CARD_LINK_MAP: Record<AboutPathCard["id"], AboutLinkId> = {
 };
 
 function PathCard({ card }: { card: AboutPathCard }) {
-  const isPrimary = card.priority === "primary";
-
   return (
-    <Surface
-      className={`flex h-full flex-col ${isPrimary ? "sm:col-span-2 lg:col-span-1" : ""}`}
-      tone={isPrimary ? "accent" : "default"}
-    >
-      {/* The cards were labelled Primary / Secondary / Ecosystem, which ranks
+    <li className="flex flex-col border-t border-brand-dark/10 py-5 lg:border-l lg:border-t-0 lg:px-6 lg:py-1 lg:first:border-l-0 lg:first:pl-0">
+      {/* The paths were labelled Primary / Secondary / Ecosystem, which ranks
           them for whoever built the page rather than for the reader. The
-          order, the span and the surface already say which comes first. */}
+          order already says which comes first. */}
       {card.disclosureRequired ? (
         <p className="mb-2 text-[11px] font-medium text-brand-dark/75">Disclosure required</p>
       ) : null}
-      <h3 className={isPrimary ? "text-lg font-semibold text-brand-dark" : "text-base font-semibold text-brand-dark"}>
+      <h3 className="text-base font-semibold text-brand-dark">
         {card.title}
       </h3>
       <p className="mt-1.5 flex-1 text-sm leading-6 text-brand-dark/75">{card.description}</p>
@@ -39,7 +33,7 @@ function PathCard({ card }: { card: AboutPathCard }) {
           {card.ctaLabel}
         </AboutExternalLink>
       </div>
-    </Surface>
+    </li>
   );
 }
 
@@ -60,14 +54,14 @@ export function PathwayGrid() {
           it in full, so this one keeps the paths a reader can take today —
           three, which is why the first card no longer spans two of three
           columns and strands an empty row beside the third. */}
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="mt-6 grid lg:grid-cols-3">
         {primary.map((card) => (
           <PathCard key={card.id} card={card} />
         ))}
         {secondary.map((card) => (
           <PathCard key={card.id} card={card} />
         ))}
-      </div>
+      </ul>
     </div>
   );
 }

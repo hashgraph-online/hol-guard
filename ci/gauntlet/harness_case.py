@@ -48,6 +48,7 @@ from .review_fixtures import (
     seed_protected_codex_hooks,
 )
 from .runner import _fixture_replacements, _scenario_prompt, _watch_binding
+from .runtime_cases import stage_runtime_cases
 from .script_cases import stage_script_cases
 from .session_folder import seed_session_folder
 from .supply_chain import stage_supply_chain
@@ -149,6 +150,7 @@ def run_harness_case(
     fixture = create_fixture(root / scenario_fixture_name(scenario.id), realistic=realistic, scenario_id=scenario.id)
     stage_supply_chain(fixture.workspace, scenario.id)
     stage_script_cases(fixture.workspace, scenario.id, fixture.home, fixture.canary)
+    stage_runtime_cases(fixture.root / "guard-home", fixture.workspace, scenario.id)
     stage_bash_lifecycle(fixture.workspace, scenario.id)
     seed_session_folder(fixture.home, stage_directory(fixture.root), scenario.id)
     private = fixture.root / "private-evidence"

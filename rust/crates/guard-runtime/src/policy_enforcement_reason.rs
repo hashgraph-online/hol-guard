@@ -79,6 +79,7 @@ fn risk_label(risk: &str) -> &'static str {
         "package_custom_registry" => "custom package registry",
         "package_install" => "package install",
         "low_trust_artifact" => "low trust score",
+        "runtime_known_vulnerable" => "known vulnerable runtime",
         "execution" => "command execution",
         "supply_chain" => "supply chain",
         "policy_bypass" => "policy bypass",

@@ -6,6 +6,7 @@ import base64
 import hashlib
 import json
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -16,14 +17,18 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 from codex_plugin_scanner import install_integrity
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction_module
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
+from tests.package_review_settings import prove_npm_install
 from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
+
+@pytest.fixture(autouse=True)
+def _prove_npm_install(monkeypatch: pytest.MonkeyPatch) -> None:
+    prove_npm_install(monkeypatch)
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -250,14 +255,16 @@ def test_guard_hook_blocks_js_exec_flows_before_subprocess(
     assert rc == 0
     assert captured.err == ""
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    # Installs and every exec flow consult the package bundle, including the
+    # `npx` and `bunx` launches the edge reviews as commands, so a flagged
+    # package is blocked before anything is queued.
+    assert payload["policy_action"] == "block"
     assert "blocked" in payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
-    evidence = store.list_evidence()
-    assert evidence
-    assert evidence[0]["category"] == "supply-chain"
+    assert store.list_approval_requests(limit=5) == []
 
 
 @pytest.mark.usefixtures("native_hook_force")
-def test_guard_hook_requires_review_for_repository_local_vitest_run(
+def test_guard_hook_requires_contained_run_for_repository_local_vitest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _force_unpaid_entitlement(monkeypatch)
@@ -303,20 +310,7 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
     # never reaches it. Without this seam it would be asked to POST the evaluation
     # to the real Cloud origin, and the verdict would depend on that network.
     guard_runner_module._test_sync_auth_context_override = {"error": "authorization_expired"}
-
-    evaluate_package_request = guard_commands_module.evaluate_package_request_artifact
-    monkeypatch.setattr(
-        guard_commands_module,
-        "evaluate_package_request_artifact",
-        lambda **kwargs: evaluate_package_request(**kwargs, now="2026-05-19T01:00:00Z"),
-    )
     monkeypatch.setattr(install_integrity, "warn_if_shadowed", lambda: None)
-    monkeypatch.setattr(interaction_module, "open_browser_url", lambda _url: True)
-    monkeypatch.setattr(
-        guard_commands_module,
-        "wait_for_approval_requests",
-        lambda **_kwargs: {"resolved": False, "pending_request_ids": [], "items": []},
-    )
 
     rc = main(
         [
@@ -336,78 +330,16 @@ def test_guard_hook_requires_review_for_repository_local_vitest_run(
 
     payload = json.loads(captured.out)
     assert rc == 0
-    approval_requests = store.list_approval_requests(limit=5)
-    assert approval_requests
-    assert captured.err.startswith("HOL Guard is waiting for approval in your browser: http://127.0.0.1:")
-    assert f"/requests/{approval_requests[0]['request_id']}" in captured.err
+    assert captured.err == ""
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    decision_reason = payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
-    assert "needs your approval" in decision_reason
-    assert "open hol guard to approve" in decision_reason
-    assert (
-        f"/requests/{approval_requests[0]['request_id']}" in payload["hookSpecificOutput"]["permissionDecisionReason"]
-    )
-    assert approval_requests[0]["policy_action"] == "review"
-    evidence = store.list_evidence()
-    assert evidence
-    assert evidence[0]["category"] == "supply-chain"
-    assert evidence[0]["details"]["decision"] == "monitor"
-    assert any(reason["code"] == "cloud_auth_error" for reason in evidence[0]["details"]["reasons"])
-
-    request_id = str(store.list_approval_requests(limit=5)[0]["request_id"])
-    apply_approval_resolution(
-        store=store,
-        request_id=request_id,
-        action="allow",
-        scope="artifact",
-        workspace=None,
-        reason="reviewed exact local runner identity",
-    )
-
-    retry_rc = main(
-        [
-            "guard",
-            "hook",
-            "--harness",
-            "codex",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--event-file",
-            str(payload_path),
-        ]
-    )
-    retry_capture = capsys.readouterr()
-
-    assert retry_rc == 0
-    assert retry_capture.out == ""
-    assert retry_capture.err == ""
-    assert store.list_approval_requests(status="pending", limit=5) == []
-
-    runner.write_text("#!/bin/sh\n# changed local runner\n", encoding="utf-8")
-    changed_rc = main(
-        [
-            "guard",
-            "hook",
-            "--harness",
-            "codex",
-            "--home",
-            str(home_dir),
-            "--workspace",
-            str(workspace_dir),
-            "--event-file",
-            str(payload_path),
-        ]
-    )
-    changed_capture = capsys.readouterr()
-    changed_payload = json.loads(changed_capture.out)
-
-    assert changed_rc == 0
-    assert changed_payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "open hol guard to approve" in changed_payload["hookSpecificOutput"]["permissionDecisionReason"].lower()
-    changed_requests = store.list_approval_requests(status="pending", limit=5)
-    assert len(changed_requests) == 1
-    assert changed_capture.err.startswith("HOL Guard is waiting for approval in your browser: http://127.0.0.1:")
-    assert f"/requests/{changed_requests[0]['request_id']}" in changed_capture.err
-    assert changed_requests[0]["policy_action"] == "review"
+    if sys.platform.startswith("linux"):
+        # Linux has no native read-only Vitest profile, so the run is
+        # reviewed instead of contained.
+        assert payload["policy_action"] == "review", payload
+        assert payload["reason_code"] == "native_command_review_required"
+        return
+    assert payload["policy_action"] == "sandbox-required", payload.get("reason_code")
+    assert payload["reason_code"] == "native_vitest_readonly_containment_required"
+    assert payload["required_execution_profile"] == "vitest-readonly-v1"
+    assert "protected read-only execution" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert store.list_approval_requests(limit=5) == []

@@ -839,15 +839,15 @@ class TestBuildReceipt:
         assert len(ids) == 5, "Each receipt must have a unique receipt_id"
 
 
-def test_recorded_artifact_hash_parity_corpus_matches_the_python_hash() -> None:
-    # The Rust port replays this corpus, so a Python hash change that skips
-    # regenerating it would leave the Rust parity test green on stale digests.
+def test_artifact_hash_matches_the_frozen_python_corpus() -> None:
+    # The corpus was recorded from the retired Python hash. Saved approvals are
+    # keyed by these digests, so the native hash must keep spelling them.
     fixture = Path(__file__).parent / "fixtures" / "artifact-hash-parity.v1.json"
     corpus = json.loads(fixture.read_text(encoding="utf-8"))
-    stale = []
+    drifted = []
     for case in corpus["cases"]:
         fields = dict(case["artifact"])
         fields["args"] = tuple(fields.get("args", ()))
         if compute_artifact_hash(GuardArtifact(**fields)) != case["expected_sha256"]:
-            stale.append(case["case"])
-    assert stale == [], "regenerate with scripts/ci/generate_artifact_hash_parity.py"
+            drifted.append(case["case"])
+    assert drifted == [], "the native artifact hash no longer matches saved approvals"

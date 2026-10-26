@@ -105,6 +105,7 @@ const VALID_RISK_ACTION_KEYS: &[&str] = &[
     "package_custom_registry",
     "package_install",
     "low_trust_artifact",
+    "runtime_known_vulnerable",
     // Native-only classifications used to preserve a strong intrinsic floor
     // even when a future policy snapshot elects to tune a broader action
     // class.

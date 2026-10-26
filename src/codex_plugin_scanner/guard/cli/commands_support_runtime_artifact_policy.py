@@ -16,7 +16,7 @@ from ..config import GuardConfig
 from ..harness_posture import harness_posture_override
 from ..models import GuardAction, GuardArtifact
 from ..native_hook_artifact_compose import native_hook_compose
-from ..native_hook_artifact_facts import HookArtifactFactsUnavailableError, native_hook_artifact_facts
+from ..native_hook_artifact_facts import native_hook_artifact_facts
 from ..protection_events import record_protection_event
 from .commands_support_runtime_resolution import _canonical_harness_name
 
@@ -25,42 +25,6 @@ def _runtime_artifact_command_action_floor(artifact: GuardArtifact) -> GuardActi
     if "command_action_floor" not in artifact.metadata:
         return None
     return normalize_guard_action(artifact.metadata.get("command_action_floor"), unknown_action="block")
-
-
-def artifact_fact_risk_classes(facts: Mapping[str, object]) -> list[str]:
-    """The risk classes the resident read off one artifact."""
-
-    classes = facts.get("risk_classes")
-    if not isinstance(classes, list) or not all(isinstance(item, str) for item in classes):
-        raise HookArtifactFactsUnavailableError
-    return cast("list[str]", classes)
-
-
-def artifact_fact_content_hash(facts: Mapping[str, object]) -> str:
-    """The digest the resident hashed the artifact to.
-
-    A saved approval is keyed by this value, so a missing or empty answer is
-    no answer: the hook fails closed rather than keying a decision by a digest
-    this side computed.
-    """
-
-    digest = facts.get("content_sha256")
-    if not isinstance(digest, str) or not digest:
-        raise HookArtifactFactsUnavailableError
-    return digest
-
-
-def artifact_fact_skip_native_floor(facts: Mapping[str, object]) -> bool:
-    """Whether the resident says the native command floor is skipped.
-
-    A missing or non-boolean answer is no answer: the hook fails closed rather
-    than guessing whether the floor applies.
-    """
-
-    skipped = facts.get("skip_native_floor")
-    if not isinstance(skipped, bool):
-        raise HookArtifactFactsUnavailableError
-    return skipped
 
 
 def _typed_text(value: object) -> str | None:

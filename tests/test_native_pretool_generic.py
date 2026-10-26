@@ -8,6 +8,7 @@ import json
 import logging
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,6 +16,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook, commands_hook_native_authority
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool, render_pre_tool_review
+from codex_plugin_scanner.guard.daemon.hook_native_exact_action import native_exact_action
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge
 from codex_plugin_scanner.guard.store import GuardStore
@@ -161,10 +163,14 @@ def test_native_review_queues_approval_without_escaping_to_cli(
         started_at="2026-09-05T00:00:00+00:00",
         last_heartbeat_at="2026-09-05T00:00:00+00:00",
     )
+
     # The approval wait is offered only for a review the agent's retry can match.
+    def evidence(**kwargs: Any) -> tuple[str | None, str | None, str | None]:
+        return (f"native-review-v4:{'ab' * 32}:ask:review:review:r", *native_exact_action(**kwargs))
+
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.native_review_binding",
-        lambda *_args, **_kwargs: f"native-review-v4:{'ab' * 32}:ask:review:review:r",
+        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.native_review_evidence",
+        evidence,
     )
     worker = HookWorker(store=store)
     response = worker.review_http_payload(
@@ -211,8 +217,8 @@ def test_supported_cli_pretool_unavailability_does_not_use_source_ref_fallback(
     )
     monkeypatch.setattr(
         commands_hook_native_authority,
-        "_emit",
-        lambda _kind, payload, _json: emitted.append(payload),
+        "_emit_native_hook_json_document",
+        lambda payload, **_kwargs: emitted.append(payload),
     )
     guard_home = tmp_path / "guard-home"
     result = commands_hook_native_authority.route_native_hook(
@@ -242,6 +248,11 @@ def test_supported_cli_pretool_worker_exception_is_fail_safe(
         def review_http_payload(self, **_kwargs: object) -> dict[str, object]:
             raise RuntimeError("worker fixture failure")
 
+        def _apply_structured_unavailable_overlay(
+            self, response: dict[str, object], **_kwargs: object
+        ) -> dict[str, object]:
+            return response
+
     monkeypatch.setattr(commands_hook_native_authority, "HookWorker", BrokenWorker)
     response = commands_hook_native_authority.try_native_hook_authority(
         payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},
@@ -270,6 +281,11 @@ def test_supported_cli_pretool_worker_exception_is_recorded_in_the_guard_log(
 
         def review_http_payload(self, **_kwargs: object) -> dict[str, object]:
             raise RuntimeError("worker fixture failure")
+
+        def _apply_structured_unavailable_overlay(
+            self, response: dict[str, object], **_kwargs: object
+        ) -> dict[str, object]:
+            return response
 
     monkeypatch.setattr(commands_hook_native_authority, "HookWorker", BrokenWorker)
     guard_home = tmp_path / "guard-home"
@@ -311,6 +327,11 @@ def test_supported_cli_pretool_worker_exception_points_stderr_at_the_guard_log(
 
         def review_http_payload(self, **_kwargs: object) -> dict[str, object]:
             raise RuntimeError("worker fixture failure")
+
+        def _apply_structured_unavailable_overlay(
+            self, response: dict[str, object], **_kwargs: object
+        ) -> dict[str, object]:
+            return response
 
     monkeypatch.setattr(commands_hook_native_authority, "HookWorker", BrokenWorker)
     with caplog.at_level(logging.WARNING, logger=commands_hook_native_authority.__name__):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,102 +11,7 @@ from ..home_path_text import expand_home, normalize_path
 from ..secret_sensitivity import SecretPathMatch as SensitivePathMatch
 from ..secret_sensitivity import classify_secret_path
 from .constants_core import _FILE_READ_TOOL_NAMES, _PATH_KEYS, _PATH_LIST_KEYS
-from .constants_patterns import _ENCODED_EXECUTION_TARGET_PATTERN
 from .tool_action_risk_summaries import tool_action_risk_summary
-
-_ENCODED_EXECUTION_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(
-        rf"\bbase64\b(?=[^\n|;]*\s(?:--decode|-[A-Za-z]*[dD][A-Za-z]*))[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        rf"\bxxd\s+(?:-r\s+-p|-rp)\b[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        rf"\bopenssl\s+enc\b[^\n|;]*\s-(?:d|decrypt)\b[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
-        re.IGNORECASE,
-    ),
-    re.compile(
-        rf"\b(?:gpg|gpg2)\b[^\n|;]*(?:--decrypt|-d)\b[^\n|;]*(?:\|\s*{_ENCODED_EXECUTION_TARGET_PATTERN})",
-        re.IGNORECASE,
-    ),
-    re.compile(r"\b(?:powershell|pwsh)\b[^\n;]*\s-(?:e|ec|enc|encodedcommand)\b", re.IGNORECASE),
-    re.compile(r"\b(?:powershell|pwsh)\b[^\n;]*\bfrombase64string\s*\(", re.IGNORECASE),
-)
-
-_BASE64_LITERAL_PATTERN = re.compile(r"(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{20,}={0,2}(?![A-Za-z0-9+/=])")
-
-_HEX_LITERAL_PATTERN = re.compile(r"(?<![A-Fa-f0-9])[A-Fa-f0-9]{24,}(?![A-Fa-f0-9])")
-
-_MAX_DECODED_PAYLOAD_BYTES = 32 * 1024
-
-_SENSITIVE_DECODED_PAYLOAD_TOKENS = (
-    ".env",
-    ".ssh/",
-    ".aws/credentials",
-    ".git-credentials",
-    "process.env",
-    "os.environ",
-    "getenv(",
-    "curl ",
-    "wget ",
-    "requests.",
-    "fetch(",
-    "axios.",
-    "approval_policy",
-    "hol-guard",
-    "guard-bypass",
-    ".codex/config.toml",
-    "scp ",
-)
-
-_SECRET_EXFILTRATION_SECRET_PATTERN = re.compile(
-    r"\b(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token)\b",
-    re.IGNORECASE,
-)
-
-_SECRET_EXFILTRATION_NETWORK_PATTERN = re.compile(
-    r"\b(?:axios\.post|fetch\s*\(|http\.client|requests\.post|urllib\.request|urlopen\s*\()|https?://",
-    re.IGNORECASE,
-)
-
-_SECRET_EXFILTRATION_DESTINATION_PATTERN = re.compile(
-    r"\b(?:collect|exfil|evil|leak|post|upload|webhook)\b",
-    re.IGNORECASE,
-)
-
-_SENSITIVE_BASENAME_LABELS = {
-    ".npmrc": "npm registry credentials",
-    ".pypirc": "Python package credentials",
-    ".netrc": "netrc credentials",
-    ".git-credentials": "Git credential store",
-}
-
-_SENSITIVE_SUFFIX_LABELS = {
-    (".aws", "credentials"): "AWS shared credentials file",
-    (".aws", "config"): "AWS shared config file",
-    (".docker", "config.json"): "Docker client config",
-    (".ssh", "id_rsa"): "SSH private key",
-    (".ssh", "id_ed25519"): "SSH private key",
-    (".ssh", "id_ecdsa"): "SSH private key",
-    (".ssh", "config"): "SSH client config",
-}
-
-_SENSITIVE_PATH_REASONS = {
-    "local .env file": "Guard treats .env files as sensitive because they commonly store local secrets.",
-    "npm registry credentials": "Guard treats .npmrc as sensitive because it may contain registry tokens.",
-    "Python package credentials": "Guard treats .pypirc as sensitive because it may contain package credentials.",
-    "netrc credentials": "Guard treats .netrc as sensitive because it may contain login secrets.",
-    "Git credential store": "Guard treats .git-credentials as sensitive because it may contain repository credentials.",
-    "AWS shared credentials file": (
-        "Guard treats AWS shared credentials as sensitive because they contain cloud access keys."
-    ),
-    "AWS shared config file": "Guard treats AWS shared config as sensitive because it may contain credential profiles.",
-    "Docker client config": "Guard treats Docker client config as sensitive because it may contain registry auth.",
-    "SSH private key": "Guard treats SSH private keys as sensitive because they provide direct host access.",
-    "SSH client config": "Guard treats SSH config as sensitive because it may reveal or shape host credentials.",
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -281,17 +185,6 @@ def _normalize_tool_name(tool_name: object) -> str | None:
 
 
 __all__ = [
-    "_BASE64_LITERAL_PATTERN",
-    "_ENCODED_EXECUTION_PATTERNS",
-    "_HEX_LITERAL_PATTERN",
-    "_MAX_DECODED_PAYLOAD_BYTES",
-    "_SECRET_EXFILTRATION_DESTINATION_PATTERN",
-    "_SECRET_EXFILTRATION_NETWORK_PATTERN",
-    "_SECRET_EXFILTRATION_SECRET_PATTERN",
-    "_SENSITIVE_BASENAME_LABELS",
-    "_SENSITIVE_DECODED_PAYLOAD_TOKENS",
-    "_SENSITIVE_PATH_REASONS",
-    "_SENSITIVE_SUFFIX_LABELS",
     "FileReadRequestMatch",
     "FileWriteRequestMatch",
     "ToolActionRequestMatch",

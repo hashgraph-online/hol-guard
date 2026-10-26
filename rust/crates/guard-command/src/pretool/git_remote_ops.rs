@@ -13,8 +13,17 @@ use super::git_session_probe::Probe;
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 use std::time::Instant;
 
+#[path = "git_remote_proof.rs"]
+mod proof;
+
 #[path = "git_remote_pull.rs"]
 pub(super) mod pull;
+
+use proof::{
+    every_remote_is_origin, fast_forward_inert, lfs_endpoint_overridden, lfsconfig_absent,
+    tracks_origin, transport_proven,
+};
+use pull::Operation;
 
 /// The allow reason for a proven refresh, or `None`. The fetch may sit in a
 /// chain after a verified `cd` and beside segments that are benign on their
@@ -55,6 +64,10 @@ pub(super) fn exact_safe_command(
     // Whether the current pipeline starts with the proven fetch, as in
     // `git fetch origin main 2>&1 | tail -2`.
     let mut fetch_pipeline = false;
+    // The pull or fast-forward merge that rewrote the work tree, if one did.
+    // A commit it checks out may become configuration a later Git read obeys,
+    // which the proof of that read never saw.
+    let mut rewrote: Option<usize> = None;
     for (index, segment) in model.segments.iter().enumerate() {
         if segment.pipeline_index == 0 {
             fetch_pipeline = false;
@@ -70,20 +83,18 @@ pub(super) fn exact_safe_command(
         }
         let stripped = super::segment_proof::without_stderr_merge(segment);
         let candidate = stripped.as_ref().unwrap_or(segment);
-        if let Some((leading, upstream)) = parse(candidate, context) {
-            let merge = upstream.is_some_and(|shape| !shape.fetches);
-            // Only `git fetch origin` then `git merge --ff-only origin/main`
-            // pair; a pull, a second fetch or a second merge stands alone.
-            let repeated = if merge {
-                merged || pulled
-            } else {
-                fetch_seen || merged
-            };
-            if repeated
+        if let Some((leading, operation)) = parse(candidate, context) {
+            let merge = operation.upstream.is_some_and(|shape| !shape.fetches);
+            // Only a change to the checkout bars a later operation: a pull or
+            // a fast-forward merge may leave files the proofs still to come
+            // never saw. A fetch writes refs and objects alone, so it may
+            // stand before a pull, a merge or another fetch.
+            if merged
+                || pulled
                 || !proven(
                     candidate,
                     leading,
-                    upstream,
+                    operation,
                     context,
                     deadline,
                     execution_environment,
@@ -95,7 +106,10 @@ pub(super) fn exact_safe_command(
                 merged = true;
             } else {
                 fetch_seen = true;
-                pulled |= upstream.is_some();
+                pulled |= operation.upstream.is_some();
+            }
+            if operation.upstream.is_some() {
+                rewrote = Some(index);
             }
             fetch_pipeline = true;
             continue;
@@ -126,6 +140,23 @@ pub(super) fn exact_safe_command(
         {
             return None;
         }
+        // A fast-forward earlier in the chain may check out a file an include
+        // names, which this read would then obey; the refresh answers for the
+        // read only when no include reaches into the work tree.
+        if let Some(prior) = rewrote {
+            if super::executable_basename(segment.executable.as_deref().unwrap_or_default())
+                == "git"
+                && !verified_refresh(
+                    &model.segments[prior],
+                    segment,
+                    context,
+                    deadline,
+                    execution_environment,
+                )
+            {
+                return None;
+            }
+        }
     }
     (fetch_seen || merged).then_some((
         "native_exact_safe_git_origin_refresh",
@@ -140,6 +171,7 @@ pub(super) fn exact_safe_command(
 pub(super) fn settle_fast_forward(
     result: &mut guard_contracts::PreToolResultV1,
     model: Option<&CanonicalCommandV1>,
+    controls: Option<&crate::native_command_controls::CompiledNativeCommandControls>,
     context: super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
@@ -161,24 +193,42 @@ pub(super) fn settle_fast_forward(
         let stripped = super::segment_proof::without_stderr_merge(segment);
         matches!(
             parse(stripped.as_ref().unwrap_or(segment), context),
-            Some((_, Some(shape))) if !shape.fetches
+            Some((_, Operation { upstream: Some(shape), .. })) if !shape.fetches
         )
     });
-    // Only the merge rule's own review is lifted: another rule, a permission
-    // the user keeps under review or an uncertain match keeps its verdict.
+    // Only the merge rule's own review is lifted: another rule that asks for
+    // more than allow, a permission the user keeps under review or an
+    // uncertain match keeps its verdict. A `git status` or `git log` beside
+    // the merge asks for nothing of its own, so it does not hold the proof
+    // back. Neither does the ruleless permission a Git plumbing read records
+    // (`git rev-parse`, `git merge-base`, `git show-ref`): it declares no
+    // floor, and exists so a disabled Git extension or permission can still
+    // block the read.
     let Some(extensions) = result.command_extensions.as_ref() else {
         return;
     };
     if !merges
         || extensions.binding.uncertainty_count != 0
         || extensions.evaluation_error.is_some()
-        || !extensions.permission_observations.is_empty()
+        || !extensions
+            .permission_observations
+            .iter()
+            .all(|observation| {
+                observation.uncertainty_reasons.is_empty()
+                    && controls.is_some_and(|controls| {
+                        controls.permission_settles_at_allow(
+                            &observation.extension_id,
+                            &observation.permission_id,
+                        )
+                    })
+            })
         || !extensions.observations.iter().all(|observation| {
             observation.uncertainty_reasons.is_empty()
-                && matches!(
+                && (matches!(
                     observation.rule_id.as_str(),
                     "command.git.merge" | "command.git.fetch" | "command.git.pull"
-                )
+                ) || controls
+                    .is_some_and(|controls| controls.rule_settles_at_allow(&observation.rule_id)))
         })
     {
         return;
@@ -228,13 +278,14 @@ pub(super) fn proven_read(
 fn proven(
     segment: &CommandSegmentV1,
     leading: &[String],
-    upstream: Option<pull::Pull>,
+    operation: Operation,
     context: super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> bool {
     // The one argument after `merge` that is not an option names its target.
-    let target = upstream
+    let target = operation
+        .upstream
         .filter(|shape| !shape.fetches)
         .and_then(|_| {
             segment
@@ -248,7 +299,7 @@ fn proven(
         Some(prove(
             segment.executable.as_deref()?,
             leading,
-            upstream,
+            operation,
             target,
             context,
             deadline,
@@ -270,8 +321,9 @@ pub(super) fn proven_fetch(
     let segment = stripped.as_ref().unwrap_or(segment);
     matches!(
         parse(segment, context),
-        Some((leading, None))
-            if proven(segment, leading, None, context, deadline, execution_environment)
+        Some((leading, operation))
+            if operation.upstream.is_none()
+                && proven(segment, leading, operation, context, deadline, execution_environment)
     )
 }
 
@@ -284,14 +336,114 @@ pub(super) fn verified(segment: &CommandSegmentV1, context: super::PathContext<'
     parse(segment, context).is_some() && super::git_probe::proven(&memo_key(segment, context))
 }
 
-/// Whether this evaluation already proved `segment` as a safe `origin` fetch.
-/// A fetch writes only refs and objects, never the configuration a later Git
-/// read in the same command depends on; a pull also updates the work tree.
-pub(super) fn verified_fetch(segment: &CommandSegmentV1, context: super::PathContext<'_>) -> bool {
+/// Whether this evaluation proved `segment` as an `origin` refresh that
+/// settles a later Git read in the same command. A fetch writes only refs and
+/// objects, so it settles one outright. A pull's fast-forward also rewrites
+/// tracked files, and the one route by which a tracked file becomes
+/// configuration the later read obeys is an include that names it, so a pull
+/// settles the read when no include reaches into the work tree.
+pub(super) fn verified_refresh(
+    segment: &CommandSegmentV1,
+    later: &CommandSegmentV1,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
     let stripped = super::segment_proof::without_stderr_merge(segment);
     let segment = stripped.as_ref().unwrap_or(segment);
-    parse(segment, context).is_some_and(|(_, upstream)| upstream.is_none())
-        && super::git_probe::proven(&memo_key(segment, context))
+    let Some((leading, operation)) = parse(segment, context) else {
+        return false;
+    };
+    if !super::git_probe::proven(&memo_key(segment, context)) {
+        return false;
+    }
+    if operation.upstream.is_none() {
+        return true;
+    }
+    let Some(route) = read_route(later, context) else {
+        return false;
+    };
+    let mut key = memo_key(segment, context);
+    key.0.push_str(":settles:");
+    key.0.push_str(&route.to_string_lossy());
+    super::git_probe::memoized(key, || {
+        let executable = segment.executable.as_deref()?;
+        let probe = Probe::new(
+            executable,
+            leading,
+            context,
+            deadline,
+            execution_environment,
+        )?;
+        Some(work_tree_settles(&probe, &route))
+    })
+    .unwrap_or(false)
+}
+
+/// The directory the later read runs Git in: the segment's working directory
+/// folded through its leading `-C` routes, as Git folds them. `None` when a
+/// leading option could send the read somewhere this cannot name, which
+/// `--git-dir` and `--work-tree` do.
+fn read_route(
+    later: &CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> Option<std::path::PathBuf> {
+    let mut route = std::path::PathBuf::from(context.cwd?);
+    let mut arguments = later.arguments.iter();
+    while let Some(argument) = arguments.next() {
+        match argument.as_str() {
+            "-P" | "--no-pager" | "--no-optional-locks" | "--literal-pathspecs" => {}
+            // A relative path joins what came before it; an absolute one
+            // replaces it, which `PathBuf::push` already does.
+            "-C" => route.push(arguments.next()?),
+            "-c" => {
+                arguments.next()?;
+            }
+            _ if argument.starts_with('-') => return None,
+            // The subcommand: every later word is its own.
+            _ => break,
+        }
+    }
+    std::fs::canonicalize(route).ok()
+}
+
+/// Whether the later read, routed to `route`, reads only what this checkout
+/// already proved: it runs at this very top level, and no configuration
+/// include names a file the work tree holds, so no commit the fast-forward
+/// checks out can become configuration. A relative include, or one whose
+/// location this cannot resolve, counts as reaching the work tree.
+fn work_tree_settles(probe: &Probe, route: &std::path::Path) -> bool {
+    let Some((effective, _)) = probe.config() else {
+        return false;
+    };
+    let Some(toplevel) = probe
+        .text(&["rev-parse", "--show-toplevel"])
+        .and_then(|toplevel| std::fs::canonicalize(toplevel).ok())
+    else {
+        return false;
+    };
+    // The fetched commit may add a directory Git reads as a repository of its
+    // own: `safe.bareRepository=all`, Git's default, finds one anywhere below
+    // the checkout, and a read routed into it would take its configuration.
+    // Only a read that runs at this very top level is answered for.
+    if toplevel != route {
+        return false;
+    }
+    !effective.iter().any(|(key, values)| {
+        (key == "include.path" || (key.starts_with("includeif.") && key.ends_with(".path")))
+            && values
+                .iter()
+                .any(|value| include_reaches_tree(value, &probe.home, &toplevel))
+    })
+}
+
+fn include_reaches_tree(value: &str, home: &std::path::Path, toplevel: &std::path::Path) -> bool {
+    let path = match value.strip_prefix("~/") {
+        Some(rest) => home.join(rest),
+        None if std::path::Path::new(value).is_absolute() => std::path::PathBuf::from(value),
+        None => return true,
+    };
+    !super::git_hook_files::outside_checkout(&path, toplevel)
 }
 
 fn memo_key(
@@ -315,7 +467,7 @@ fn memo_key(
 fn parse<'a>(
     segment: &'a CommandSegmentV1,
     context: super::PathContext<'_>,
-) -> Option<(&'a [String], Option<pull::Pull>)> {
+) -> Option<(&'a [String], Operation)> {
     let executable = segment.executable.as_deref()?;
     if executable != "git"
         || segment.pipeline_index != 0
@@ -341,11 +493,20 @@ fn parse<'a>(
     }
     let (command, rest) = remaining.split_first()?;
     match command.as_str() {
-        "fetch" => {
-            crate::command_compatibility::git_fetch_origin_shaped(rest).then_some((leading, None))
-        }
-        "pull" => Some((leading, Some(pull::shaped(rest)?))),
-        "merge" => Some((leading, Some(pull::fast_forward_merge(rest)?))),
+        "fetch" => crate::command_compatibility::git_fetch_every_remote(rest).map(|every_remote| {
+            (
+                leading,
+                Operation {
+                    upstream: None,
+                    every_remote,
+                },
+            )
+        }),
+        "pull" => Some((leading, Operation::upstream(pull::shaped(rest)?))),
+        "merge" => Some((
+            leading,
+            Operation::upstream(pull::fast_forward_merge(rest)?),
+        )),
         _ => None,
     }
 }
@@ -353,7 +514,7 @@ fn parse<'a>(
 fn prove(
     executable: &str,
     leading: &[String],
-    upstream: Option<pull::Pull>,
+    operation: Operation,
     target: Option<&str>,
     context: super::PathContext<'_>,
     deadline: Option<Instant>,
@@ -371,7 +532,7 @@ fn prove(
     let Some((effective, repository)) = probe.config() else {
         return false;
     };
-    if let Some(shape) = upstream.filter(|shape| !shape.fetches) {
+    if let Some(shape) = operation.upstream.filter(|shape| !shape.fetches) {
         // Git LFS smudges the pointers a fast-forward checks out from the
         // endpoint it derives from origin, with the credentials Git hands it,
         // so with LFS on the merge needs the fetch's transport proof too.
@@ -386,115 +547,18 @@ fn prove(
     // Initialized submodules are fetched on demand with their own config
     // and hooks, which this probe does not read.
     transport_proven(&effective, &repository, &probe)
+        && (!operation.every_remote || every_remote_is_origin(&effective, &probe))
         && !effective.keys().any(|key| key.starts_with("submodule."))
         && probe.hooks_inert_in_a_stable_tree([
             "pre-auto-gc",
             "reference-transaction",
             "post-fetch",
         ])
-        && upstream.is_none_or(|shape| pull::pull_inert(&effective, &repository, shape, &probe))
+        && operation
+            .upstream
+            .is_none_or(|shape| pull::pull_inert(&effective, &repository, shape, &probe))
 }
 
-/// Git LFS takes its endpoint from `lfs.url`, `lfs.pushurl` or
-/// `remote.<name>.lfsurl`, and how it authenticates there from
-/// `lfs.<url>.access`, rather than from origin's URL.
-fn lfs_endpoint_overridden(effective: &config::GitConfig) -> bool {
-    effective.keys().any(|key| {
-        let key = key.to_ascii_lowercase();
-        key == "lfs.url"
-            || key == "lfs.pushurl"
-            || (key.starts_with("remote.") && key.ends_with(".lfsurl"))
-            || (key.starts_with("lfs.") && key.ends_with(".access"))
-    })
-}
-
-/// No `.lfsconfig` names those keys from the work tree, the current commit
-/// or the commit the fast-forward checks out. A probe that fails counts as
-/// one being there.
-fn lfsconfig_absent(probe: &Probe, target: &str) -> bool {
-    let Some(top) = probe.text(&["rev-parse", "--show-toplevel"]) else {
-        return false;
-    };
-    if std::fs::symlink_metadata(std::path::Path::new(&top).join(".lfsconfig")).is_ok() {
-        return false;
-    }
-    ["HEAD", target].iter().all(|commit| {
-        probe
-            .output(&[
-                "ls-tree",
-                "--full-tree",
-                "--name-only",
-                "--end-of-options",
-                commit,
-                "--",
-                ".lfsconfig",
-            ])
-            .is_some_and(|listed| listed.iter().all(u8::is_ascii_whitespace))
-    })
-}
-
-/// The network half of the proof: every origin URL reaches GitHub, no
-/// configuration routes the transport through a program, credential helpers
-/// are trusted, and no `pager.fetch` names a program for the fetch's output.
-fn transport_proven(
-    effective: &config::GitConfig,
-    repository: &config::GitConfig,
-    probe: &Probe,
-) -> bool {
-    let urls = effective
-        .get("remote.origin.url")
-        .map_or(&[][..], Vec::as_slice);
-    !urls.is_empty()
-        && urls.iter().all(|url| {
-            config::rewritten_remote_url(effective, url.trim())
-                .is_some_and(|url| config::safe_github_remote_url(&url))
-        })
-        && !config::fetch_config_routes_execution(effective)
-        && probe.credential_helpers_trusted(&config::credential_helpers(effective))
-        && !config::config_weakens_transport(effective)
-        && !config::repository_config_routes_transport(repository)
-        && !pull::pager_enabled(effective, "fetch")
-}
-
-/// Whether Git resolves the merge target to origin's remote-tracking ref,
-/// rather than a ref such as a tag or local branch spelled `origin/<branch>`
-/// that Git would pick first.
-fn tracks_origin(probe: &Probe, target: &str) -> bool {
-    let Some(full) = probe.text(&[
-        "rev-parse",
-        "--verify",
-        "--quiet",
-        "--symbolic-full-name",
-        target,
-    ]) else {
-        return false;
-    };
-    if target.starts_with("origin/") {
-        full == format!("refs/remotes/{target}")
-    } else {
-        full.starts_with("refs/remotes/origin/")
-    }
-}
-
-/// The work tree half of the pull proof, for a fast-forward merge that
-/// fetches nothing: the checkout, ref update and automatic maintenance start
-/// no program. A partial clone would fetch the blobs it checks out from a
-/// remote this proof has not read, submodules carry their own hooks, and a
-/// virtual file system names a program Git runs on every index read.
-fn fast_forward_inert(
-    effective: &config::GitConfig,
-    repository: &config::GitConfig,
-    shape: pull::Pull,
-    probe: &Probe,
-) -> bool {
-    !effective.iter().any(|(key, values)| {
-        matches!(
-            key.as_str(),
-            "extensions.partialclone" | "core.virtualfilesystem"
-        ) || key.starts_with("submodule.")
-            || (key.starts_with("remote.")
-                && key.ends_with(".promisor")
-                && values.iter().any(|value| !pull::disabled(value)))
-    }) && probe.hooks_inert(["reference-transaction", "pre-auto-gc"])
-        && pull::pull_inert(effective, repository, shape, probe)
-}
+#[cfg(test)]
+#[path = "git_remote_ops_tests.rs"]
+mod tests;

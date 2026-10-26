@@ -460,4 +460,28 @@ const detail: ReleaseDetail = {
   }
 }
 
+// The Releases screen draws only from the dashboard palette in DESIGN.md.
+// Tailwind's amber, yellow and other stock hues read as alarms on a screen
+// that has nothing to warn about, so none of them may appear here. The list
+// below is every hue Tailwind ships, so reintroducing any of them fails.
+{
+  const releaseSources = [
+    "./releases-model.ts",
+    "./releases-workspace.tsx",
+    "./components/release-archive-list.tsx",
+    "./components/release-detail-panel.tsx",
+    "./components/release-notes.tsx",
+    "./components/release-status-band.tsx",
+  ];
+  for (const path of releaseSources) {
+    const source = readFileSync(new URL(path, import.meta.url), "utf8");
+    assert.doesNotMatch(
+      source,
+      /\b(?:slate|gray|zinc|neutral|stone|mauve|olive|mist|taupe|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d/,
+      path,
+    );
+    assert.doesNotMatch(source, /tone=\{?[^}\n]*"(?:amber|warning)"/, path);
+  }
+}
+
 console.log("releases-ui.test.tsx passed");

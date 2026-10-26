@@ -187,7 +187,10 @@ fn recursive_search_checks_every_reachable_path() {
             ("grep -rn -- ordinary __tests__/".to_owned(), true),
             ("grep -rn ordinary .".to_owned(), false),
             ("grep -rn ordinary".to_owned(), false),
-            ("grep -rn ordinary src/missing.ts".to_owned(), false),
+            // The name is not there, so the walk opens nothing at all. An
+            // absent root is admitted the same way an absent operand is for
+            // `rg` and `find`.
+            ("grep -rn ordinary src/missing.ts".to_owned(), true),
             ("grep -rn ordinary src/alias.ts".to_owned(), false),
             ("grep -rn ordinary src/one.ts .env".to_owned(), false),
         ] {

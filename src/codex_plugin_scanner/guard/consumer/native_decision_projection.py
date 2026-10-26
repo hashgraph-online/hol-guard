@@ -1,16 +1,17 @@
-"""Resident consumer decision queries and mechanical result projection."""
+"""Resident consumer decision queries.
+
+Python gathers the saved-decision evidence; the resident composes the decision
+and, through the projection op, decides what it means for the artifact.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from functools import partial
-from typing import Any, cast
 
 from ..config import GuardConfig
 from ..models import GuardAction
 from ..native_consumer_artifact_compose import NativeConsumerComposeError
-from ..runtime.decisions import AuthoritativeGuardDecision, project_native_authoritative_decision
 from ..runtime.signals import RiskSignalV2
 from ..store import GuardStore
 
@@ -18,9 +19,6 @@ _SAVED_DECISION_KEYS = ("action", "artifact_hash", "scope", "fresh_local_approva
 
 
 _QUALIFICATION_KEYS = ("fresh_local_approval", "durable_exact_approval")
-
-
-_COMPOSE_UNAVAILABLE_REASON = "consumer_artifact_compose_unavailable"
 
 
 def _native_current_action(
@@ -41,8 +39,9 @@ def _native_current_action(
 ) -> dict[str, object]:
     """Ask the resident for the scoring recommendation and current action.
 
-    Without an answer the artifact blocks (``compose_unavailable`` carries the
-    reason) so the evaluation still completes instead of aborting midway.
+    Without an answer the artifact blocks unscored (``compose_unavailable``
+    carries the reason) so the evaluation still completes instead of aborting
+    midway; the resident's outcome query presents the refusal.
     """
 
     try:
@@ -66,74 +65,7 @@ def _native_current_action(
             guard_home=getattr(store, "guard_home", None),
         )
     except NativeConsumerComposeError as error:
-        return {
-            "current_action": "block",
-            "scanner_action": None,
-            "verdict": {
-                "action": "block",
-                "confidence": 0.0,
-                "evidence_sources": [],
-                "provenance_state": "none",
-                "reasons": ["Guard could not score this artifact, so it stays blocked."],
-                "recommended_next_actions": ["open_investigation"],
-                "review_priority": "critical",
-                "severity": 9,
-                "suppressible": False,
-            },
-            "compose_unavailable": error.code,
-        }
-
-
-def _compose_unavailable_decision(
-    code: str,
-    *,
-    configured_action: str | None,
-    scanner_action: GuardAction | None,
-    raw_scoring_recommendation: object,
-) -> dict[str, object]:
-    """Transport refusal presentation when the resident composed nothing.
-
-    No authoritative decision or permission is synthesized. The public report
-    blocks the failed evaluation and carries the transport error for diagnosis.
-    """
-
-    return {
-        "approval_claim": None,
-        "approval_reuse": {
-            "action": "block",
-            "current_action": "block",
-            "current_normalization_reason_code": None,
-            "original_current_action": "block",
-            "original_current_type": "str",
-            "original_saved_action": None,
-            "original_saved_type": None,
-            "reason_code": _COMPOSE_UNAVAILABLE_REASON,
-            "saved_action": None,
-            "saved_normalization_reason_code": None,
-            "should_claim": False,
-            "status": "not-applicable",
-        },
-        "approval_source": "policy",
-        "append_pending_claim": False,
-        "evaluation_error": {"code": code, "component": "consumer_artifact_compose"},
-        "decision_reason": _COMPOSE_UNAVAILABLE_REASON,
-        "policy_action": "block",
-        "policy_composition": {
-            "configured_action": configured_action,
-            "current_action": "block",
-            "final_action": "block",
-            "native_compose_error": code,
-            "raw_scoring_recommendation": raw_scoring_recommendation,
-            "saved_action": None,
-            "saved_state_present": False,
-            "scanner_action": scanner_action,
-            "scoring_recommendation_non_authoritative": True,
-            "trusted_request_override": False,
-        },
-        "saved_state_present": False,
-        "scanner_evidence": [],
-        "trusted_request_override": False,
-    }
+        return {"current_action": "block", "scanner_action": None, "verdict": None, "compose_unavailable": error.code}
 
 
 @dataclass(frozen=True)
@@ -171,20 +103,15 @@ def _native_runtime_decision(
     compose_unavailable: object = None,
     decision_signals: Sequence[RiskSignalV2] = (),
     composer: Callable[..., dict[str, object]],
-) -> dict[str, object]:
+) -> dict[str, object] | str:
     """Gather saved-decision evidence; the resident composes the final authority.
 
-    A failed current-action query, or no answer here, blocks the artifact.
+    Returns the composed answer, or the error code of a failed current-action
+    query or of this one; the artifact then blocks.
     """
 
-    unavailable = partial(
-        _compose_unavailable_decision,
-        configured_action=configured_action,
-        scanner_action=scanner_action,
-        raw_scoring_recommendation=raw_scoring_recommendation,
-    )
     if isinstance(compose_unavailable, str):
-        return unavailable(compose_unavailable)
+        return compose_unavailable
     store = inputs.store
     lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
         inputs.harness,
@@ -248,29 +175,8 @@ def _native_runtime_decision(
             guard_home=getattr(store, "guard_home", None),
         )
     except NativeConsumerComposeError as error:
-        return unavailable(error.code)
+        return error.code
     pending = inputs.pending_approval_claims
     if answer["append_pending_claim"] is True and saved_decision is not None and pending is not None:
         pending.append((saved_decision, artifact_id, approval_context_hash))
     return answer
-
-
-def _project_runtime_decision(runtime: dict[str, object]) -> AuthoritativeGuardDecision | None:
-    if "authoritative_decision" in runtime:
-        return project_native_authoritative_decision(cast(dict[str, Any], runtime["authoritative_decision"]))
-    if "evaluation_error" in runtime:
-        return None
-    raise ValueError("native_consumer_artifact_compose_authoritative_decision_missing")
-
-
-def _runtime_artifact_projection(
-    runtime: dict[str, object], decision: AuthoritativeGuardDecision | None
-) -> dict[str, object]:
-    if decision is not None:
-        return decision.to_artifact_projection()
-    return {
-        "policy_action": "block",
-        "decision_reason": runtime["decision_reason"],
-        "policy_composition": runtime["policy_composition"],
-        "evaluation_error": runtime["evaluation_error"],
-    }

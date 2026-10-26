@@ -10,7 +10,7 @@ pub(super) fn persist_evidence(
     evaluation: &PackageEvalResult,
     now: &str,
 ) {
-    let held = hold_unresolved_package_cwd(artifact, evaluation.clone());
+    let held = hold_unresolved_package_cwd(deps.identity, artifact, evaluation.clone());
     let evaluation = &held;
     if evaluation.decision == "allow" {
         return;
@@ -22,7 +22,7 @@ pub(super) fn persist_evidence(
         if !should_record_package(package, &evaluation.decision) {
             continue;
         }
-        let evidence_id = evidence_id(deps, &evaluation.package_intent_hash, package);
+        let evidence_id = evidence_id(deps.identity, &evaluation.package_intent_hash, package);
         let mut details = Map::new();
         details.insert(
             "agent_app".to_string(),

@@ -12,7 +12,9 @@ use guard_contracts::{GuardExecutionEnvironmentV1, PreToolActionTypeV1, PreToolR
 use std::path::Path;
 
 #[cfg(unix)]
-use crate::restricted_pytest::{linux_workspace_sandbox_available, workspace_admissible};
+use crate::restricted_pytest::linux_workspace_sandbox_available;
+#[cfg(unix)]
+use crate::workspace_roots::workspace_admissible;
 
 /// The workspace sandbox runs on macOS and Linux; Windows never admits a workspace.
 #[cfg(not(unix))]
@@ -38,6 +40,8 @@ mod cd;
 mod chmod;
 #[path = "workspace_contained_compiled.rs"]
 mod compiled;
+#[path = "workspace_contained_cwd.rs"]
+mod cwd;
 #[path = "workspace_contained_git.rs"]
 mod git_metadata;
 #[path = "workspace_contained_home_cd.rs"]
@@ -65,7 +69,7 @@ mod script;
 #[path = "workspace_contained_settings.rs"]
 mod settings;
 #[path = "workspace_contained_sibling.rs"]
-mod sibling;
+pub(super) mod sibling;
 #[path = "workspace_contained_vendored.rs"]
 mod vendored;
 
@@ -208,6 +212,9 @@ pub(crate) fn command_shape(
     let temp_fixed = !reach::rebinds_private_temp(&model.normalized_text);
     // `~` is the private home the launcher seeds only while nothing rebinds it.
     let home_fixed = !model.normalized_text.contains("HOME");
+    // How far under the workspace root each segment's shell stands, so a
+    // relative path may spend that many parent steps and stay inside.
+    let below = cwd::depths(model, workspace);
     for (index, segment) in model.segments.iter().enumerate() {
         // A bare private assignment starts no program.
         if segment.executable.is_none() && cd::assigns_private(model, segment) {
@@ -223,6 +230,9 @@ pub(crate) fn command_shape(
                 .environment_names
                 .iter()
                 .any(|name| name.to_ascii_uppercase().starts_with("GIT_"))
+            // A directory search path would send a bare relative `cd` operand
+            // somewhere other than the directory the shape reads it as.
+            || cd::sets_search_path(segment)
         {
             return None;
         }
@@ -244,6 +254,7 @@ pub(crate) fn command_shape(
                 temp_fixed,
                 home_fixed,
                 script.as_ref().map(|(operand, _)| operand.as_str()),
+                below.get(index).copied().unwrap_or(0),
             )
             || (matches!(name, "cd" | "pushd")
                 && !matches!(segment.arguments.as_slice(),
@@ -368,7 +379,7 @@ fn extensions_contain(
         && extensions.permission_observations.iter().all(|observation| {
             (package || super::restricted_test_commands::bun_inline_eval(model))
                 && observation.mcp_tool.is_none()
-                && package::PACKAGE_EXTENSIONS.contains(&observation.extension_id.as_str())
+                && crate::package_extension_ids::PACKAGE_EXTENSIONS.contains(&observation.extension_id.as_str())
                 && observation.uncertainty_reasons.is_empty()
         })
         && extensions.observations.iter().all(|observation| {

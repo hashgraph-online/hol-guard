@@ -11,7 +11,7 @@ use serde_json::{json, Value};
 use crate::context_digest::python_strip;
 
 const SELECTOR_PREFIX: &str = "mcp-temporary-grant:v1";
-const INFORMATIONAL_CATEGORY: &str = "browser_external_domain";
+pub(crate) const INFORMATIONAL_CATEGORY: &str = "browser_external_domain";
 
 pub(crate) fn browser_intent(
     subject: &McpToolPolicySubjectV1,
@@ -64,7 +64,7 @@ pub(crate) fn exact_match_context(intent: Option<&BrowserAutomationIntentV1>) ->
     String::from_utf8(bytes).ok()
 }
 
-fn category_for(intent: &str) -> Option<&'static str> {
+pub(crate) fn category_for(intent: &str) -> Option<&'static str> {
     match intent {
         "browser.navigation" => Some("browser_navigation"),
         "browser.inspect" => Some("browser_inspection"),

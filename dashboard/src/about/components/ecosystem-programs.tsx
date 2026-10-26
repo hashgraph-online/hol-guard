@@ -25,15 +25,10 @@ export function EcosystemPrograms() {
           lead={ABOUT_PARTNER_SECTION_BODY}
         />
         <div className="mt-4 space-y-0">
-          {ABOUT_PARTNER_LEVELS.map((level, i) => (
+          {ABOUT_PARTNER_LEVELS.map((level) => (
             <div key={level.name} className="border-t border-brand-dark/10 py-4">
-              <div className="flex items-baseline gap-3">
-                <span className="font-mono text-xs font-semibold tabular-nums text-brand-blue">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <h3 className="text-sm font-semibold text-brand-dark">{level.name}</h3>
-              </div>
-              <p className="ml-7 mt-1 text-sm leading-6 text-brand-dark/75">
+              <h3 className="text-sm font-semibold text-brand-dark">{level.name}</h3>
+              <p className="mt-1 text-sm leading-6 text-brand-dark/75">
                 {level.description}
               </p>
             </div>
@@ -43,7 +38,7 @@ export function EcosystemPrograms() {
           <AboutExternalLink
             linkId="hol_partners"
             href={ABOUT_PARTNER_CTA_HREF}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-blue px-4 py-2.5 text-sm font-semibold text-white transition-colors duration-150 hover:bg-brand-blue/90 motion-reduce:transition-none"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-brand-dark/15 bg-white px-4 py-2.5 text-sm font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-dark/25 hover:bg-surface-1 motion-reduce:transition-none"
           >
             {ABOUT_PARTNER_CTA}
           </AboutExternalLink>
@@ -79,7 +74,7 @@ export function EcosystemPrograms() {
           <AboutExternalLink
             linkId="hol_affiliates"
             href={ABOUT_AFFILIATE_CTA_HREF}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-dark/15 bg-white px-4 py-2.5 text-sm font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-dark/25 hover:bg-surface-1 motion-reduce:transition-none"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-brand-dark/15 bg-white px-4 py-2.5 text-sm font-semibold text-brand-dark transition-colors duration-150 hover:border-brand-dark/25 hover:bg-surface-1 motion-reduce:transition-none"
           >
             {ABOUT_AFFILIATE_CTA}
           </AboutExternalLink>

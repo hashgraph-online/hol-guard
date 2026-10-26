@@ -114,6 +114,7 @@ from ..store_evidence import (
     clear_evidence,
 )
 from ..store_storage_maintenance import DEFAULT_GUARD_EVENT_LIMIT, DEFAULT_RECEIPT_DETAIL_LIMIT
+from ..workspace_assessment_worker import start_workspace_assessment_worker
 from . import repair_self_check
 from .aibom_inventory_persist import persist_aibom_inventory_context
 from .audit_persistence import NOT_PERSISTED as AUDIT_NOT_PERSISTED
@@ -251,6 +252,8 @@ _LOCAL_DISCOVERY_MEASUREMENT = {
 
 _LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS = 7 * 24 * 60 * 60
 _DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS = 30.0
+_PLUGIN_TELEMETRY_FIRST_CHECK_SECONDS = 300.0
+_PLUGIN_TELEMETRY_CHECK_INTERVAL_SECONDS = 6 * 60 * 60.0
 _DEFAULT_HEADLESS_CLOUD_SYNC_BACKOFF_SECONDS = 10.0
 
 
@@ -817,11 +820,19 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             self._enroll_authority_by_default()
         try:
             try:
-                return read(shared=True)
+                snapshot = read(shared=True)
             except NativeCommandControlMutationRequiredError:
                 # Release the shared lease before migration and recapture the
                 # active projection under the exclusive mutation fence.
                 return read(shared=False)
+            if snapshot.health is AuthorityHealth.RECOVERY_REQUIRED:
+                # A save that failed before anchoring leaves a prepared
+                # transition that only a writer may roll back, and a shared
+                # read only reports it. Read again as the writer so the
+                # authority heals here instead of refusing every save and
+                # holding every extension blocked until someone repairs it.
+                return read(shared=False)
+            return snapshot
         except NativeCommandControlAuthorityUnavailableError:
             # Nothing was read, so there is nothing to refresh from. Keeping the
             # snapshot already installed beats replacing a known authority with
@@ -2048,10 +2059,12 @@ class _GuardDaemonHandler(
         transport_deadline = self._daemon_server().request_deadline(self.request, admission_seconds)
         params = parse_qs(query)
         # Diagnostics only: a count by the harness the worker reviews (the
-        # `runtime-harness` override first), before anything is judged.
+        # `runtime-harness` override first), and the reason a bridge names
+        # for the resident not answering, before anything is judged.
         note_hook_received(
             getattr(self._daemon_server(), "hook_worker", None),
             self._optional_string(params.get("runtime-harness", [None])[-1]) or default_harness,
+            self.headers.get("X-Guard-Direct-Miss"),
         )
         hint_missing = "guard_remaining_seconds" not in payload and "guard_remaining_ms" not in payload
         hook_deadline = RuntimeHookDeadline.for_admission(
@@ -3335,7 +3348,10 @@ class GuardDaemonServer:
         # Catalog preparation and publication run on their own threads and hold
         # no daemon object. Without this sink a permanent preparation fault
         # leaves no line in daemon.log while every catalog read answers 503.
-        install_background_sink(self._diagnostics.record_background)
+        install_background_sink(
+            self._diagnostics.record_background,
+            notice=self._diagnostics.record_background_notice,
+        )
         try:
             with timed_phase("init_provider_registry"):
                 self._isolation_provider_registry = load_managed_provider_registry()
@@ -3401,12 +3417,14 @@ class GuardDaemonServer:
         self._command_activity_maintenance_thread: threading.Thread | None = None
         self._onefile_extraction_reclaim_thread: threading.Thread | None = None
         self._extension_control_refresh_thread: threading.Thread | None = None
+        self._plugin_telemetry_thread: threading.Thread | None = None
         self._extension_control_refresh_interval_seconds = extension_control_refresh_interval_seconds
         self._cloud_review_sync_worker: CloudReviewSyncWorker | None = None
         self._thread: threading.Thread | None = None
         self._serve_loop_started = threading.Event()
         self._watchdog_thread: threading.Thread | None = None
         self._native_resident_watchdog_thread: threading.Thread | None = None
+        self._workspace_assessment_thread: threading.Thread | None = None
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -3588,6 +3606,7 @@ class GuardDaemonServer:
                 self._start_supply_chain_bundle_refresh()
                 self._start_aibom_inventory_refresh()
                 self._start_extension_control_refresh()
+                self._start_plugin_telemetry()
             with timed_phase("start_queue_and_cloud_workers", phase):
                 self._command_queue_worker = start_command_queue_worker(self._server.store, self._command_queue_worker)
                 self._cloud_review_sync_worker = start_cloud_sync_sync_worker(
@@ -3600,6 +3619,7 @@ class GuardDaemonServer:
                 self._start_onefile_extraction_reclaim()
                 self._start_repair_self_check()
                 self._start_native_resident_watchdog()
+                self._start_workspace_assessment_worker()
             self._record_lifecycle("ready")
             self._owned_service_ready = True
             self._diagnostics.record("daemon_ready")
@@ -3796,6 +3816,15 @@ class GuardDaemonServer:
     def _start_native_resident_watchdog(self) -> None:
         self._native_resident_watchdog_thread = start_native_resident_watchdog(
             self._server.store.guard_home,
+            stop=self._shutdown_started,
+            on_error=self._diagnostics.record_exception,
+        )
+
+    def _start_workspace_assessment_worker(self) -> None:
+        if self._workspace_assessment_thread is not None and self._workspace_assessment_thread.is_alive():
+            return
+        self._workspace_assessment_thread = start_workspace_assessment_worker(
+            self._server.store,
             stop=self._shutdown_started,
             on_error=self._diagnostics.record_exception,
         )
@@ -4040,6 +4069,10 @@ class GuardDaemonServer:
             getattr(self, "_headless_cloud_sync_thread", None),
             deadline=deadline,
         )
+        self._plugin_telemetry_thread = self._join_service_thread(
+            getattr(self, "_plugin_telemetry_thread", None),
+            deadline=deadline,
+        )
         self._command_activity_maintenance_thread = self._join_service_thread(
             getattr(self, "_command_activity_maintenance_thread", None),
             deadline=deadline,
@@ -4052,6 +4085,12 @@ class GuardDaemonServer:
             getattr(self, "_native_resident_watchdog_thread", None),
             deadline=started + _NATIVE_RESIDENT_WATCHDOG_STOP_JOIN_TIMEOUT_SECONDS,
         )
+        # An assessment still running past the deadline writes to the store
+        # after shutdown, so it counts against containment like the others.
+        self._workspace_assessment_thread = self._join_service_thread(
+            getattr(self, "_workspace_assessment_thread", None),
+            deadline=deadline,
+        )
         return all(
             thread is None
             for thread in (
@@ -4060,9 +4099,11 @@ class GuardDaemonServer:
                 self._aibom_refresh_thread,
                 self._extension_control_refresh_thread,
                 self._headless_cloud_sync_thread,
+                self._plugin_telemetry_thread,
                 self._command_activity_maintenance_thread,
                 self._onefile_extraction_reclaim_thread,
                 self._native_resident_watchdog_thread,
+                self._workspace_assessment_thread,
             )
         )
 
@@ -4245,6 +4286,31 @@ class GuardDaemonServer:
             sync_network_protection_bundle_best_effort(self._server.store)
             if self._shutdown_started.wait(wait_seconds):
                 return
+
+    def _start_plugin_telemetry(self) -> None:
+        if self._plugin_telemetry_thread is not None:
+            return
+        self._plugin_telemetry_thread = threading.Thread(
+            target=self._plugin_telemetry_loop,
+            daemon=True,
+            name="guard-plugin-telemetry",
+        )
+        self._plugin_telemetry_thread.start()
+
+    def _plugin_telemetry_loop(self) -> None:
+        """Sends the opted-in weekly plugin install report; a no-op until opt-in."""
+
+        from ..plugin_telemetry.report import PluginTelemetryError, send_if_due
+
+        wait_seconds = _PLUGIN_TELEMETRY_FIRST_CHECK_SECONDS
+        while not self._shutdown_started.wait(wait_seconds):
+            wait_seconds = _PLUGIN_TELEMETRY_CHECK_INTERVAL_SECONDS
+            try:
+                send_if_due(self._server.store.guard_home)
+            except PluginTelemetryError as error:
+                _LOGGER.info("Plugin install report not sent: %s", error)
+            except Exception:
+                _LOGGER.exception("Plugin install report failed")
 
     def _start_extension_control_refresh(self) -> None:
         if self._extension_control_refresh_thread is not None:

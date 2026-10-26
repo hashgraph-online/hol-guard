@@ -14,8 +14,6 @@ from codex_plugin_scanner.guard.runtime.native_command_extension_evidence import
 
 
 def test_missing_snapshot_does_not_query_or_evaluate(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(bridge, "current_extension_control_snapshot", lambda: None)
-
     def forbidden(*_args: object, **_kwargs: object) -> None:
         pytest.fail("unbound diagnostics queried or evaluated a command")
 

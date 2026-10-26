@@ -27,9 +27,7 @@ text of the two ordered objects the resident must write in Python's key order
 old section ran and the answer they exhibit.
 
 The Rust ``hook_decision_artifact_finalize_tests`` replays facts to answers and
-pins the wire text; the ``tests/test_artifact_finalize_*.py`` suites run the new
-executor with the resident stubbed from the vectors and check that it leaves
-the same state, receipt bytes and effects.
+pins the wire text.
 """
 
 from __future__ import annotations

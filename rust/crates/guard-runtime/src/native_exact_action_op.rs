@@ -263,7 +263,41 @@ fn decide_with(
     if request.schema != NATIVE_EXACT_ACTION_REQUEST_SCHEMA {
         return Err("native_exact_action_schema_mismatch");
     }
-    Ok(match &request.query {
+    decide_query(&request.query, engines, fallback)
+}
+
+fn decide_query(
+    query: &NativeExactActionQueryV1,
+    engines: &dyn Engines,
+    fallback: Fallback,
+) -> Result<NativeExactActionPayloadV1, &'static str> {
+    Ok(match query {
+        NativeExactActionQueryV1::ReviewEvidence { binding, action } => {
+            // Each half is answered exactly as its own query would be, so
+            // one ask can never bind or mint anything the two asks would not.
+            if !matches!(**binding, NativeExactActionQueryV1::ReviewBinding { .. })
+                || !matches!(**action, NativeExactActionQueryV1::ExactAction { .. })
+            {
+                return Err("native_exact_action_query_invalid");
+            }
+            let NativeExactActionPayloadV1::ReviewBinding { binding } =
+                decide_query(binding, engines, fallback)?
+            else {
+                return Err("native_exact_action_query_invalid");
+            };
+            let NativeExactActionPayloadV1::ExactAction {
+                token,
+                once_only_reason,
+            } = decide_query(action, engines, fallback)?
+            else {
+                return Err("native_exact_action_query_invalid");
+            };
+            NativeExactActionPayloadV1::ReviewEvidence {
+                binding,
+                token,
+                once_only_reason,
+            }
+        }
         NativeExactActionQueryV1::LaunchEvidence { action } => {
             launch_evidence::observe(action, engines)?
         }
@@ -312,9 +346,9 @@ fn decide_with(
             let budget = Duration::from_millis((*budget_ms).min(NATIVE_EXACT_ACTION_MAX_BUDGET_MS));
             let deadline = Instant::now() + budget;
             let minted = match fallback {
-                Fallback::CommandHash => token::approval_token(&request.query, deadline, engines),
+                Fallback::CommandHash => token::approval_token(query, deadline, engines),
                 #[cfg(test)]
-                Fallback::Strict => token::exact_action(&request.query, deadline, engines),
+                Fallback::Strict => token::exact_action(query, deadline, engines),
             };
             match minted {
                 Ok(token) => NativeExactActionPayloadV1::ExactAction {

@@ -19,11 +19,12 @@ use guard_command::hook_adapter_value::OValue;
 
 use super::{answer, fail_closed, Client, Kind, Reply, Request, DAEMON_HARNESS};
 use crate::bounded_hook_bridge::{
-    daemon_target, post_hook_reply, transport_deadline, DaemonTarget, PostFailure, DAEMON_BUDGET,
-    PROMPT_DAEMON_BUDGET,
+    daemon_target, post_hook_reply_missed, transport_deadline, DaemonTarget, PostFailure,
+    DAEMON_BUDGET, PROMPT_DAEMON_BUDGET,
 };
 use crate::claude_hook_bridge_http::remaining;
 use crate::claude_hook_bridge_render::py_strip;
+use crate::codex_hook_bridge_direct_resident::DirectMiss;
 use crate::cursor_hook_bridge_response::python_document;
 use crate::hook_bridge_daemon_start::{await_daemon, start_daemon, Attempt};
 
@@ -87,14 +88,17 @@ fn request_deadline(client: &Client, request: &Request) -> Option<Instant> {
 
 /// The body `_daemon_hook_result` reads from the daemon for `request`,
 /// stripped as the client strips it. The client also sends `hook_env`,
-/// which the daemon drops unread.
+/// which the daemon drops unread. `miss` names why the resident did not
+/// answer, so the daemon can count it.
 fn post(
     target: &DaemonTarget,
     request: &Request,
     deadline: Instant,
+    miss: DirectMiss,
 ) -> Result<String, PostFailure> {
     let path = format!("/v1/hooks/{DAEMON_HARNESS}?{}", request.query);
-    post_hook_reply(target, &path, &request.data, deadline).map(|body| py_strip(&body).to_owned())
+    post_hook_reply_missed(target, &path, &request.data, deadline, Some(miss))
+        .map(|body| py_strip(&body).to_owned())
 }
 
 /// The client's `[*GUARD_RECOVERY_COMMAND, failure_kind]`; a frozen
@@ -108,24 +112,32 @@ pub(super) fn recovery_argv(command: &[String], failure_kind: &str) -> Vec<Strin
     argv
 }
 
-/// The bridge's reply to `request`, given what a live resident answered.
-pub(super) fn daemon_reply(client: &Client, request: &Request, resident: Option<String>) -> Reply {
-    if let Some(body) = resident {
+/// The bridge's reply to `request`, given what a live resident answered or
+/// why it did not.
+pub(super) fn daemon_reply(
+    client: &Client,
+    request: &Request,
+    resident: Result<String, DirectMiss>,
+) -> Reply {
+    let miss = match resident {
         // The resident answered, and queued the hook's evidence, for the
         // daemon: asking the daemon would forward the hook to it again.
-        return match settle(client, request, &body) {
-            Settled::Reply(reply) => reply,
-            Settled::Refused => fail_closed(&request.event),
-        };
-    }
+        Ok(body) => {
+            return match settle(client, request, &body) {
+                Settled::Reply(reply) => reply,
+                Settled::Refused => fail_closed(&request.event),
+            }
+        }
+        Err(miss) => miss,
+    };
     let Some(target) = daemon_target(Path::new(&client.guard_home), DAEMON_HARNESS) else {
-        return restarted_reply(client, request, PostFailure::Transport, None);
+        return restarted_reply(client, request, PostFailure::Transport, None, miss);
     };
     // Too little time for a request means the deadline is all but spent.
     let Some(deadline) = request_deadline(client, request) else {
         return fail_closed(&request.event);
     };
-    let failure = match post(&target, request, deadline) {
+    let failure = match post(&target, request, deadline, miss) {
         Ok(body) => match settle(client, request, &body) {
             Settled::Reply(reply) => return reply,
             Settled::Refused => PostFailure::ControlPlane,
@@ -133,7 +145,7 @@ pub(super) fn daemon_reply(client: &Client, request: &Request, resident: Option<
         Err(PostFailure::Overload) => return fail_closed(&request.event),
         Err(failure) => failure,
     };
-    restarted_reply(client, request, failure, Some(&target))
+    restarted_reply(client, request, failure, Some(&target), miss)
 }
 
 /// Start the daemon for `failure` and send the hook once to a daemon that
@@ -144,6 +156,7 @@ fn restarted_reply(
     request: &Request,
     failure: PostFailure,
     failed: Option<&DaemonTarget>,
+    miss: DirectMiss,
 ) -> Reply {
     let failure_kind = failure.failure_kind();
     let command = recovery_argv(&client.recovery_command, failure_kind);
@@ -161,7 +174,7 @@ fn restarted_reply(
     });
     let body = started.and_then(|target| {
         let deadline = request_deadline(client, request)?;
-        post(&target, request, deadline).ok()
+        post(&target, request, deadline, miss).ok()
     });
     match body.map(|body| settle(client, request, &body)) {
         Some(Settled::Reply(reply)) => reply,

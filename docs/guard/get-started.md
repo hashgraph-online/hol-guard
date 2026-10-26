@@ -14,6 +14,85 @@ boundary.
 For security reviews, sales conversations, and GRC packets, see the
 [Enterprise packet](./enterprise-packet.md).
 
+## Platform support
+
+Guard needs both the Python package and its matching native runtime. A successful
+`pip install` or `hol-guard --version` does not establish that the runtime works
+or that an agent is protected. The universal `py3-none-any` wheel does not contain
+the native runtime.
+
+The 3.56.0 release provides these artifacts:
+
+| Python platform | Native wheel location | Installation notes |
+| --- | --- | --- |
+| macOS ARM64, macOS 11 or later | PyPI and GitHub release | Use native ARM64 Python. |
+| macOS Intel, macOS 13 or later | GitHub release | The PyPI universal wheel needs the matching native wheel from the same release. |
+| Linux x86_64, glibc 2.17 or later | PyPI and GitHub release | Use a compatible manylinux interpreter. |
+| Windows x64 | PyPI and GitHub release | Use x64 Python (`win-amd64`). |
+| Windows ARM64 with native ARM64 Python | GitHub release | The native runtime exists, but the Python 3.12 dependency install currently requires source builds. Use the x64 Python route below. |
+| Linux ARM64 | No published native wheel | The universal wheel cannot complete setup or provide protection on this platform. Use a platform with a published native wheel. |
+
+Check the [release assets](https://github.com/hashgraph-online/hol-guard/releases)
+for your exact Guard version. Keep the Python package and native wheel versions
+matched; an artifact for another architecture is not a native installation.
+
+### macOS Intel: install the matching native wheel
+
+Try `hol-guard update` first to let the updater repair the existing installation.
+If it cannot recover the native runtime, use the same-version wheel below.
+
+After a normal pipx installation has installed Guard and its dependencies, replace
+the universal wheel with the native wheel for the **same installed version** before
+checking runtime readiness. For Guard 3.56.0 on Intel macOS 13 or later:
+
+```bash
+pipx runpip hol-guard install --force-reinstall --no-deps "https://github.com/hashgraph-online/hol-guard/releases/download/v3.56.0/hol_guard-3.56.0-py3-none-macosx_13_0_x86_64.whl"
+```
+
+Here `--no-deps` only repairs an existing installation whose full dependency install
+already succeeded; it is not a substitute for installing those dependencies. For a
+different Guard version, select that version's matching Intel wheel from the release
+assets. Then run the readiness check below before starting setup.
+
+### Windows ARM64: select x64 Python
+
+With native ARM64 Python 3.12, the 3.56.0 dependency graph builds `cryptography` and
+`rfc3161-client` from source and can fail when OpenSSL or Perl is missing. The
+presence of Guard's ARM64 runtime wheel does not resolve those dependency builds.
+
+The full production dependency install failed in the tested native ARM64 Python
+3.12 environment. Native ARM64 onboarding and a first protected action therefore
+remain unverified. That acceptance work is tracked separately in
+[issue #5924](https://github.com/hashgraph-online/hol-guard/issues/5924); the x64
+route below does not establish native ARM64 support.
+
+Use an x64 CPython installation on Windows ARM64. Select its executable explicitly
+and verify the interpreter architecture before asking pipx to create the Guard
+environment:
+
+```powershell
+& '<path-to-x64-python.exe>' -c "import sysconfig; print(sysconfig.get_platform())"
+pipx install --python '<path-to-x64-python.exe>' hol-guard
+```
+
+The first command must print `win-amd64`, not `win-arm64`. This route uses Windows
+x64 emulation; it is not native ARM64 Python coverage. If Guard is already managed
+by pipx, inspect that environment before replacing it rather than installing a
+second copy over an existing setup.
+
+### Check runtime readiness
+
+Before starting the wizard, inspect a harmless command without executing it:
+
+```bash
+hol-guard command test 'echo guard-install-check' --json
+```
+
+An exit of zero with `no_match` is normal for this harmless command. A
+`native_unavailable` failure means the installation is not ready for setup.
+After setup, verify the actual agent integration and a benign action with a
+matching receipt; this inspection alone is not proof of active protection.
+
 ## The everyday flow
 
 1. Start the guided first-run setup:

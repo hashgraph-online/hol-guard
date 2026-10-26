@@ -134,3 +134,35 @@ def test_group_writable_guard_home_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(NativePolicySnapshotError, match="native_policy_generation_home_invalid"):
         _snapshot(tmp_path, digest="a" * 64)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX symlink contract")
+def test_symlinked_guard_home_keeps_working_when_its_target_is_private(tmp_path: Path) -> None:
+    target = tmp_path / "real-home"
+    target.mkdir(mode=0o700)
+    link = tmp_path / "link-home"
+    link.symlink_to(target, target_is_directory=True)
+
+    assert _snapshot(link, digest="a" * 64)["generation"] == 1
+    assert (target / "native-policy-generation.lock").is_file()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission contract")
+def test_symlinked_guard_home_is_rejected_when_its_target_is_group_writable(tmp_path: Path) -> None:
+    target = tmp_path / "shared-home"
+    target.mkdir()
+    target.chmod(0o770)
+    link = tmp_path / "link-home"
+    link.symlink_to(target, target_is_directory=True)
+
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_generation_home_invalid"):
+        _snapshot(link, digest="a" * 64)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX symlink contract")
+def test_dangling_guard_home_symlink_is_rejected(tmp_path: Path) -> None:
+    link = tmp_path / "link-home"
+    link.symlink_to(tmp_path / "missing-home", target_is_directory=True)
+
+    with pytest.raises(NativePolicySnapshotError, match="native_policy_generation_home_invalid"):
+        _snapshot(link, digest="a" * 64)

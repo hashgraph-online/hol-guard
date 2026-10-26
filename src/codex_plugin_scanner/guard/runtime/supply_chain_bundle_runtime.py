@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import time
 from dataclasses import dataclass
 
@@ -53,11 +54,21 @@ class OfflineSupplyChainDecision:
     emergency_deny: bool = False
 
 
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
 def canonical_supply_chain_bundle_payload(bundle: SupplyChainBundle | dict[str, object]) -> bytes:
-    """Return the canonical payload used for payloadHash and RSA-PSS signing."""
+    """Return the canonical payload used for payloadHash and RSA-PSS signing.
+
+    Keys sort by code point, separators are compact, and non-ASCII text stays UTF-8
+    rather than becoming unicode escape sequences, because that is how the signing side
+    writes the bytes it signs. A lone surrogate is escaped the way a well-formed JSON
+    writer escapes it, so malformed text fails the hash check instead of raising.
+    """
 
     payload = bundle.to_dict() if isinstance(bundle, SupplyChainBundle) else bundle
-    return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    text = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return _LONE_SURROGATE.sub(lambda match: f"\\u{ord(match.group()):04x}", text).encode("utf-8")
 
 
 def payload_hash_for_supply_chain_bundle(bundle: SupplyChainBundle | dict[str, object]) -> str:

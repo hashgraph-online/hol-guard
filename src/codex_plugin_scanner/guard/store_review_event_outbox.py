@@ -84,6 +84,7 @@ class StoreReviewEventOutboxMixin:
                     method=method,
                     args=args,
                     deadline_monotonic=deadline,
+                    prerequisite_store=self,
                     busy_timeout_seconds=timeout_seconds
                     if busy_timeout_seconds is None
                     else min(timeout_seconds, busy_timeout_seconds),

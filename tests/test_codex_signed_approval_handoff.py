@@ -12,7 +12,6 @@ from codex_plugin_scanner.guard.approval_hook_copy import (
     _SIGNED_APPROVAL_LINK_UNAVAILABLE,
     live_hook_approval_context,
 )
-from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction
 from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool_review
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 
@@ -134,67 +133,6 @@ def test_pending_approval_does_not_open_unsigned_url_when_auth_token_load_fails(
     monkeypatch.setattr(resume, "open_browser_url", lambda url: opened_urls.append(url) or True)
 
     resume._open_pending_approval(approval_url, state_path=tmp_path / "daemon-state.json")
-
-    captured = capsys.readouterr()
-    assert opened_urls == []
-    assert "could not create a signed approval link" in captured.err.lower()
-    assert approval_url not in captured.err
-
-
-def test_codex_live_approval_prints_the_authenticated_browser_url(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    write_synthetic_daemon_auth_token(guard_home)
-    approval_url = "http://127.0.0.1:5475/requests/req-1"
-    opened_urls: list[str] = []
-    monkeypatch.setattr(interaction, "open_browser_url", lambda url: opened_urls.append(url) or True)
-
-    interaction._open_codex_live_approval(
-        {"approval_requests": [{"request_id": "req-1", "approval_url": approval_url}]},
-        guard_home=guard_home,
-    )
-
-    captured = capsys.readouterr()
-    assert len(opened_urls) == 1
-    assert opened_urls[0].startswith(f"{approval_url}#guard-token=")
-    assert captured.err == f"HOL Guard is waiting for approval in your browser: {opened_urls[0]}\n"
-
-
-def test_codex_live_approval_keeps_external_url_unsigned(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    approval_url = "https://example.invalid/requests/req-1"
-    opened_urls: list[str] = []
-    monkeypatch.setattr(interaction, "open_browser_url", lambda url: opened_urls.append(url) or True)
-
-    interaction._open_codex_live_approval(
-        {"approval_requests": [{"request_id": "req-1", "approval_url": approval_url}]},
-        guard_home=tmp_path / "guard-home",
-    )
-
-    captured = capsys.readouterr()
-    assert opened_urls == [approval_url]
-    assert captured.err == f"HOL Guard is waiting for approval in your browser: {approval_url}\n"
-
-
-def test_codex_live_approval_does_not_open_unsigned_local_url_without_auth(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    approval_url = "http://127.0.0.1:5475/requests/req-1"
-    opened_urls: list[str] = []
-    monkeypatch.setattr(interaction, "open_browser_url", lambda url: opened_urls.append(url) or True)
-
-    interaction._open_codex_live_approval(
-        {"approval_requests": [{"request_id": "req-1", "approval_url": approval_url}]},
-        guard_home=tmp_path / "missing-guard-home",
-    )
 
     captured = capsys.readouterr()
     assert opened_urls == []

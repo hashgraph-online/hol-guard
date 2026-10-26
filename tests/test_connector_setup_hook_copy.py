@@ -24,8 +24,6 @@ from codex_plugin_scanner.guard.blocked_request_mode import (
     connector_setup_reason,
     is_unlinked_connector_setup_reason,
 )
-from codex_plugin_scanner.guard.cli.commands_support_prompts import _copilot_hook_reason
-from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _native_hook_reason_for_harness
 
 _TESTDATA = Path(__file__).resolve().parents[1] / "rust" / "crates" / "guard-runtime" / "testdata"
 _URL = "https://guard.example.test/approvals/0123456789abcdef"
@@ -103,39 +101,3 @@ def test_default_mode_gets_no_link_from_the_shared_hook_copy() -> None:
 def test_ask_mode_keeps_the_link_in_the_shared_hook_copy() -> None:
     assert with_approval_review_url(_ASK, {"approval_url": _URL}) == f"{_ASK} {_LINK}"
     assert join_native_hook_reason(_ASK, _LINK) == f"{_ASK} {_LINK}"
-
-
-@pytest.mark.parametrize(
-    ("harness", "render"),
-    [
-        ("codex", lambda reason: _native_hook_reason_for_harness("codex", reason)),
-        ("omp", lambda reason: _native_hook_reason_for_harness("omp", reason)),
-        ("claude-code", lambda reason: _native_hook_reason_for_harness("claude-code", reason)),
-        ("copilot", _copilot_hook_reason),
-    ],
-)
-def test_harness_copy_by_mode(harness: str, render: object) -> None:
-    assert callable(render)
-    default = render(_DEFAULT)
-    assert default == _DEFAULT, harness
-    assert "approve it" not in default.lower()
-    ask = render(_ASK)
-    assert ask.startswith(_ASK), harness
-    assert "Do not retry it" in ask
-
-
-@pytest.mark.parametrize(
-    ("harness", "render"),
-    [
-        ("codex", lambda reason: _native_hook_reason_for_harness("codex", reason)),
-        ("omp", lambda reason: _native_hook_reason_for_harness("omp", reason)),
-        ("claude-code", lambda reason: _native_hook_reason_for_harness("claude-code", reason)),
-        ("copilot", _copilot_hook_reason),
-    ],
-)
-def test_a_local_tool_keeps_its_approval_wait_in_every_harness(harness: str, render: object) -> None:
-    assert callable(render)
-    text = render(_LOCAL)
-    assert text.startswith(_LOCAL), harness
-    assert "Allow once or Always allow" in text
-    assert "seek permission" not in text

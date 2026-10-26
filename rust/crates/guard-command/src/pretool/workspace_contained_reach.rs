@@ -50,6 +50,9 @@ const DEVICES: &[&str] = &[
 /// `home_fixed` says nothing in the command rebinds `HOME`, so `~` is the
 /// private home the launcher seeds with the safety guide.
 /// `granted_script` is the operand of an outside script the sandbox may read.
+/// `below` is how many directories down from the workspace root every shell
+/// that could run this segment stands, so that many leading parent steps in a
+/// relative path still land inside it.
 pub(super) fn reaches_outside(
     segment: &CommandSegmentV1,
     name: &str,
@@ -57,6 +60,7 @@ pub(super) fn reaches_outside(
     temp_fixed: bool,
     home_fixed: bool,
     granted_script: Option<&str>,
+    below: usize,
 ) -> bool {
     if GUARD_CLIS.contains(&name) || DATABASE_CLIENTS.contains(&name) {
         return true;
@@ -79,7 +83,7 @@ pub(super) fn reaches_outside(
     {
         return true;
     }
-    if redirect_targets(&segment.text).any(|target| outside(target, name, workspace)) {
+    if redirect_targets(&segment.text).any(|target| outside_from(target, name, workspace, below)) {
         return true;
     }
     // A proven stdin-only filter is handed the previous step's output, so its
@@ -101,7 +105,7 @@ pub(super) fn reaches_outside(
             _ if argument.starts_with('-') => return false,
             _ => argument.as_str(),
         };
-        outside(value, name, workspace)
+        outside_from(value, name, workspace, below)
     })
 }
 
@@ -391,6 +395,14 @@ pub(super) fn redirect_targets(text: &str) -> impl Iterator<Item = &str> {
 }
 
 pub(super) fn outside(value: &str, name: &str, workspace: &Path) -> bool {
+    outside_from(value, name, workspace, 0)
+}
+
+/// `below` is the directory depth the running shell stands at under the
+/// workspace root. A relative path spends one of those steps per leading
+/// `..`, so `cmake ..` run from `build/` still names the root. A caller that
+/// cannot prove the directory passes zero, which is the root's own depth.
+fn outside_from(value: &str, name: &str, workspace: &Path, below: usize) -> bool {
     let path = Path::new(value);
     if value.starts_with('~') {
         return true;
@@ -412,7 +424,7 @@ pub(super) fn outside(value: &str, name: &str, workspace: &Path) -> bool {
             top.is_some_and(|top| Path::new("/").join(top.as_os_str()).exists());
         return names_file_system && !path.starts_with(workspace) && !DEVICES.contains(&value);
     }
-    let mut depth = 0usize;
+    let mut depth = below;
     path.components().any(|component| match component {
         Component::ParentDir => match depth.checked_sub(1) {
             Some(up) => {

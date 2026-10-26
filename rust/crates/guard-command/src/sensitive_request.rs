@@ -26,7 +26,7 @@ use crate::sfrs_requests::{
     build_file_read_request_artifact, build_file_write_request_artifact, classify_sensitive_path,
     command_list_candidate_texts, extract_sensitive_file_read_request,
     extract_sensitive_file_read_request_from_action, extract_sensitive_file_write_request,
-    FileReadRequest, FileWriteRequest, SensitivePath,
+    harness_protected_write_paths, FileReadRequest, FileWriteRequest, SensitivePath,
 };
 use crate::unmodeled_shell_artifact::unmodeled_shell_artifact;
 use crate::CommandModelRequestV1;
@@ -120,7 +120,16 @@ pub fn evaluate(
         }
         "file_write_artifact" => {
             let naming = ArtifactNaming::from_input(input)?;
-            let protected = protected_paths(field("protected_paths"))?;
+            // The harness configuration files are this side's to name. The
+            // caller's table is added to them rather than consulted instead,
+            // so a caller that sends none still cannot leave a Codex
+            // configuration file writable without a review.
+            let mut protected = harness_protected_write_paths(&naming.harness, cwd, home);
+            for entry in protected_paths(field("protected_paths"))? {
+                if !protected.iter().any(|(path, _)| *path == entry.0) {
+                    protected.push(entry);
+                }
+            }
             let found = extract_sensitive_file_write_request(
                 &ovalue_from_json(field("tool_name")),
                 &ovalue_from_json(field("arguments")),

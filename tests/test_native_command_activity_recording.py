@@ -223,11 +223,3 @@ def test_native_restrictive_decisions_keep_receipt_and_prompt(
         "accepted" if action == "allow" else "not-applicable",
     )
     assert writer.stats()["failures"] == 0
-
-
-def test_grok_failure_normalization_preserves_failure() -> None:
-    from codex_plugin_scanner.guard.adapters.grok_hooks import prepare_grok_hook_payload
-    from codex_plugin_scanner.guard.cli.commands_support_command_activity import hook_post_succeeded
-
-    payload = prepare_grok_hook_payload({"hookEventName": "post_tool_use_failure"})
-    assert not hook_post_succeeded(str(payload["hook_event_name"]), payload)

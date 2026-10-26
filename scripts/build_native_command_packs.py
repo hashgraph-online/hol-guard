@@ -74,7 +74,7 @@ def input_stream(root: Path, output, identities: set[str] | None = None) -> int:
                         "schemaVersion": "guard.extension-trust-class-map.v1",
                         "classes": classes,
                         "publishers": {
-                            "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+                            "hol": {"id": "hol", "displayName": "HOL"},
                             "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
                         },
                     },

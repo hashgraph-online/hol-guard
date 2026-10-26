@@ -38,8 +38,15 @@ pub struct PathContext<'a> {
 
 mod brace_group;
 mod contained_wrapper;
+mod contained_wrapper_plan;
+pub use contained_wrapper_plan::{
+    contained_wrapper_plan, ContainedOutput, ContainedWrapperCore, ContainedWrapperPlan,
+    CONTAINED_WRAPPER_PLAN_UNSUPPORTED,
+};
 pub(crate) mod curl_reads;
 pub use curl_reads::bound_curl_read_destinations;
+#[cfg(unix)]
+mod contained_exact_shape;
 pub(crate) mod dd_reads;
 mod digest_reads;
 pub(crate) mod docker_reads;
@@ -51,9 +58,10 @@ mod loopback_ports;
 pub(crate) mod port_probes;
 pub(crate) mod rsync_local;
 mod workspace_contained;
-/// The package firewall's extensions, whose permission marks which
-/// ecosystem's manager ran rather than a risk the run carries.
-pub(crate) use workspace_contained::package::PACKAGE_EXTENSIONS;
+#[cfg(unix)]
+pub(crate) use contained_exact_shape::{
+    exact_shape as workspace_exact_shape, runs_whole as workspace_runs_whole,
+};
 #[cfg(unix)]
 pub(crate) use workspace_contained::Shape;
 #[cfg(unix)]
@@ -80,6 +88,7 @@ pub(crate) mod git_apply_check;
 pub(crate) mod git_branch_listing;
 pub(crate) mod git_clean_preview;
 pub(crate) mod git_clone_local;
+pub(crate) mod git_conditional_include;
 mod git_config;
 pub(crate) mod git_config_reads;
 mod git_config_trust;
@@ -95,6 +104,7 @@ mod git_rev_list;
 mod git_search_text;
 pub(crate) mod git_side_record_reads;
 pub(crate) mod git_stash_reads;
+pub(crate) mod git_submodule_reads;
 pub(crate) mod git_tag_listing;
 pub(crate) mod recoverable_removal;
 mod repo_create_reason;
@@ -140,7 +150,7 @@ mod apply_patch_writes;
 mod data_heredocs;
 mod lockfile_install;
 mod omp_hashline_writes;
-mod pipe_attacks;
+pub(crate) mod pipe_attacks;
 mod pure_expression;
 mod read_paths;
 mod source_reads;
@@ -167,6 +177,7 @@ mod secret_aliases;
 pub(crate) mod sed_edits;
 mod segment_proof;
 mod shell_script;
+mod sink_peel;
 mod stderr_merge;
 mod stdin_filters;
 mod symlink_writes;
@@ -202,7 +213,7 @@ pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
 pub(crate) use script_content::launch_loopback_ports;
 pub(crate) use script_content::{
-    activation_script_text, backgrounded_launch, foreground_job, prefixed_launch,
+    activation_script_text, backgrounded_launch, models_exactly, prefixed_launch, sequential_jobs,
     sole_program_sources, sourced_program_sources, sourcing_bounded_sources,
 };
 pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
@@ -876,6 +887,14 @@ fn evaluate_rewritten(
 /// `{ ...; }`. `None` leaves the command exactly as it was submitted.
 pub(crate) fn ungrouped_command_list(command: &str) -> Option<String> {
     trailing_group::unwrap(command).or_else(|| brace_group::unwrap(command))
+}
+
+/// The command list a trailing group runs, when that list run in the group's
+/// place executes exactly the same commands. `ungrouped_command_list` may
+/// flatten a conditional subshell into a list that runs more than the group
+/// does, which a decision can read but a sink cannot execute.
+pub(crate) fn runnable_ungrouped_command_list(command: &str) -> Option<String> {
+    trailing_group::unwrap_for_execution(command).or_else(|| brace_group::unwrap(command))
 }
 
 /// A trailing subshell or brace group is its command list, so that list's

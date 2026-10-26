@@ -13,14 +13,6 @@ from codex_plugin_scanner.guard.cli.commands_support_codex_reads import (
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
     _codex_post_tool_output_artifact,
 )
-from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
-    _runtime_hook_approval_context_token,
-)
-from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.consumer import artifact_hash
-from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.native_context import is_unbound_context_digest
-from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_tool_action_request,
@@ -53,26 +45,6 @@ def _write_executable(path: Path) -> Path:
     _write(path, "#!/bin/sh\nexit 0\n")
     path.chmod(0o755)
     return path
-
-
-def _approval_token(artifact: GuardArtifact, *, workspace: Path, config: GuardConfig) -> str:
-    return _runtime_hook_approval_context_token(
-        artifact=artifact,
-        content_hash=artifact_hash(artifact),
-        runtime_workspace=workspace,
-        action_envelope=None,
-        config=config,
-        current_config_action="review",
-        trusted_cli_action=None,
-        untrusted_payload_action=None,
-        package_action=None,
-        data_flow_action=None,
-        scanner_action=None,
-        current_action="review",
-        risk_classes=(),
-        data_flow_signals=(),
-        scanner_evidence=(),
-    )
 
 
 @pytest.mark.parametrize(
@@ -510,116 +482,6 @@ def test_secret_source_output_artifact_uses_the_effective_project(tmp_path: Path
     assert artifact is not None
     assert artifact.metadata["guard_default_action"] == "require-reapproval"
     assert artifact.metadata["effective_cwd"] == str(project_b.resolve())
-
-
-def test_approval_tokens_are_partitioned_by_effective_project(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    project_a = workspace / "project-a"
-    project_b = workspace / "project-b"
-    _write(project_a / "package.json", '{"dependencies":{"left-pad":"1.3.0"}}\n')
-    _write(project_b / "package.json", '{"dependencies":{"left-pad":"1.1.0"}}\n')
-    _write(project_a / "conftest.py", "PROJECT = 'a'\n")
-    _write(project_b / "conftest.py", "PROJECT = 'b'\n")
-    _write(project_a / "pyproject.toml", '[tool.pytest.ini_options]\naddopts = "-q"\n')
-    _write(project_b / "pyproject.toml", '[tool.pytest.ini_options]\naddopts = "-ra"\n')
-    config = GuardConfig(guard_home=tmp_path / "home", workspace=workspace)
-
-    def token(project: str) -> str:
-        intent = parse_package_intent(f"cd {project} && npm install left-pad", workspace=workspace)
-        assert intent is not None
-        artifact = build_package_request_artifact(
-            "codex",
-            intent,
-            config_path=str(workspace / ".codex" / "config.toml"),
-            source_scope="project",
-        )
-        return _approval_token(artifact, workspace=workspace, config=config)
-
-    assert token("project-a") != token("project-b")
-
-
-def test_approval_token_binds_executables_from_every_effective_project(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    project_a = workspace / "project-a"
-    project_b = workspace / "project-b"
-    runner_a = _write_executable(project_a / "runner")
-    _write_executable(project_b / "runner")
-    config = GuardConfig(guard_home=tmp_path / "home", workspace=workspace)
-    artifact = GuardArtifact(
-        artifact_id="codex:project:multi-cwd-runner",
-        name="multi-cwd runner",
-        harness="codex",
-        artifact_type="tool_action_request",
-        source_scope="project",
-        config_path=str(workspace / ".codex" / "config.toml"),
-        command="./runner",
-        metadata={
-            "shell_execution_context_hash": "stable-command-context",
-            "shell_execution_context_complete": True,
-            "shell_execution_effective_cwds": [str(project_a), str(project_b)],
-        },
-    )
-
-    first = _approval_token(artifact, workspace=workspace, config=config)
-    _write(runner_a, "#!/bin/sh\nexit 7\n")
-    runner_a.chmod(0o755)
-    second = _approval_token(artifact, workspace=workspace, config=config)
-
-    assert first != second
-
-
-def test_unresolved_execution_context_cannot_reuse_an_approval_token(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    config = GuardConfig(guard_home=tmp_path / "home", workspace=workspace)
-    intent = parse_package_intent("cd $PROJECT && npm install left-pad", workspace=workspace)
-    assert intent is not None
-    artifact = build_package_request_artifact(
-        "codex",
-        intent,
-        config_path=str(workspace / ".codex" / "config.toml"),
-        source_scope="project",
-    )
-
-    first = _approval_token(artifact, workspace=workspace, config=config)
-    second = _approval_token(artifact, workspace=workspace, config=config)
-
-    assert artifact.metadata["shell_execution_context_complete"] is False
-    if is_unbound_context_digest(first) or is_unbound_context_digest(second):
-        # A loaded runner can leave the resident unreachable; the degraded
-        # sentinel never validates, so it cannot be reused either.
-        assert is_unbound_context_digest(first) and is_unbound_context_digest(second)
-        return
-    assert first != second
-
-
-def test_missing_explicit_execution_context_completeness_cannot_reuse_token(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    config = GuardConfig(guard_home=tmp_path / "home", workspace=workspace)
-    artifact = GuardArtifact(
-        artifact_id="codex:project:legacy-shell-context",
-        name="legacy shell context",
-        harness="codex",
-        artifact_type="tool_action_request",
-        source_scope="project",
-        config_path=str(workspace / ".codex" / "config.toml"),
-        command="rm marker",
-        metadata={
-            "shell_execution_context_hash": "legacy-context-without-completeness",
-            "shell_execution_effective_cwds": [str(workspace)],
-        },
-    )
-
-    first = _approval_token(artifact, workspace=workspace, config=config)
-    second = _approval_token(artifact, workspace=workspace, config=config)
-
-    if is_unbound_context_digest(first) or is_unbound_context_digest(second):
-        # A loaded runner can leave the resident unreachable; the degraded
-        # sentinel never validates, so it cannot be reused either.
-        assert is_unbound_context_digest(first) and is_unbound_context_digest(second)
-        return
-    assert first != second
 
 
 def test_path_hash_changes_when_effective_directory_identity_changes(tmp_path: Path) -> None:

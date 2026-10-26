@@ -61,6 +61,13 @@ pub(crate) fn git_fetch_origin_shaped(arguments: &[String]) -> bool {
     git::fetch_origin_shaped(arguments)
 }
 
+/// A refresh whose operands the proof can follow, reported as whether it
+/// reaches every configured remote. `None` is a refresh the proof cannot
+/// follow at all.
+pub(crate) fn git_fetch_every_remote(arguments: &[String]) -> Option<bool> {
+    git::fetch_reach(arguments)
+}
+
 /// The arguments after leading `-C` routes that stay within the workspace,
 /// whatever the subcommand. Remote and worktree proofs start from here.
 pub(crate) fn git_routed_arguments<'a>(

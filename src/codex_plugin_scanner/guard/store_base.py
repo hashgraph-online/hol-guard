@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from functools import partial
+from functools import partial, wraps
 
 from .artifact_identity import artifact_family_key
 
@@ -21,8 +21,8 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager, suppress
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from hashlib import pbkdf2_hmac, scrypt, sha256
 from pathlib import Path
@@ -278,6 +278,8 @@ _OAUTH_CREDENTIAL_LOCK_TIMEOUT_SECONDS = 30.0
 _OAUTH_CREDENTIAL_LOCK_POLL_SECONDS = 0.05
 _CLOUD_SYNC_LOCK_TIMEOUT_SECONDS = 30.0
 _CLOUD_SYNC_LOCK_POLL_SECONDS = 0.05
+_POLICY_INTEGRITY_GENERATION_LOCK_TIMEOUT_SECONDS = 30.0
+_POLICY_INTEGRITY_GENERATION_LOCK_POLL_SECONDS = 0.05
 _GUARD_STORE_PRIVATE_DIR_MODE = 0o700
 _GUARD_STORE_PRIVATE_FILE_MODE = 0o600
 _SYSTEM_KEYRING_AVAILABILITY_CACHE_FILE = "system-keyring-availability.json"
@@ -1543,6 +1545,7 @@ def _mapping_int(payload: Mapping[str, object], key: str) -> int | None:
 
 
 _ChunkT = TypeVar("_ChunkT")
+_T = TypeVar("_T")
 
 
 def _chunks(values: Sequence[_ChunkT], size: int) -> Iterator[list[_ChunkT]]:
@@ -1593,6 +1596,29 @@ def _transport_value(value: object) -> TransportKind:
     if value == "hybrid":
         return "hybrid"
     return "local"
+
+
+class _PolicyIntegrityGenerationLockHolder(Protocol):
+    """A store that can serialize its policy integrity generation advances."""
+
+    def hold_policy_integrity_generation_lock(self) -> AbstractContextManager[None]: ...
+
+
+def serialize_policy_integrity_generation(method: Callable[..., _T]) -> Callable[..., _T]:
+    """Run ``method`` while holding the store's policy integrity generation lock.
+
+    Advancing the generation reads the trusted control state, marks the next one
+    pending and signs the rows. Routes that still do all of that on one store
+    connection are serialized by SQLite; the native upsert route is not, so every
+    advance takes the lock and they stay ordered against each other.
+    """
+
+    @wraps(method)
+    def wrapper(self: _PolicyIntegrityGenerationLockHolder, *args: object, **kwargs: object) -> _T:
+        with self.hold_policy_integrity_generation_lock():
+            return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 __all__ = tuple(name for name in globals() if not (name.startswith("__") and name.endswith("__")))

@@ -239,7 +239,8 @@ function renderViewContent(props: LayoutProps): ReactNode {
   if (
     props.view === "supply-chain" ||
     props.view === "audit" ||
-    props.view === "feed-health"
+    props.view === "feed-health" ||
+    props.view === "workspaces"
   ) {
     return props.supplyChainHubContent ?? null;
   }

@@ -50,7 +50,7 @@ fn a_leaf_glob_lists_hidden_names_in_a_listable_directory_only() {
     ] {
         let words: Vec<String> = command.split(' ').map(str::to_owned).collect();
         assert_eq!(
-            super::safe_listing_segment(&command, &words[1..], context),
+            super::safe_listing_segment(&command, &words[1..], context, true),
             allowed,
             "{command}"
         );
@@ -105,12 +105,81 @@ fn a_recursive_listing_screens_what_it_can_print() {
         ("ls -Rf .".to_owned(), false),
         ("ls -fR .".to_owned(), false),
         (format!("ls -R {keyed}"), false),
+        // A root that is not there holds no tree, so the walk prints an error
+        // and reads nothing. A hidden missing name keeps the screen.
+        ("ls -R lib".to_owned(), true),
+        ("ls -aR lib".to_owned(), true),
+        (format!("ls -R {keyed}/missing"), true),
+        (
+            format!("ls -R {home}/.ssh/missing", home = home.display()),
+            false,
+        ),
     ] {
         let words: Vec<String> = command.split(' ').map(str::to_owned).collect();
         assert_eq!(
-            super::safe_listing_segment(&command, &words[1..], context),
+            super::safe_listing_segment(&command, &words[1..], context, true),
             allowed,
             "{command}"
+        );
+    }
+    // A peer step could create the missing root before the walk reaches it.
+    let words: Vec<String> = "ls -R lib".split(' ').map(str::to_owned).collect();
+    assert!(!super::safe_listing_segment(
+        "ls -R lib",
+        &words[1..],
+        context,
+        false
+    ));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+/// The shell expands `~` from its own `HOME`, so an operand under it is absent
+/// only when that `HOME` is the declared home. Where the two differ, the name
+/// Guard checked is not the one the walk opens, and the tree the shell's home
+/// holds at that path was never inspected.
+#[test]
+fn a_tilde_root_is_read_only_when_the_shell_home_matches() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/listing-tilde-home")
+        .join(std::process::id().to_string());
+    let home = root.join("home");
+    let project = home.join("work/project");
+    std::fs::create_dir_all(project.join("src")).unwrap();
+    std::fs::write(project.join("src/app.ts"), "synthetic\n").unwrap();
+    let (home, project) = (
+        crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
+        crate::runtime_read_paths::canonicalize_text(&project).unwrap(),
+    );
+    for (shell_home_matches, allowed) in [(true, true), (false, false)] {
+        let context = crate::pretool::PathContext {
+            home_dir: home.to_str(),
+            cwd: project.to_str(),
+            shell_home_matches,
+            ..Default::default()
+        };
+        let command = "ls -R ~/work/absent-logs";
+        let words: Vec<String> = command.split(' ').map(str::to_owned).collect();
+        assert_eq!(
+            super::safe_listing_segment(command, &words[1..], context, true),
+            allowed,
+            "{command} with shell_home_matches={shell_home_matches}"
+        );
+        let words: Vec<String> = "tree ~/work/absent-logs"
+            .split(' ')
+            .map(str::to_owned)
+            .collect();
+        assert_eq!(
+            crate::pretool::tree_reads::safe_tree_segment(&words[1..], context, true),
+            allowed,
+            "tree with shell_home_matches={shell_home_matches}"
+        );
+        // A listing that walks nothing reads one directory's names at most, so
+        // it stays admitted whatever the shell's own `HOME` is.
+        let command = "ls ~/work/absent-logs";
+        let words: Vec<String> = command.split(' ').map(str::to_owned).collect();
+        assert!(
+            super::safe_listing_segment(command, &words[1..], context, true),
+            "{command} with shell_home_matches={shell_home_matches}"
         );
     }
     std::fs::remove_dir_all(root).unwrap();

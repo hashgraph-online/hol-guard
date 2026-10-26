@@ -1,32 +1,29 @@
-"""Peel the cd prefix, output handling and status echo that native authority classified."""
+"""Carry native authority's peel to the execution sink, and apply its output handling.
+
+The cd prefix, output filter chain and status echo are classified once, by the
+pre-tool pass. This module used to peel them a second time from its own lexer,
+its own sibling-repository rule and its own filter grammar; that copy could not
+read a Windows owner SID, so it accepted checkouts the classifier had refused
+and handed the sandbox a core no receipt covered. The questions below are now
+asked of the classifier. What stays here is the sink's own work: holding the
+answer, and filtering the captured output in process.
+"""
 
 from __future__ import annotations
 
 import contextlib
 import io
-import os
-import re
-import shlex
 import sys
-from collections.abc import Iterator
-from dataclasses import dataclass, field, replace
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
-from .contained_output_filters import Stage, apply_filters, filter_chain, keep_lines
-from .restricted_pytest_validation import _path_is_within
-
-_MERGE = re.compile(r"2>&1(?=[ \t|]|\Z)")
-_HOME_CD = re.compile(r"[ \t]*cd[ \t]+~(?=/|[ \t])")
-# `cd <dir> 2>/dev/null; …` only silences a cd the sink resolves itself first.
-_QUIET_CD = re.compile(r"([ \t]*cd[ \t]+[^ \t;&|<>'\"]+)[ \t]+2>/dev/null(?=[ \t]*(?:;|&&))")
-_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
-_OPERATOR = frozenset("();<>|&\n")
-# Characters the shell would expand; native authority only upgrades exact parses.
-_UNQUOTED_EXPANSION = frozenset("$`*?[{")
-_DOUBLE_QUOTED_ESCAPES = frozenset('$`"\\')
-_ARGUMENT_REJECT = frozenset("<>|&;")
-# A final `; echo "<label>$?"`; a label with spaces must be double-quoted.
-_STATUS_ECHO = re.compile(r';[ \t]*echo[ \t]+(?:"([A-Za-z0-9_=: -]{0,32})\$\?"|([A-Za-z0-9_=:-]{0,32})\$\?)[ \t]*\Z')
+from ..native_contained_wrapper_plan import (
+    ContainedWrapperPlanUnavailableError,
+    native_contained_wrapper_plan,
+)
+from .contained_output_filters import Stage, apply_filters, keep_lines
 
 
 @dataclass(frozen=True)
@@ -55,340 +52,93 @@ class OutputFilter:
         return f"{self.status_label}{exit_code}\n"
 
 
-def _lex(command: str) -> tuple[list[tuple[str, bool]], bool]:
-    """Split like a POSIX shell into (value, is_operator) pairs; also report exactness.
+def _answer(
+    command: str,
+    *,
+    workspace: Path,
+    cwd: Path | None,
+    home: Path | None,
+    project_root_query: Path | None = None,
+) -> Mapping[str, object]:
+    """Ask native authority about one command, or raise when it cannot answer."""
+    return native_contained_wrapper_plan(
+        command,
+        workspace=workspace,
+        cwd=cwd,
+        home=home,
+        project_root_query=project_root_query,
+    )
 
-    Quoted text is never an operator, so `'|'` or `'print(1)'` stay plain words.
-    """
-    tokens: list[tuple[str, bool]] = []
-    word: list[str] | None = None
-    exact = True
-    index = 0
 
-    def finish() -> None:
-        nonlocal word
-        if word is not None:
-            tokens.append(("".join(word), False))
-            word = None
+def _root(answer: Mapping[str, object], key: str) -> Path | None:
+    value = answer.get(key)
+    return Path(value) if isinstance(value, str) and value else None
 
-    while index < len(command):
-        character = command[index]
-        if character in " \t":
-            finish()
-            index += 1
-        elif word is None and _MERGE.match(command, index):
-            tokens.append(("2>&1", True))
-            index += 4
-        elif character in _OPERATOR:
-            finish()
-            end = index
-            while end < len(command) and command[end] in _OPERATOR:
-                end += 1
-            tokens.append((command[index:end], True))
-            index = end
-        elif character == "'":
-            end = command.find("'", index + 1)
-            if end < 0:
-                raise ValueError("unterminated quote")
-            word = [*(word or []), command[index + 1 : end]]
-            index = end + 1
-        elif character == '"':
-            word = word or []
-            index += 1
-            while True:
-                if index >= len(command):
-                    raise ValueError("unterminated quote")
-                character = command[index]
-                if character == '"':
-                    index += 1
-                    break
-                if character == "\\" and index + 1 < len(command) and command[index + 1] in _DOUBLE_QUOTED_ESCAPES:
-                    index += 1
-                    character = command[index]
-                elif character == "\\" and command[index + 1 : index + 2] == "\n":
-                    raise ValueError("line continuation")
-                elif character in "$`":
-                    exact = False
-                word.append(character)
-                index += 1
-        elif character == "\\":
-            if index + 1 >= len(command) or command[index + 1] == "\n":
-                raise ValueError("unsupported escape")
-            word = [*(word or []), command[index + 1]]
-            index += 2
-        else:
-            if ord(character) < 32 or character in _UNQUOTED_EXPANSION or (word is None and character in "~#"):
-                exact = False
-            word = [*(word or []), character]
-            index += 1
-    finish()
-    return tokens, exact
+
+def _output_filter(encoded: object) -> OutputFilter | None:
+    """The sink's output handling, as native authority described it."""
+    if encoded is None:
+        return None
+    if not isinstance(encoded, Mapping):
+        raise ValueError("unsupported wrapper shape")
+    fields = cast(Mapping[str, object], encoded)
+    count = fields["count"]
+    stages = fields.get("stages") or ()
+    if not isinstance(count, int) or not isinstance(stages, Sequence):
+        raise ValueError("unsupported wrapper shape")
+    label = fields.get("status_label")
+    return OutputFilter(
+        str(fields["kind"]),
+        count,
+        bool(fields["merge_stderr"]),
+        status_label=None if label is None else str(label),
+        stages=tuple(tuple(str(word) for word in _words(stage)) for stage in stages),
+    )
+
+
+def _words(stage: object) -> Sequence[object]:
+    if not isinstance(stage, Sequence) or isinstance(stage, (str, bytes)):
+        raise ValueError("unsupported wrapper shape")
+    return stage
 
 
 def sibling_project_root(directory: Path, *, home: Path | None) -> Path | None:
-    """The repository holding a cd target outside the hook workspace, as native authority finds it.
+    """The repository holding a directory outside the hook workspace, as native authority finds it.
 
     The nearest ancestor with a `.git` entry, strictly below home - or the
-    system temporary directory, on POSIX - and owned by this user. The sink
-    rebases its approved root there, so the run is contained to that repository exactly as it would
-    be from a session started in it.
+    system temporary directory, on POSIX - and owned by this user, which only
+    the native runtime can establish on Windows. The sink rebases its approved
+    root there, so the run is contained to that repository exactly as it would
+    be from a session started in it. An unreachable runtime proves no root.
     """
     if home is None:
         return None
-    directory = directory.resolve(strict=True)
-    # Native authority's Windows arm bases the search on the profile alone, so a
-    # checkout outside it keeps its review. `Path("/tmp")` resolves to `C:\tmp`
-    # on the current drive, which any authenticated user can create, and the
-    # owner check Python can still make there is the native one - which never
-    # runs for a root native would not return. Keep the bases identical.
-    bases = (home,) if os.name == "nt" else (home, Path("/tmp"))
-    for base in bases:
-        try:
-            base = base.resolve(strict=True)
-        except (OSError, RuntimeError):
-            continue
-        if directory == base or not _path_is_within(directory, base):
-            continue
-        candidate = directory
-        while candidate != base:
-            if os.path.lexists(candidate / ".git"):
-                return candidate if _owned_by_this_user(candidate) else None
-            candidate = candidate.parent
+    try:
+        answer = _answer(
+            "",
+            workspace=directory,
+            cwd=directory,
+            home=home,
+            project_root_query=directory,
+        )
+    except ContainedWrapperPlanUnavailableError:
         return None
-    return None
-
-
-def _owned_by_this_user(candidate: Path) -> bool:
-    """Whether this user owns `candidate`, as far as this process can ask.
-
-    POSIX compares the owning uid. Windows has no uid: `st_uid` is always 0
-    there and `os.getuid` does not exist, so comparing them rejected every
-    Windows checkout. The owner question is the native runtime's
-    (`owned_by_current_user`, owner SID against the process SID), it is
-    asked before any receipt is issued, and every caller here runs only after
-    `_contained_receipt` accepted that receipt. So on Windows this answers the
-    part Python can still see - the checkout is strictly inside the profile and
-    carries a `.git` - and leaves the owner to the authority that can read it.
-    """
-
-    if os.name == "nt":
-        return True
-    return candidate.stat().st_uid == getattr(os, "getuid", lambda: -1)()
+    return _root(answer, "project_root")
 
 
 def anchored_sibling_root(command: str, *, workspace: Path, cwd: Path, home: Path | None) -> Path | None:
     """The sibling repository an absolute script or tool names, as native authority anchors it.
 
-    One plain command whose executed path (`_executed_path`) lies in a repository outside the
-    workspace roots the sandbox there, as after `cd <root> &&`. A relative word naming a file from
-    `cwd`, the workspace's own repository, or an untrusted temporary root keeps None.
+    One plain command whose executed path lies in a repository outside the
+    workspace roots the sandbox there, as after `cd <root> &&`. A relative word
+    naming a file from `cwd`, the workspace's own repository, or an untrusted
+    temporary root keeps None, as does an unreachable runtime.
     """
     try:
-        tokens, exact = _lex(command)
-    except ValueError:
+        answer = _answer(command, workspace=workspace, cwd=cwd, home=home)
+    except ContainedWrapperPlanUnavailableError:
         return None
-    words = [value for value, _operator in tokens]
-    if not exact or not words or any(operator for _value, operator in tokens) or words[0] == "cd":
-        return None
-    values = [word.partition("=")[2] if word.startswith("-") else word for word in words]
-    if _ASSIGNMENT.match(words[0]) or any(
-        value and not Path(value).is_absolute() and os.path.lexists(cwd / value) for value in values
-    ):
-        return None
-    anchor = _executed_path(words)
-    if anchor is None:
-        return None
-    try:
-        path = Path(anchor).resolve(strict=True)
-        root = sibling_project_root(path, home=home)
-        if root is None or not _temp_anchor_trusted(root, home=home):
-            return None
-        inside = workspace.resolve(strict=True)
-        inside = sibling_project_root(inside, home=home) or inside
-    except (OSError, RuntimeError):
-        return None
-    if _path_is_within(path, inside) or _path_is_within(root, inside) or _path_is_within(inside, root):
-        return None
-    return root
-
-
-_SCRIPT_RUNNERS = frozenset({"node", "bun", "deno", "tsx", "ts-node", "ruby", "perl", "sh", "bash"})
-_PYTHON = re.compile(r"python(?:3(?:\.[0-9]+)?)?")
-
-
-def _node_heap_size(word: str) -> bool:
-    """Whether `word` is the `--max-old-space-size=<megabytes>` Node takes ahead of its script."""
-    value = word.removeprefix("--max-old-space-size=")
-    if value == word or not value.isascii() or not value.isdigit():
-        return False
-    # Past six significant digits the value is out of range anyway; checking
-    # the length first keeps `int` off a string past the conversion limit.
-    significant = value.lstrip("0") or "0"
-    return len(significant) <= 6 and 16 <= int(significant) <= 131072
-
-
-def _executed_path(words: list[str]) -> str | None:
-    """The absolute path a command runs: the executable, an interpreter's first operand, or the
-    file `python3 -m py_compile` checks, as `workspace_contained_sibling.rs` selects it."""
-    executable, arguments = words[0], words[1:]
-    if Path(executable).is_absolute():
-        return executable
-    name = executable.rsplit("/", 1)[-1]
-    python = _PYTHON.fullmatch(name) is not None
-    if name == "node" and arguments and _node_heap_size(arguments[0]):
-        arguments = arguments[1:]
-    if python and arguments[:1] == ["-m"] and len(arguments) >= 3 and arguments[1] in {"py_compile", "compileall"}:
-        candidate = arguments[2]
-    elif (python or name in _SCRIPT_RUNNERS) and arguments:
-        candidate = arguments[0]
-    else:
-        return None
-    return candidate if Path(candidate).is_absolute() else None
-
-
-def _temp_roots() -> tuple[Path, ...]:
-    """The shared temporary directories, as spelled and as resolved."""
-    spelled = [Path("/tmp"), Path("/private/tmp"), Path("/var/folders")]
-    if os.environ.get("TMPDIR", "").startswith("/"):
-        spelled.append(Path(os.environ["TMPDIR"]))
-    return tuple(dict.fromkeys([*spelled, *(path.resolve(strict=False) for path in spelled)]))
-
-
-def _temp_anchor_trusted(root: Path, *, home: Path | None) -> bool:
-    """A root in home or outside the temporary directories, or a linked
-    worktree there whose shared `.git` lies in home or outside them.
-    native authority applies the same rule (`workspace_contained_sibling.rs`).
-    """
-    home_root = home.resolve(strict=False) if home is not None else None
-    temp = _temp_roots()
-
-    def trusted(path: Path) -> bool:
-        if home_root is not None and home_root.exists() and _path_is_within(path, home_root):
-            return True
-        return not any(_path_is_within(path, base) for base in temp)
-
-    if trusted(root):
-        return True
-    common = _linked_worktree_common(root)
-    return common is not None and trusted(common)
-
-
-def _metadata_line(path: Path) -> str | None:
-    """One short line of git metadata, or None for anything else."""
-    try:
-        with path.open("rb") as handle:
-            raw = handle.read(4097)
-    except OSError:
-        return None
-    text = raw.decode("utf-8", "replace").strip()
-    return text if 0 < len(raw) <= 4096 and "\n" not in text and "\0" not in text else None
-
-
-def _linked_worktree_common(root: Path) -> Path | None:
-    """The shared `.git` of the linked worktree rooted at `root`, as
-    `worktree_writes::linked_worktree_dirs` proves it: a plain gitfile naming
-    an admin entry under `<common>/worktrees` whose `gitdir` names it back.
-    """
-    gitfile = root / ".git"
-    if not gitfile.is_file() or gitfile.is_symlink():
-        return None
-    text = _metadata_line(gitfile)
-    if text is None or not text.startswith("gitdir: "):
-        return None
-    admin = (root / text.removeprefix("gitdir: ")).resolve(strict=True)
-    common_text, backlink_text = _metadata_line(admin / "commondir"), _metadata_line(admin / "gitdir")
-    if common_text is None or backlink_text is None:
-        return None
-    common = (admin / common_text).resolve(strict=True)
-    linked = (
-        common.name == ".git"
-        and common.is_dir()
-        and admin.parent == common / "worktrees"
-        and (admin / backlink_text).resolve(strict=True) == root / ".git"
-        and not _path_is_within(root, common)
-        and not _path_is_within(common, root)
-    )
-    return common if linked else None
-
-
-_DIRECTORY_FLAGS = {"bun": ("--cwd",), "yarn": ("--cwd",), "npm": ("--prefix", "-C"), "pnpm": ("--dir", "-C")}
-_PLAIN_WORD = re.compile(r"[A-Za-z0-9/._@+=:,-]+")
-
-
-def _names_directory_flag(word: str, flags: tuple[str, ...]) -> bool:
-    return any(
-        word.startswith(flag) and (word == flag or word[len(flag)] == "=" or not flag.startswith("--"))
-        for flag in flags
-    )
-
-
-def _package_directory(tokens: list[tuple[str, bool]], base: Path) -> tuple[list[tuple[str, bool]], Path] | None:
-    """`bun --cwd <dir> run build` as `bun run build` in `<dir>`, as native authority reads it.
-
-    One directory flag, before the verb or right after `run`. The directory is
-    joined to the physical working directory and normalized lexically, as the
-    package manager's `path.resolve` does, then resolved on disk. Other
-    spellings return None and keep the unwrapped path.
-    """
-    flags = _DIRECTORY_FLAGS.get(tokens[0][0]) if tokens and not tokens[0][1] else None
-    if flags is None:
-        return None
-    end = next((index for index, (_value, operator) in enumerate(tokens) if operator), len(tokens))
-    words = [value for value, _operator in tokens[1:end]]
-    options = words[: words.index("--")] if "--" in words else words
-    if sum(_names_directory_flag(word, flags) for word in options) != 1:
-        return None
-    index = 1 if words[:1] == ["run"] else 0
-    flag = words[index] if index < len(words) else ""
-    if flag in flags and index + 1 < len(words):
-        value, consumed = words[index + 1], 2
-    elif "=" in flag and flag.split("=", 1)[0] in flags and flag.startswith("--"):
-        value, consumed = flag.split("=", 1)[1], 1
-    else:
-        return None
-    rest = words[:index] + words[index + consumed :]
-    if value.startswith(("-", "~")) or "//" in value or not _PLAIN_WORD.fullmatch(value) or not rest:
-        return None
-    # Only scripts are projected; `bun x`, `npm exec` and other runners keep
-    # their own tool-runner path, as on the native side.
-    if rest[0] not in ("run", "test"):
-        return None
-    directory = Path(os.path.realpath(os.path.normpath(os.path.join(os.path.realpath(base), value))))
-    if not directory.is_dir():
-        raise ValueError("package directory is not a directory")
-    return [tokens[0], *((word, False) for word in rest), *tokens[end:]], directory
-
-
-def _joined_list(tokens: list[tuple[str, bool]]) -> str | None:
-    """`a && b && c` of plain words, rejoined, or None for any other shape."""
-    segments: list[list[str]] = [[]]
-    for value, operator in tokens:
-        if (value, operator) == ("&&", True):
-            segments.append([])
-        elif operator or set(value) & _ARGUMENT_REJECT:
-            return None
-        else:
-            segments[-1].append(value)
-    if len(segments) < 2 or not all(segments):
-        return None
-    return " && ".join(shlex.join(segment) for segment in segments)
-
-
-_INLINE_PROGRAM_FLAGS = {"node": ("-e", "--eval"), "nodejs": ("-e", "--eval"), "bun": ("-e", "--eval")}
-
-
-def _inline_program_index(tokens: list[tuple[str, bool]]) -> int | None:
-    """Where a bare `node -e <program>` or `python3 -c <program>` holds its program, else None.
-
-    That word is one argument the sandbox passes to the interpreter, never to a
-    shell, and the peeled core is re-authorized as quoted text. So `;` or `|`
-    inside its quotes (`node -e "a(); b()"`) is code, not an operator.
-    """
-    if len(tokens) != 3 or any(operator for _value, operator in tokens):
-        return None
-    name, flag = tokens[0][0], tokens[1][0]
-    flags = _INLINE_PROGRAM_FLAGS.get(name, ("-c",) if name in {"python", "python3"} else ())
-    return 2 if flag in flags else None
+    return _root(answer, "anchored_sibling_root")
 
 
 def peel_contained_wrapper(
@@ -400,112 +150,28 @@ def peel_contained_wrapper(
     repository (see `sibling_project_root`). A relative target is accepted only
     when it names a sibling repository's root from `cwd`, such as a linked
     worktree beside the checkout, or, on Windows, a workspace directory joined
-    by `&&`; after a cd into a sibling root, the core may
-    be an `&&` list of plain commands, which is re-authorized there. Only a cd
-    into a sibling repository may end in `;` or carry `2>/dev/null`: the
-    directory is resolved here and nothing runs when it is gone, so the core
+    by `&&`; after a cd into a sibling root, the core may be an `&&` list of
+    plain commands, which is re-authorized there. Only a cd into a sibling
+    repository may end in `;` or carry `2>/dev/null`: the directory is resolved
+    by native authority and nothing is peeled when it is gone, so the core
     never falls back to the session directory the way the shell would after a
-    failed cd. Raises
-    ValueError (or OSError for a missing cd target) for shapes native
-    authority never upgrades.
+    failed cd.
+
+    Raises ValueError for a wrapped shape native authority does not peel, which
+    the sink answers by running the text whole in the sandbox native authority
+    chose for it, and ContainedWrapperPlanUnavailableError when no classifier
+    is reachable to ask.
     """
-    status = _STATUS_ECHO.search(command)
-    if status is not None:
-        command = command[: status.start()].rstrip(" \t")
-    if (quiet := _QUIET_CD.match(command)) is not None:
-        command = quiet.group(1) + command[quiet.end() :]
-    home_cd = home is not None and _HOME_CD.match(command) is not None
-    if home_cd:
-        # The cd target's leading `~` is the one expansion proved; lex it as `.`.
-        tilde = command.index("~")
-        command = command[:tilde] + "." + command[tilde + 1 :]
-    tokens, exact = _lex(command)
-    directory = workspace
-    wrapped = status is not None
-    output = None
-    sibling_root = False
-    if tokens[:1] == [("cd", False)]:
-        if len(tokens) < 4 or tokens[1][1] or tokens[2] not in (("&&", True), (";", True)):
-            raise ValueError("unsupported cd prefix")
-        sequenced = tokens[2] == (";", True)
-        spelled = tokens[1][0]
-        # Only an unquoted leading `~` expands, as the native proof requires.
-        # `~//x` is home/x. Joining home with a leading slash would drop home,
-        # because pathlib treats an absolute right-hand side as the whole path.
-        rest = spelled[2:].lstrip("/")
-        target = home / rest if home_cd and home is not None else Path(spelled)
-        if not exact:
-            raise ValueError("relative cd target")
-        inside = workspace.resolve(strict=True)
-        directory = ((cwd or workspace) / target).resolve(strict=True)
-        # Windows has no workspace sandbox to run the text whole, so there an
-        # `&&`-joined relative cd into the workspace is peeled too.
-        peeled_inside = (
-            sys.platform == "win32" and not sequenced and quiet is None and _path_is_within(directory, inside)
-        )
-        if (
-            not target.is_absolute()
-            and not peeled_inside
-            and (_path_is_within(directory, inside) or sibling_project_root(directory, home=home) != directory)
-        ):
-            raise ValueError("relative cd target")
-        if not directory.is_dir() or not (
-            _path_is_within(directory, inside) or sibling_project_root(directory, home=home) is not None
-        ):
-            raise ValueError("cd target outside the workspace")
-        sibling_root = sibling_project_root(directory, home=home) == directory and not _path_is_within(
-            directory, inside
-        )
-        if (sequenced or quiet is not None) and _path_is_within(directory, inside):
-            raise ValueError("unsupported cd prefix")
-        tokens, wrapped = tokens[3:], True
-        joined = _joined_list(tokens) if sibling_root else None
-        if joined is not None:
-            # A filter after `a && b` applies to `b` alone, so none is peeled.
-            if status is not None:
-                label = status.group(1) if status.group(1) is not None else status.group(2)
-                output = OutputFilter("all", 0, False, status_label=label)
-            return joined, directory, output
-    elif exact and (package := _package_directory(tokens, cwd or workspace)) is not None:
-        tokens, directory = package
-        if not (
-            _path_is_within(directory, workspace.resolve(strict=True))
-            or sibling_project_root(directory, home=home) is not None
-        ):
-            raise ValueError("package directory outside the workspace")
-        wrapped = True
-    if ("|", True) in tokens:
-        index = tokens.index(("|", True))
-        stages = filter_chain(tokens[index + 1 :])
-        tokens = tokens[:index]
-        merge = tokens[-1:] == [("2>&1", True)]
-        if merge:
-            tokens = tokens[:-1]
-        if len(stages) == 1 and stages[0][0] in {"head", "tail"}:
-            output = OutputFilter(stages[0][0], int(stages[0][1]), merge)
-        else:
-            output = OutputFilter("pipe", 0, merge, stages=stages)
-        wrapped = True
-    elif tokens[-1:] == [("2>&1", True)]:
-        tokens = tokens[:-1]
-        output = OutputFilter("all", 0, True)
-        wrapped = True
-    if status is not None:
-        label = status.group(1) if status.group(1) is not None else status.group(2)
-        output = replace(output or OutputFilter("all", 0, False), status_label=label)
-    if not wrapped:
+    answer = _answer(command, workspace=workspace, cwd=cwd, home=home)
+    refusal = answer.get("refusal")
+    if refusal is not None:
+        raise ValueError(str(refusal))
+    plan = answer.get("plan")
+    if plan is None:
         return None
-    program = _inline_program_index(tokens)
-    if (
-        not exact
-        or not tokens
-        or any(
-            operator or (index != program and set(value) & _ARGUMENT_REJECT)
-            for index, (value, operator) in enumerate(tokens)
-        )
-    ):
+    if not isinstance(plan, Mapping):
         raise ValueError("unsupported wrapper shape")
-    return shlex.join(value for value, _operator in tokens), directory, output
+    return str(plan["core"]), Path(str(plan["directory"])), _output_filter(plan.get("output"))
 
 
 @contextlib.contextmanager

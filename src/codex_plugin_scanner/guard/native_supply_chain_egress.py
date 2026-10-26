@@ -20,6 +20,7 @@ import urllib.parse
 import urllib.request
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -103,6 +104,37 @@ class EgressProtocolError(ValueError):
     """The resident's egress request is malformed; the evaluation cannot proceed."""
 
 
+OFFLINE_REFUSED_CODE = "egress_offline_assessment"
+
+
+class OfflineEgress:
+    """Counts the exchanges an offline evaluation refused."""
+
+    def __init__(self) -> None:
+        self.refused = 0
+
+
+_OFFLINE: ContextVar[OfflineEgress | None] = ContextVar("guard_egress_offline", default=None)
+
+
+@contextmanager
+def offline_egress() -> Iterator[OfflineEgress]:
+    """Evaluate without the network in this context.
+
+    A background assessment runs with no one waiting and without consent to
+    contact anything, so every exchange the resident asks for is answered from
+    the in-process registry cache or refused as blocked. The caller reads
+    ``refused`` to report the evaluation as incomplete.
+    """
+
+    state = OfflineEgress()
+    token = _OFFLINE.set(state)
+    try:
+        yield state
+    finally:
+        _OFFLINE.reset(token)
+
+
 class EgressExchanger:
     """Performs needs and keeps what the next request must carry."""
 
@@ -126,10 +158,14 @@ class EgressExchanger:
             self.supplied.append(self._answer(need))
 
     def _answer(self, need: Mapping[str, Any]) -> dict[str, object]:
-        delay = min(max(float(need["delay_seconds"]), 0.0), MAX_DELAY_SECONDS)
-        if delay > 0:
-            time.sleep(delay)
-        outcome = self.archives.fulfil(need) if need["class"] == "archive" else self._http(need)
+        offline = _OFFLINE.get()
+        if offline is not None:
+            outcome = self._offline(need, offline)
+        else:
+            delay = min(max(float(need["delay_seconds"]), 0.0), MAX_DELAY_SECONDS)
+            if delay > 0:
+                time.sleep(delay)
+            outcome = self.archives.fulfil(need) if need["class"] == "archive" else self._http(need)
         return {
             "class": need["class"],
             "method": need["method"],
@@ -138,6 +174,15 @@ class EgressExchanger:
             "occurrence": need["occurrence"],
             "outcome": outcome,
         }
+
+    def _offline(self, need: Mapping[str, Any], offline: OfflineEgress) -> dict[str, object]:
+        key = _registry_cache_key(need) if need["class"] == "registry" else None
+        cached = self.registry_cache.cached(key) if key is not None else None
+        if cached is not None:
+            status, header_items, body = cached
+            return self._response_outcome(status, header_items, body, int(need["max_response_bytes"]))
+        offline.refused += 1
+        return {"kind": "blocked", "code": OFFLINE_REFUSED_CODE}
 
     def _http(self, need: Mapping[str, Any]) -> dict[str, object]:
         key = _registry_cache_key(need)

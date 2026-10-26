@@ -37,6 +37,7 @@ import { PackageWorkbenchPanel } from "./package-workbench-panel";
 import { listSupplyChainAuditWorkspaceChoices } from "./supply-chain-audit-workspace";
 import type { SupplyChainAuditSession } from "./use-supply-chain-audit-session";
 import { isBlockedGuardAction } from "./guard-action";
+import { auditPriorityBadgeLabel } from "./audit-priority-badge";
 
 export type AuditSeverity = "critical" | "high" | "medium" | "low" | "info";
 
@@ -557,14 +558,8 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession 
     [snapshot.managed_installs],
   );
 
-  const criticalCount = useMemo(
-    () =>
-      baseResults.filter(
-        (r) =>
-          (r.severity === "critical" || r.severity === "high") &&
-          !r.resolved &&
-          !resolvedIds.has(r.id),
-      ).length,
+  const priorityBadge = useMemo(
+    () => auditPriorityBadgeLabel(baseResults, resolvedIds),
     [baseResults, resolvedIds],
   );
 
@@ -594,8 +589,8 @@ export function AuditWorkspace({ snapshot, receipts, approvalGate, auditSession 
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {criticalCount > 0 && (
-            <Badge tone="destructive">{criticalCount} critical</Badge>
+          {priorityBadge && (
+            <Badge tone="destructive">{priorityBadge}</Badge>
           )}
           {openCount > 0 ? (
             <Badge tone="attention">{openCount} open</Badge>

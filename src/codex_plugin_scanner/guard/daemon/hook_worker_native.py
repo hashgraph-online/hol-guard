@@ -60,67 +60,6 @@ def _edge_harness_response(edge: Mapping[str, object]) -> dict[str, object]:
 _NATIVE_PRE_TOOL_APPROVAL_ACTIONS = frozenset({"review", "require-reapproval"})
 
 
-_CLAUDE_SECRET_READ_NATIVE_CLASSES = frozenset({"local_env_read", "sensitive_material"})
-
-
-def _claude_native_prompt_brand(
-    response: dict[str, object],
-    native_result: Mapping[str, object],
-) -> dict[str, object]:
-    """Overlay the Python-owned Claude approval presentation on a native prompt result.
-
-    Rust decides the action; this only re-derives the branded system message and
-    approval briefing copy that the hook surfaces to Claude Code users.
-    """
-    from ..cli.commands_support_prompts import (
-        _claude_prompt_additional_context,
-        _claude_prompt_system_message,
-    )
-    from ..models import GuardArtifact
-
-    raw_classes = native_result.get("prompt_risk_classes")
-    request_classes = (
-        [
-            "secret_read" if item in _CLAUDE_SECRET_READ_NATIVE_CLASSES else item
-            for item in raw_classes
-            if isinstance(item, str) and item
-        ]
-        if isinstance(raw_classes, list)
-        else []
-    )
-    artifact = GuardArtifact(
-        artifact_id="claude-code:native-prompt:session",
-        name="user prompt",
-        harness="claude-code",
-        artifact_type="prompt_request",
-        source_scope="harness",
-        config_path="",
-        metadata={"prompt_request_classes": request_classes},
-    )
-    policy_action = str(native_result.get("minimum_action") or "")
-    native_reason = str(native_result.get("reason") or "")
-    system_message = _claude_prompt_system_message(
-        event_name="UserPromptSubmit",
-        policy_action=policy_action,
-        artifact=artifact,
-        native_reason=lambda: native_reason,
-    )
-    if system_message:
-        response["systemMessage"] = system_message
-    additional_context = _claude_prompt_additional_context(
-        harness="claude-code",
-        event_name="UserPromptSubmit",
-        policy_action=policy_action,
-        artifact=artifact,
-        native_reason=native_reason,
-    )
-    if additional_context:
-        hook_output = response.get("hookSpecificOutput")
-        if isinstance(hook_output, dict):
-            hook_output["additionalContext"] = additional_context
-    return response
-
-
 class _HookWorkerMetrics(Protocol):
     def record_route(self, route: str) -> None: ...
 
@@ -179,6 +118,25 @@ class _HookWorkerNativeHost(Protocol):
         workspace: Path | None,
         harness: str,
     ) -> StructuredOutputResolution: ...
+
+
+def withholds_structured_destination(*, harness: str, event_name: str) -> bool:
+    """Return whether this hook can carry a managed structured destination."""
+
+    return event_name == "PostToolUse" and canonical_harness_name(harness) in {"pi", "omp"}
+
+
+def withhold_structured_destination(response: dict[str, object]) -> dict[str, object]:
+    """Withhold the structured destination on an answer without native proof."""
+
+    return {
+        **response,
+        "structured_content_mediation": StructuredContentMediation(
+            action="withhold",
+            reason_code="structured_native_edge_unavailable",
+            native_decision_id=None,
+        ).to_harness_json(),
+    }
 
 
 def _record_native_pre_activity(
@@ -395,7 +353,7 @@ class HookWorkerNativeMixin:
         structured destination keeps the existing availability response.
         """
 
-        if event_name != "PostToolUse" or canonical_harness_name(harness) not in {"pi", "omp"}:
+        if not withholds_structured_destination(harness=harness, event_name=event_name):
             return response
         # Unavailable-edge callers supply their one resolution. The successful
         # edge uses a separate initial read and a post-scan revocation check.
@@ -406,14 +364,7 @@ class HookWorkerNativeMixin:
         )
         if not resolved.required:
             return response
-        return {
-            **response,
-            "structured_content_mediation": StructuredContentMediation(
-                action="withhold",
-                reason_code="structured_native_edge_unavailable",
-                native_decision_id=None,
-            ).to_harness_json(),
-        }
+        return withhold_structured_destination(response)
 
     def _review_native_edge(
         self: _HookWorkerNativeHost,
@@ -600,11 +551,8 @@ class HookWorkerNativeMixin:
                     ),
                     False,
                 )
-            response = _edge_harness_response(edge)
-            if not recording_only and native_harness.strip().lower().replace("_", "-") == "claude-code":
-                with suppress(Exception):
-                    response = _claude_native_prompt_brand(response, native_result)
-            return (response, True)
+            # The edge already carries Guard's Claude Code notice outside Watch.
+            return (_edge_harness_response(edge), True)
         if native_event == "PreToolUse":
             with suppress(Exception):
                 observe_native_pre_tool_cli(self.store, payload=payload, workspace=workspace, home_dir=home_dir)

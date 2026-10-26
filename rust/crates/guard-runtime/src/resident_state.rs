@@ -34,8 +34,8 @@ pub(crate) use resident_state_files::ensure_private_directory;
 #[allow(unused_imports)]
 pub(crate) use resident_state_files::{
     bind_windows_existing_directory, open_private_read, protect_windows_private_path,
-    remove_windows_private_file, replace_windows_private_file, verify_windows_private_file,
-    verify_windows_private_path,
+    publish_new_windows_private_file, remove_windows_private_file, replace_windows_private_file,
+    verify_windows_private_file, verify_windows_private_path,
 };
 #[allow(unused_imports)]
 pub(crate) use resident_state_files::{

@@ -294,59 +294,6 @@ def test_cleanup_failure_does_not_interrupt_routing(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("edge_patch", "routed", "expected"),
-    [
-        ({}, {"hookSpecificOutput": {"permissionDecision": "allow"}}, 0),
-        ({}, None, None),
-        ({"recording_only": True}, {"hookSpecificOutput": {}}, None),
-        ({"event_name": "PostToolUse"}, {"hookSpecificOutput": {}}, None),
-        ({"result": {"minimum_action": "review"}}, {"hookSpecificOutput": {}}, None),
-    ],
-)
-def test_cli_fallback_applies_the_same_containment_rewrite(
-    containment_resident, monkeypatch, tmp_path, edge_patch, routed, expected
-):
-    """With the daemon down, `guard hook` must still route eligible tests to the sink."""
-    import io
-    from types import SimpleNamespace
-
-    from codex_plugin_scanner.guard.cli import commands_hook_native_containment as cli_route
-
-    edge = {
-        "event_name": "PreToolUse",
-        "harness": "claude-code",
-        "recording_only": False,
-        "result": {"minimum_action": "sandbox-required"},
-        **edge_patch,
-    }
-    receipt = {"decision": "deny"}
-    monkeypatch.setattr(cli_route, "render_pre_tool", lambda harness, result, guard_home=None: receipt)
-
-    def route(response, **kwargs):
-        assert response is receipt
-        assert kwargs["harness"] == "claude-code"
-        assert kwargs["workspace"] == tmp_path
-        return receipt if routed is None else routed
-
-    monkeypatch.setattr(cli_route, "route_zcode_containment", route)
-    recorded: list[dict[str, object]] = []
-    monkeypatch.setattr(cli_route, "record_pre_hook_command_activity_best_effort", lambda **kw: recorded.append(kw))
-    edge["receipt"] = {"decision_id": "native-receipt-1"}
-    stream = io.StringIO()
-    context = SimpleNamespace(guard_home=tmp_path, home_dir=tmp_path)
-    store = object()
-    assert cli_route.emit_native_containment_route(edge, {}, context, tmp_path, stream, store) == expected
-    assert (json.loads(stream.getvalue()) if stream.getvalue() else None) == (routed if expected == 0 else None)
-    if expected == 0:
-        # The daemon records the routed PreToolUse; the CLI fallback must leave the same history.
-        assert len(recorded) == 1
-        assert recorded[0]["store"] is store and recorded[0]["receipt_id"] == "native-receipt-1"
-        assert recorded[0]["event"] == "PreToolUse" and recorded[0]["harness"] == "claude-code"
-    else:
-        assert recorded == []
-
-
-@pytest.mark.parametrize(
     ("reason", "profile", "routed"),
     [
         ("native_workspace_containment_required", "workspace-contained-v1", True),

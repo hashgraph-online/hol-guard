@@ -163,3 +163,128 @@ fn a_malformed_payload_is_refused() {
     });
     assert!(relative.is_err());
 }
+
+/// The caller flattened the tool response before sending it, so whatever it
+/// missed never reached the scan. The response now travels whole and the text
+/// is read here, so a caller that flattened nothing still has its output
+/// scanned.
+#[test]
+fn a_whole_tool_response_is_read_here() {
+    let mut body = output_body(json!({"command": "ls"}));
+    body["tool_response"] = json!({"stdout": "AWS_SECRET_ACCESS_KEY=abc"});
+    let input = Input::parse(&body).unwrap();
+    assert_eq!(input.response_text, "AWS_SECRET_ACCESS_KEY=abc");
+}
+
+/// A caller that flattened the response the same way must not have its text
+/// counted twice, and one that appended its own captured output keeps that
+/// text beside what the response says.
+#[test]
+fn a_flattened_response_is_not_repeated() {
+    let mut body = output_body(json!({"command": "ls"}));
+    body["tool_response"] = json!({"stdout": "token=abc"});
+    body["response_text"] = json!("token=abc\ntrailing stdout");
+    let input = Input::parse(&body).unwrap();
+    assert_eq!(input.response_text, "token=abc\ntrailing stdout");
+
+    body["response_text"] = json!("only what the caller captured");
+    let input = Input::parse(&body).unwrap();
+    assert_eq!(
+        input.response_text,
+        "token=abc\nonly what the caller captured"
+    );
+}
+
+/// A line of the response that merely occurs inside a longer line the caller
+/// sent has not been read: `token=abc` is its own secret even when the caller
+/// happened to send `xtoken=abcdef`.
+#[test]
+fn a_line_inside_a_longer_one_is_not_read_yet() {
+    let mut body = output_body(json!({"command": "ls"}));
+    body["tool_response"] = json!({"stdout": "token=abc"});
+    body["response_text"] = json!("xtoken=abcdef");
+    let input = Input::parse(&body).unwrap();
+    assert_eq!(input.response_text, "token=abc\nxtoken=abcdef");
+}
+
+/// The comparison hashes the caller's lines once rather than searching its
+/// whole text per response line, so a large response that the caller already
+/// flattened is read well inside the hook deadline.
+#[test]
+fn a_large_flattened_response_is_compared_once() {
+    let text: String = (0..50_000)
+        .map(|line| format!("line {line} of the tool response\n"))
+        .collect();
+    let mut body = output_body(json!({"command": "ls"}));
+    body["tool_response"] = json!({"stdout": text});
+    body["response_text"] = json!(text);
+    let started = std::time::Instant::now();
+    let input = Input::parse(&body).unwrap();
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(5),
+        "comparing a flattened response took {:?}",
+        started.elapsed()
+    );
+    assert_eq!(input.response_text, text);
+}
+
+/// The walk reads the named output keys at the top level and everything below
+/// them, so a secret nested under a key this scan does not name is still read
+/// once something it does name carries it.
+#[test]
+fn the_walk_reads_below_a_named_key_but_not_beside_one() {
+    let mut body = output_body(json!({"command": "ls"}));
+    body["tool_response"] = json!({
+        "metadata": {"ignored": "beside a named key"},
+        "result": {"nested": {"deeper": "token=abc"}},
+    });
+    let input = Input::parse(&body).unwrap();
+    assert_eq!(input.response_text, "token=abc");
+}
+
+/// The walk stops rather than following a response that nests without end.
+#[test]
+fn the_walk_stops_at_its_depth() {
+    let mut nested = json!("token=abc");
+    for _ in 0..8 {
+        nested = json!({"inner": nested});
+    }
+    let mut body = output_body(json!({"command": "ls"}));
+    body["tool_response"] = json!({"result": nested});
+    let input = Input::parse(&body).unwrap();
+    assert_eq!(input.response_text, "");
+}
+
+/// An older caller sends no response at all, so the text it flattened stays
+/// the text the scan reads.
+#[test]
+fn an_older_caller_keeps_the_text_it_sent() {
+    let mut body = output_body(json!({"command": "ls"}));
+    body["response_text"] = json!("token=abc");
+    let input = Input::parse(&body).unwrap();
+    assert_eq!(input.response_text, "token=abc");
+
+    body["tool_response"] = Value::Null;
+    let input = Input::parse(&body).unwrap();
+    assert_eq!(input.response_text, "token=abc");
+}
+
+/// A response map is a `BTreeMap` here but the caller flattens it in the order
+/// the response was built, so the two agree on what they read and not on the
+/// order. A two-key response the caller already flattened must not be read
+/// twice, whichever order it sent, and trimming what it sent changes nothing.
+#[test]
+fn a_flattened_response_is_not_repeated_whatever_its_key_order() {
+    let mut body = output_body(json!({"command": "ls"}));
+    body["tool_response"] = json!({"stdout": "A", "stderr": "B"});
+
+    for supplied in ["A\nB", "B\nA", "\nA\nB\n"] {
+        body["response_text"] = json!(supplied);
+        let input = Input::parse(&body).unwrap();
+        assert_eq!(input.response_text, supplied);
+    }
+
+    body["response_text"] = json!("A");
+    let input = Input::parse(&body).unwrap();
+    assert_eq!(input.response_text, "B\nA\nA");
+}

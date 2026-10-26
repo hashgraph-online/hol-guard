@@ -63,32 +63,6 @@ KNOWN_SKILL_DOC_ROOT_SUFFIXES = (
     ".agents/skills",
     ".claude/skills",
 )
-KNOWN_AGENT_DOC_SUFFIXES = (
-    ".codex/docs/harness-engineering.md",
-    ".codex/docs/token-discipline.md",
-)
-FD_OPTION_VALUE_FLAGS = frozenset(
-    {
-        "-d",
-        "--max-depth",
-        "-E",
-        "--exclude",
-        "-e",
-        "--extension",
-        "-t",
-        "--type",
-        "-S",
-        "--size",
-        "-o",
-        "--owner",
-        "--changed-before",
-        "--changed-within",
-        "--changed-after",
-        "-j",
-        "--threads",
-        "--path-separator",
-    }
-)
 
 
 def _bound_rule(operation: str, params: dict[str, object]) -> bool:

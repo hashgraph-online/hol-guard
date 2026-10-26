@@ -219,6 +219,28 @@ pub(super) fn local_uv_pip_work(words: &[&str], project: &Path) -> bool {
         && isolated_virtual_environment(&project.join(".venv"))
 }
 
+// How much of a script is read to find the dependency block. PEP 723 allows
+// the block anywhere in the file, so the whole script is read, up to a bound
+// that keeps a hook from paging in an arbitrarily large one.
+const SCRIPT_BYTES: u64 = 1 << 20;
+
+/// Whether `path` is a script that carries its own dependencies. uv installs
+/// those into a fresh environment before it runs the script, which the
+/// sandbox has no network for.
+pub(super) fn declares_dependencies(path: &Path) -> bool {
+    use std::io::Read;
+    let Ok(file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut text = Vec::new();
+    if file.take(SCRIPT_BYTES).read_to_end(&mut text).is_err() {
+        return false;
+    }
+    String::from_utf8_lossy(&text)
+        .lines()
+        .any(|line| line.trim_end() == "# /// script")
+}
+
 #[cfg(test)]
 #[path = "workspace_contained_python_tests.rs"]
 mod python_tests;

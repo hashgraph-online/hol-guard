@@ -1,34 +1,27 @@
-"""Output filters after a contained core, as native authority classifies them.
+"""Running the output filters native authority classified after a contained core.
 
-A chain of up to three `| head -N`, `| tail -N`, `| grep` and `| rg` stages
-that read only standard input. Head and tail run in-process. A matcher runs
-as its own binary on the text the core already produced, in this process
-rather than in the core's sandbox, so its argument list is validated first:
-no file operand, pattern file, recursion or other output, so it can only
-print lines of the text it is given. The environment is built here, never
-the caller's. The binary is the installed one, located by ownership rather
-than by the caller's `PATH`; a matcher an agent could rewrite is one every
-plain `grep` or `rg` search already runs, so locating it this way is what
-this screen can decide, and the sandbox the core ran in does not extend
-here. `contained_output_filters.rs` accepts the same chain.
+`contained_output_filters.rs` decides which chain of `| head -N`, `| tail -N`,
+`| grep` and `| rg` stages a contained command may carry: at most three, each
+reading only standard input, with no file operand, pattern file, recursion or
+other output, so a stage can only print lines of the text it is given. That
+grammar lives there alone. This module carries out the chain it chose.
+
+Head and tail run in-process. A matcher runs as its own binary on the text the
+core already produced, in this process rather than in the core's sandbox. The
+environment is built here, never the caller's. The binary is the installed
+one, located by ownership rather than by the caller's `PATH`; a matcher an
+agent could rewrite is one every plain `grep` or `rg` search already runs, so
+locating it this way is what this screen can decide, and the sandbox the core
+ran in does not extend here.
 """
 
 from __future__ import annotations
 
 import os
-import re
 import stat
 import subprocess
 from pathlib import Path
 
-MAX_FILTERS = 3
-_COUNT = re.compile(r"[0-9]{1,6}")
-# Single-letter switches that change only which input lines print and how.
-_GREP_SWITCHES = frozenset("EFGacinosvwx")
-# The same for ripgrep, which spells its own set. `-E` (encoding) and `-g`
-# (glob) take a value there, and `-P` opts into a second regex engine.
-_RG_SWITCHES = frozenset("FNSUacinosvwx")
-_GREP_COUNTS = ("-A", "-B", "-C", "-m")
 _GREP_PROGRAMS = {"grep": (), "egrep": ("-E",), "fgrep": ("-F",)}
 _GREP_BINARIES = (Path("/usr/bin/grep"), Path("/bin/grep"))
 # ripgrep ships from a package manager rather than the system image, so it is
@@ -45,99 +38,6 @@ _LOCALE = ("LANG", "LC_ALL", "LC_CTYPE", "LC_COLLATE")
 _FILTER_TIMEOUT_SECONDS = 60
 
 Stage = tuple[str, ...]
-
-
-def bounded_count(values: list[str]) -> int | None:
-    """The line count of a `head`/`tail` stage: `-N` or `-n N`."""
-    if len(values) == 1 and values[0].startswith("-") and _COUNT.fullmatch(values[0][1:]):
-        return int(values[0][1:])
-    if len(values) == 2 and values[0] == "-n" and _COUNT.fullmatch(values[1]):
-        return int(values[1])
-    return None
-
-
-def stdin_arguments(values: list[str], switches: frozenset[str]) -> bool:
-    """Whether a matcher called with `values` reads only standard input.
-
-    Switches from `switches`, counted options, `-e PATTERN`, and one pattern
-    operand unless `-e` gave the patterns. Any further operand is a file, so
-    it is refused.
-    """
-    expressions = operands = 0
-    options_done = False
-    index = 0
-    while index < len(values):
-        value = values[index]
-        index += 1
-        if value == "-":
-            return False
-        if options_done or not value.startswith("-"):
-            operands += 1
-            continue
-        if value == "--":
-            options_done = True
-            continue
-        if value == "-e":
-            if index >= len(values):
-                return False
-            index += 1
-            expressions += 1
-            continue
-        option = next((option for option in _GREP_COUNTS if value.startswith(option)), None)
-        if option is not None:
-            count = value[len(option) :]
-            if not count:
-                if index >= len(values):
-                    return False
-                count = values[index]
-                index += 1
-            if not _COUNT.fullmatch(count):
-                return False
-            continue
-        flags = value[1:]
-        if not flags or not set(flags) <= switches:
-            return False
-    return operands == 0 if expressions else operands == 1
-
-
-def grep_arguments(values: list[str]) -> bool:
-    """Whether `grep <values>` reads only standard input."""
-    return stdin_arguments(values, _GREP_SWITCHES)
-
-
-def rg_arguments(values: list[str]) -> bool:
-    """Whether `rg <values>` reads only standard input."""
-    return stdin_arguments(values, _RG_SWITCHES)
-
-
-def matcher_stage(program: str, values: list[str]) -> bool:
-    """Whether `program <values>` is a matcher reading only standard input."""
-    if program in _GREP_PROGRAMS:
-        return grep_arguments(values)
-    return program == "rg" and rg_arguments(values)
-
-
-def filter_chain(tokens: list[tuple[str, bool]]) -> tuple[Stage, ...]:
-    """The stages after a core's first `|`, or ValueError for any other shape."""
-    stages: list[list[str]] = [[]]
-    for value, operator in tokens:
-        if (value, operator) == ("|", True):
-            stages.append([])
-        elif operator:
-            raise ValueError("unsupported output filter")
-        else:
-            stages[-1].append(value)
-    if len(stages) > MAX_FILTERS:
-        raise ValueError("unsupported output filter")
-    chain: list[Stage] = []
-    for program, *arguments in (stage or [""] for stage in stages):
-        if program in {"head", "tail"} and (count := bounded_count(arguments)) is not None:
-            chain.append((program, str(count)))
-        elif matcher_stage(program, arguments):
-            chain.append((program, *arguments))
-        else:
-            raise ValueError("unsupported output filter")
-    return tuple(chain)
 
 
 def keep_lines(lines: list[str], kind: str, count: int) -> list[str]:
@@ -188,12 +88,18 @@ def _trusted_grep() -> str:
 
 
 def _matcher_command(program: str, arguments: list[str]) -> list[str]:
-    """The screened binary and argument list one matcher stage runs."""
-    if not matcher_stage(program, arguments):
-        raise ValueError("unsupported output filter")
+    """The screened binary and argument list one matcher stage runs.
+
+    Native authority already refused every argument that would read something
+    other than standard input, so only the program name is settled here: this
+    module spawns the matchers it knows how to locate by ownership, and
+    nothing else.
+    """
     if program == "rg":
         return [_trusted_ripgrep(), *arguments]
-    return [_trusted_grep(), *_GREP_PROGRAMS[program], *arguments]
+    if program in _GREP_PROGRAMS:
+        return [_trusted_grep(), *_GREP_PROGRAMS[program], *arguments]
+    raise ValueError("unsupported output filter")
 
 
 def _match_lines(text: str, stage: Stage) -> tuple[str, str, int]:
@@ -209,7 +115,7 @@ def _match_lines(text: str, stage: Stage) -> tuple[str, str, int]:
     # No `RIPGREP_CONFIG_PATH` or `GREP_OPTIONS`: the environment is built here.
     environment = {"PATH": "/usr/bin:/bin"}
     environment.update({name: os.environ[name] for name in _LOCALE if name in os.environ})
-    completed = subprocess.run(  # screened binary, validated stdin-only arguments
+    completed = subprocess.run(  # screened binary, native-validated stdin-only arguments
         command,
         input=text.encode("utf-8", "surrogateescape"),
         capture_output=True,

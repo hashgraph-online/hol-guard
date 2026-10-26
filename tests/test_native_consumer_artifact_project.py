@@ -45,7 +45,23 @@ def _first(kind: str) -> dict[str, object]:
     return next(vector for vector in _VECTORS if vector["query"]["kind"] == kind)
 
 
-def test_resident_answers_match_shared_vectors(native_approval_reuse_runtime: Path) -> None:
+# Recorded result kinds the resident still answers so the vectors replay.
+# Python asks for the outcome kinds, which wrap these rows; they are covered
+# by the Rust outcome tests.
+_RECORDED_RESULT_KINDS = frozenset({"artifact_result", "removed_result"})
+
+
+def test_resident_answers_match_shared_vectors(
+    native_approval_reuse_runtime: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    recorded = {kind: frozenset(_fields(_first(kind))[1]) for kind in _RECORDED_RESULT_KINDS}
+    monkeypatch.setattr(project, "_FIELDS", {**project._FIELDS, **recorded})
+    answer_valid = project._answer_valid
+    monkeypatch.setattr(
+        project,
+        "_answer_valid",
+        lambda kind, payload: kind in _RECORDED_RESULT_KINDS or answer_valid(kind, payload),
+    )
     mismatches = []
     for vector in _VECTORS:
         kind, fields = _fields(vector)
@@ -56,7 +72,8 @@ def test_resident_answers_match_shared_vectors(native_approval_reuse_runtime: Pa
 
 
 def test_vectors_cover_every_query_kind() -> None:
-    assert {vector["query"]["kind"] for vector in _VECTORS} == set(project._FIELDS)
+    kinds = {vector["query"]["kind"] for vector in _VECTORS}
+    assert kinds == (set(project._FIELDS) - {"artifact_outcome", "removed_outcome"}) | _RECORDED_RESULT_KINDS
 
 
 def _artifact_from_wire(wire: Mapping[str, object], source_metadata: dict[str, object] | None = None) -> GuardArtifact:
@@ -247,13 +264,83 @@ def test_incomplete_or_mistyped_payloads_raise(monkeypatch: pytest.MonkeyPatch, 
     assert error.value.code == "native_consumer_artifact_project_payload_invalid"
 
 
-def test_removed_result_must_be_marked_removed(monkeypatch: pytest.MonkeyPatch) -> None:
-    kind, fields = _fields(_first("removed_result"))
-    payload = json.loads(json.dumps(_first("removed_result")["expected"]))
-    payload["result"]["removed"] = False
+_REMOVED_FIELDS: dict[str, object] = {
+    "harness": "codex",
+    "artifact_id": "codex:project:tool",
+    "previous": None,
+    "previous_hash": "h",
+    "configured_action": "review",
+    "runtime": None,
+    "compose_error": "native_unavailable",
+    "decision_signals": [],
+    "user_override": None,
+    "approval_context_hash": "c",
+    "effective_workspace": None,
+}
+
+
+def _removed_outcome() -> dict[str, object]:
+    removed = cast("dict[str, object]", _first("removed_result")["expected"])
+    return json.loads(
+        json.dumps(
+            {
+                "result": removed["result"],
+                "policy_action": "require-reapproval",
+                "blocking": True,
+                "snapshot_permitted": False,
+                "receipt": {
+                    "artifact_hash": "h",
+                    "policy_decision": "require-reapproval",
+                    "capabilities_summary": "mcp server",
+                    "changed_capabilities": ["removed"],
+                    "provenance_summary": "project artifact removed",
+                    "artifact_name": "tool",
+                    "source_scope": "project",
+                    "user_override": None,
+                    "diff_summary": "artifact removed",
+                    "approval_source": "policy",
+                    "scanner_evidence": [],
+                },
+                "event": {"artifact_id": "codex:project:tool"},
+            }
+        )
+    )
+
+
+def _removed(monkeypatch: pytest.MonkeyPatch, payload: dict[str, object]) -> dict[str, object]:
     _resident_returning(monkeypatch, lambda request: _good(request, payload=payload))
-    with pytest.raises(project.NativeConsumerProjectError):
-        project.native_consumer_project(kind, fields, guard_home=None)
+    return project.native_consumer_project("removed_outcome", _REMOVED_FIELDS, guard_home=None)
+
+
+def test_a_well_formed_removed_outcome_is_returned(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = _removed_outcome()
+    assert _removed(monkeypatch, payload) == payload
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda payload: payload["result"].update(removed=False),
+        lambda payload: payload.update(event=None),
+        lambda payload: payload.update(blocking="yes"),
+        lambda payload: payload.update(policy_action="maybe"),
+        lambda payload: payload["receipt"].pop("approval_source"),
+        lambda payload: payload["receipt"].update(extra=1),
+        lambda payload: payload.update(extra=1),
+        # Contradictory decisions: a block that permits the snapshot, a block
+        # that does not block, or a row and receipt that disagree.
+        lambda payload: payload.update(snapshot_permitted=True),
+        lambda payload: payload.update(blocking=False),
+        lambda payload: payload["receipt"].update(policy_decision="allow"),
+        lambda payload: payload["result"].update(policy_action="allow"),
+    ],
+)
+def test_malformed_removed_outcomes_raise(monkeypatch: pytest.MonkeyPatch, mutate) -> None:
+    payload = _removed_outcome()
+    mutate(payload)
+    with pytest.raises(project.NativeConsumerProjectError) as error:
+        _removed(monkeypatch, payload)
+    assert error.value.code == "native_consumer_artifact_project_payload_invalid"
 
 
 def test_error_codes_are_sanitised(monkeypatch: pytest.MonkeyPatch) -> None:

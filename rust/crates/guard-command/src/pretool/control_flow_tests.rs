@@ -16,8 +16,9 @@ fn decide(command: &str) -> (String, String) {
     (decision.minimum_action, decision.reason_code)
 }
 
-/// A conditional or a bounded `while read` loop decides as the command list
-/// written inside it, so reading a file under a test no longer asks.
+/// A conditional, a `case` statement or a bounded `while read` loop decides
+/// as the command list written inside it, so reading a file under a test no
+/// longer asks.
 #[test]
 fn read_only_constructs_match_their_flattened_form() {
     for (construct, flattened) in [
@@ -32,6 +33,14 @@ fn read_only_constructs_match_their_flattened_form() {
         (
             "if grep -q package Cargo.toml; then echo found; fi",
             "grep -q package Cargo.toml; echo found",
+        ),
+        (
+            "case $1 in build) cat Cargo.toml;; *) echo other;; esac",
+            "cat Cargo.toml; echo other",
+        ),
+        (
+            "case $name in *.toml) wc -l Cargo.toml;; esac",
+            "wc -l Cargo.toml",
         ),
         (
             "while read line; do echo hi; done < Cargo.toml",
@@ -80,7 +89,8 @@ fn unmodeled_constructs_keep_their_review() {
         "while read name; do cat Cargo.toml > copy.md; done < Cargo.toml",
         "while read line; do echo $line; done < Cargo.toml",
         "until [ -f build/done ]; do ls build; done",
-        "case $1 in a) ls;; esac",
+        "case $(id -u) in 0) ls;; esac",
+        "case $1 in a) ls;& b) ls;; esac",
         "if [ -f a ]; then if [ -f b ]; then cat b; fi; fi",
     ] {
         assert_ne!(decide(command).0, "allow", "{command}");

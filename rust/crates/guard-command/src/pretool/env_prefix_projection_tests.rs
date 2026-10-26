@@ -411,3 +411,48 @@ fn a_one_time_approval_binds_only_plain_reviewable_settings() {
     }
     assert!(!bindable_setting("DEPLOY_TARGET", &"x".repeat(129)));
 }
+
+#[test]
+fn a_bare_exec_in_front_of_a_setting_is_read_past() {
+    // `exec` hands the shell's process to the command behind it, so these run
+    // what the bare spelling runs. Before this the projection stopped at the
+    // first word, so a setting the compatibility layer refuses, `NODE_OPTIONS`
+    // among them, left the command on its own floor instead of the one its
+    // bare spelling earns.
+    for (command, expected) in [
+        ("exec env -u NODE_OPTIONS npm test", "npm test"),
+        (
+            "exec env -u GH_TOKEN git -C repo status",
+            "git -C repo status",
+        ),
+        (
+            "git status && exec env -u GH_TOKEN gh repo view o/r",
+            "git status && gh repo view o/r",
+        ),
+    ] {
+        assert_eq!(project(command).as_deref(), Some(expected), "{command}");
+    }
+}
+
+#[test]
+fn an_exec_the_projection_cannot_read_past_leaves_the_command_alone() {
+    // `-c` runs with an empty environment and `-a` renames the program, so
+    // neither spelling runs what the bare one runs. `exec` with nothing behind
+    // it sets up redirections for the shell itself. And an `exec` that removes
+    // no setting is the command the caller wrote, not a prefix of one.
+    for command in [
+        "exec -c env -u NODE_OPTIONS npm test",
+        "exec -a sh env -u NODE_OPTIONS npm test",
+        "exec > /tmp/log",
+        "exec npm test",
+        // `exec` is the command word, so the shell hands `LC_ALL=C` to it as
+        // the program to run rather than recognizing it as an assignment.
+        "exec LC_ALL=C ls src",
+        // `-u PATH` is refused by `strip_env_options` whether or not a
+        // launcher stands in front of it, so reading past `exec` reaches the
+        // same refusal the bare spelling reaches.
+        "exec env -u PATH npm test",
+    ] {
+        assert_eq!(project(command), None, "{command}");
+    }
+}

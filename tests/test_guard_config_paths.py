@@ -260,6 +260,7 @@ def test_dashboard_settings_switch_to_custom_carries_forward_effective_risk_map(
         "package_custom_registry": "allow",
         "package_install": "allow",
         "low_trust_artifact": "require-reapproval",
+        "runtime_known_vulnerable": "block",
     }
     assert resolve_risk_action(loaded, "network_egress", harness="codex") == "require-reapproval"
 

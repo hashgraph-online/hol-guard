@@ -19,6 +19,8 @@ from .feature_directory_fixtures import (
     SESSION_PATH,
 )
 from .fixtures import SECURITY_NOTES, SOURCE, SOURCE_FILES
+from .runtime_cases import OUTPUT as RUNTIME_OUTPUT
+from .runtime_cases import QUIET_CASES as RUNTIME_QUIET_CASES
 from .script_cases import REPORT_CASES, report_output
 from .source_output_fixtures import (
     HELPER_MARKER,
@@ -58,6 +60,7 @@ OUTPUT_SCENARIOS = frozenset(
         "routed-git-inspection",
         "stdin-sed-transformation",
         *REPORT_CASES,
+        *RUNTIME_QUIET_CASES,
     }
 )
 
@@ -296,6 +299,8 @@ def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bo
         )
     if identifier in REPORT_CASES:
         return texts == [report_output()]
+    if identifier in RUNTIME_QUIET_CASES:
+        return texts == [RUNTIME_OUTPUT]
     if identifier == "bounded-source-discovery":
         return _discovery(texts)
     if identifier == "quoted-workspace-copy":

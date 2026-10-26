@@ -1,0 +1,95 @@
+name: Plugin install round-trip
+
+# Installs a HOL listing into Claude Code and Codex with
+# `hol-guard plugin install --apply`, checks that both runtimes list it, then
+# uninstalls and checks that both are clean. Pull requests use the pinned
+# runtime CLIs and a fixture install spec. The weekly canary installs the
+# latest runtime releases and reads the live spec from hol.org, so a runtime
+# changing its plugin commands or the spec drifting fails here first.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "rust/crates/guard-plugin-kit/src/install.rs"
+      - "rust/crates/guard-plugin-kit/src/lib.rs"
+      - "rust/crates/guard-plugin-kit/src/ledger.rs"
+      - "rust/crates/guard-runtime/src/runtime_cli.rs"
+      - "src/codex_plugin_scanner/guard/plugin_kit/install.py"
+      - "src/codex_plugin_scanner/guard/plugin_kit/cli.py"
+      - "scripts/ci/plugin_install_roundtrip.sh"
+      - ".github/tools/plugin-kit-validators/**"
+      - ".github/workflows/plugin-install-roundtrip.yml"
+  schedule:
+    - cron: "41 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      canary:
+        description: Use the latest runtime CLIs and the live install spec.
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugin-install-roundtrip-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI_PYTHON_VERSION: "3.12.14"
+  CANARY: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.canary) }}
+
+jobs:
+  roundtrip:
+    name: Install and uninstall in Claude Code and Codex
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - uses: ./.github/actions/setup-ci-python
+        with:
+          python-version: ${{ env.CI_PYTHON_VERSION }}
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+      - uses: ./.github/actions/setup-rust
+      - name: Build the native runtime
+        run: |
+          set -euo pipefail
+          .venv/bin/python scripts/refresh_extension_artifacts.py --trust-only
+          cargo build --manifest-path rust/Cargo.toml --locked --release \
+            -p hol-guard-runtime --bin hol-guard-runtime
+      - name: Install runtime CLIs
+        env:
+          NPM_CONFIG_IGNORE_SCRIPTS: "true"
+        run: |
+          set -euo pipefail
+          tools=.github/tools/plugin-kit-validators
+          if [ "$CANARY" = "true" ]; then
+            tools="$RUNNER_TEMP/runtime-clis"
+            mkdir -p "$tools"
+            npm install --ignore-scripts --no-save --prefix "$tools" \
+              @anthropic-ai/claude-code@latest @openai/codex@latest
+          else
+            npm ci --ignore-scripts --prefix "$tools"
+          fi
+          # Claude Code's postinstall only links the platform binary from its
+          # optional dependency; run it explicitly since scripts are disabled.
+          node "$tools/node_modules/@anthropic-ai/claude-code/install.cjs"
+          "$tools/node_modules/.bin/claude" --version
+          "$tools/node_modules/.bin/codex" --version
+          echo "RUNTIME_BIN=$tools/node_modules/.bin" >> "$GITHUB_ENV"
+      - name: Round-trip a HOL listing
+        env:
+          HOL_GUARD: ${{ github.workspace }}/.venv/bin/hol-guard
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+        run: |
+          mode=fixture
+          if [ "$CANARY" = "true" ]; then mode=live; fi
+          bash scripts/ci/plugin_install_roundtrip.sh "$RUNTIME_BIN" "$RUNNER_TEMP/plugin-install" "$mode"

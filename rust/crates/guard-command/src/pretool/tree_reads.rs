@@ -90,7 +90,14 @@ fn flag(argument: &str) -> Option<Flag> {
     Some(flag)
 }
 
-pub(super) fn safe_tree_segment(arguments: &[String], context: super::PathContext<'_>) -> bool {
+/// `absent_recursive` says whether a missing operand stays missing while the
+/// walk runs: no peer segment may create a file, directory or link at that
+/// name, because the walk descends into whatever appears there.
+pub(super) fn safe_tree_segment(
+    arguments: &[String],
+    context: super::PathContext<'_>,
+    absent_recursive: bool,
+) -> bool {
     let mut lists_hidden = false;
     let mut operands: Vec<&str> = Vec::new();
     let mut options_ended = false;
@@ -131,9 +138,17 @@ pub(super) fn safe_tree_segment(arguments: &[String], context: super::PathContex
     if operands.is_empty() {
         return search::safe_recursive_listing_target(".", context, lists_hidden);
     }
-    operands
-        .iter()
-        .all(|operand| search::safe_recursive_listing_target(operand, context, lists_hidden))
+    operands.iter().all(|operand| {
+        // A name that is not there holds no tree to walk, so `tree` prints the
+        // same error it prints for any unreadable operand and reads nothing. A
+        // `~` is expanded by the shell from its own `HOME`, which this screen
+        // reads as the declared home, so a walk is admitted under it only once
+        // `shell_home_matches` says the two name one directory.
+        search::safe_recursive_listing_target(operand, context, lists_hidden)
+            || (absent_recursive
+                && (!operand.starts_with('~') || context.shell_home_matches)
+                && super::listing_reads::absent_listing_operand(operand, context))
+    })
 }
 
 #[cfg(test)]
@@ -196,14 +211,27 @@ mod tests {
             ("tree -L".to_owned(), false),
             ("tree src/*".to_owned(), false),
             (format!("tree {keyed}"), false),
+            // A root that is not there holds no tree, in the project and beside it.
+            ("tree lib".to_owned(), true),
+            ("tree -L 2 lib".to_owned(), true),
+            (format!("tree {keyed}/missing"), true),
+            // Hidden names cannot matter for a root that is not there.
+            ("tree -a lib".to_owned(), true),
+            (
+                format!("tree {home}/.ssh/missing", home = home.display()),
+                false,
+            ),
         ] {
             let words: Vec<String> = command.split(' ').map(str::to_owned).collect();
             assert_eq!(
-                super::safe_tree_segment(&words[1..], context),
+                super::safe_tree_segment(&words[1..], context, true),
                 allowed,
                 "{command}"
             );
         }
+        // A peer step could create the missing root before the walk reaches it.
+        let words: Vec<String> = "tree lib".split(' ').map(str::to_owned).collect();
+        assert!(!super::safe_tree_segment(&words[1..], context, false));
         std::fs::remove_dir_all(root).unwrap();
     }
 }

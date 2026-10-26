@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 /// The sibling repository root that confines the run, and the commands to
 /// check there: the rest after a `cd <root>` list, or `None` when the whole
 /// text runs from the root as issued, `cd` included.
-pub(super) fn sibling_run(
+pub(crate) fn sibling_run(
     model: &CanonicalCommandV1,
     context: PathContext<'_>,
 ) -> Option<(PathBuf, Option<CanonicalCommandV1>)> {

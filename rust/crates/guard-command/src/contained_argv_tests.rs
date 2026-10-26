@@ -133,9 +133,10 @@ fn only_a_bare_pnpm_exec_reads_as_vitest() {
 }
 
 /// The sink plans the call again from its own snapshot, so it has to be able
-/// to ask for the same reading the pre-tool pass made of an activation.
+/// to ask for the same reading the pre-tool pass made of an activation or a
+/// trailing group.
 #[test]
-fn venv_activation_target_answers_the_sink() {
+fn contained_target_answers_the_sink() {
     let root = std::env::temp_dir().join(format!("contained-argv-venv-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     let venv = root.join("project/.venv");
@@ -160,7 +161,7 @@ fn venv_activation_target_answers_the_sink() {
         "cwd": project.to_str().unwrap(),
         "home": root.to_str().unwrap(),
     });
-    let projected = evaluate("venv_activation_target", &input).unwrap();
+    let projected = evaluate("contained_target", &input).unwrap();
     assert_eq!(
         projected["value"],
         json!(".venv/bin/pytest -q"),
@@ -173,7 +174,50 @@ fn venv_activation_target_answers_the_sink() {
         "home": root.to_str().unwrap(),
     });
     assert_eq!(
-        evaluate("venv_activation_target", &unread).unwrap()["value"],
+        evaluate("contained_target", &unread).unwrap()["value"],
+        Value::Null
+    );
+    // A trailing group runs exactly the list inside it, around an activation
+    // or not.
+    for (text, expected) in [
+        ("(.venv/bin/pytest -q)", ".venv/bin/pytest -q"),
+        ("( .venv/bin/pytest -q )", ".venv/bin/pytest -q"),
+        ("{ .venv/bin/pytest -q; }", ".venv/bin/pytest -q"),
+        (
+            "(source .venv/bin/activate && pytest -q)",
+            ".venv/bin/pytest -q",
+        ),
+    ] {
+        let grouped = json!({
+            "text": text,
+            "cwd": project.to_str().unwrap(),
+            "home": root.to_str().unwrap(),
+        });
+        assert_eq!(
+            evaluate("contained_target", &grouped).unwrap()["value"],
+            json!(expected),
+            "{text}"
+        );
+    }
+    // A group behind a conditional that holds a list keeps its parentheses:
+    // flattened, `touch b` would run whether or not `false` succeeded.
+    let conditional = json!({
+        "text": "false && (.venv/bin/pytest -q; touch b)",
+        "cwd": project.to_str().unwrap(),
+        "home": root.to_str().unwrap(),
+    });
+    assert_eq!(
+        evaluate("contained_target", &conditional).unwrap()["value"],
+        Value::Null
+    );
+    // A plain call is its own answer.
+    let plain = json!({
+        "text": ".venv/bin/pytest -q",
+        "cwd": project.to_str().unwrap(),
+        "home": root.to_str().unwrap(),
+    });
+    assert_eq!(
+        evaluate("contained_target", &plain).unwrap()["value"],
         Value::Null
     );
     let _ = std::fs::remove_dir_all(&root);
@@ -192,6 +236,9 @@ fn launcher_program_reports_where_the_parser_reads_the_program() {
         offset(&["stdbuf", "-oL", "pytest", "-q"]),
         json!({"value": 2})
     );
+    // The shell's `exec` is read here too. The sink keeps no list of launcher
+    // names of its own, so every name this op answers for is one it peels.
+    assert_eq!(offset(&["exec", "pytest", "-q"]), json!({"value": 1}));
     // The sink refuses every shape the native parser leaves in place.
     for command in [
         &["./nice", "-n", "10", "pytest"][..],
@@ -199,6 +246,47 @@ fn launcher_program_reports_where_the_parser_reads_the_program() {
         &["stdbuf", "pytest", "-q"],
         &["nohup", "pytest", "-q"],
         &["nice", "-n", "10", "python3", "deploy.py"],
+        &["pytest", "-q"],
+        &["exec"],
+        &["exec", "-a", "name", "pytest"],
+        &["exec", "./deploy.sh"],
+    ] {
+        assert_eq!(offset(command), json!({"value": null}), "{command:?}");
+    }
+}
+
+#[test]
+fn transparent_prefix_reports_where_the_parser_reads_the_program() {
+    let offset =
+        |command: &[&str]| evaluate("transparent_prefix", &json!({ "command": command })).unwrap();
+    assert_eq!(offset(&["command", "pytest", "-q"]), json!({"value": 1}));
+    assert_eq!(offset(&["time", "pytest", "-q"]), json!({"value": 1}));
+    assert_eq!(
+        offset(&["env", "CI=1", "pytest", "-q"]),
+        json!({"value": 2})
+    );
+    // The parser reads the two system paths as the `env` they name, so the
+    // sink peels them too rather than planning `/usr/bin/env` as the program.
+    assert_eq!(
+        offset(&["/usr/bin/env", "CI=1", "pytest", "-q"]),
+        json!({"value": 2})
+    );
+    assert_eq!(offset(&["/bin/env", "CI=1", "pytest"]), json!({"value": 2}));
+    assert_eq!(
+        offset(&["env", "CI=1", "TZ=UTC", "pytest"]),
+        json!({"value": 3})
+    );
+    for command in [
+        // An `env` carrying no assignment only bypasses shell functions, and
+        // extension floors key on that spelling, so it stays the executable.
+        &["env", "pytest", "-q"][..],
+        &["env", "-i", "pytest"],
+        &["env", "CI=1"],
+        // A word that is no assignment and no program leaves the prefix whole.
+        &["env", "FOO=1", "A-B=1", "rm"],
+        &["command", "-v", "pytest"],
+        &["time", "-p", "pytest"],
+        &["nice", "pytest"],
         &["pytest", "-q"],
     ] {
         assert_eq!(offset(command), json!({"value": null}), "{command:?}");

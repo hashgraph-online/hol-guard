@@ -6,6 +6,7 @@ import json
 import urllib.request
 from collections.abc import Iterable
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -157,7 +158,7 @@ def test_queue_time_hint_is_the_connector_for_a_setup_review(monkeypatch: pytest
     def unexpected(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("a setup review has no extension permission to hint")
 
-    monkeypatch.setattr(native_review_allow_hint, "native_review_extension_allow_hint", unexpected)
+    monkeypatch.setattr(native_review_allow_hint, "_ask_review_hint", unexpected)
 
     hint = native_review_allow_hint.native_review_hint(
         object(), {}, {"reason_code": "native_command_review_required"}, None, None, None, _CONNECTOR
@@ -194,9 +195,13 @@ def test_a_pending_delete_keeps_caution_through_the_full_path(monkeypatch: pytes
 
 def test_queue_time_hint_without_a_connector_is_the_extension_hint(monkeypatch: pytest.MonkeyPatch) -> None:
     sentinel = {"schema": "guard.extension-allow-hint.v1"}
-    monkeypatch.setattr(native_review_allow_hint, "native_review_extension_allow_hint", lambda *_a, **_k: sentinel)
+    monkeypatch.setattr(native_review_allow_hint, "_ask_review_hint", lambda *_a, **_k: sentinel)
+    store = SimpleNamespace(guard_home=Path("guard-home"))
 
-    assert native_review_allow_hint.native_review_hint(object(), {}, {}, None, None, None, None) is sentinel
+    assert (
+        native_review_allow_hint.native_review_hint(store, {}, {"command_extensions": {}}, None, None, None, None)
+        is sentinel
+    )
 
 
 def test_available_while_the_connector_is_unset(monkeypatch: pytest.MonkeyPatch) -> None:

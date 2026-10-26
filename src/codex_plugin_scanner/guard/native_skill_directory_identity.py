@@ -47,11 +47,14 @@ from .skill_directory_identity_contract import (
 )
 
 SKILL_DIRECTORY_IDENTITY_FEATURE = "skill-directory-identity-v1"
+SKILL_DOCUMENT_EVIDENCE_FEATURE = "skill-document-evidence-v1"
 _REQUEST_SCHEMA = "guard-skill-directory-identity-request.v1"
 _RESULT_SCHEMA = "guard-skill-directory-identity-result.v1"
 _INSPECT_TIMEOUT_SECONDS = 60.0
 _DISCOVER_TIMEOUT_SECONDS = 30.0
 _INCOMPLETE_TIMEOUT_SECONDS = 2.0
+_DOCUMENT_EVIDENCE_TIMEOUT_SECONDS = 15.0
+SKILL_DOCUMENT_EVIDENCE_SCHEMA = "guard.skill.content-evidence.v1"
 _SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
 _ISSUE_ID = re.compile(r"^[0-9a-f]{16}$")
 _FAILURES = frozenset(get_args(SkillDirectoryIdentityFailure)) - {"native_unavailable"}
@@ -68,6 +71,30 @@ _IDENTITY_KEYS = frozenset(
     }
 )
 _ISSUE_KEYS = frozenset({"relative_path_hex", "failure_reason", "issue_id", "identity"})
+_DOCUMENT_EVIDENCE_KEYS = frozenset(
+    {
+        "readability_status",
+        "byte_length",
+        "content_hash",
+        "line_count",
+        "heading_count",
+        "frontmatter_present",
+        "documented_network_capability",
+    }
+)
+_DOCUMENT_READABILITY = frozenset(
+    {
+        "not_primary_skill_document",
+        "symlink_rejected",
+        "unreadable",
+        "outside_safe_roots",
+        "not_regular_file",
+        "too_large",
+        "invalid_utf8",
+        "readable",
+    }
+)
+_DOCUMENTED_CAPABILITY_CODES = frozenset({"explicit_http_client", "explicit_remote_api_statement"})
 _DISCOVERY_KEYS = frozenset({"documents_hex", "issues"})
 
 # Pinned by ``transport_unavailable_constants_are_pinned`` in the runtime.
@@ -81,6 +108,12 @@ def _is_windows() -> bool:
 
 def _encoded_path(path: Path) -> str:
     text = anchor_to_process_directory(path)
+    return (text.encode("utf-16-le", "surrogatepass") if _is_windows() else os.fsencode(text)).hex()
+
+
+def _encoded_text(text: str) -> str:
+    """Encode a path without anchoring it, for a command that sends the cwd."""
+
     return (text.encode("utf-16-le", "surrogatepass") if _is_windows() else os.fsencode(text)).hex()
 
 
@@ -200,7 +233,12 @@ def _caller_incomplete_identity(reason: SkillDirectoryIdentityFailure) -> SkillD
     )
 
 
-def _exchange(command: dict[str, object], *, timeout_seconds: float) -> object | None:
+def _exchange(
+    command: dict[str, object],
+    *,
+    timeout_seconds: float,
+    required_feature: str = SKILL_DIRECTORY_IDENTITY_FEATURE,
+) -> object | None:
     deadline = time.monotonic() + timeout_seconds
     guard_home = _resolve_digest_home(None)
     request: dict[str, object] = {
@@ -226,7 +264,7 @@ def _exchange(command: dict[str, object], *, timeout_seconds: float) -> object |
         request=request,
         guard_home=guard_home,
         timeout_seconds=remaining,
-        required_feature=SKILL_DIRECTORY_IDENTITY_FEATURE,
+        required_feature=required_feature,
         response_schema=_RESULT_SCHEMA,
         status=status,
     )
@@ -241,6 +279,88 @@ def _exchange(command: dict[str, object], *, timeout_seconds: float) -> object |
     ):
         return None
     return response.get("payload")
+
+
+def native_skill_document_evidence(
+    skill_document: object,
+    *,
+    safe_roots: tuple[Path | None, ...],
+) -> dict[str, object] | None:
+    """Bounded evidence for one primary skill document, read by the runtime.
+
+    The document path travels exactly as the caller holds it, with the caller's
+    working directory alongside, so the runtime reads the same components the
+    caller sees and anchors a relative path the same way. ``None`` means no
+    bound answer arrived; the caller reports its own unavailable evidence.
+    """
+
+    if not isinstance(skill_document, str) or not skill_document:
+        return None
+    try:
+        process_directory = os.getcwd()
+    except OSError:
+        # A process whose working directory has been removed has no directory
+        # to anchor a relative document against, and the caller's own
+        # unavailable evidence is the answer that leaves.
+        return None
+    encoding = "utf16le" if _is_windows() else "os_bytes"
+    roots = [root for root in safe_roots if root is not None]
+    payload = _exchange(
+        {
+            "kind": "document_evidence",
+            "skill_document_hex": _encoded_text(skill_document),
+            "process_directory_hex": _encoded_path(Path(process_directory)),
+            "safe_roots_hex": [_encoded_path(root) for root in roots],
+            "path_encoding": encoding,
+        },
+        timeout_seconds=_DOCUMENT_EVIDENCE_TIMEOUT_SECONDS,
+        required_feature=SKILL_DOCUMENT_EVIDENCE_FEATURE,
+    )
+    return _decode_document_evidence(payload)
+
+
+def _decode_document_evidence(payload: object) -> dict[str, object] | None:
+    if not isinstance(payload, Mapping) or set(payload) != _DOCUMENT_EVIDENCE_KEYS:
+        return None
+    status = payload["readability_status"]
+    if status not in _DOCUMENT_READABILITY:
+        return None
+    byte_length = payload["byte_length"]
+    if byte_length is not None and not _is_count(byte_length):
+        return None
+    evidence: dict[str, object] = {"readabilityStatus": status}
+    if byte_length is not None:
+        evidence["byteLength"] = byte_length
+    if status != "readable":
+        return evidence
+    content_hash = payload["content_hash"]
+    line_count = payload["line_count"]
+    heading_count = payload["heading_count"]
+    frontmatter = payload["frontmatter_present"]
+    if (
+        not _is_sha256(content_hash)
+        or byte_length is None
+        or not _is_count(line_count)
+        or not _is_count(heading_count)
+        or not isinstance(frontmatter, bool)
+    ):
+        return None
+    capability = payload["documented_network_capability"]
+    if capability is not None and capability not in _DOCUMENTED_CAPABILITY_CODES:
+        return None
+    evidence.update(
+        {
+            "schemaVersion": SKILL_DOCUMENT_EVIDENCE_SCHEMA,
+            "contentHash": content_hash,
+            "lineCount": line_count,
+            "headingCount": heading_count,
+            "frontmatterPresent": frontmatter,
+            "truncatedForAnalysis": False,
+        }
+    )
+    if capability is not None:
+        evidence["documentedNetworkCapability"] = capability
+    return evidence
 
 
 def _is_count(value: object) -> TypeGuard[int]:
@@ -367,7 +487,10 @@ def _decode_discovery(payload: object, root: Path) -> SkillDocumentDiscovery | N
 
 __all__ = [
     "SKILL_DIRECTORY_IDENTITY_FEATURE",
+    "SKILL_DOCUMENT_EVIDENCE_FEATURE",
+    "SKILL_DOCUMENT_EVIDENCE_SCHEMA",
     "native_discover_skill_documents",
     "native_inspect_skill_directory",
+    "native_skill_document_evidence",
     "unavailable_skill_directory_identity",
 ]

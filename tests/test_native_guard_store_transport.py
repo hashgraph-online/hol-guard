@@ -94,7 +94,7 @@ def test_invalid_reason_from_the_resident_is_surfaced() -> None:
 def _patch_transport(
     monkeypatch: pytest.MonkeyPatch, clock: list[float], seen: dict[str, Any], on_request: Callable[[], None]
 ) -> None:
-    monkeypatch.setattr(native_guard_store, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(native_guard_store, "ensure_resident_prerequisite", lambda _home, **_kwargs: True)
     monkeypatch.setattr(native_guard_store.time, "monotonic", lambda: clock[0])
 
     def request(**kwargs: Any) -> None:
@@ -249,3 +249,33 @@ def test_idle_watcher_does_not_stay_alive_on_an_unavailable_outbox(
     daemon._server.last_activity_monotonic = time.monotonic() - 30
     daemon._watch_for_idle_shutdown()
     assert shutdowns == [True]
+
+
+def test_the_request_digest_never_covers_the_policy_integrity_key() -> None:
+    """The resident drops the same argument names before it digests the request.
+
+    The client checks ``request_sha256`` on every reply, so if the two lists
+    disagree every signed policy write fails as a digest mismatch.
+    """
+
+    request: dict[str, Any] = {
+        "schema": "guard-store-request.v1",
+        "request_id": "digest",
+        "store_path": "/guard-home/guard.db",
+        "guard_home": "/guard-home",
+        "method": "upsert_policy",
+        "source": "guard",
+        "busy_timeout_ms": 5000,
+        "args": {"harness": "codex", "scope": "artifact", "integrity_key_id": "key-1"},
+    }
+    bare = native_guard_store._canonical_request_sha256(native_guard_store._digest_material(request))
+
+    keyed = {**request, "args": {**request["args"], "integrity_key_b64": "c2VjcmV0"}}
+    other_key = {**request, "args": {**request["args"], "integrity_key_b64": "ZGlmZmVyZW50"}}
+    assert native_guard_store._canonical_request_sha256(native_guard_store._digest_material(keyed)) == bare
+    assert native_guard_store._canonical_request_sha256(native_guard_store._digest_material(other_key)) == bare
+
+    renamed = {**request, "args": {**request["args"], "integrity_key_id": "key-2"}}
+    assert native_guard_store._canonical_request_sha256(native_guard_store._digest_material(renamed)) != bare
+    assert "integrity_key_b64" not in native_guard_store._digest_material(keyed)["args"]
+    assert keyed["args"]["integrity_key_b64"] == "c2VjcmV0"

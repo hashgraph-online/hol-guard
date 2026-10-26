@@ -1,11 +1,12 @@
 //! Native launch plan for `workspace-contained-v1`.
 use super::workspace_linked::admissible_checkout;
 use super::*;
-use crate::pretool::generic::chain_literals::inert::temp_cd;
-use crate::pretool::generic::{chain_literals, contained_publish, workspace_redirects};
+use crate::pretool::generic::contained_publish;
 use crate::pretool::workspace_git_config::{linked_git_dirs, workspace_write_denials};
 use crate::pretool::workspace_git_environment::GitVariables;
-use crate::pretool::{command_shape, Shape, WORKSPACE_PROFILE};
+use crate::pretool::{
+    workspace_exact_shape as exact_shape, workspace_runs_whole as runs_whole, WORKSPACE_PROFILE,
+};
 use crate::{parse_command, CommandModelRequestV1};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -33,57 +34,6 @@ struct Input {
 
 fn invalid(message: &str) -> RestrictedPytestError {
     RestrictedPytestError::new(PYTEST_INVALID_COMMAND_REASON_CODE, message)
-}
-
-/// The canonical workspace for `cwd`, or `None` for a missing directory or a
-/// filesystem, home, temporary or credential-directory root.
-pub(crate) fn workspace_admissible(cwd: &Path, home: Option<&Path>) -> Option<PathBuf> {
-    let resolved = cwd.canonicalize().ok()?;
-    (resolved.is_dir() && !workspace_is_broad_or_sensitive_for_home(&resolved, home))
-        .then_some(resolved)
-}
-
-/// The sandbox shape for the exact `text` about to run, or `None` when the
-/// workspace sandbox cannot bound it. Literal-path redirects are classified
-/// without them, chained `$NAME` uses as the literal assigned earlier in the
-/// chain, and a `cd "$(mktemp -d)"` as the temporary stand-in; the raw text
-/// still runs, so such a shape must run it whole, and the real `mktemp`
-/// creates its directory under the sandbox's private `TMPDIR`.
-pub(crate) fn exact_shape(text: &str, workspace: &Path) -> Option<Shape> {
-    // A trailing subshell group runs exactly the command list inside it, so
-    // the list's shape is the group's. The group text itself models no
-    // command, so without this the sandbox could not plan a group the
-    // decision already routed to it.
-    if let Some(ungrouped) = crate::pretool::ungrouped_command_list(text) {
-        return exact_shape(&ungrouped, workspace).filter(runs_whole);
-    }
-    if let Some(projected) = temp_cd::project(text) {
-        return exact_shape(&projected, workspace).filter(runs_whole);
-    }
-    match chain_literals::substitute(text) {
-        Some(substituted) => literal_shape(&substituted, workspace).filter(runs_whole),
-        None => literal_shape(text, workspace),
-    }
-}
-
-fn runs_whole(shape: &Shape) -> bool {
-    shape.bootstrap.is_none() && shape.prefix.is_none() && shape.remainder.is_none()
-}
-
-fn literal_shape(text: &str, workspace: &Path) -> Option<Shape> {
-    match workspace_redirects::project(text) {
-        Some(projected) => workspace_redirects::contained_shape(text, &projected, workspace),
-        None => {
-            let model = parse_command(&CommandModelRequestV1 {
-                command: text.to_owned(),
-                dialect: "posix".into(),
-                transport: "shell_string".into(),
-                extraction_provenance: "pre-tool-generic".into(),
-            })
-            .ok()?;
-            command_shape(&model, workspace, Some(text))
-        }
-    }
 }
 
 fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
@@ -144,6 +94,7 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
         &input.search_path,
         input.home.as_deref(),
         &workspace,
+        Some(&input.text),
         reaches_go_modules(&input.text, &workspace),
         reaches_cargo_caches(&input.text, &workspace),
         reaches_maven_repository(&input.text, &workspace),

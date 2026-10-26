@@ -28,25 +28,6 @@ const NODE_MANAGERS: &[&str] = &["npm", "pnpm", "yarn", "bun"];
 // The runners that fetch the package they name. Only the caller's proof that
 // every one of them starts an installed project tool makes them local work.
 const PACKAGE_RUNNERS: &[&str] = &["npx", "bunx", "pnpx"];
-pub(super) const NODE_PACKAGE_EXTENSION: &str = "command.package.node";
-const PYTHON_PACKAGE_EXTENSION: &str = "command.package.python";
-const GO_PACKAGE_EXTENSION: &str = "command.package.go";
-const RUST_PACKAGE_EXTENSION: &str = "command.package.rust";
-const PHP_PACKAGE_EXTENSION: &str = "command.package.php";
-const RUBY_PACKAGE_EXTENSION: &str = "command.package.ruby";
-const JVM_PACKAGE_EXTENSION: &str = "command.package.jvm";
-// The package-firewall permissions that mark a manager's use. They record
-// which ecosystem ran, not a risk the run carries, so a local verb below one
-// of them is still ordinary workspace work.
-pub(crate) const PACKAGE_EXTENSIONS: &[&str] = &[
-    NODE_PACKAGE_EXTENSION,
-    PYTHON_PACKAGE_EXTENSION,
-    GO_PACKAGE_EXTENSION,
-    RUST_PACKAGE_EXTENSION,
-    PHP_PACKAGE_EXTENSION,
-    RUBY_PACKAGE_EXTENSION,
-    JVM_PACKAGE_EXTENSION,
-];
 // The Python managers the package firewall watches. Each can install what it
 // runs, so only the queries and runner verbs [`super::python`] admits are
 // local work; `uv` is the exception below.
@@ -102,10 +83,6 @@ const UV_GLOBAL_FLAGS: &[&str] = &[
 // uv's global options that move the project a verb works on, so the
 // environment the check below looks for moves with them.
 const UV_PROJECT_OPTIONS: &[&str] = &["--directory", "--project"];
-// How much of a script is read to find the dependency block. PEP 723 allows
-// the block anywhere in the file, so the whole script is read, up to a bound
-// that keeps a hook from paging in an arbitrarily large one.
-const SCRIPT_BYTES: u64 = 1 << 20;
 // Verbs that fetch from, or publish to, a registry. Without network they would
 // fail silently, so they keep supply-chain admission or consent instead. This
 // excludes by effect; local verbs and script names are never enumerated.
@@ -212,6 +189,7 @@ struct UvCommand {
     verb: usize,
     directory: PathBuf,
     project: PathBuf,
+    discovered: bool,
     operand: Option<usize>,
 }
 
@@ -279,33 +257,22 @@ fn uv_command(arguments: &[&str], directory: &Path, workspace: &Path) -> Option<
         verb,
         directory: run,
         project,
+        discovered: named.is_none(),
         operand,
     })
 }
 
-/// Whether `path` is a script that carries its own dependencies. uv installs
-/// those into a fresh environment before it runs the script, which the
-/// sandbox has no network for.
-fn declares_dependencies(path: &Path) -> bool {
-    use std::io::Read;
-    let Ok(file) = std::fs::File::open(path) else {
-        return false;
-    };
-    let mut text = Vec::new();
-    if file.take(SCRIPT_BYTES).read_to_end(&mut text).is_err() {
-        return false;
-    }
-    String::from_utf8_lossy(&text)
-        .lines()
-        .any(|line| line.trim_end() == "# /// script")
-}
-
-/// Whether `uv` runs a local verb against an environment the project
-/// already holds. uv materializes a project environment before it runs
-/// anything, so without `.venv` the run would have to install, which the
-/// sandbox has no network for; those commands keep the admission they have.
-/// An operand uv has to write, fetch or install for keeps it for the same
-/// reason.
+/// Whether `uv` runs a local verb against an environment the project already
+/// holds. uv materializes one before it runs anything, so without `.venv` the
+/// run would have to install, which the sandbox has no network for; those
+/// commands keep the admission they have, as does an operand uv must write,
+/// fetch or install for. Which project holds the environment is found the way
+/// uv finds it: with no `--project` uv ascends from the directory the run
+/// enters to the nearest `pyproject.toml`, so a run standing below a
+/// single-project repository reaches the root's `.venv`, and the ascent stops
+/// at that project as uv's does — one holding no environment is a project uv
+/// would sync, not one borrowing the root's. `--project` names the project
+/// outright and uv reads no other, so that path is checked where it stands.
 fn local_uv_work(arguments: &[&str], directory: &Path, workspace: &Path) -> bool {
     let Some(uv) = uv_command(arguments, directory, workspace) else {
         return false;
@@ -323,12 +290,18 @@ fn local_uv_work(arguments: &[&str], directory: &Path, workspace: &Path) -> bool
         // script carrying a dependency block has those installed first.
         if verb == "version"
             || operand.contains("://")
-            || declares_dependencies(&uv.directory.join(operand))
+            || super::python::declares_dependencies(&uv.directory.join(operand))
         {
             return false;
         }
     }
-    uv.project.join(".venv").is_dir()
+    if !uv.discovered {
+        return uv.project.join(".venv").is_dir();
+    }
+    super::cd::first_from(&uv.project, workspace, |probe| {
+        probe.join("pyproject.toml").is_file()
+    })
+    .is_some_and(|project| project.join(".venv").is_dir())
 }
 
 /// Whether `name` runs Maven, by either spelling the JVM extension claims.
@@ -394,7 +367,7 @@ pub(super) fn local_package_work(
                 .map(String::as_str)
                 .take_while(|argument| *argument != "--")
                 .collect();
-            return super::compiled::local_go_work(&arguments, directory);
+            return super::compiled::local_go_work(&arguments, directory, workspace);
         }
         if maven_executable(&name) {
             let Some(directory) = directory.as_deref() else {
@@ -418,7 +391,7 @@ pub(super) fn local_package_work(
                 .map(String::as_str)
                 .take_while(|argument| *argument != "--")
                 .collect();
-            return super::compiled::local_cargo_work(&arguments, directory);
+            return super::compiled::local_cargo_work(&arguments, directory, workspace);
         }
         if PYTHON_MANAGERS.contains(&name.as_str()) {
             let Some(directory) = directory.as_deref() else {
@@ -470,30 +443,43 @@ pub(super) fn local_package_work(
             .take_while(|argument| *argument != "--")
             .collect();
         // A bare `yarn` (or `yarn --frozen-lockfile`) installs, so the verb must
-        // come first; `npm init <name>` runs a fetched initializer. A leading
-        // option such as `--cwd dir` hides the verb and keeps the command out.
-        let version_probe = arguments
+        // come first; `npm init <name>` runs a fetched initializer. The verb
+        // is read behind the words [`options::skip_inert_options`] knows; any
+        // other leading option, `--cwd dir` among them, still hides it.
+        let behind = &arguments[options::skip_inert_options(&name, &arguments)..];
+        // `yarn workspaces focus` installs the dependencies of the projects it
+        // selects, and `yarn workspaces foreach` runs a command of its own in
+        // each of them. The verb names neither effect, so the subcommand after
+        // it decides, and neither effect is the local script work this admits.
+        let workspace_fanout = name == "yarn" && behind.first() == Some(&"workspaces");
+        let version_probe = behind
             .iter()
             .all(|argument| matches!(*argument, "-v" | "--version" | "-h" | "--help"));
-        let leading_verb = arguments
+        let leading_verb = behind
             .first()
             .is_some_and(|argument| !argument.starts_with('-'));
-        let positional_init = arguments
+        let positional_init = behind
             .iter()
             .position(|argument| *argument == "init")
             .is_some_and(|index| {
-                arguments[index + 1..]
+                behind[index + 1..]
                     .iter()
                     .any(|argument| !argument.starts_with('-'))
             });
-        !arguments.is_empty()
+        // The registry scan stays on the whole list, so a selector spelled
+        // like a registry verb keeps the command out rather than passing.
+        !behind.is_empty()
             && (leading_verb || version_probe)
+            && !workspace_fanout
             && !positional_init
             && !arguments
                 .iter()
                 .any(|argument| REGISTRY_VERBS.contains(&argument.to_ascii_lowercase().as_str()))
     })
 }
+
+#[path = "workspace_contained_package_options.rs"]
+mod options;
 
 #[cfg(test)]
 #[path = "workspace_contained_cargo_tests.rs"]

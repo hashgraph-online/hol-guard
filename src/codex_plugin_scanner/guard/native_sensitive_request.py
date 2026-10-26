@@ -77,12 +77,6 @@ def _git_executable() -> str | None:
     return found if found is not None and os.path.isabs(found) else None
 
 
-def _control_snapshot() -> dict[str, object] | None:
-    from .cli.commands_hook_native_generic_facts import _control_snapshot as snapshot
-
-    return snapshot()
-
-
 def _path_text(value: Path | None) -> str | None:
     return None if value is None else str(value)
 
@@ -103,7 +97,7 @@ def _ask(query: str, input_value: dict[str, Any], *, cwd: Path | None, home_dir:
                 "input": {**input_value, "cwd": _path_text(cwd), "home_dir": _path_text(home_dir)},
                 "facts": facts,
                 "git_executable": _git_executable(),
-                "control_snapshot": _control_snapshot(),
+                "control_snapshot": None,
             },
         },
         source="hook",

@@ -105,8 +105,7 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
         );
     }
     model.segments[1..].iter().all(|segment| {
-        (cwd_read_executable(segment.executable.as_deref())
-            || super::super::version_probes::lone_probe_segment(segment))
+        !cwd_effectful_segment(segment)
             && exact_safe_segment_with_context(
                 model,
                 segment,
@@ -125,6 +124,62 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
                 },
             )
     })
+}
+
+/// Whether `segment` carries an effect the generic branch must not admit:
+/// its executable is one of the effectful names below, or its own proof is
+/// one of the few that authorize an effect for a program whose other shapes
+/// only read.
+fn cwd_effectful_segment(segment: &crate::CommandSegmentV1) -> bool {
+    if cwd_effectful_executable(segment.executable.as_deref()) {
+        return true;
+    }
+    let words: Vec<&str> = segment.arguments.iter().map(String::as_str).collect();
+    match segment.executable.as_deref() {
+        // `docker ps` and the other listings read; `docker start` and
+        // `docker container start` run an existing container again.
+        Some("docker") => super::super::docker_start::start_shaped(&words),
+        // `hol-guard dashboard` starts Guard's daemon and opens a browser.
+        Some("hol-guard") => words.contains(&"dashboard"),
+        _ => false,
+    }
+}
+
+/// Executables a verified `cd` compound keeps out of its generic branch.
+///
+/// Every later step of the compound is proven again against the verified
+/// directory, so a program the proof admits there has already been read as
+/// safe in that directory. Naming the readers a second time only meant that a
+/// reader this module had not listed - `pip list`, `npm ls`, `docker ps`,
+/// `awk`, `file`, `realpath` - lost a proof it had standalone and became an
+/// approval row. The names below are the ones whose own proofs can authorize
+/// an effect rather than a read: a path written, a process stopped, a server
+/// started, or a shell variable the later steps inherit. Mutations keep the
+/// narrower two-segment handling above, which bounds the write to the
+/// workspace; they must not ride the generic branch.
+fn cwd_effectful_executable(executable: Option<&str>) -> bool {
+    matches!(
+        executable,
+        Some(
+            "cd" | "cp"
+                | "mktemp"
+                | "mkdir"
+                | "touch"
+                | "mv"
+                | "ln"
+                | "rm"
+                | "dd"
+                | "rustfmt"
+                | "pkill"
+                | "pg_ctl"
+                | "export"
+                | "set"
+                | "unset"
+                // `--output`, `--remote-name` and `--dump-header` write what
+                // curl fetched into the directory the `cd` named.
+                | "curl"
+        )
+    )
 }
 
 /// Executables a verified `cd` compound may run after the directory change.

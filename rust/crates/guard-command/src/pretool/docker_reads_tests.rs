@@ -286,7 +286,6 @@ fn remote_daemons_secrets_and_other_subcommands_stay_reviewed() {
         vec!["pull", "alpine"],
         vec!["system", "prune", "-af"],
         vec!["rm", "-f", "web"],
-        vec!["stats", "--no-stream"],
         vec!["scan", "alpine"],
         vec!["ps", "web"],
         vec!["ps", "-x"],
@@ -360,5 +359,108 @@ fn remote_daemons_secrets_and_other_subcommands_stay_reviewed() {
         vec!["context"],
     ] {
         assert!(!safe_docker_arguments(&arguments(&words)), "{words:?}");
+    }
+}
+
+#[test]
+fn daemon_summaries_that_resolve_no_project_are_admitted() {
+    for words in [
+        vec!["volume", "ls"],
+        vec!["volume", "list"],
+        vec!["volume", "ls", "-q"],
+        vec!["volume", "ls", "--filter=dangling=true"],
+        vec!["volume", "ls", "-f", "driver=local"],
+        vec!["network", "ls"],
+        vec!["network", "list"],
+        vec!["network", "ls", "-q", "--no-trunc"],
+        vec!["network", "ls", "--filter=driver=bridge"],
+        vec!["network", "ls", "--format", "{{.Name}} {{.Driver}}"],
+        vec!["network", "ls", "--format={{json .ID}}"],
+        vec!["system", "df"],
+        vec!["system", "df", "-v"],
+        vec!["system", "df", "--verbose"],
+        vec![
+            "system",
+            "df",
+            "--format",
+            "{{.Type}} {{.Size}} {{.Reclaimable}}",
+        ],
+        vec!["stats", "--no-stream"],
+        vec!["stats", "--no-stream", "--all"],
+        vec!["stats", "--no-stream", "web", "api"],
+        vec!["stats", "--no-stream", "--format", "{{.Name}} {{.CPUPerc}}"],
+    ] {
+        assert!(
+            safe_docker_arguments(&arguments(&words)),
+            "{}",
+            words.join(" ")
+        );
+    }
+}
+
+#[test]
+fn summaries_that_stream_name_a_secret_or_query_a_registry_stay_reviewed() {
+    for words in [
+        // Without `--no-stream` the command redraws until it is interrupted.
+        vec!["stats"],
+        vec!["stats", "web"],
+        vec!["stats", "--all"],
+        // `--format` takes the next word as its template, so the word that was
+        // supposed to bound the stream is consumed by it and the command
+        // redraws exactly as a bare `docker stats` does.
+        vec!["stats", "--format", "--no-stream"],
+        vec!["stats", "--format=--no-stream"],
+        // A network row carries the labels it was created with, and a verbose
+        // disk row reaches the volumes and the options they were created with.
+        vec!["network", "ls", "--format", "{{.Labels}}"],
+        vec!["network", "ls", "--format", "{{json .}}"],
+        vec!["network", "ls", "--format", "json"],
+        vec!["network", "ls", "--format=json"],
+        vec!["network", "ls", "--format", "{{.IPAM.Config}}"],
+        vec!["system", "df", "--format", "{{json .}}"],
+        vec!["system", "df", "--format", "json"],
+        vec![
+            "system",
+            "df",
+            "-v",
+            "--format",
+            "{{range .Volumes}}{{.Labels}}{{end}}",
+        ],
+        // `--format json` on a volume listing serializes the `--opt` values a
+        // CIFS or NFS volume was created with, credentials among them.
+        vec!["volume", "ls", "--format", "{{json .}}"],
+        vec!["volume", "ls", "--format=json"],
+        // A volume listing has no `--all` or `--no-trunc` of its own, and a
+        // disk summary has no filter.
+        vec!["volume", "ls", "-a"],
+        vec!["volume", "ls", "--no-trunc"],
+        vec!["system", "df", "--filter=type=image"],
+        // `info` names the proxy the daemon was configured with, and a proxy
+        // URL is written with its credentials in it.
+        vec!["info"],
+        vec!["info", "--format", "{{.ServerVersion}}"],
+        // A process listing prints command lines and an image history the
+        // commands it was built from; both routinely hold a secret.
+        vec!["top", "web"],
+        vec!["history", "nginx:latest"],
+        vec!["diff", "web"],
+        // These reach a registry rather than the local daemon.
+        vec!["search", "nginx"],
+        vec!["manifest", "inspect", "nginx:latest"],
+        vec!["trust", "inspect", "nginx"],
+        // Removal and pruning are not summaries.
+        vec!["volume", "prune"],
+        vec!["volume", "rm", "data"],
+        vec!["network", "prune"],
+        vec!["network", "rm", "web"],
+        vec!["system", "prune", "-a"],
+        // A streaming event feed never returns either.
+        vec!["system", "events"],
+    ] {
+        assert!(
+            !safe_docker_arguments(&arguments(&words)),
+            "{}",
+            words.join(" ")
+        );
     }
 }

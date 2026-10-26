@@ -107,6 +107,24 @@ def test_request_is_bound_non_retaining_and_requires_feature(monkeypatch, tmp_pa
     assert request["store_path"] == str(tmp_path / "guard.db")
 
 
+def test_an_answer_whose_evidence_ids_miss_a_recorded_package_blocks(monkeypatch, tmp_path: Path) -> None:
+    """The recorder writes the resident's ids, so a short list is a disagreement, not a row to invent."""
+
+    def hold_one_package(reply: dict[str, object]) -> None:
+        payload = reply["payload"]
+        payload.update(
+            decision="ask",
+            policy_action="review",
+            packages=[{"name": "left-pad", "resolvedVersion": "1.3.0", "decision": "ask"}],
+            evidence_ids=[],
+        )
+
+    _bind(monkeypatch, mutate=hold_one_package)
+    result = _evaluate(tmp_path)
+    assert result.decision == "block"
+    assert result.reasons[0]["code"] == "native_supply_chain_eval_unavailable"
+
+
 @pytest.mark.parametrize(
     "mutate",
     [

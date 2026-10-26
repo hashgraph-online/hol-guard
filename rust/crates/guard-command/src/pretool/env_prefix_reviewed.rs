@@ -69,7 +69,7 @@ fn plain_data(name: &str, value: &str) -> bool {
 
 #[cfg(unix)]
 fn forwarded(name: &str) -> bool {
-    crate::restricted_pytest::forwarded_setting(name)
+    crate::forwarded_settings::forwarded_setting(name)
 }
 
 /// Without the restricted launchers every setting counts as forwarded.

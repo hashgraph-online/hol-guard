@@ -126,20 +126,34 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
             pack_record_digest=_plan_pack_digest(plan),
         )
 
-    def _roll_back_abandoned_transition(self, revision: int, *, snapshot_digest: str, key: bytes) -> bool:
+    def _roll_back_abandoned_transition(
+        self,
+        revision: int,
+        *,
+        snapshot_digest: str,
+        key: bytes,
+        own_transition_digest: str | None = None,
+    ) -> bool:
         """Discard a prepared transition the vault anchor never moved past.
 
         The resident decides: the row must sit above a committed anchor that
         still pins ``snapshot_digest``, authenticate as prepared, and have
         outlived the window in which its own request may retry with its
-        single-use proof. Anchored or committed transitions are left for
-        explicit recovery. Returns whether the abandoned row was removed.
+        single-use proof. A caller that wrote the row and failed to anchor it
+        names it with ``own_transition_digest`` and skips that window.
+        Anchored or committed transitions are left for explicit recovery.
+        Returns whether the abandoned row was removed.
         """
 
         from .native_policy_snapshot_constants import NativePolicySnapshotError
 
         plan = self._authority_plan(
-            "rollback_plan", key=key, revision=revision, snapshot_digest=snapshot_digest, now=_now()
+            "rollback_plan",
+            key=key,
+            revision=revision,
+            snapshot_digest=snapshot_digest,
+            now=_now(),
+            own_transition_digest=own_transition_digest,
         )
         if plan["outcome"] != "abandon":
             return False

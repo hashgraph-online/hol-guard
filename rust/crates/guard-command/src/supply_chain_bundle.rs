@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 use base64ct::{Base64, Encoding};
-use guard_contracts::write_canonical_json;
+use guard_contracts::write_canonical_json_utf8;
 use rsa::pkcs1::DecodeRsaPublicKey;
 use rsa::pkcs8::DecodePublicKey;
 use rsa::pss::{Signature as RsaPssSignature, VerifyingKey as RsaPssVerifyingKey};
@@ -35,8 +35,8 @@ use crate::supply_chain_package_identity::{
 // `supply_chain_bundle_base` constants (:7-13).
 // ---------------------------------------------------------------------------
 
-const BUNDLE_MAX_AGE_SECONDS: f64 = 86_400.0 * 7.0;
-const BUNDLE_CLOCK_SKEW_SECONDS: f64 = 300.0;
+pub(crate) const BUNDLE_MAX_AGE_SECONDS: f64 = 86_400.0 * 7.0;
+pub(crate) const BUNDLE_CLOCK_SKEW_SECONDS: f64 = 300.0;
 
 const PACKAGE_ACTION_VALUES: &[&str] = &["allow", "monitor", "warn", "ask", "block"];
 const SEVERITY_VALUES: &[&str] = &["unknown", "low", "medium", "high", "critical"];
@@ -837,11 +837,13 @@ fn now_seconds() -> f64 {
 }
 
 /// `canonical_supply_chain_bundle_payload` (:57) — `json.dumps` with
-/// `sort_keys=True`, `separators=(",", ":")`, `ensure_ascii=True` (CPython
-/// default), `allow_nan=True`.
+/// `sort_keys=True`, `separators=(",", ":")`, `ensure_ascii=False`. Non-ASCII
+/// text stays UTF-8 because that is how the signing side writes the bytes it
+/// signs; escaping it would make every bundle that carries such text fail the
+/// payload-hash check.
 pub fn canonical_supply_chain_bundle_payload(payload: &Map<String, Value>) -> Vec<u8> {
     let mut out = Vec::new();
-    let _ = write_canonical_json(&Value::Object(payload.clone()), &mut out);
+    let _ = write_canonical_json_utf8(&Value::Object(payload.clone()), &mut out);
     out
 }
 

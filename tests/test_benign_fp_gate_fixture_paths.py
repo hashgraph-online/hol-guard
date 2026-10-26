@@ -71,6 +71,18 @@ _PROBES_FOR_ABSENCE = frozenset(
         # whole case, since an absent name under the workspace is what the
         # missing-read screen admits without a review.
         "cat-missing-name-inside-the-worktree",
+        # A recursive read whose root is not there: the walk opens nothing,
+        # which is exactly the shape these cases measure. Building the root
+        # would turn them into ordinary recursive reads of a populated tree,
+        # which other cases already cover.
+        "grep-recursive-absent-sibling-dir",
+        "grep-recursive-absent-nested-module",
+        "ls-recursive-absent-sibling-dir",
+        "ls-recursive-absent-nested-module",
+        "tree-recursive-absent-sibling-dir",
+        "tree-recursive-absent-nested-module",
+        "grep-recursive-absent-probe-fallback",
+        "ls-recursive-absent-probe-fallback",
     }
 )
 

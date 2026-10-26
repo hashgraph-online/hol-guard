@@ -91,10 +91,14 @@ fn classify_operands(text: &str, arguments: &[String]) -> Option<Vec<Operand>> {
         .collect()
 }
 
+/// `absent_recursive` says whether a missing operand stays missing while the
+/// listing runs: no peer segment may create a file, directory or link at that
+/// name, because a recursive listing walks whatever appears there.
 pub(super) fn safe_listing_segment(
     text: &str,
     arguments: &[String],
     context: super::PathContext<'_>,
+    absent_recursive: bool,
 ) -> bool {
     let recursive = arguments.iter().any(|argument| is_recursive_flag(argument));
     let lists_hidden = arguments
@@ -128,9 +132,17 @@ pub(super) fn safe_listing_segment(
             None => &Operand::Plain,
         };
         let allowed = match kind {
+            // A name that is not there holds no tree to walk, so a recursive
+            // listing of it prints the same error a plain `ls` does. A `~` is
+            // expanded by the shell from its own `HOME`, which this screen
+            // reads as the declared home, so a walk is admitted under it only
+            // once `shell_home_matches` says the two name one directory.
             Operand::Plain if recursive => {
                 surviving += 1;
                 search::safe_recursive_listing_target(argument, context, lists_hidden)
+                    || (absent_recursive
+                        && (!argument.starts_with('~') || context.shell_home_matches)
+                        && absent_listing_operand(argument, context))
             }
             // A listing without a glob admits a name that is not there, because
             // the shell prints an error and nothing else. One glob beside it
@@ -239,6 +251,10 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
 }
 
 /// The path an operand names, with `~` and a relative cwd resolved.
+///
+/// A `~` is expanded here from the declared `home_dir`, which is the home the
+/// shell reports; where a caller needs the two to be one directory it screens
+/// `shell_home_matches` itself before admitting the operand.
 fn expanded_path(value: &str, context: super::PathContext<'_>) -> Option<std::path::PathBuf> {
     if value.starts_with('~') {
         super::read_paths::expand_home_read_path(value, context.home_dir)
@@ -388,7 +404,7 @@ fn listable_ancestor(ancestor: &std::path::Path, context: super::PathContext<'_>
     };
     resolved.to_str().is_some_and(|parent| {
         safe_reads::bounded_read_target(parent, context.home_dir, context.cwd, true)
-            || (!parent_steps && search::skill_listing_root(parent, context))
+            || (!parent_steps && search::skill_listing_root(parent, context, false))
     })
 }
 

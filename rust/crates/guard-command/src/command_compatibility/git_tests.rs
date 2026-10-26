@@ -138,3 +138,33 @@ fn inspection_exemption_does_not_cover_execution_routing_or_mutation() {
         );
     }
 }
+
+#[test]
+fn a_submodule_status_listing_invents_no_unrelated_git_owners() {
+    for command in [
+        "git submodule",
+        "git submodule status",
+        "git submodule status -q",
+        "git submodule status --quiet",
+        "git submodule status vendor/lib",
+    ] {
+        assert!(observations(command).rule_matches.is_empty(), "{command}");
+    }
+    for command in [
+        "git submodule status --cached",
+        "git submodule status --cached -- vendor/lib",
+        "git submodule status --recursive",
+        "git submodule update",
+        "git submodule update --init --recursive",
+        "git submodule foreach git status",
+        "git submodule add https://example.invalid/lib vendor/lib",
+        "git submodule deinit vendor/lib",
+    ] {
+        let result = observations(command);
+        assert!(!result.rule_matches.is_empty(), "{command}");
+        assert!(
+            result.rule_matches.iter().all(|item| item.uncertainty),
+            "{command}"
+        );
+    }
+}

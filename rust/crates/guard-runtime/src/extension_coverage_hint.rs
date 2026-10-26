@@ -1,5 +1,5 @@
 //! Queue-time coverage hint: which extension governs which step of a paused
-//! command (`compute_extension_coverage_hint`, `extension_coverage_hint.py`).
+//! command.
 //!
 //! The allow hint answers whether enabling a few permissions would let the
 //! whole command run, and stays silent whenever the answer is no. This hint

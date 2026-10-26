@@ -21,6 +21,7 @@ from .review_fixtures import (
     PLAN_NOTE_PROTECTION_CASE,
     WORKTREE_CASE,
 )
+from .runtime_cases import RUNTIME_BLOCK_REASONS, runtime_required_checks
 from .script_cases import CREDENTIAL_STORE_CASES, SCRIPT_BLOCK_REASONS, STORE_CHECK
 from .session_folder import EDIT_CASE as SESSION_EDIT_CASE
 from .session_folder import SHELL_CASE as SESSION_SHELL_CASE
@@ -52,6 +53,8 @@ def block_reasons(scenario: Scenario) -> frozenset[str]:
         return PACKAGE_BLOCK_REASONS[scenario.id]
     if scenario.id in SCRIPT_BLOCK_REASONS:
         return SCRIPT_BLOCK_REASONS[scenario.id]
+    if scenario.id in RUNTIME_BLOCK_REASONS:
+        return RUNTIME_BLOCK_REASONS[scenario.id]
     return REMOTE_CODE_CASES.get(scenario.id, BLOCK_REASONS)
 
 
@@ -109,6 +112,7 @@ def required_checks(scenario: Scenario) -> set[str]:
         checks.add("business-cli-executed-absent")
     if scenario.id == "linked-destination-touch":
         checks.add("protected:.env:metadata")
+    checks.update(runtime_required_checks(scenario.id))
     return checks
 
 

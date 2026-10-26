@@ -152,7 +152,7 @@ pub(super) fn fix_command(package: &Map<String, Value>) -> Option<String> {
 /// `_result_package_identity` (:5073-5099).
 // supply_chain_package_eval.py:5073-5099
 pub(super) fn result_package_identity(
-    deps: &SupplyChainEvalDeps<'_>,
+    identity_api: &dyn PackageIdentityApi,
     package: &Map<String, Value>,
 ) -> (String, String, String, String, String, String) {
     let ecosystem = optional_string(package.get("ecosystem"));
@@ -161,7 +161,7 @@ pub(super) fn result_package_identity(
     let version = optional_string(package.get("resolvedVersion"))
         .or_else(|| optional_string(package.get("requestedVersion")));
     if let Some(eco) = &ecosystem {
-        if let Ok(identity) = deps.identity.canonical_package_identity(
+        if let Ok(identity) = identity_api.canonical_package_identity(
             eco,
             namespace.as_deref(),
             &name,
@@ -195,7 +195,7 @@ pub(super) fn result_package_identity(
 /// `_evidence_id` (:5060-5070).
 // supply_chain_package_eval.py:5060-5070
 pub(super) fn evidence_id(
-    deps: &SupplyChainEvalDeps<'_>,
+    identity_api: &dyn PackageIdentityApi,
     package_intent_hash: &str,
     package: &Map<String, Value>,
 ) -> String {
@@ -203,7 +203,7 @@ pub(super) fn evidence_id(
         optional_string(package.get("decision")).unwrap_or_else(|| "monitor".to_string());
     let dependency_path =
         optional_string(package.get("dependencyPath")).unwrap_or_else(|| "direct".to_string());
-    let identity = result_package_identity(deps, package);
+    let identity = result_package_identity(identity_api, package);
     let identity_payload = json!({
         "decision": decision,
         "dependency_path": dependency_path,

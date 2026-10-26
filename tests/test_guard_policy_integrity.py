@@ -52,6 +52,7 @@ from codex_plugin_scanner.guard.local_trust_contract import (
     select_trust_backend,
 )
 from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisite
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
     NATIVE_POLICY_VERIFIER_KEY_NAME,
     NATIVE_RUNTIME_STATE_DIRECTORY,
@@ -1132,6 +1133,10 @@ def test_upsert_policy_uses_single_integrity_key_lookup_per_write(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = _store(tmp_path)
+    # The resident's one-time verifier-key provisioning also reads the master.
+    # It happens once per guard home, not once per write, so settle it before
+    # counting the lookups the write itself makes.
+    assert ensure_resident_prerequisite(store.guard_home, store=store)
     original_lookup = store._policy_integrity_secret_material
     lookup_calls = 0
 
@@ -4019,3 +4024,98 @@ def test_symlinked_guard_home_forces_degraded_local_policy_authority(tmp_path: P
     assert verify["mode"] == "degraded"
     assert "guard_home_symlink" in verify["degraded_reasons"]
     assert verify["counts"]["degraded_mode"] == 1
+
+
+def _generation_lock_is_held(guard_home: Path) -> bool:
+    """Probe the generation lock from a second open file description."""
+
+    import fcntl
+
+    with (guard_home / "policy-integrity-generation.lock").open("a+b") as handle:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return True
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        return False
+
+
+@pytest.mark.skipif(os.name == "nt", reason="flock probes the POSIX advisory lock.")
+def test_upsert_policy_holds_the_policy_integrity_generation_lock(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "home")
+    observed: list[bool] = []
+    original = store._native_store_call
+
+    def record(operation: str, args: dict[str, object]) -> object:
+        if operation == "upsert_policy":
+            observed.append(_generation_lock_is_held(store.guard_home))
+        return original(operation, args)
+
+    store._native_store_call = record  # type: ignore[method-assign]
+    store.upsert_policy(
+        _decision(artifact_id="codex:project:locked", artifact_hash="hash-locked"),
+        "2026-06-14T00:00:00Z",
+    )
+
+    # The resident's write and the control state around it share one holder, so
+    # a second save cannot read the generation this one is about to advance.
+    assert observed == [True]
+    assert not _generation_lock_is_held(store.guard_home)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="flock probes the POSIX advisory lock.")
+def test_policy_integrity_generation_lock_excludes_a_second_holder(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "home")
+    store.guard_home.mkdir(parents=True, exist_ok=True)
+
+    with store.hold_policy_integrity_generation_lock():
+        assert _generation_lock_is_held(store.guard_home)
+        # Re-entry must not deadlock: one thread advancing a generation calls
+        # through several routes that each take the lock.
+        with store.hold_policy_integrity_generation_lock():
+            assert _generation_lock_is_held(store.guard_home)
+        assert _generation_lock_is_held(store.guard_home)
+
+    assert not _generation_lock_is_held(store.guard_home)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="flock probes the POSIX advisory lock.")
+def test_policy_integrity_generation_lock_serializes_two_threads(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "home")
+    store.guard_home.mkdir(parents=True, exist_ok=True)
+    inside = 0
+    overlapped = False
+
+    def hold() -> None:
+        nonlocal inside, overlapped
+        with store.hold_policy_integrity_generation_lock():
+            inside += 1
+            if inside > 1:
+                overlapped = True
+            time.sleep(0.05)
+            inside -= 1
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        for future in [pool.submit(hold), pool.submit(hold)]:
+            future.result(timeout=30)
+
+    assert not overlapped
+
+
+def test_policy_integrity_generation_cannot_advance_inside_a_connection_scope(tmp_path: Path) -> None:
+    """A connection scope shares a connection, not a transaction.
+
+    Nothing serializes an advance taken under one, and taking the file lock
+    there would invert the order every other holder uses, so the route refuses
+    instead of racing.
+    """
+
+    store = GuardStore(tmp_path / "home")
+    store.guard_home.mkdir(parents=True, exist_ok=True)
+
+    with (
+        store.connection_scope(),
+        pytest.raises(RuntimeError, match="connection scope"),
+        store.hold_policy_integrity_generation_lock(),
+    ):
+        pass

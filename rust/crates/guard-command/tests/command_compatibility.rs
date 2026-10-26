@@ -119,6 +119,69 @@ fn github_reads_have_permission_attribution_without_fabricated_rules() {
 }
 
 #[test]
+fn a_trailing_help_reads_the_subcommands_help_not_the_subcommand() {
+    for command in [
+        "gh --help",
+        "gh -h",
+        "gh repo --help",
+        "gh repo view --help",
+        "gh repo delete --help",
+        "gh repo delete owner/name --help",
+        "gh repo clone --help",
+        "gh issue delete 1 --help",
+        "gh release delete v1 --help",
+        "gh pr merge --help",
+        "gh workflow run --help",
+        "gh auth switch --help",
+        "gh auth login --help",
+        "gh secret set --help",
+        "gh cache delete --help",
+        "gh ssh-key delete --help",
+    ] {
+        let observed = compatibility_observations(&model(command), None).unwrap();
+        assert!(observed.rule_matches.is_empty(), "{command}");
+        assert_eq!(observed.permission_matches.len(), 1, "{command}");
+        assert_eq!(
+            observed.permission_matches[0].permission_id, "command.github.permission.read-local",
+            "{command}"
+        );
+        assert!(!observed.permission_matches[0].uncertainty, "{command}");
+    }
+}
+
+#[test]
+fn a_help_that_is_an_options_value_still_runs_the_subcommand() {
+    // `--title --help` opens an issue titled `--help`; only a plain word before
+    // the flag makes it the subcommand's own help.
+    for (command, rule_id) in [
+        ("gh issue create --title --help", "command.github.content"),
+        (
+            "gh repo delete owner/name --help extra",
+            "command.github.delete",
+        ),
+        ("gh repo --help extra", "command.github.unknown"),
+        // After `--` the flag is a positional: this uploads a file named
+        // `--help` and publishes the release.
+        (
+            "gh release create v1.0.0 -- notes.txt --help",
+            "command.github.publish",
+        ),
+        // An alias or an installed extension runs with flag parsing disabled,
+        // so gh forwards `--help` to what it runs.
+        ("gh nuke --help", "command.github.unknown"),
+        ("gh my-ext purge --help", "command.github.unknown"),
+        (
+            "gh extension exec my-ext delete target --help",
+            "command.github.unknown",
+        ),
+    ] {
+        let observed = compatibility_observations(&model(command), None).unwrap();
+        assert_eq!(observed.rule_matches.len(), 1, "{command}");
+        assert_eq!(observed.rule_matches[0].rule_id, rule_id, "{command}");
+    }
+}
+
+#[test]
 fn github_reads_keep_their_permission_after_a_stderr_merge() {
     for command in [
         "gh api repos/o/r/actions/jobs/1/logs 2>&1 | grep -A 6 \"Diff in\" | head -40",

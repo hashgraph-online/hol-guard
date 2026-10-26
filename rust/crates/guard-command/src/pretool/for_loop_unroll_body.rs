@@ -430,14 +430,21 @@ pub(crate) fn substitute(item: &str, word: &str) -> Option<String> {
     // stage that starts with one is rejected. A glob in the command word
     // (`/usr/bin/doc?er`) could name any program, so it keeps the loop on
     // the unmodeled path.
+    //
+    // A stage that opens with `[[` and closes with `]]` is the one keyword
+    // that is read here, because the parse surface reads that closed pair as
+    // the `[` test it asks, of less: inside `[[ ]]` the shell splits no word
+    // and expands no glob. An unclosed `[[` is some other shape and keeps the
+    // construct on the unmodeled path with every other keyword.
     for stage in item.split('|') {
         let first = stage.split_whitespace().next()?;
         let bare = first.trim_start_matches(|c: char| c.is_ascii_digit());
+        let bracket_test = first == "[[" && stage.trim_end().ends_with("]]");
         if first.contains(MARKER)
             || first.contains('=')
             || bare.starts_with(['>', '<', '&'])
-            || (first != "[" && first.contains(['*', '?', '[']))
-            || CONTROL_WORDS.contains(&first)
+            || (first != "[" && !bracket_test && first.contains(['*', '?', '[']))
+            || (CONTROL_WORDS.contains(&first) && !bracket_test)
         {
             return None;
         }

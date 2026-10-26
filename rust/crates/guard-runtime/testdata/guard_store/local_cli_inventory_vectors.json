@@ -1,0 +1,873 @@
+{
+ "order_by": {
+  "local_cli_authority": "singleton",
+  "local_cli_command": "cli_id, command_id",
+  "local_cli_command_grant": "cli_id, command_id",
+  "local_cli_grant": "cli_id",
+  "local_cli_grant_capability": "cli_id, capability",
+  "local_cli_observation": "cli_id",
+  "local_mcp_catalog": "cli_id",
+  "local_mcp_provider_action": "cli_id, tool_slug"
+ },
+ "scenarios": [
+  {
+   "name": "empty_store",
+   "seed": {
+    "local_cli_authority": [
+     {
+      "revision": 0,
+      "singleton": 1
+     }
+    ],
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [],
+    "local_cli_grant_capability": [],
+    "local_cli_observation": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "nothing observed and nothing granted",
+     "method": "list_local_cli_items",
+     "native_payload": [],
+     "wire_args": {}
+    }
+   ]
+  },
+  {
+   "name": "observations_and_grants",
+   "seed": {
+    "local_cli_authority": [
+     {
+      "revision": 0,
+      "singleton": 1
+     }
+    ],
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [],
+    "local_cli_grant_capability": [],
+    "local_cli_observation": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "sql": [
+      [
+       "update local_cli_authority set revision = ? where singleton = 1",
+       [
+        7
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, source_path, help_status, surface, server_identity_hash, server_command, source_label, remote_origin, declared_sources_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "executable",
+        "alpha",
+        null,
+        "alpha",
+        4,
+        "2026-10-03T00:00:00+00:00",
+        "/usr/bin/alpha",
+        null,
+        "cli",
+        null,
+        null,
+        null,
+        null,
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, source_path, help_status, surface, server_identity_hash, server_command, source_label, remote_origin, declared_sources_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.beta",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "script",
+        "beta",
+        "python3",
+        "beta",
+        1,
+        "2026-10-02T00:00:00+00:00",
+        null,
+        "captured",
+        "cli",
+        null,
+        null,
+        null,
+        null,
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, source_path, help_status, surface, server_identity_hash, server_command, source_label, remote_origin, declared_sources_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.gamma",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "executable",
+        "gamma",
+        null,
+        "gamma",
+        1,
+        "2026-10-02T00:00:00+00:00",
+        "/opt/gamma",
+        null,
+        "cli",
+        null,
+        null,
+        null,
+        null,
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "allowed",
+        3,
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.beta",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "blocked",
+        2,
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.delta",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "allowed",
+        5,
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "merged grants, a stale grant, and a grant-only item",
+     "method": "list_local_cli_items",
+     "native_payload": [
+      {
+       "authority_revision": 7,
+       "capabilities": {
+        "loopback-network": "off",
+        "state-dir-read": "off",
+        "state-dir-write": "off"
+       },
+       "cli_id": "local-cli.alpha",
+       "commands": [],
+       "example_label": "alpha",
+       "grant_revision": 3,
+       "help_status": null,
+       "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "interpreter_name": null,
+       "kind": "executable",
+       "last_seen_at": "2026-10-03T00:00:00+00:00",
+       "name": "alpha",
+       "observed_count": 4,
+       "server_identity_hash": null,
+       "source_label": null,
+       "source_path": "/usr/bin/alpha",
+       "stale": false,
+       "state": "allowed",
+       "suggestable": false,
+       "suggestion_score": 0,
+       "surface": "cli"
+      },
+      {
+       "authority_revision": 7,
+       "capabilities": {
+        "loopback-network": "off",
+        "state-dir-read": "off",
+        "state-dir-write": "off"
+       },
+       "cli_id": "local-cli.beta",
+       "commands": [],
+       "example_label": "beta",
+       "grant_revision": 2,
+       "help_status": "captured",
+       "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "interpreter_name": "python3",
+       "kind": "script",
+       "last_seen_at": "2026-10-02T00:00:00+00:00",
+       "name": "beta",
+       "observed_count": 1,
+       "server_identity_hash": null,
+       "source_label": null,
+       "source_path": null,
+       "stale": true,
+       "state": "blocked",
+       "suggestable": false,
+       "suggestion_score": 0,
+       "surface": "cli"
+      },
+      {
+       "authority_revision": 7,
+       "capabilities": {
+        "loopback-network": "off",
+        "state-dir-read": "off",
+        "state-dir-write": "off"
+       },
+       "cli_id": "local-cli.gamma",
+       "commands": [],
+       "example_label": "gamma",
+       "grant_revision": null,
+       "help_status": null,
+       "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+       "interpreter_name": null,
+       "kind": "executable",
+       "last_seen_at": "2026-10-02T00:00:00+00:00",
+       "name": "gamma",
+       "observed_count": 1,
+       "server_identity_hash": null,
+       "source_label": null,
+       "source_path": "/opt/gamma",
+       "stale": false,
+       "state": "unset",
+       "suggestable": false,
+       "suggestion_score": 0,
+       "surface": "cli"
+      },
+      {
+       "authority_revision": 7,
+       "capabilities": {
+        "loopback-network": "off",
+        "state-dir-read": "off",
+        "state-dir-write": "off"
+       },
+       "cli_id": "local-cli.delta",
+       "commands": [],
+       "example_label": "delta",
+       "grant_revision": 5,
+       "help_status": null,
+       "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "interpreter_name": null,
+       "kind": "executable",
+       "last_seen_at": null,
+       "name": "delta",
+       "observed_count": 0,
+       "server_identity_hash": null,
+       "source_label": null,
+       "source_path": null,
+       "stale": false,
+       "state": "allowed",
+       "suggestable": false,
+       "suggestion_score": 0,
+       "surface": "cli"
+      }
+     ],
+     "wire_args": {}
+    }
+   ]
+  },
+  {
+   "name": "commands_and_capabilities",
+   "seed": {
+    "local_cli_authority": [
+     {
+      "revision": 0,
+      "singleton": 1
+     }
+    ],
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [],
+    "local_cli_grant_capability": [],
+    "local_cli_observation": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, source_path, help_status, surface, server_identity_hash, server_command, source_label, remote_origin, declared_sources_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "executable",
+        "alpha",
+        null,
+        "alpha",
+        1,
+        "2026-10-01T00:00:00+00:00",
+        "/usr/bin/alpha",
+        null,
+        "cli",
+        null,
+        null,
+        null,
+        null,
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, source_path, help_status, surface, server_identity_hash, server_command, source_label, remote_origin, declared_sources_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.beta",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "executable",
+        "beta",
+        null,
+        "beta",
+        1,
+        "2026-10-01T00:00:00+00:00",
+        null,
+        null,
+        "mcp",
+        "5555555555555555555555555555555555555555555555555555555555555555",
+        "/usr/bin/beta serve",
+        null,
+        null,
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "allowed",
+        1,
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_command (cli_id, command_id, name, usage, description, parent_id, sort_index) values (?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "zeta",
+        "Zeta",
+        "zeta [args]",
+        "Run zeta",
+        null,
+        1
+       ]
+      ],
+      [
+       "insert into local_cli_command (cli_id, command_id, name, usage, description, parent_id, sort_index) values (?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "beta",
+        "Beta",
+        "beta [args]",
+        "Run beta",
+        null,
+        0
+       ]
+      ],
+      [
+       "insert into local_cli_command (cli_id, command_id, name, usage, description, parent_id, sort_index) values (?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.beta",
+        "fetch",
+        "Fetch",
+        "fetch",
+        "Run fetch",
+        null,
+        0
+       ]
+      ],
+      [
+       "insert into local_cli_command_grant (cli_id, command_id, state) values (?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "zeta",
+        "block"
+       ]
+      ],
+      [
+       "insert into local_cli_grant_capability (cli_id, capability, state, revision, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "loopback-network",
+        "on",
+        1,
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_grant_capability (cli_id, capability, state, revision, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.alpha",
+        "state-dir-write",
+        "off",
+        1,
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_grant_capability (cli_id, capability, state, revision, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.beta",
+        "state-dir-read",
+        "on",
+        1,
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "update local_cli_observation set first_blocked_cause = ? where cli_id = ?",
+       [
+        "read_home_state",
+        "local-cli.alpha"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "commands, a capability map, and a suggested capability",
+     "method": "list_local_cli_items",
+     "native_payload": [
+      {
+       "authority_revision": 0,
+       "capabilities": {
+        "loopback-network": "on",
+        "state-dir-read": "off",
+        "state-dir-write": "off"
+       },
+       "cli_id": "local-cli.alpha",
+       "commands": [
+        {
+         "command_id": "beta",
+         "description": "Run beta",
+         "name": "Beta",
+         "parent_id": null,
+         "state": "inherit",
+         "usage": "beta [args]"
+        },
+        {
+         "command_id": "zeta",
+         "description": "Run zeta",
+         "name": "Zeta",
+         "parent_id": null,
+         "state": "block",
+         "usage": "zeta [args]"
+        }
+       ],
+       "example_label": "alpha",
+       "grant_revision": 1,
+       "help_status": null,
+       "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "interpreter_name": null,
+       "kind": "executable",
+       "last_seen_at": "2026-10-01T00:00:00+00:00",
+       "name": "alpha",
+       "observed_count": 1,
+       "server_identity_hash": null,
+       "source_label": null,
+       "source_path": "/usr/bin/alpha",
+       "stale": false,
+       "state": "allowed",
+       "suggestable": false,
+       "suggested_capability": "state-dir-read",
+       "suggestion_score": 0,
+       "surface": "cli"
+      },
+      {
+       "authority_revision": 0,
+       "capabilities": {},
+       "cli_id": "local-cli.beta",
+       "commands": [
+        {
+         "command_id": "fetch",
+         "description": "Run fetch",
+         "name": "Fetch",
+         "parent_id": null,
+         "state": "inherit",
+         "usage": "fetch"
+        }
+       ],
+       "declared_sources": [],
+       "example_label": "beta",
+       "grant_revision": null,
+       "help_status": null,
+       "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "interpreter_name": null,
+       "kind": "executable",
+       "last_seen_at": "2026-10-01T00:00:00+00:00",
+       "name": "beta",
+       "observed_count": 1,
+       "permission_scope": "configured-connection",
+       "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+       "source_label": null,
+       "source_path": null,
+       "stale": false,
+       "state": "unset",
+       "suggestable": false,
+       "suggestion_score": 0,
+       "surface": "mcp"
+      }
+     ],
+     "wire_args": {}
+    }
+   ]
+  },
+  {
+   "name": "mcp_catalogs_and_providers",
+   "seed": {
+    "local_cli_authority": [
+     {
+      "revision": 0,
+      "singleton": 1
+     }
+    ],
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [],
+    "local_cli_grant_capability": [],
+    "local_cli_observation": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, source_path, help_status, surface, server_identity_hash, server_command, source_label, remote_origin, declared_sources_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.enrolled",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "executable",
+        "enrolled",
+        null,
+        "enrolled",
+        1,
+        "2026-10-01T00:00:00+00:00",
+        null,
+        null,
+        "mcp",
+        "5555555555555555555555555555555555555555555555555555555555555555",
+        "/usr/bin/enrolled serve",
+        "codex",
+        "https://example.test/mcp",
+        "[\"codex\", \"claude\"]"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, source_path, help_status, surface, server_identity_hash, server_command, source_label, remote_origin, declared_sources_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.sharer",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "executable",
+        "sharer",
+        null,
+        "sharer",
+        1,
+        "2026-10-02T00:00:00+00:00",
+        null,
+        null,
+        "mcp",
+        "5555555555555555555555555555555555555555555555555555555555555555",
+        null,
+        null,
+        null,
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, source_path, help_status, surface, server_identity_hash, server_command, source_label, remote_origin, declared_sources_json) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.lonely",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "executable",
+        "lonely",
+        null,
+        "lonely",
+        1,
+        "2026-10-02T00:00:00+00:00",
+        null,
+        null,
+        "mcp",
+        "9999999999999999999999999999999999999999999999999999999999999999",
+        null,
+        null,
+        null,
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, ?, ?, ?)",
+       [
+        "local-cli.enrolled",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "allowed",
+        1,
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_catalog (cli_id, identity_hash, catalog_json, revision, updated_at, last_complete_at) values (?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.enrolled",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "{\"complete\": true, \"tools\": [{\"name\": \"fetch\", \"description\": \"Fetch a page\", \"inputSchema\": {\"type\": \"object\"}}, {\"name\": \"write\", \"description\": \"Write a file\", \"inputSchema\": {\"type\": \"object\"}}]}",
+        4,
+        "2026-10-02T00:00:00+00:00",
+        "2026-10-03T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_catalog (cli_id, identity_hash, catalog_json, revision, updated_at, last_complete_at) values (?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.sharer",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "{\"complete\": true, \"tools\": [{\"name\": \"fetch\", \"description\": \"Fetch a page\", \"inputSchema\": {\"type\": \"object\"}}, {\"name\": \"write\", \"description\": \"Write a file\", \"inputSchema\": {\"type\": \"object\"}}]}",
+        1,
+        "2026-10-02T00:00:00+00:00",
+        "2026-10-03T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_catalog (cli_id, identity_hash, catalog_json, revision, updated_at, last_complete_at) values (?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.lonely",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "not json",
+        1,
+        "2026-10-02T00:00:00+00:00",
+        "2026-10-03T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_command (cli_id, command_id, name, usage, description, parent_id, sort_index) values (?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.enrolled",
+        "fetch",
+        "Fetch",
+        "fetch",
+        "Run fetch",
+        null,
+        0
+       ]
+      ],
+      [
+       "insert into local_cli_command (cli_id, command_id, name, usage, description, parent_id, sort_index) values (?, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.enrolled",
+        "absent",
+        "Absent",
+        "absent",
+        "Run absent",
+        null,
+        1
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_action (cli_id, identity_hash, provider, tool_slug, toolkit, description, input_schema_json, authority_hash, full_schema, source_tool, revision, updated_at) values (?, ?, 'composio', ?, 'github', 'Do a thing', '{}', ?, ?, 'COMPOSIO_SEARCH', 1, ?)",
+       [
+        "local-cli.enrolled",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "GITHUB_STAR",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        1,
+        "2026-10-02T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_action (cli_id, identity_hash, provider, tool_slug, toolkit, description, input_schema_json, authority_hash, full_schema, source_tool, revision, updated_at) values (?, ?, 'composio', ?, 'github', 'Do a thing', '{}', ?, ?, 'COMPOSIO_SEARCH', 1, ?)",
+       [
+        "local-cli.enrolled",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "GITHUB_FORK",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        0,
+        "2026-10-03T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_action (cli_id, identity_hash, provider, tool_slug, toolkit, description, input_schema_json, authority_hash, full_schema, source_tool, revision, updated_at) values (?, ?, 'composio', ?, 'github', 'Do a thing', '{}', ?, ?, 'COMPOSIO_SEARCH', 1, ?)",
+       [
+        "local-cli.sharer",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "GITHUB_STAR",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        1,
+        "2026-10-02T00:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "catalogs, a shared enrolled server, and a provider summary",
+     "method": "list_local_cli_items",
+     "native_payload": [
+      {
+       "authority_revision": 0,
+       "capabilities": {},
+       "cli_id": "local-cli.lonely",
+       "commands": [],
+       "declared_sources": [],
+       "example_label": "lonely",
+       "grant_revision": null,
+       "help_status": null,
+       "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+       "interpreter_name": null,
+       "kind": "executable",
+       "last_seen_at": "2026-10-02T00:00:00+00:00",
+       "name": "lonely",
+       "observed_count": 1,
+       "permission_scope": "configured-connection",
+       "server_identity_hash": "9999999999999999999999999999999999999999999999999999999999999999",
+       "source_label": null,
+       "source_path": null,
+       "stale": false,
+       "state": "unset",
+       "suggestable": false,
+       "suggestion_score": 0,
+       "surface": "mcp"
+      },
+      {
+       "authority_revision": 0,
+       "capabilities": {},
+       "cli_id": "local-cli.sharer",
+       "commands": [],
+       "declared_sources": [],
+       "example_label": "sharer",
+       "grant_revision": null,
+       "help_status": null,
+       "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "interpreter_name": null,
+       "kind": "executable",
+       "last_seen_at": "2026-10-02T00:00:00+00:00",
+       "name": "sharer",
+       "observed_count": 1,
+       "permission_scope": "configured-connection",
+       "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+       "shares_enrolled_server": true,
+       "source_label": null,
+       "source_path": null,
+       "stale": false,
+       "state": "unset",
+       "suggestable": false,
+       "suggestion_score": 0,
+       "surface": "mcp"
+      },
+      {
+       "authority_revision": 0,
+       "capabilities": {},
+       "cli_id": "local-cli.enrolled",
+       "commands": [
+        {
+         "command_id": "fetch",
+         "description": "Run fetch",
+         "name": "Fetch",
+         "parent_id": null,
+         "state": "inherit",
+         "usage": "fetch"
+        },
+        {
+         "command_id": "absent",
+         "description": "Run absent",
+         "name": "Absent",
+         "parent_id": null,
+         "state": "inherit",
+         "usage": "absent"
+        }
+       ],
+       "declared_sources": [
+        "codex",
+        "claude"
+       ],
+       "example_label": "enrolled",
+       "grant_revision": 1,
+       "help_status": null,
+       "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+       "interpreter_name": null,
+       "kind": "executable",
+       "last_seen_at": "2026-10-01T00:00:00+00:00",
+       "mcp_catalog": {
+        "complete": true,
+        "last_complete_at": "2026-10-03T00:00:00+00:00",
+        "revision": 4,
+        "tools": [
+         {
+          "description": "Fetch a page",
+          "inputSchema": {
+           "type": "object"
+          },
+          "name": "fetch"
+         },
+         {
+          "description": "Write a file",
+          "inputSchema": {
+           "type": "object"
+          },
+          "name": "write"
+         }
+        ],
+        "updated_at": "2026-10-02T00:00:00+00:00"
+       },
+       "name": "enrolled",
+       "observed_count": 1,
+       "permission_scope": "configured-connection",
+       "provider_catalog": {
+        "account_binding": "unverified",
+        "coverage": "discovery-subset",
+        "full_schema_count": 1,
+        "known_count": 2,
+        "provider": "composio",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       },
+       "remote_origin": "https://example.test/mcp",
+       "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+       "source_label": "codex",
+       "source_path": null,
+       "stale": false,
+       "state": "allowed",
+       "suggestable": false,
+       "suggestion_score": 0,
+       "surface": "mcp"
+      }
+     ],
+     "wire_args": {}
+    }
+   ]
+  }
+ ],
+ "schema": "guard-store-local-cli-inventory-vectors.v1",
+ "schema_sql": [
+  "CREATE TABLE local_cli_observation (\n            cli_id text primary key,\n            identity_hash text not null,\n            kind text not null check (kind in ('executable', 'script')),\n            name text not null,\n            interpreter_name text,\n            example_label text not null,\n            observed_count integer not null check (observed_count >= 1),\n            last_seen_at text not null,\n            source_path text,\n            help_status text,\n            surface text not null default 'cli' check (surface in ('cli', 'mcp', 'package-scripts')),\n            server_identity_hash text,\n            server_command text,\n            server_args_hash text,\n            source_label text,\n            remote_origin text,\n            declared_sources_json text\n        , first_blocked_cause text, last_trigger_summary text, last_why_now text, last_harness text, last_workspace_label text, last_context_at text)",
+  "CREATE TABLE local_cli_grant (\n            cli_id text primary key,\n            identity_hash text not null,\n            state text not null check (state in ('allowed', 'blocked')),\n            revision integer not null check (revision >= 1),\n            updated_at text not null\n        )",
+  "CREATE TABLE local_cli_authority (\n            singleton integer primary key check (singleton = 1),\n            revision integer not null check (revision >= 0)\n        )",
+  "CREATE TABLE local_cli_command (\n            cli_id text not null,\n            command_id text not null,\n            name text not null,\n            usage text not null,\n            description text not null,\n            parent_id text,\n            sort_index integer not null check (sort_index >= 0),\n            primary key (cli_id, command_id)\n        )",
+  "CREATE TABLE local_cli_command_grant (\n            cli_id text not null,\n            command_id text not null,\n            state text not null check (state in ('inherit', 'allow', 'review', 'block')),\n            primary key (cli_id, command_id)\n        )",
+  "CREATE TABLE local_mcp_catalog (\n            cli_id text primary key,\n            identity_hash text not null,\n            catalog_json text not null,\n            revision integer not null check (revision >= 1),\n            updated_at text not null,\n            last_complete_at text\n        )",
+  "CREATE TABLE local_mcp_provider_action (\n            cli_id text not null,\n            identity_hash text not null,\n            provider text not null check (provider = 'composio'),\n            tool_slug text not null,\n            toolkit text not null,\n            description text not null,\n            input_schema_json text not null,\n            authority_hash text not null,\n            full_schema integer not null check (full_schema in (0, 1)),\n            source_tool text not null,\n            revision integer not null check (revision >= 1),\n            updated_at text not null,\n            primary key (cli_id, identity_hash, provider, tool_slug)\n        )",
+  "CREATE TABLE local_cli_grant_capability (\n            cli_id text not null,\n            capability text not null\n                check (capability in ('loopback-network', 'state-dir-read', 'state-dir-write')),\n            state text not null check (state in ('on', 'off')),\n            revision integer not null check (revision >= 1),\n            updated_at text not null,\n            primary key (cli_id, capability)\n        )"
+ ],
+ "source": "guard"
+}

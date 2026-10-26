@@ -91,10 +91,13 @@ fn ancestry_is_requested_and_checked_for_each_protected_floor() {
     let missing = evaluate(&input, &active, &key).unwrap();
     assert_eq!(missing["lineage_kind"], "active");
     input["active_ancestry"] = json!({"status":"ahead","base_commit":{"sha":active.source},
-        "merge_base_commit":{"sha":active.source},"head_commit":{"sha":"b".repeat(40)},
+        "merge_base_commit":{"sha":active.source},"url":crate::pack_lifecycle::compare_url(&active.source, &"b".repeat(40)),
         "behind_by":0,"ahead_by":1});
     assert!(evaluate(&input, &active, &key).is_ok());
-    input["active_ancestry"]["head_commit"]["sha"] = json!("c".repeat(40));
+    input["active_ancestry"]["url"] = json!(crate::pack_lifecycle::compare_url(
+        &active.source,
+        &"c".repeat(40)
+    ));
     assert_eq!(
         evaluate(&input, &active, &key).unwrap_err(),
         "pack_lifecycle_source_ancestry_required"

@@ -140,16 +140,18 @@ fn route_on(
     request::write_and_route(temp, payload, original, target, native.as_deref())
 }
 
-/// The call the denial was answered for, when a virtualenv activation moved
-/// it. `source .venv/bin/activate && pytest -q` exports settings and runs
-/// nothing else, so the pre-tool pass hands the verdict to `pytest` and
-/// answers for `.venv/bin/pytest -q`. The sink plans the command it is
-/// given, and it models no shell builtin, so handing it the unprojected text
-/// leaves it unable to build a plan for a call Guard already judged. This
-/// cannot widen authority: the sink reruns native authority on the snapshot
-/// and needs a matching denial of its own, and the projected text is the
-/// user's own command with the activation it already resolved removed. Any
-/// other command has no projection and keeps its own bytes.
+/// The call the denial was answered for, when a trailing group or a
+/// virtualenv activation moved it. `source .venv/bin/activate && pytest -q`
+/// exports settings and runs nothing else, so the pre-tool pass hands the
+/// verdict to `pytest` and answers for `.venv/bin/pytest -q`; and
+/// `(.venv/bin/pytest -q)` runs exactly the list inside its parentheses, so
+/// the pass answers for that list. The sink plans the command it is given,
+/// and it models neither a shell builtin nor a group, so handing it the
+/// unprojected text leaves it unable to build a plan for a call Guard already
+/// judged. This cannot widen authority: the sink reruns native authority on
+/// the snapshot and needs a matching denial of its own, and the projected
+/// text is the user's own command with the wrapping it already resolved
+/// removed. Any other command has no projection and keeps its own bytes.
 fn projected_input(
     original: &Map<String, Value>,
     target: &SinkTarget<'_>,
@@ -159,7 +161,7 @@ fn projected_input(
     // the harness sent. Reading the payload's own `cwd` here would resolve the
     // activation script against `~/project` or a symlinked path the verdict
     // never used, and the route would carry text Guard did not answer for.
-    let projected = guard_command::pretool::generic::venv_activation_target(
+    let projected = guard_command::pretool::generic::contained_target(
         command,
         guard_command::pretool::PathContext {
             home_dir: Some(target.home_dir),

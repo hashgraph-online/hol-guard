@@ -36,7 +36,7 @@ def test_catalog_publication_does_not_rewrite_tests_or_rebuild_runtime(tmp_path,
             {
                 "schemaVersion": "guard.extension-trust-class-map.v1",
                 "publishers": {
-                    "hol": {"id": "hol", "displayName": "Hashgraph Online"},
+                    "hol": {"id": "hol", "displayName": "HOL"},
                     "hol-curated": {"id": "hol-curated", "displayName": "HOL curated library"},
                 },
                 "classes": {"first-party": [], "trusted-library": [], "external": ["command.demo"]},

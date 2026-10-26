@@ -58,12 +58,6 @@ def native_hook_force(monkeypatch: pytest.MonkeyPatch) -> Path:
     return runtime
 
 
-@pytest.fixture
-def native_approval_reuse_runtime(native_hook_force: Path) -> Path:
-    """Run approval reuse assertions with the caller-pinned native authority."""
-    return native_hook_force
-
-
 @pytest.fixture(scope="session")
 def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
     """Session-shared guard home so the resident is spawned once per run."""
@@ -229,11 +223,7 @@ def _ambient_context_digest_home(
 
     ``context_digest`` calls resolve their guard home either from the bound
     flow context or the default user home; both are pointed at the keyed
-    session home.  ``native_hook_approval_context`` imports the lookup by
-    name at module load, so it holds its own reference and has to be bound
-    separately; without that its tokens are asked of whatever guard home the
-    runner happens to have, and whether a resident can answer there depends
-    on what else already ran in the same worker process.  Unit tests default
+    session home.  Unit tests default
     to ``HOL_GUARD_NATIVE=off`` so the
     adapter's status probe is additionally re-evaluated under ``force`` —
     scoped to the ``native_context`` module only, leaving every other
@@ -242,7 +232,7 @@ def _ambient_context_digest_home(
     preserving the no-binary behavior.
     """
 
-    from codex_plugin_scanner.guard import native_context, native_hook_approval_context, native_runtime
+    from codex_plugin_scanner.guard import native_context, native_runtime
     from codex_plugin_scanner.guard.runtime import approval_context
 
     real_status = native_runtime.native_runtime_status
@@ -272,11 +262,6 @@ def _ambient_context_digest_home(
 
     monkeypatch.setattr(native_context, "native_runtime_status", _digest_status)
     monkeypatch.setattr(native_context, "context_digest_guard_home", lambda: _native_context_home)
-    monkeypatch.setattr(
-        native_hook_approval_context,
-        "context_digest_guard_home",
-        lambda: _native_context_home,
-    )
     monkeypatch.setattr(
         approval_context,
         "_context_digest_guard_home",
@@ -453,18 +438,20 @@ def native_command_artifact_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def native_data_flow_runtime(
+def native_contained_wrapper_runtime(
     native_hook_force: Path, _native_context_home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Path:
-    """Serve data-flow analysis from the real resident; there is no Python fallback."""
+    """Serve the contained wrapper peel from the real resident.
 
-    from codex_plugin_scanner.guard import native_data_flow
+    The sink's peel is the classifier's own answer now: the grammar lives in
+    `contained_wrapper.rs` alone and this side only carries what it returns.
+    There is no Python peel left to fall back to, so these suites ask the
+    session resident rather than a second copy of the rules.
+    """
 
-    monkeypatch.setattr(
-        native_data_flow,
-        "_resolve_digest_home",
-        lambda guard_home: guard_home if guard_home is not None else _native_context_home,
-    )
+    from codex_plugin_scanner.guard import native_contained_wrapper_plan
+
+    monkeypatch.setattr(native_contained_wrapper_plan, "_resolve_digest_home", lambda _guard_home: _native_context_home)
     return _native_context_home
 
 

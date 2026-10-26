@@ -163,6 +163,13 @@ class TestCursorHeadlessHookExecution:
             assert permission == "allow", response
             assert exit_code == 0, response
             return
+        if expected == "review":
+            # An inline interpreter the daemon cannot prove read-only is held
+            # for review: Cursor gets a deny that links the queued request.
+            assert permission == "deny", response
+            assert "/requests/" in str(response.get("agent_message") or ""), response
+            assert exit_code == 2, response
+            return
         if expected == "blocked":
             assert permission in _BLOCKED_PERMISSIONS, response
             if permission == "deny":

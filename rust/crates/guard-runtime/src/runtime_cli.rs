@@ -92,6 +92,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = guard_config_update::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if guard_config_resolve::is_command(command) && flag == "--stdin" => {
+            let response = guard_config_resolve::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if policy_effective::is_command(command) && flag == "--stdin" => {
             let response = policy_effective::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -223,6 +227,32 @@ pub(super) fn run() -> Result<(), String> {
             let response = oneshot::evaluate_pre_tool_bytes(&bytes)?;
             write_bytes_response(&response)
         }
+        // Provisioning the policy verifier key cannot be a resident call: the
+        // resident refuses to serve until that key exists. This one-shot arm
+        // is the bootstrap, so the master arrives on stdin and never on argv,
+        // where another local process could read it.
+        [command, flag, state_dir]
+            if command == "provision-verifier-key" && flag == "--stdin" =>
+        {
+            let bytes = read_stdin_bounded()?;
+            let request = strict_json_value(&bytes)?;
+            let encoded = request
+                .get("policy_integrity_key")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| "native_policy_verifier_master_invalid".to_owned())?;
+            let master = zeroize::Zeroizing::new(
+                hex::decode(encoded)
+                    .map_err(|_| "native_policy_verifier_master_invalid".to_owned())?,
+            );
+            let outcome = policy_verifier_key_provision::provision_verifier_key(
+                std::path::Path::new(state_dir),
+                &master,
+            )?;
+            write_json(&serde_json::json!({
+                "schema": "hol-guard-native-verifier-key.v1",
+                "status": outcome.as_str(),
+            }))
+        }
         [command, flag, state_dir, request_flag, request_id]
             if command == "workspace-review-decision"
                 && flag == "--stdin"
@@ -269,9 +299,37 @@ pub(super) fn run() -> Result<(), String> {
             let response = archive_inspect::evaluate_archive_inspection_bytes(&bytes)?;
             write_bytes_response(&response)
         }
+        [command, flag] if command == runtime_identity::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&runtime_identity::run_command(&bytes)?)
+        }
+        [command, flag] if command == runtime_identity_probe::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&runtime_identity_probe::run_command(&bytes)?)
+        }
         [command, flag] if command == secrets_cli::COMMAND && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
             write_json(&secrets_cli::run_command(&bytes)?)
+        }
+        [command, flag] if command == guard_plugin_kit::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&guard_plugin_kit::run_request(&bytes))
+        }
+        [command, flag] if command == guard_plugin_telemetry::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&guard_plugin_telemetry::run_request(&bytes))
+        }
+        [command, flag] if command == workspace_snapshot::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&workspace_snapshot::run_command(&bytes)?)
+        }
+        [command, flag] if command == workspace_mcp_config::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&workspace_mcp_config::run_command(&bytes)?)
+        }
+        [command, flag] if command == workspace_fix::COMMAND && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&workspace_fix::run_command(&bytes)?)
         }
         [command, flag] if command == "context-digest" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;

@@ -14,6 +14,12 @@
 //! (`echo {a,b}`) and parameter expansion (`${HOME}`) are never read as a
 //! group. Anything this recognizer does not fully understand returns `None`,
 //! which keeps the existing review behavior.
+//!
+//! The group need not end the command. Braces group without a child shell,
+//! so a single command inside them runs exactly as it runs without them:
+//! `{ ls; } | wc -l` and `{ cd web; } && npm ci` are the blanked text written
+//! twice. A body that is itself a list keeps its braces, because blanking
+//! `{ a; b; } | c` would pipe `b` alone.
 
 const MAX_COMMAND_BYTES: usize = 8192;
 
@@ -36,9 +42,11 @@ pub(crate) fn unwrap(command: &str) -> Option<String> {
     }
     let chars: Vec<char> = command.chars().collect();
     let (open, close) = unquoted_braces(&chars)?;
-    if close + 1 != chars.len() || !super::trailing_group::opens_list_element(&chars, open) {
+    let piped_into = super::trailing_group::follows_a_pipe(&chars, open);
+    if !super::trailing_group::opens_list_element(&chars, open) && !piped_into {
         return None;
     }
+    let trailed = close + 1 != chars.len();
     // The reserved word is `{` followed by a blank; `{a,b}` is one word.
     if !matches!(chars.get(open + 1), Some(c) if c.is_whitespace()) {
         return None;
@@ -61,7 +69,41 @@ pub(crate) fn unwrap(command: &str) -> Option<String> {
     // its group. A group that opens the command, or holds a single command
     // behind one of those operators, means the same either way.
     let first = inner.iter().position(|c| !c.is_whitespace())?;
-    if follows_a_conditional(&chars, open) && holds_a_list_operator(&inner[first..last]) {
+    // A `;` terminator is blanked along with the braces, so it is not part of
+    // the body. A newline one stays where it is, and the character before it
+    // is the body's own last character: `{ make &` + newline ends its command
+    // with the operator this scan is looking for.
+    let body = match terminator {
+        Some(_) => &inner[first..last],
+        None => &inner[first..=last],
+    };
+    let body_is_a_list = holds_a_list_operator(body);
+    if follows_a_conditional(&chars, open) && body_is_a_list {
+        return None;
+    }
+    // A group that is not the last element of the command keeps whatever
+    // follows it. One command answers for the group either way, so blanking
+    // the braces leaves the same list; a body that is itself a list does not,
+    // because its separators would then end the pipeline or the conditional
+    // the group stood in.
+    if (trailed || piped_into) && body_is_a_list {
+        return None;
+    }
+    // A newline terminator is not blanked, so it survives into the flattened
+    // text and separates the body from whatever followed the group:
+    // `{ make` + newline + `} && rm -rf build` would leave the `&&` at the
+    // start of its own line, which is not the command that was submitted.
+    if terminator.is_none() && (trailed || piped_into) {
+        return None;
+    }
+    // A redirection applied to the group is applied to the body once the
+    // braces are blanked. That is the same redirection while the body has none
+    // of its own, and a different one as soon as it has: in
+    // `{ printf x > inner; } > outer` the group's `> outer` collects nothing
+    // while the flattened text sends `printf` there instead, so the decision
+    // and the sandbox shape would be bound to a different output target than
+    // the one the request writes to.
+    if redirects(&chars[close + 1..]) && redirects(inner) {
         return None;
     }
     let mut ungrouped = chars;
@@ -73,6 +115,44 @@ pub(crate) fn unwrap(command: &str) -> Option<String> {
     let ungrouped: String = ungrouped.into_iter().collect();
     let ungrouped = ungrouped.trim();
     (!ungrouped.is_empty()).then(|| ungrouped.to_owned())
+}
+
+/// Whether the text holds an unquoted `<` or `>`.
+fn redirects(text: &[char]) -> bool {
+    let mut single = false;
+    let mut double = false;
+    let mut escaped = false;
+    let mut comment = false;
+    let mut in_word = false;
+    for &c in text {
+        if comment {
+            comment = c != '\n';
+            continue;
+        }
+        if escaped {
+            escaped = false;
+            in_word = true;
+            continue;
+        }
+        if single {
+            single = c != '\'';
+            in_word = true;
+            continue;
+        }
+        match c {
+            '\\' => escaped = true,
+            '"' => double = !double,
+            '\'' if !double => single = true,
+            '#' if !double && !in_word => {
+                comment = true;
+                continue;
+            }
+            '<' | '>' if !double => return true,
+            _ => {}
+        }
+        in_word = double || !starts_a_word_position(c);
+    }
+    false
 }
 
 /// The positions of the only unquoted `{` and `}`, in that order.
@@ -149,7 +229,7 @@ fn starts_a_word_position(c: char) -> bool {
 /// A `#` anywhere before the brace hides whatever it comments out, including
 /// the operator this scan is looking for, so the group keeps its review rather
 /// than being flattened on a reading this scan cannot make.
-fn follows_a_conditional(chars: &[char], open: usize) -> bool {
+pub(super) fn follows_a_conditional(chars: &[char], open: usize) -> bool {
     if chars[..open].contains(&'#') {
         return true;
     }
@@ -165,7 +245,7 @@ fn follows_a_conditional(chars: &[char], open: usize) -> bool {
 
 /// Whether the body is itself a list rather than one command: a `;`, a newline
 /// or an unquoted `&` or `|` the shell would act on.
-fn holds_a_list_operator(inner: &[char]) -> bool {
+pub(super) fn holds_a_list_operator(inner: &[char]) -> bool {
     let mut single = false;
     let mut double = false;
     let mut escaped = false;

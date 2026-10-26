@@ -1705,11 +1705,11 @@
    "view",
    "--help"
   ],
-  "capability": "read_remote",
-  "reason_code": "github.command.proven-read",
-  "detail": "The command is a known read-only GitHub operation.",
+  "capability": "read_local",
+  "reason_code": "github.command.local-help",
+  "detail": "The command displays local CLI help.",
   "capabilities": [
-   "read_remote"
+   "read_local"
   ]
  },
  {
@@ -3609,11 +3609,11 @@
    "secret",
    "--help"
   ],
-  "capability": "secret_remote",
-  "reason_code": "github.command.secret-mutation",
-  "detail": "The command changes GitHub secrets.",
+  "capability": "read_local",
+  "reason_code": "github.command.local-help",
+  "detail": "The command displays local CLI help.",
   "capabilities": [
-   "secret_remote"
+   "read_local"
   ]
  },
  {

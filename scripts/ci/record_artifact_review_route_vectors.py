@@ -18,8 +18,7 @@ exactly which effects the old ladder ran, in order:
 Each vector holds the resident's inputs (``facts``), the route fields the
 recorded trace exhibits (``route``), the trace itself and the return code.
 The Rust ``hook_decision_artifact_review_route_tests`` replays the route
-fields; ``tests/test_artifact_review_route_parity.py`` runs the new executor
-with the same stubs and checks that it runs the same effects.
+fields and pins the approval invariant on them.
 
 One deliberate difference from the old ladder: it composed the native reason
 before every branch, though only the Claude notice and the native response read

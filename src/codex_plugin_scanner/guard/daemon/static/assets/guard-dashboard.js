@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-BXyV7oNP.js","assets/chunks/home-protection-module-Du65PsUR.js","assets/chunks/about-content-Bsz4ilTC.js","assets/chunks/app-catalog-BU3dzTBu.js","assets/chunks/fleet-workspace-CbqphIX4.js","assets/chunks/harness-version-label-BEu-FrKY.js","assets/chunks/connect-guard-cloud-button-D3-S0tLq.js","assets/chunks/settings-save-proof-modal-DSJONzDi.js","assets/chunks/settings-workspace-CpitooFy.js","assets/chunks/confirm-dialog-DClNtuX1.js","assets/chunks/extensions-workspace-BiG33v6D.js","assets/chunks/app-detail-workspace-3cnkv6h5.js","assets/chunks/policy-workspace-page--QnvLElq.js","assets/chunks/about-workspace-93T2cVjf.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-D6HYkV_q.js","assets/chunks/home-protection-module-DZsYd8li.js","assets/chunks/supply-chain-protection-stats-BbhzE3ad.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-By01oDVd.js","assets/chunks/fleet-workspace-BIUOUQ_O.js","assets/chunks/harness-version-label-CS-CRwir.js","assets/chunks/connect-guard-cloud-button-C4Z4YFhK.js","assets/chunks/settings-save-proof-modal-CZZvxWFO.js","assets/chunks/settings-workspace-D3SHkj-8.js","assets/chunks/confirm-dialog-C2SCoXLE.js","assets/chunks/extensions-workspace-Cp-huDr6.js","assets/chunks/app-detail-workspace-UGP1uq-z.js","assets/chunks/policy-workspace-page-DRY_qXhn.js","assets/chunks/about-workspace-DF4GsLZL.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -12776,9 +12776,6 @@ function HiMiniSparkles(props) {
 function HiMiniSignal(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M16.364 3.636a.75.75 0 0 0-1.06 1.06 7.5 7.5 0 0 1 0 10.607.75.75 0 0 0 1.06 1.061 9 9 0 0 0 0-12.728ZM4.697 4.697a.75.75 0 0 0-1.061-1.061 9 9 0 0 0 0 12.728.75.75 0 1 0 1.06-1.06 7.5 7.5 0 0 1 0-10.607Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M12.475 6.464a.75.75 0 0 1 1.06 0 5 5 0 0 1 0 7.072.75.75 0 0 1-1.06-1.061 3.5 3.5 0 0 0 0-4.95.75.75 0 0 1 0-1.06ZM7.525 6.464a.75.75 0 0 1 0 1.061 3.5 3.5 0 0 0 0 4.95.75.75 0 0 1-1.06 1.06 5 5 0 0 1 0-7.07.75.75 0 0 1 1.06 0ZM11 10a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z" }, "child": [] }] })(props);
 }
-function HiMiniShieldExclamation(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10.339 2.237a.531.531 0 0 0-.678 0 11.947 11.947 0 0 1-7.078 2.75.5.5 0 0 0-.479.425A12.11 12.11 0 0 0 2 7c0 5.163 3.26 9.564 7.834 11.257a.48.48 0 0 0 .332 0C14.74 16.564 18 12.163 18 7c0-.538-.035-1.069-.104-1.589a.5.5 0 0 0-.48-.425 11.947 11.947 0 0 1-7.077-2.75ZM10 6a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 6Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
 function HiMiniShieldCheck(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.661 2.237a.531.531 0 0 1 .678 0 11.947 11.947 0 0 0 7.078 2.749.5.5 0 0 1 .479.425c.069.52.104 1.05.104 1.59 0 5.162-3.26 9.563-7.834 11.256a.48.48 0 0 1-.332 0C5.26 16.564 2 12.163 2 7c0-.538.035-1.069.104-1.589a.5.5 0 0 1 .48-.425 11.947 11.947 0 0 0 7.077-2.75Zm4.196 5.954a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -12845,6 +12842,9 @@ function HiMiniFunnel(props) {
 function HiMiniFolder(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M3.75 3A1.75 1.75 0 0 0 2 4.75v3.26a3.235 3.235 0 0 1 1.75-.51h12.5c.644 0 1.245.188 1.75.51V6.75A1.75 1.75 0 0 0 16.25 5h-4.836a.25.25 0 0 1-.177-.073L9.823 3.513A1.75 1.75 0 0 0 8.586 3H3.75ZM3.75 9A1.75 1.75 0 0 0 2 10.75v4.5c0 .966.784 1.75 1.75 1.75h12.5A1.75 1.75 0 0 0 18 15.25v-4.5A1.75 1.75 0 0 0 16.25 9H3.75Z" }, "child": [] }] })(props);
 }
+function HiMiniFolderOpen(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M4.75 3A1.75 1.75 0 0 0 3 4.75v2.752l.104-.002h13.792c.035 0 .07 0 .104.002V6.75A1.75 1.75 0 0 0 15.25 5h-3.836a.25.25 0 0 1-.177-.073L9.823 3.513A1.75 1.75 0 0 0 8.586 3H4.75ZM3.104 9a1.75 1.75 0 0 0-1.673 2.265l1.385 4.5A1.75 1.75 0 0 0 4.488 17h11.023a1.75 1.75 0 0 0 1.673-1.235l1.384-4.5A1.75 1.75 0 0 0 16.896 9H3.104Z" }, "child": [] }] })(props);
+}
 function HiMiniEye(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
@@ -12874,9 +12874,6 @@ function HiMiniCube(props) {
 }
 function HiMiniCpuChip(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M14 6H6v8h8V6Z" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.25 3V1.75a.75.75 0 0 1 1.5 0V3h1.5V1.75a.75.75 0 0 1 1.5 0V3h.5A2.75 2.75 0 0 1 17 5.75v.5h1.25a.75.75 0 0 1 0 1.5H17v1.5h1.25a.75.75 0 0 1 0 1.5H17v1.5h1.25a.75.75 0 0 1 0 1.5H17v.5A2.75 2.75 0 0 1 14.25 17h-.5v1.25a.75.75 0 0 1-1.5 0V17h-1.5v1.25a.75.75 0 0 1-1.5 0V17h-1.5v1.25a.75.75 0 0 1-1.5 0V17h-.5A2.75 2.75 0 0 1 3 14.25v-.5H1.75a.75.75 0 0 1 0-1.5H3v-1.5H1.75a.75.75 0 0 1 0-1.5H3v-1.5H1.75a.75.75 0 0 1 0-1.5H3v-.5A2.75 2.75 0 0 1 5.75 3h.5V1.75a.75.75 0 0 1 1.5 0V3h1.5ZM4.5 5.75c0-.69.56-1.25 1.25-1.25h8.5c.69 0 1.25.56 1.25 1.25v8.5c0 .69-.56 1.25-1.25 1.25h-8.5c-.69 0-1.25-.56-1.25-1.25v-8.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
-}
-function HiMiniComputerDesktop(props) {
-  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M2 4.25A2.25 2.25 0 0 1 4.25 2h11.5A2.25 2.25 0 0 1 18 4.25v8.5A2.25 2.25 0 0 1 15.75 15h-3.105a3.501 3.501 0 0 0 1.1 1.677A.75.75 0 0 1 13.26 18H6.74a.75.75 0 0 1-.484-1.323A3.501 3.501 0 0 0 7.355 15H4.25A2.25 2.25 0 0 1 2 12.75v-8.5Zm1.5 0a.75.75 0 0 1 .75-.75h11.5a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-.75.75H4.25a.75.75 0 0 1-.75-.75v-7.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
 function HiMiniCommandLine(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M3.25 3A2.25 2.25 0 0 0 1 5.25v9.5A2.25 2.25 0 0 0 3.25 17h13.5A2.25 2.25 0 0 0 19 14.75v-9.5A2.25 2.25 0 0 0 16.75 3H3.25Zm.943 8.752a.75.75 0 0 1 .055-1.06L6.128 9l-1.88-1.693a.75.75 0 1 1 1.004-1.114l2.5 2.25a.75.75 0 0 1 0 1.114l-2.5 2.25a.75.75 0 0 1-1.06-.055ZM9.75 10.25a.75.75 0 0 0 0 1.5h2.5a.75.75 0 0 0 0-1.5h-2.5Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -17441,6 +17438,12 @@ async function fetchReleaseFeedApi(input, init) {
   }
   return fetchWithGuardAuth(input, init);
 }
+async function fetchPluginUpdatesApi(input, init) {
+  if (input !== "/v1/plugins/updates" && input !== "/v1/plugins/updates/dismiss") {
+    throw new Error("Invalid plugin updates API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
 function guardAuthHeaders() {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
@@ -20586,12 +20589,12 @@ const ActionButton = reactExports.forwardRef(
   }
 );
 ActionButton.displayName = "ActionButton";
-function IconActionButton({ label, icon: icon2, variant = "outline", onClick, disabled, spinning, "aria-label": ariaLabel }) {
+function IconActionButton({ label, icon: icon2, variant = "outline", onClick, disabled, spinning, "aria-label": ariaLabel, showLabel = false }) {
   const base = "inline-flex items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-[color,background-color,border-color,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-h-9 h-9 px-2.5 sm:px-3";
   const tone = variant === "primary" ? "bg-brand-blue text-white shadow-sm hover:bg-brand-blue/90" : variant === "danger" ? "bg-brand-purple text-white shadow-sm hover:bg-brand-purple/90" : variant === "ghost" ? "text-slate-600 hover:bg-slate-100" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick, disabled, "aria-label": ariaLabel ?? label, className: `${base} ${tone}`, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `h-4 w-4 ${spinning ? "animate-spin" : ""}`, "aria-hidden": "true", children: icon2 }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: spinning ? "Running..." : label })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: showLabel ? "inline" : "hidden sm:inline", children: spinning ? "Running..." : label })
   ] });
 }
 function PaginationControls(props) {
@@ -20660,7 +20663,7 @@ function tagToneClass(tone) {
   if (tone === "info") return "border-transparent bg-blue-500/10 text-blue-700";
   if (tone === "default") return "border-gray-200 bg-gray-100 text-gray-500";
   if (tone === "slate") return "border-gray-200 bg-gray-100 text-gray-500";
-  if (tone === "attention") return "border-transparent bg-brand-attention-bg text-brand-attention";
+  if (tone === "attention") return "border-transparent bg-brand-attention-bg text-brand-attention-text";
   return "border-transparent bg-blue-500/10 text-blue-700";
 }
 function actionButtonClass(variant) {
@@ -21027,7 +21030,7 @@ function ApprovalProofInline(props) {
         onApprovalTotpCodeChange: props.onApprovalTotpCodeChange
       }
     ),
-    props.error !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "alert", children: props.error }) : null,
+    props.error ?? null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row sm:items-center", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: props.onSubmit, disabled: submitDisabled, children: props.submitLabel }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: props.onBack, disabled: props.submitBusy, children: "Go back" })
@@ -21867,7 +21870,7 @@ const NAVIGATION_GROUPS = [
 ];
 function canonicalNavigationView(view) {
   if (view === "app-detail") return "fleet";
-  if (view === "audit" || view === "feed-health") return "supply-chain";
+  if (view === "audit" || view === "feed-health" || view === "workspaces") return "supply-chain";
   if (view === "protection-repair") return "extensions";
   return view;
 }
@@ -25112,6 +25115,16 @@ function ActivationSummary({
     return null;
   }
   const copy = resolvePackageManagerProtectionCopy(protection);
+  if (protection.path_status === "in_path" && activationAssistError === null) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs leading-5 text-slate-600", children: [
+      copy.pathDetail,
+      lastAuditProofAt !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        " Last audit proof ",
+        formatRelativeTime(lastAuditProofAt),
+        "."
+      ] }) : null
+    ] });
+  }
   const Icon = protection.path_status === "in_path" ? HiMiniCheckCircle : protection.path_status === "restart_required" ? HiMiniArrowPath : HiMiniExclamationTriangle;
   const toneClass = protection.path_status === "in_path" ? "border-brand-green/20 bg-brand-green/[0.04]" : protection.path_status === "restart_required" ? "border-brand-blue/20 bg-brand-blue/[0.04]" : "border-brand-attention/20 bg-brand-attention/[0.04]";
   const iconClass = protection.path_status === "in_path" ? "text-brand-green" : protection.path_status === "restart_required" ? "text-brand-blue" : "text-brand-attention";
@@ -25129,7 +25142,7 @@ function ActivationSummary({
         canActivateRuntime && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "primary", onClick: onActivateRuntime, disabled: activatingRuntime, children: activatingRuntime ? "Finishing activation…" : "Finish activation" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: onRefreshStatus, disabled: activatingRuntime, children: "Refresh status" })
       ] }),
-      activationAssistError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-attention", children: activationAssistError })
+      activationAssistError !== null && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-attention-text", children: activationAssistError })
     ] })
   ] }) });
 }
@@ -31524,7 +31537,7 @@ function extension(value, label) {
     required: bool$1(item.required, `${label}.required`),
     trust_class: item.trust_class === void 0 ? "first-party" : enumValue(item.trust_class, `${label}.trust_class`, ["first-party", "trusted-library", "external"]),
     activation: item.activation === void 0 ? "default-on" : enumValue(item.activation, `${label}.activation`, ["default-on", "opt-in"]),
-    publisher: item.publisher === void 0 ? { id: "hol", displayName: "Hashgraph Online" } : publisher(item.publisher, `${label}.publisher`),
+    publisher: item.publisher === void 0 ? { id: "hol", displayName: "HOL" } : publisher(item.publisher, `${label}.publisher`),
     icon: icon(item.icon, `${label}.icon`),
     source: enumValue(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"]),
     version: version(item.version, `${label}.version`),
@@ -32214,6 +32227,16 @@ function ExtensionAuthoritySetup(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(CheckAgain, { watch, note: "" })
   ] });
 }
+function closeOnEscape(onClose) {
+  return (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    onClose();
+  };
+}
 function ApprovalProofModal(props) {
   const {
     title,
@@ -32254,6 +32277,11 @@ function ApprovalProofModal(props) {
       requireFreshTotp
     ));
   }, [approvalGate, confirmDisabled, onConfirm, password, requireFreshTotp, totpCode]);
+  const handleEscape = reactExports.useCallback(() => {
+    if (!busy) {
+      onCancel();
+    }
+  }, [busy, onCancel]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/30 px-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "form",
     {
@@ -32264,6 +32292,7 @@ function ApprovalProofModal(props) {
       "aria-describedby": "approval-proof-modal-detail",
       className: "w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl",
       onSubmit: handleSubmit,
+      onKeyDown: closeOnEscape(handleEscape),
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval required" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "approval-proof-modal-title", className: "mt-2 text-base font-semibold text-brand-dark", children: title }),
@@ -35245,7 +35274,7 @@ async function fetchMcpProviderActions(cliId, options) {
     };
   });
   const nextOffset = body.next_offset;
-  if (nextOffset !== null && (typeof nextOffset !== "number" || !Number.isSafeInteger(nextOffset) || nextOffset !== options.offset + 50 || nextOffset > 1e4)) throw new Error("Invalid provider inventory page");
+  if (nextOffset !== null && (typeof nextOffset !== "number" || !Number.isSafeInteger(nextOffset) || nextOffset <= options.offset || nextOffset > options.offset + 50 || nextOffset > 1e4)) throw new Error("Invalid provider inventory page");
   return { actions, nextOffset, catalogToken: body.catalog_token };
 }
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -36663,7 +36692,7 @@ function turnProtectionOnUpdate(snapshot) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-MUAws0Y5.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-C_QkVNcf.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -36780,7 +36809,7 @@ function renderViewContent(props) {
   if (props.view === "policy") {
     return props.policyContent ?? null;
   }
-  if (props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health") {
+  if (props.view === "supply-chain" || props.view === "audit" || props.view === "feed-health" || props.view === "workspaces") {
     return props.supplyChainHubContent ?? null;
   }
   if (props.view === "inbox") {
@@ -37084,34 +37113,34 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
   }, [view, mainSelector]);
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-BXyV7oNP.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-CbqphIX4.js"), true ? __vite__mapDeps([4,3,5,6,7]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-CpitooFy.js"), true ? __vite__mapDeps([8,7,3,9,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-D6HYkV_q.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-BIUOUQ_O.js"), true ? __vite__mapDeps([6,7,8,5,9]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-D3SHkj-8.js"), true ? __vite__mapDeps([10,9,5,11,8]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-BiG33v6D.js"), true ? __vite__mapDeps([10,9]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-Cp-huDr6.js"), true ? __vite__mapDeps([12,11]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-3cnkv6h5.js"), true ? __vite__mapDeps([11,5]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-UGP1uq-z.js"), true ? __vite__mapDeps([13,7]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-B0TZsHE3.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-DabvDO9V.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BOsywkJu.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page--QnvLElq.js"), true ? __vite__mapDeps([12,6]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-DRY_qXhn.js"), true ? __vite__mapDeps([14,8]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-93T2cVjf.js"), true ? __vite__mapDeps([13,2]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-DF4GsLZL.js"), true ? __vite__mapDeps([15,3,4,16]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",
-  () => __vitePreload(() => import("./chunks/releases-workspace-DDSlU5cV.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
+  () => __vitePreload(() => import("./chunks/releases-workspace-BXhqp614.js"), true ? [] : void 0).then((m) => ({ default: m.ReleasesWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-zjCZDbfH.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-BHCDscE8.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -37151,6 +37180,7 @@ function viewTitle(view) {
   if (view === "audit") return "Audit";
   if (view === "policy") return "Rules & exceptions";
   if (view === "feed-health") return "Feed Health";
+  if (view === "workspaces") return "Workspaces";
   if (view === "about") return "About";
   if (view === "releases") return "Releases";
   if (view === "extensions") return "Extensions";
@@ -37201,6 +37231,9 @@ function resolveView(pathname) {
   }
   if (pathname === "/feed-health") {
     return "feed-health";
+  }
+  if (pathname === "/workspaces") {
+    return "workspaces";
   }
   if (pathname === "/about") {
     return "about";
@@ -37440,7 +37473,7 @@ function App() {
     };
   }, [view]);
   reactExports.useEffect(() => {
-    const needsReceipts = view === "evidence" || view === "app-detail" || view === "supply-chain" || view === "audit" || view === "feed-health";
+    const needsReceipts = view === "home" || view === "evidence" || view === "app-detail" || view === "supply-chain" || view === "audit" || view === "feed-health";
     const needsPolicies = view === "home" || view === "fleet" || view === "app-detail" || view === "supply-chain" || view === "audit" || view === "feed-health" || view === "policy";
     if (!needsReceipts && !needsPolicies) {
       return;
@@ -37910,6 +37943,7 @@ function App() {
           {
             requests,
             runtime,
+            receipts: receipts.kind === "ready" ? receipts.items : void 0,
             policies,
             onOpenInbox: handleOpenInbox,
             onOpenFleet: handleOpenFleet,
@@ -37987,6 +38021,7 @@ function App() {
           cloudState: runtime.snapshot.cloud_state ?? "unknown",
           cloudStateLabel: runtime.snapshot.cloud_state_label ?? "Unknown",
           syncConfigured: runtime.snapshot.sync_configured ?? false,
+          syncHealth: runtime.snapshot.cloud_sync_health?.state ?? null,
           pendingCount: runtime.snapshot.pending_count ?? 0,
           receiptCount: runtime.snapshot.receipt_count ?? 0,
           protectedAppCount: 0
@@ -38045,9 +38080,9 @@ export {
   HiMiniMinusCircle as a7,
   isUnsupportedPlatformCheck as a8,
   RECHECK_UNAVAILABLE_SIGNATURE as a9,
-  GuardHero as aA,
-  ProofStrip as aB,
-  HiMiniXCircle as aC,
+  HiMiniXCircle as aA,
+  GuardHero as aB,
+  ProofStrip as aC,
   HiMiniClipboardDocumentCheck as aD,
   HiMiniClipboard as aE,
   fetchResolvedApprovalGate as aF,
@@ -38093,11 +38128,11 @@ export {
   selectHarnessPosture as as,
   harnessPosturePatch as at,
   harnessRowTone as au,
-  harnessPostureOptions as av,
-  HiMiniEye as aw,
-  harnessRowStatus as ax,
-  PROTECTION_POSTURE_COPY as ay,
-  globalPosture as az,
+  PROTECTION_POSTURE_COPY as av,
+  harnessPostureOptions as aw,
+  globalPosture as ax,
+  harnessRowStatus as ay,
+  HiMiniEye as az,
   HiMiniChevronUp as b,
   LOCAL_CLI_CAPABILITIES as b$,
   importSettings as b0,
@@ -38164,7 +38199,7 @@ export {
   normalizeExtensionCatalogItem as by,
   guardApiCacheScope as bz,
   HiMiniChevronDown as c,
-  fetchPolicy as c$,
+  fetchApprovalPage as c$,
   readJson as c0,
   enrollablePackageScriptCommands as c1,
   seenSuggestionMeta as c2,
@@ -38175,33 +38210,33 @@ export {
   filterExtensionSuggestions as c7,
   suggestedHarnessExtensions as c8,
   suggestedSeenExtensions as c9,
-  customExtensionNeedsReview as cA,
-  extensionDisplayName as cB,
-  catalogRowSecondLine as cC,
-  extensionStateLabel as cD,
-  HiMiniGlobeAlt as cE,
-  HiMiniFunnel as cF,
-  discoveryFailureMessage as cG,
-  refreshCodexHostInventory as cH,
-  CODEX_HOST_FALLBACK as cI,
-  CONFIGURED_CONNECTIONS_FALLBACK as cJ,
-  loadCurrentDashboardBuild as cK,
-  canonicalExtensionId as cL,
-  extensionDetailHref as cM,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as cN,
-  acknowledgeDegradedExtensionControlAuthority as cO,
-  recoverExtensionControlAuthority as cP,
-  readExtensionDetailUrlState as cQ,
-  parseProtectionRoute as cR,
-  addCustomExtensionHref as cS,
-  GuardModalLayer as cT,
-  runHarnessAction as cU,
-  GuardHarnessActionError as cV,
-  HiMiniRocketLaunch as cW,
-  HiMiniTrash as cX,
-  fetchGuardApi as cY,
-  formatHarnessCommand as cZ,
-  fetchApprovalPage as c_,
+  connectorWorkspaceItems as cA,
+  customExtensionNeedsReview as cB,
+  extensionDisplayName as cC,
+  catalogRowSecondLine as cD,
+  extensionStateLabel as cE,
+  HiMiniGlobeAlt as cF,
+  HiMiniFunnel as cG,
+  discoveryFailureMessage as cH,
+  refreshCodexHostInventory as cI,
+  CODEX_HOST_FALLBACK as cJ,
+  CONFIGURED_CONNECTIONS_FALLBACK as cK,
+  loadCurrentDashboardBuild as cL,
+  canonicalExtensionId as cM,
+  extensionDetailHref as cN,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as cO,
+  acknowledgeDegradedExtensionControlAuthority as cP,
+  recoverExtensionControlAuthority as cQ,
+  readExtensionDetailUrlState as cR,
+  parseProtectionRoute as cS,
+  addCustomExtensionHref as cT,
+  GuardModalLayer as cU,
+  runHarnessAction as cV,
+  GuardHarnessActionError as cW,
+  HiMiniRocketLaunch as cX,
+  HiMiniTrash as cY,
+  fetchGuardApi as cZ,
+  formatHarnessCommand as c_,
   keepsPackageScriptCatalog as ca,
   recognizeLocalCli as cb,
   preferredPackageScriptExtension as cc,
@@ -38226,93 +38261,94 @@ export {
   waitForMcpDiscoveryJob as cv,
   isLocalCliId as cw,
   localCliHref as cx,
-  filterCodexHostApps as cy,
-  connectorWorkspaceItems as cz,
+  fetchPluginUpdatesApi as cy,
+  filterCodexHostApps as cz,
   HiMiniArrowPath as d,
-  Surface as d$,
-  HiMiniHome as d0,
-  appSetupTarget as d1,
-  guardActionPresentation as d2,
-  DEFAULT_FILTER_STATE as d3,
-  filterEvidence as d4,
-  sortEvidence as d5,
-  computeMetrics as d6,
-  CommandActivityWorkspace as d7,
-  EvidenceFilterBar as d8,
-  EvidenceInsightStrip as d9,
-  parseInterceptProofSnapshot as dA,
-  activatePackageFirewallRuntime as dB,
-  EntitlementNotice as dC,
-  chooseSupplyChainAuditFolder as dD,
-  fetchReceipts as dE,
-  lazyWorkspace as dF,
-  __vitePreload as dG,
-  scopeLabel as dH,
-  HiMiniCloudArrowUp as dI,
-  HiMiniCodeBracket as dJ,
-  HiMiniClipboardDocument as dK,
-  HiMiniUsers as dL,
-  HiMiniFolder as dM,
-  HiMiniIdentification as dN,
-  StyledSelect as dO,
-  policyActionLabel as dP,
-  createCloudExceptionRequest as dQ,
-  HiMiniPuzzlePiece as dR,
-  fetchCloudExceptions as dS,
-  fetchCloudExceptionRequests as dT,
-  downloadBlob as dU,
-  PaginationControls as dV,
-  PolicyStatField as dW,
-  HiMiniArrowDownTray as dX,
-  HiMiniInbox as dY,
-  HiMiniQueueList as dZ,
-  subscribeDashboardLocation as d_,
-  EvidenceActionList as da,
-  EvidenceActionDetail as db,
-  policyIdentityKey as dc,
-  clearLabelForScope as dd,
-  HiMiniChartBar as de,
-  HiMiniCheckBadge as df,
-  isSupplyChainAuditIncomplete as dg,
-  isSupplyChainAuditEvidence as dh,
-  readString$1 as di,
-  IconActionButton as dj,
-  HiMiniBeaker as dk,
-  ActivationSummary as dl,
-  ActionResultPanel as dm,
-  HiMiniBugAnt as dn,
-  ConnectFlowCard as dp,
-  ApprovalProofInline as dq,
-  HiMiniCloudArrowDown as dr,
-  fetchPackageFirewallStatus as ds,
-  runPackageAudit as dt,
-  resolveSupplyChainAuditFailure as du,
-  runPackageSync as dv,
-  startPackageFirewallConnect as dw,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as dx,
-  repairSupplyChainProtection as dy,
-  runPackageFirewallAction as dz,
+  HiMiniInbox as d$,
+  fetchPolicy as d0,
+  HiMiniHome as d1,
+  appSetupTarget as d2,
+  guardActionPresentation as d3,
+  DEFAULT_FILTER_STATE as d4,
+  filterEvidence as d5,
+  sortEvidence as d6,
+  computeMetrics as d7,
+  CommandActivityWorkspace as d8,
+  EvidenceFilterBar as d9,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as dA,
+  repairSupplyChainProtection as dB,
+  runPackageFirewallAction as dC,
+  parseInterceptProofSnapshot as dD,
+  activatePackageFirewallRuntime as dE,
+  EntitlementNotice as dF,
+  chooseSupplyChainAuditFolder as dG,
+  fetchReceipts as dH,
+  lazyWorkspace as dI,
+  __vitePreload as dJ,
+  scopeLabel as dK,
+  HiMiniCloudArrowUp as dL,
+  HiMiniCodeBracket as dM,
+  HiMiniClipboardDocument as dN,
+  HiMiniUsers as dO,
+  HiMiniFolder as dP,
+  HiMiniIdentification as dQ,
+  StyledSelect as dR,
+  policyActionLabel as dS,
+  createCloudExceptionRequest as dT,
+  HiMiniPuzzlePiece as dU,
+  fetchCloudExceptions as dV,
+  fetchCloudExceptionRequests as dW,
+  downloadBlob as dX,
+  PaginationControls as dY,
+  PolicyStatField as dZ,
+  HiMiniArrowDownTray as d_,
+  EvidenceInsightStrip as da,
+  EvidenceActionList as db,
+  EvidenceActionDetail as dc,
+  policyIdentityKey as dd,
+  clearLabelForScope as de,
+  HiMiniChartBar as df,
+  HiMiniCheckBadge as dg,
+  isSupplyChainAuditIncomplete as dh,
+  isSupplyChainAuditEvidence as di,
+  readString$1 as dj,
+  IconActionButton as dk,
+  HiMiniBeaker as dl,
+  ActivationSummary as dm,
+  ActionResultPanel as dn,
+  HiMiniBugAnt as dp,
+  fetchSupplyChainBundle as dq,
+  closeOnEscape as dr,
+  ConnectFlowCard as ds,
+  ApprovalProofInline as dt,
+  HiMiniCloudArrowDown as du,
+  fetchPackageFirewallStatus as dv,
+  runPackageAudit as dw,
+  resolveSupplyChainAuditFailure as dx,
+  runPackageSync as dy,
+  startPackageFirewallConnect as dz,
   HiMiniCheck as e,
-  HiMiniEllipsisHorizontal as e0,
-  HiMiniMinus as e1,
-  HiMiniWrench as e2,
-  HiMiniArrowLongRight as e3,
-  HiMiniArrowUpCircle as e4,
-  fetchReleaseFeedApi as e5,
-  fetchMcpPolicyRequest as e6,
-  resolveMcpPolicyRequest as e7,
-  HiMiniDocumentPlus as e8,
-  HiMiniDocumentMagnifyingGlass as e9,
-  fetchSupplyChainBundle as ea,
-  isSupplyChainScannerEvidence as eb,
-  isBlockedGuardAction as ec,
-  HiMiniShieldExclamation as ed,
-  HiMiniComputerDesktop as ee,
-  HiMiniChevronLeft as ef,
-  HiMiniArrowDown as eg,
-  HiMiniArrowUp as eh,
-  runAuditRemediation as ei,
-  HiMiniSignal as ej,
+  HiMiniQueueList as e0,
+  subscribeDashboardLocation as e1,
+  Surface as e2,
+  HiMiniEllipsisHorizontal as e3,
+  HiMiniMinus as e4,
+  HiMiniWrench as e5,
+  HiMiniArrowLongRight as e6,
+  HiMiniArrowUpCircle as e7,
+  fetchReleaseFeedApi as e8,
+  fetchMcpPolicyRequest as e9,
+  resolveMcpPolicyRequest as ea,
+  HiMiniDocumentPlus as eb,
+  HiMiniDocumentMagnifyingGlass as ec,
+  HiMiniChevronLeft as ed,
+  HiMiniArrowDown as ee,
+  HiMiniArrowUp as ef,
+  runAuditRemediation as eg,
+  isBlockedGuardAction as eh,
+  isSupplyChainScannerEvidence as ei,
+  HiMiniFolderOpen as ej,
+  HiMiniSignal as ek,
   formatRelativeTime as f,
   HiMiniNoSymbol as g,
   harnessDisplayName as h,

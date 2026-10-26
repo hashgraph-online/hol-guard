@@ -109,6 +109,8 @@ mod observations;
 pub mod source;
 #[path = "native_command_program_wire.rs"]
 mod wire;
+#[path = "native_command_program_work_stats.rs"]
+pub mod work_stats;
 use compile::{compile_node, validate_graph};
 use evaluation::Evaluation;
 use wire::*;

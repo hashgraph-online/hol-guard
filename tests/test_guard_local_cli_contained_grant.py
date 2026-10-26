@@ -8,7 +8,6 @@ widened by exactly that grant, and refuses one that changed before launch.
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,7 +16,6 @@ import pytest
 from codex_plugin_scanner.guard import local_cli_hook as client
 from codex_plugin_scanner.guard import native_hook_containment_route as containment_route
 from codex_plugin_scanner.guard.adapters import zcode_contained_tests
-from codex_plugin_scanner.guard.cli import commands_hook_native_containment as cli_route
 from codex_plugin_scanner.guard.daemon import hook_contained_grant as routing
 from codex_plugin_scanner.guard.runtime import restricted_workspace as workspace_sink
 from codex_plugin_scanner.guard.runtime import restricted_workspace_grant_lookup as lookup
@@ -246,20 +244,6 @@ def test_daemon_routes_the_grant_and_answers_the_sink_with_the_receipt(
     assert (
         routing.granted_containment_response(object(), _review(), payload=payload("lanectl status"), **common) is None
     )
-
-
-def test_direct_cli_hook_routes_a_granted_review(
-    containment_resident: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(cli_route, "granted_containment_response", lambda store, result, **kwargs: {"routed": True})
-    monkeypatch.setattr(cli_route, "record_pre_hook_command_activity_best_effort", lambda **kwargs: None)
-    edge = {"event_name": "PreToolUse", "harness": "omp", "result": _review()}
-    context = SimpleNamespace(guard_home=tmp_path, home_dir=tmp_path)
-    stream = io.StringIO()
-    assert cli_route.emit_native_containment_route(edge, payload(), context, tmp_path, stream, object()) == 0  # type: ignore[arg-type]
-    assert stream.getvalue().strip() == '{"routed":true}'
-    monkeypatch.setattr(cli_route, "granted_containment_response", lambda store, result, **kwargs: None)
-    assert cli_route.emit_native_containment_route(edge, payload(), context, tmp_path, io.StringIO(), object()) is None  # type: ignore[arg-type]
 
 
 def _granted_plan(workspace: Path, **changes: object) -> dict[str, object]:

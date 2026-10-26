@@ -25,12 +25,23 @@ pub(in crate::pretool) fn repository_inert(
 ) -> Option<bool> {
     // `git describe --dirty` and `--broken` refresh the index before they
     // answer, so they reach the `post-index-change` hook the same way.
-    let refreshes = matches!(operation, "status" | "diff")
+    // `git submodule status` reads the superproject index, so it is held to
+    // the same hook and ownership inspection.
+    let refreshes = matches!(operation, "status" | "diff" | "submodule")
         || super::super::git_history_reads::refreshes_the_index(
             operation,
             arguments.get(1..).unwrap_or_default(),
         );
-    if refreshes && !super::submodules_are_inert(base, arguments, deadline)? {
+    // A tracked gitlink leaves a descending read unproven: `status` and `diff`
+    // open each recorded submodule and refresh its index there, under that
+    // submodule's own configuration, which a superproject-rooted probe never
+    // read. The status listing does not descend. It names each recorded object
+    // id from the superproject index and describes it against the submodule's
+    // refs, starting nothing a submodule's `core.fsmonitor`, `core.hooksPath`,
+    // `core.pager` or `diff.external` names, so the gitlink rejection would
+    // refuse it in exactly the superprojects it is written for.
+    let descends = refreshes && operation != "submodule";
+    if descends && !super::submodules_are_inert(base, arguments, deadline)? {
         return Some(false);
     }
     let roots = super::super::git_routes::owned_temporary_roots();
@@ -428,3 +439,7 @@ mod tests {
         assert_eq!(absolute_lines(b"/r/.git\n\n/r/.git\n", 2), None);
     }
 }
+
+#[cfg(all(test, unix))]
+#[path = "git_probe_submodule_tests.rs"]
+mod submodule_tests;

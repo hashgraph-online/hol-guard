@@ -827,8 +827,8 @@ jobs:
         env:
           CHANNEL: ${{ steps.version.outputs.channel }}
           SOURCE_SHA: ${{ steps.version.outputs.source_sha }}
-          # Windows ARM64 wheels ship on alpha and stable GitHub releases only. Pull request
-          # canaries skip that runner, and so do sources that predate GitHub-only native wheels.
+          # Windows ARM64 and Linux ARM64 wheels ship on alpha and stable GitHub releases only.
+          # Pull request canaries skip those runners, and so do sources that predate each wheel.
           NATIVE_WHEEL_MATRIX: >-
             [
             {"runner": "ubuntu-latest", "platform_tag": "manylinux_2_17_x86_64", "target": "x86_64-unknown-linux-musl",
@@ -847,13 +847,18 @@ jobs:
             {"runner": "windows-11-arm", "platform_tag": "win_arm64", "rustflags": "-C link-arg=/Brepro",
              "target": "aarch64-pc-windows-msvc",
              "runtime": "rust/target/aarch64-pc-windows-msvc/release/hol-guard-runtime.exe",
-             "source_compiler": "rust/target/aarch64-pc-windows-msvc/release/guard-command-source.exe"}
+             "source_compiler": "rust/target/aarch64-pc-windows-msvc/release/guard-command-source.exe"},
+            {"runner": "ubuntu-24.04-arm", "platform_tag": "manylinux_2_17_aarch64", "target": "aarch64-unknown-linux-musl",
+             "runtime": "rust/target/aarch64-unknown-linux-musl/release/hol-guard-runtime",
+             "source_compiler": "rust/target/aarch64-unknown-linux-musl/release/guard-command-source"}
             ]
         run: |
           set -euo pipefail
           filter='.'
           if [[ "$CHANNEL" == "canary" ]] || ! git cat-file -e "${SOURCE_SHA}:scripts/embed_native_wheel_manifest.py"; then
-            filter='map(select(.platform_tag != "win_arm64"))'
+            filter='map(select(.platform_tag != "win_arm64" and .platform_tag != "manylinux_2_17_aarch64"))'
+          elif ! git grep -q manylinux_2_17_aarch64 "$SOURCE_SHA" -- scripts/release_artifact_sets.py; then
+            filter='map(select(.platform_tag != "manylinux_2_17_aarch64"))'
           fi
           echo "matrix=$(jq -c "$filter" <<< "$NATIVE_WHEEL_MATRIX")" >> "$GITHUB_OUTPUT"
           echo "targets=$(jq -c "$filter | map(.target)" <<< "$NATIVE_WHEEL_MATRIX")" >> "$GITHUB_OUTPUT"
@@ -1266,6 +1271,50 @@ jobs:
     permissions:
       contents: read
 
+  build-native-guard-wheel-linux-arm64:
+    name: Build native Guard wheel (aarch64-unknown-linux-musl)
+    if: >-
+      always() && !cancelled() && needs.build.result == 'success' &&
+      contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'aarch64-unknown-linux-musl') &&
+      (
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'publish-testpypi-canary') &&
+          needs.build.outputs.channel == 'canary'
+        ) ||
+        (
+          needs.build.outputs.channel == 'alpha' &&
+          (
+            (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') ||
+            (
+              github.event_name == 'workflow_dispatch' &&
+              (github.event.inputs.release_train == '3.0' || github.event.inputs.release_train == 'main')
+            )
+          )
+        ) ||
+        (
+          needs.build.outputs.channel == 'stable' &&
+          github.event_name == 'workflow_dispatch' &&
+          github.run_attempt == 1 &&
+          (github.ref == 'refs/heads/main' || github.ref == format('refs/tags/v{0}', github.event.inputs.release_version)) &&
+          github.event.inputs.release_channel == 'stable' &&
+          github.event.inputs.release_train == 'main'
+        )
+      )
+    # No precompile lane: the ARM64 runner compiles in-job, so this wheel adds no warm-cache artifacts.
+    needs: [build]
+    uses: ./.github/workflows/release-native-wheel.yml
+    with:
+      target: aarch64-unknown-linux-musl
+      source_sha: ${{ needs.build.outputs.source_sha }}
+      version: ${{ needs.build.outputs.version }}
+      channel: ${{ needs.build.outputs.channel }}
+      precompiled: false
+      release_repair: ${{ needs.build.outputs.release_repair == 'true' }}
+    permissions:
+      contents: read
+
   publish-installed-bundle-assets:
     name: Publish package-pinned immutable data before installable packages
     needs: build
@@ -1356,8 +1405,10 @@ jobs:
        (!contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'x86_64-pc-windows-msvc') && needs.build-native-guard-wheel-windows-x64.result == 'skipped')) &&
       ((contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'aarch64-pc-windows-msvc') && needs.build-native-guard-wheel-windows-arm64.result == 'success') ||
        (!contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'aarch64-pc-windows-msvc') && needs.build-native-guard-wheel-windows-arm64.result == 'skipped')) &&
+      ((contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'aarch64-unknown-linux-musl') && needs.build-native-guard-wheel-linux-arm64.result == 'success') ||
+       (!contains(fromJSON(needs.build.outputs.native_wheel_targets || '[]'), 'aarch64-unknown-linux-musl') && needs.build-native-guard-wheel-linux-arm64.result == 'skipped')) &&
       needs.publish-installed-bundle-assets.result == 'success'
-    needs: [build, build-native-guard-wheel-linux-x64, build-native-guard-wheel-macos-x64, build-native-guard-wheel-macos-arm64, build-native-guard-wheel-windows-x64, build-native-guard-wheel-windows-arm64, publish-installed-bundle-assets]
+    needs: [build, build-native-guard-wheel-linux-x64, build-native-guard-wheel-macos-x64, build-native-guard-wheel-macos-arm64, build-native-guard-wheel-windows-x64, build-native-guard-wheel-windows-arm64, build-native-guard-wheel-linux-arm64, publish-installed-bundle-assets]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -1397,6 +1448,7 @@ jobs:
               "aarch64-apple-darwin": ("macos-15", "macosx_11_0_arm64"),
               "x86_64-pc-windows-msvc": ("windows-latest", "win_amd64"),
               "aarch64-pc-windows-msvc": ("windows-11-arm", "win_arm64"),
+              "aarch64-unknown-linux-musl": ("ubuntu-24.04-arm", "manylinux_2_17_aarch64"),
           }
           matrix_targets = []
           for row in matrix:
@@ -1426,9 +1478,15 @@ jobs:
           manifest = subprocess.check_output(
               ["git", "ls-tree", "--name-only", source, "--", "scripts/embed_native_wheel_manifest.py"], text=True,
           ).strip()
+          linux_arm64 = subprocess.run(
+              ["git", "grep", "-q", "manylinux_2_17_aarch64", source, "--", "scripts/release_artifact_sets.py"],
+              check=False,
+          ).returncode == 0
           required = set(metadata)
           if channel == "canary" or not manifest:
               required.remove("aarch64-pc-windows-msvc")
+          if channel == "canary" or not manifest or not linux_arm64:
+              required.remove("aarch64-unknown-linux-musl")
           if set(selected) != required:
               raise SystemExit("Native wheel inventory does not match the qualified source and channel")
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
@@ -2116,36 +2174,59 @@ jobs:
         if: steps.pypi.outputs.hol_guard_upload == 'true'
         with:
           packages-dir: upload-dist-hol-guard/
+      - name: Skip plugin-scanner when its PyPI project is over quota
+        id: scanner_quota
+        if: steps.pypi.outputs.plugin_scanner_upload == 'true' && needs.build.outputs.release_train == 'main'
+        run: |
+          set -euo pipefail
+          quota_output=$(uv run --with packaging==25.0 python scripts/pypi_project_storage.py \
+            --project plugin-scanner --pending-dir dist-plugin-scanner)
+          printf '%s\n' "$quota_output"
+          if jq -e '.over_limit == true' <<< "$quota_output" >/dev/null; then
+            echo "blocked=true" >> "$GITHUB_OUTPUT"
+            echo "::warning title=plugin-scanner publication skipped::plugin-scanner was not uploaded because the PyPI project limit is reached. hol-guard publication continues."
+          else
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Publish plugin-scanner to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
-        if: steps.pypi.outputs.plugin_scanner_upload == 'true'
+        if: steps.pypi.outputs.plugin_scanner_upload == 'true' && steps.scanner_quota.outputs.blocked != 'true'
         with:
           packages-dir: dist-plugin-scanner/
       - name: Remove generated upload attestations
         run: rm -f upload-dist-hol-guard/*.publish.attestation dist-plugin-scanner/*.publish.attestation
       - name: Download and verify exact PyPI artifacts
         env:
+          SCANNER_QUOTA_BLOCKED: ${{ steps.scanner_quota.outputs.blocked }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
+          scanner_blocked=false
+          if [[ "${SCANNER_QUOTA_BLOCKED}" == "true" ]]; then
+            scanner_blocked=true
+          fi
           for attempt in {1..60}; do
             if ! guard_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
               inspect-release --registry pypi --project hol-guard --version "$VERSION"); then
               exit 1
             fi
-            if ! scanner_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
-              verify-release --registry pypi --project plugin-scanner --version "$VERSION" \
-              --dist-dir dist-plugin-scanner --download-dir verified-pypi-plugin-scanner); then
-              exit 1
-            fi
             guard_status=$(jq -r '.status' <<< "$guard_result")
-            scanner_status=$(jq -r '.status' <<< "$scanner_result")
-            if [[ "$guard_status" == "present" && "$scanner_status" == "exact" ]]; then
+            if [[ "$scanner_blocked" == "true" ]]; then
+              scanner_status=skipped
+            else
+              if ! scanner_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
+                verify-release --registry pypi --project plugin-scanner --version "$VERSION" \
+                --dist-dir dist-plugin-scanner --download-dir verified-pypi-plugin-scanner); then
+                exit 1
+              fi
+              scanner_status=$(jq -r '.status' <<< "$scanner_result")
+            fi
+            if [[ "$guard_status" == "present" && ( "$scanner_status" == "exact" || "$scanner_blocked" == "true" ) ]]; then
               uv run --with packaging==25.0 python scripts/retry_verify_published.py --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set pure || exit 1
               break
             fi
             if [[ "$guard_status" != "absent" && "$guard_status" != "present" && "$guard_status" != "pending" ]] || \
-              [[ "$scanner_status" != "absent" && "$scanner_status" != "exact" ]] || \
+              [[ "$scanner_blocked" != "true" && "$scanner_status" != "absent" && "$scanner_status" != "exact" ]] || \
               [[ "$attempt" == "60" ]]; then
               echo "PyPI did not expose the exact release artifacts" >&2
               exit 1
@@ -2156,10 +2237,13 @@ jobs:
           guard_wheels=(dist-hol-guard/*-py3-none-any.whl)
           [[ "${#guard_wheels[@]}" == "1" ]]
           guard_wheel="${guard_wheels[0]}"
-          scanner_wheel=$(jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$scanner_result")
-          [[ -n "$guard_wheel" && -n "$scanner_wheel" ]]
+          [[ -n "$guard_wheel" ]]
           [[ "$(uv tool run --from "$guard_wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
-          [[ "$(uv tool run --from "$scanner_wheel" plugin-scanner --version)" == "plugin-scanner $VERSION" ]]
+          if [[ "$scanner_blocked" != "true" ]]; then
+            scanner_wheel=$(jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$scanner_result")
+            [[ -n "$scanner_wheel" ]]
+            [[ "$(uv tool run --from "$scanner_wheel" plugin-scanner --version)" == "plugin-scanner $VERSION" ]]
+          fi
 
   release-unpublished-alpha-reservation:
     name: Release unpublished alpha reservation

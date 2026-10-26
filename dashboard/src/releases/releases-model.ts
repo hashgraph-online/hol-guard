@@ -468,11 +468,10 @@ export function groupReleaseAssets(assets: readonly ReleaseAsset[]): {
  */
 const MONOGRAM_TONES = [
   "bg-brand-blue/10 text-brand-blue",
-  "bg-emerald-500/10 text-emerald-700",
-  "bg-purple-500/10 text-purple-700",
-  "bg-amber-500/10 text-amber-700",
-  "bg-rose-500/10 text-rose-700",
-  "bg-slate-500/10 text-slate-700",
+  "bg-brand-green-bg text-brand-green-text",
+  "bg-brand-purple/10 text-brand-purple",
+  "bg-brand-attention-bg text-brand-attention-text",
+  "bg-brand-dark/[0.07] text-brand-dark/75",
 ];
 
 export function contributorMonogram(contributor: ReleaseContributor): string {

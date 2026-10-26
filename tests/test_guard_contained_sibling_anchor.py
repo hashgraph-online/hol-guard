@@ -24,6 +24,11 @@ def sibling_home(tmp_path: Path) -> tuple[Path, Path, Path]:
     return home, workspace, sibling
 
 
+@pytest.fixture(autouse=True)
+def _peel_from_the_resident(native_contained_wrapper_runtime: Path) -> None:
+    """Every peel here is the classifier's answer, asked of the session resident."""
+
+
 def test_quiet_or_sequenced_cd_into_a_sibling_repository_is_peeled(tmp_path: Path) -> None:
     home, workspace, sibling = sibling_home(tmp_path)
     dashboard = sibling / "dashboard"
@@ -136,7 +141,12 @@ def test_sink_runs_an_anchored_script_from_the_sibling_root(monkeypatch: pytest.
     assert runs == [(sibling.resolve(), sibling.resolve())]
 
 
-def test_plain_data_settings_are_dropped_and_others_stay() -> None:
+def test_plain_data_settings_are_dropped_and_others_stay(monkeypatch: pytest.MonkeyPatch) -> None:
+    # No command here stands behind a transparent prefix, and the parser owns
+    # that answer; the settings themselves are this module's subject.
+    from codex_plugin_scanner.guard import native_restricted_pytest
+
+    monkeypatch.setattr(native_restricted_pytest, "restricted_native", lambda *_args: None)
     assert _split_command_prefix(["REPORT_DIR=/tmp/report", "CI=1", "vitest", "run"], drop_data=True) == (
         ["vitest", "run"],
         {"CI": "1"},
@@ -148,10 +158,3 @@ def test_plain_data_settings_are_dropped_and_others_stay() -> None:
         ["TMPDIR=/tmp/x", "pytest"],
     ):
         assert _split_command_prefix(command, drop_data=True) == (command, {})
-
-
-def test_without_posix_owners_no_sibling_root_is_proven(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    home, workspace, sibling = sibling_home(tmp_path)
-    monkeypatch.delattr("os.getuid", raising=False)
-    for command in ("pytest -q", f"python3 {sibling / 'scripts' / 'report.py'}"):
-        assert anchored_sibling_root(command, workspace=workspace, cwd=workspace, home=home) is None

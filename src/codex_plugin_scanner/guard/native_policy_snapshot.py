@@ -126,6 +126,16 @@ def _policy_digest(*, config_digest: str, rule_digest: str) -> str:
 
 
 def _private_guard_home(guard_home: Path) -> None:
+    """Refuse to keep generation state anywhere another account could reach it.
+
+    A symlinked home is followed rather than refused: the link itself is not
+    trusted to sign policy -- ``guard_home_symlink`` degrades local policy
+    authority for exactly that reason -- but Guard still has to run from one,
+    and what the generation lock needs is that the directory the link names is
+    the owner's and closed to everyone else. A link that names nothing, or
+    something other than a directory, is still invalid.
+    """
+
     if os.name == "nt":
         _windows_ensure_private_directory(guard_home)
         return
@@ -134,9 +144,14 @@ def _private_guard_home(guard_home: Path) -> None:
     except FileNotFoundError:
         guard_home.mkdir(mode=0o700, parents=True, exist_ok=True)
         metadata = guard_home.lstat()
-    if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+    if stat.S_ISLNK(metadata.st_mode):
+        try:
+            metadata = guard_home.stat()
+        except OSError as error:
+            raise NativePolicySnapshotError("native_policy_generation_home_invalid") from error
+    if not stat.S_ISDIR(metadata.st_mode):
         raise NativePolicySnapshotError("native_policy_generation_home_invalid")
-    if os.name != "nt" and (metadata.st_uid != os.geteuid() or stat.S_IMODE(metadata.st_mode) & 0o022):
+    if metadata.st_uid != os.geteuid() or stat.S_IMODE(metadata.st_mode) & 0o022:
         raise NativePolicySnapshotError("native_policy_generation_home_invalid")
 
 

@@ -30,6 +30,7 @@ mod policy_bundle_v2;
 mod policy_bundle_v2_ack;
 
 pub use policy_bundle_op::evaluate_policy_bundle_authority_request as evaluate;
+pub use policy_bundle_op::{evaluate_with_payload_hasher, PayloadHasher};
 
 /// Timestamp semantics shared with runtime callers.
 pub mod time {

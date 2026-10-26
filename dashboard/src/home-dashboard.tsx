@@ -137,6 +137,7 @@ export function HomeWorkspace(props: {
   requests: HomeRequestState;
   runtime: HomeRuntimeState;
   policies: HomePolicyState;
+  receipts?: readonly GuardReceipt[];
   onOpenInbox: () => void;
   onOpenFleet: () => void;
   onOpenEvidence: () => void;
@@ -434,7 +435,7 @@ export function HomeWorkspace(props: {
 
           <HomeProtectionModule
             snapshot={snapshot}
-            managedInstalls={managedInstalls}
+            receipts={props.receipts}
             onOpenFleet={props.onOpenFleet}
             onOpenSupplyChain={props.onOpenSupplyChain}
           />

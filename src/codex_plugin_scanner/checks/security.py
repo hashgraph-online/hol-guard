@@ -19,6 +19,7 @@ from ..path_support import (
     read_text_file_within_root,
     resolves_within_root,
 )
+from .security_binaries import UninspectedBinary, inspect_packaged_binary, uninspected_binary_check
 from .security_failures import ScanInputUnreadableError, unreadable_scan_input_failure
 from .security_secret_patterns import (
     DOCUMENTATION_EXTS,
@@ -97,6 +98,7 @@ MAX_SCAN_FILE_BYTES = 16 * 1024 * 1024
 MAX_SCAN_TOTAL_BYTES = 512 * 1024 * 1024
 MAX_SECRET_MATCHES_PER_FILE = 10_000
 MAX_SCAN_DEPTH = 64
+MAX_UNINSPECTED_BINARIES = 64
 
 BINARY_EXTS = {
     ".png",
@@ -204,8 +206,17 @@ def _raise_walk_error(error: OSError) -> None:
     raise ScanInputUnreadableError(f"filesystem traversal failed: {reason}") from error
 
 
-def _scan_all_files(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> list[Path]:
-    """Recursively find all files, skipping excluded dirs."""
+def _scan_all_files(
+    plugin_dir: Path,
+    files: tuple[Path, ...] | None = None,
+    uninspected: list[UninspectedBinary] | None = None,
+) -> list[Path]:
+    """Recursively find all files, skipping excluded dirs.
+
+    A file over the size limit fails the scan unless ``uninspected`` is given and its
+    headers show a packaged executable; that file is then recorded there, left out of
+    the result, and never read.
+    """
     if files is not None:
         discovered = []
         try:
@@ -253,17 +264,25 @@ def _scan_all_files(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> 
     if len(discovered) > MAX_SCAN_FILES:
         raise ScanBudgetExceededError(f"scannable files exceeded {MAX_SCAN_FILES}")
     total_bytes = 0
+    scannable = []
     for path in discovered:
         try:
             size = path.stat().st_size
         except OSError:
             continue
         if size > MAX_SCAN_FILE_BYTES:
-            raise ScanBudgetExceededError(f"{path.name} exceeded {MAX_SCAN_FILE_BYTES} bytes")
+            binary = inspect_packaged_binary(path) if uninspected is not None else None
+            if uninspected is None or binary is None:
+                raise ScanBudgetExceededError(f"{path.name} exceeded {MAX_SCAN_FILE_BYTES} bytes")
+            if len(uninspected) >= MAX_UNINSPECTED_BINARIES:
+                raise ScanBudgetExceededError(f"packaged binaries exceeded {MAX_UNINSPECTED_BINARIES}")
+            uninspected.append(UninspectedBinary(path=path, size=size, binary=binary))
+            continue
         total_bytes += size
         if total_bytes > MAX_SCAN_TOTAL_BYTES:
             raise ScanBudgetExceededError(f"aggregate input exceeded {MAX_SCAN_TOTAL_BYTES} bytes")
-    return discovered
+        scannable.append(path)
+    return scannable
 
 
 def _is_example_surface(relative_path: Path) -> bool:
@@ -711,12 +730,15 @@ def check_license(plugin_dir: Path) -> CheckResult:
 
 
 def _check_no_hardcoded_secrets(
-    plugin_dir: Path, files: tuple[Path, ...] | None, runtime_findings: list[Finding]
+    plugin_dir: Path,
+    files: tuple[Path, ...] | None,
+    runtime_findings: list[Finding],
+    uninspected: list[UninspectedBinary],
 ) -> CheckResult:
     findings: list[tuple[str, int]] = []
     resolved_plugin_dir = plugin_dir.resolve()
     try:
-        for fpath in _scan_all_files(resolved_plugin_dir, files):
+        for fpath in _scan_all_files(resolved_plugin_dir, files, uninspected):
             relative_path = fpath.relative_to(resolved_plugin_dir)
             try:
                 content = read_text_file_within_root(
@@ -752,7 +774,8 @@ def _check_no_hardcoded_secrets(
             passed=True,
             points=7,
             max_points=7,
-            message="No hardcoded secrets detected",
+            message="No hardcoded secrets detected"
+            + (f" (excluding {len(uninspected)} uninspected packaged executable(s))" if uninspected else ""),
         )
     shown = [path for path, _line_number in findings[:5]]
     suffix = f" and {len(findings) - 5} more" if len(findings) > 5 else ""
@@ -778,11 +801,19 @@ def _check_no_hardcoded_secrets(
     )
 
 
-def check_credential_access(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> tuple[CheckResult, CheckResult]:
+def check_credential_access(
+    plugin_dir: Path,
+    files: tuple[Path, ...] | None = None,
+    *,
+    uninspected: list[UninspectedBinary] | None = None,
+) -> tuple[CheckResult, CheckResult]:
     """Scan once and keep literal scoring separate from advisory capabilities."""
     runtime_findings: list[Finding] = []
-    literal_check = _check_no_hardcoded_secrets(plugin_dir, files, runtime_findings)
+    skipped = uninspected if uninspected is not None else []
+    literal_check = _check_no_hardcoded_secrets(plugin_dir, files, runtime_findings, skipped)
     complete = all(finding.rule_id == "HARDCODED_SECRET" for finding in literal_check.findings)
+    if not complete:
+        skipped.clear()
     message = (
         "Runtime credential access requires review"
         if runtime_findings
@@ -1190,7 +1221,7 @@ def check_no_approval_bypass_defaults(
     resolved_plugin_dir = plugin_dir.resolve()
     strict_paths = _instruction_file_keys(plugin_dir, resolved_plugin_dir, instruction_files)
     try:
-        for file_path in _scan_all_files(resolved_plugin_dir, files):
+        for file_path in _scan_all_files(resolved_plugin_dir, files, []):
             relative_path = file_path.relative_to(resolved_plugin_dir)
             if not file_path.name.endswith((".json", ".md", ".yaml", ".yml", ".toml")):
                 continue
@@ -1251,13 +1282,30 @@ def check_no_approval_bypass_defaults(
     )
 
 
+def check_uninspected_binaries(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult | None:
+    """List packaged executables the scan skipped; None when there are none or the walk itself failed.
+
+    A failed walk is already reported by the content checks that share it.
+    """
+    resolved_plugin_dir = plugin_dir.resolve()
+    uninspected: list[UninspectedBinary] = []
+    try:
+        _scan_all_files(resolved_plugin_dir, files, uninspected)
+    except (ScanInputUnreadableError, ScanBudgetExceededError):
+        return None
+    return uninspected_binary_check(resolved_plugin_dir, uninspected) if uninspected else None
+
+
 def run_security_checks(plugin_dir: Path, *, instruction_files: tuple[Path, ...] = ()) -> tuple[CheckResult, ...]:
     """Run the security checks; ``instruction_files`` are read as agent instructions by the approval check."""
+    uninspected: list[UninspectedBinary] = []
+    credential_checks = check_credential_access(plugin_dir, uninspected=uninspected)
     return (
         check_security_md(plugin_dir),
         check_license(plugin_dir),
-        *check_credential_access(plugin_dir),
+        *credential_checks,
         check_no_dangerous_mcp(plugin_dir),
         check_mcp_transport_security(plugin_dir),
         check_no_approval_bypass_defaults(plugin_dir, instruction_files=instruction_files),
+        *((uninspected_binary_check(plugin_dir.resolve(), uninspected),) if uninspected else ()),
     )

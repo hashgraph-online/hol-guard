@@ -18,6 +18,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from .artifact_native_fields import artifact_native_fields as _artifact_wire
 from .models import GuardArtifact, HarnessDetection
 from .native_context import _UNBOUND_PREFIX
 from .native_path_anchor import anchor_to_process_directory
@@ -76,23 +77,6 @@ def _native(kind: str, args: Mapping[str, Any]) -> dict[str, Any]:
         return native_runner_authority(kind, args, timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS)
     except NativeRunnerAuthorityError as error:
         raise NativeAibomError(str(error)) from error
-
-
-def _artifact_wire(artifact: GuardArtifact) -> dict[str, object]:
-    return {
-        "artifact_id": artifact.artifact_id,
-        "name": artifact.name,
-        "harness": artifact.harness,
-        "artifact_type": artifact.artifact_type,
-        "source_scope": artifact.source_scope,
-        "config_path": artifact.config_path,
-        "command": artifact.command,
-        "args": list(artifact.args),
-        "url": artifact.url,
-        "transport": artifact.transport,
-        "publisher": artifact.publisher,
-        "metadata": dict(artifact.metadata),
-    }
 
 
 def _artifact_from_wire(item: object) -> GuardArtifact:

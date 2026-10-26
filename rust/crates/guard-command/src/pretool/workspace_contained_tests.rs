@@ -78,6 +78,11 @@ fn unproven_local_commands_run_in_the_workspace_sandbox_on_macos() {
         "git checkout -b fix-1",
         "git stash",
         "git stash push -m 'wip: parser'",
+        // A pathspec keeps strictly less work than the unbounded form does,
+        // and the entry still holds every change the command moves.
+        "git stash push -- src/app.py",
+        "git stash push src/app.py",
+        "git stash push -m 'warm cache' -- src/app.py",
         "git stash -u && git switch -c spike",
     ] {
         let got = reason("omp", command, &ws, true);
@@ -224,7 +229,6 @@ fn commands_with_network_privilege_or_escape_stay_at_review() {
         "git stash pop",
         "git stash drop",
         "git stash clear",
-        "git stash push -- src/app.py",
         "git stash -m",
         "cat .env",
         "GIT_DIR=/x git status",

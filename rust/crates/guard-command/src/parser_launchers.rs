@@ -85,12 +85,19 @@ const GRAMMARS: [Grammar; 3] = [
 /// Where the program stands behind a launcher at `index`, when every word in
 /// between is one this launcher documents and a program follows it.
 ///
-/// The program must also be one the scan can name. A path, a script file, an
+/// The program must also be one the scan can name. A script file, an
 /// interpreter and a prefix this module does not read each hand the run to a
 /// program whose own text was never opened, so `nice ./deploy.sh` and
 /// `stdbuf -oL python3 deploy.py` keep the unmodelled failure they arrive
 /// with rather than reaching an owner as though `deploy.sh` were a program the
 /// text names.
+///
+/// A program spelled as a path that is not one of those is handed over. What
+/// comes out is `<program> <arguments>`, which the parser then reads exactly
+/// as it reads those same words written without the launcher, so
+/// `nice -n 10 .venv/bin/pytest -q` reaches the route `.venv/bin/pytest -q`
+/// already reaches. `nice` and `stdbuf` change neither the user, the root nor
+/// the directory the program runs in, so that reading widens nothing.
 pub(crate) fn launcher_program(tokens: &[String], index: usize) -> Option<usize> {
     let name = tokens.get(index)?;
     if name.contains(['/', '\\']) {
@@ -122,7 +129,11 @@ pub(crate) fn launcher_program(tokens: &[String], index: usize) -> Option<usize>
         return None;
     }
     let words: Vec<&str> = tokens[index..].iter().map(String::as_str).collect();
-    (!crate::native_command_controls::prefix_reads_a_program_file(&words)).then_some(next)
+    (!crate::native_command_controls::prefix_reads_a_program_file(
+        &words,
+        crate::native_command_controls::Handover::Parsed,
+    ))
+    .then_some(next)
 }
 
 /// How many further words this option word carries, or `None` when the

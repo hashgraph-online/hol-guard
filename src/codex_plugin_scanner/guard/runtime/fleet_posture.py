@@ -47,6 +47,7 @@ from .fleet_posture_inventory import (
     previous_items,
     stream_active,
 )
+from .fleet_posture_runtimes import RUNTIMES_TTL_SECONDS, runtimes_section
 from .fleet_posture_tools import (
     AUTO_UPDATE_STATE_KEY,
     DIAGNOSTICS_TTL_SECONDS,
@@ -76,6 +77,7 @@ class FleetPostureSettings:
     force_full: bool | None = None
     extra: Mapping[str, object] = field(default_factory=dict)
     diagnostics_ttl_seconds: int = DIAGNOSTICS_TTL_SECONDS
+    runtimes_ttl_seconds: int = RUNTIMES_TTL_SECONDS
 
 
 @dataclass(frozen=True)
@@ -245,6 +247,12 @@ def build_fleet_posture_state(
     tools = tools[:MAX_TOOLS]
 
     previous = previous_items(last)
+    # Runtime identities are detail: a minimal report leaves them out.
+    runtimes = (
+        runtimes_section(store, settings.context, hash_key=hash_key, now=now, ttl_seconds=settings.runtimes_ttl_seconds)
+        if detail
+        else None
+    )
 
     def plan_and_assemble(limit: int) -> tuple[InventoryPlan, dict[str, Any]]:
         plan = plan_inventory(
@@ -257,10 +265,17 @@ def build_fleet_posture_state(
             limit=limit,
         )
         assembled = _assemble(store, settings, now, detail, tools, current_items, plan, acknowledgement, hash_key)
+        if runtimes is not None:
+            assembled["runtimes"] = runtimes
         return plan, assembled
 
     plan, payload = plan_and_assemble(MAX_ITEMS_PER_SYNC)
     payload_bytes = json_size(payload)
+    if payload_bytes > MAX_PAYLOAD_BYTES and runtimes is not None:
+        # Inventory rows matter more than runtime identities; drop those first.
+        runtimes = None
+        plan, payload = plan_and_assemble(MAX_ITEMS_PER_SYNC)
+        payload_bytes = json_size(payload)
     if payload_bytes > MAX_PAYLOAD_BYTES and plan.mode != "digest_only":
         # Send as many items as fit, in successive deltas; digest_only only when
         # not even one item fits next to the machine and tool sections.

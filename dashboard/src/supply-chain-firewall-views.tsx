@@ -584,6 +584,17 @@ export function ActivationSummary({
     return null;
   }
   const copy = resolvePackageManagerProtectionCopy(protection);
+  // A healthy PATH gets no headline of its own, whether the status above is
+  // all clear or the recovery panel: the note itself says the shims intercept
+  // installs, and any open issue the recovery panel names is not about PATH.
+  if (protection.path_status === "in_path" && activationAssistError === null) {
+    return (
+      <p className="text-xs leading-5 text-slate-600">
+        {copy.pathDetail}
+        {lastAuditProofAt !== null ? <> Last audit proof {formatRelativeTime(lastAuditProofAt)}.</> : null}
+      </p>
+    );
+  }
   const Icon =
     protection.path_status === "in_path"
       ? HiMiniCheckCircle
@@ -629,7 +640,7 @@ export function ActivationSummary({
             </div>
           )}
           {activationAssistError !== null && (
-            <p className="mt-2 text-xs text-brand-attention">{activationAssistError}</p>
+            <p className="mt-2 text-xs text-brand-attention-text">{activationAssistError}</p>
           )}
         </div>
       </div>

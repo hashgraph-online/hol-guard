@@ -10,7 +10,6 @@ import pytest
 
 import codex_plugin_scanner.guard.config as config_module
 from codex_plugin_scanner.guard.config import (
-    editable_guard_settings,
     load_guard_config,
     maybe_auto_revert_watch,
     resolve_risk_action,
@@ -18,8 +17,6 @@ from codex_plugin_scanner.guard.config import (
 )
 from codex_plugin_scanner.guard.harness_posture import (
     config_for_harness,
-    effective_harness_posture,
-    harness_is_recording_only,
     harness_posture_summary,
     protection_settings_payload,
 )
@@ -40,26 +37,6 @@ def _managed(settings: dict[str, object], locked: set[str]) -> ManagedPolicyStat
         content_hash="a" * 64,
     )
     return ManagedPolicyState("active", "machine-policy-fixture", policy=policy)
-
-
-def test_unset_harness_inherits_global_posture(tmp_path: Path) -> None:
-    guard_home = tmp_path / ".hol-guard"
-    config = update_guard_settings(guard_home, {"protection_posture": "protected"})
-    assert config.harness_postures in (None, {})
-    assert effective_harness_posture(config, "codex") == "protected"
-    assert harness_is_recording_only(config, "codex") is False
-
-
-def test_harness_watch_is_recording_only_for_that_harness_only(tmp_path: Path) -> None:
-    guard_home = tmp_path / ".hol-guard"
-    config = update_guard_settings(guard_home, {"harness_postures": {"codex": "watch"}})
-    assert config.harness_postures == {"codex": "watch"}
-    assert config.harness_watch_entered_at is not None and "codex" in config.harness_watch_entered_at
-    assert harness_is_recording_only(config, "codex") is True
-    assert harness_is_recording_only(config, "claude-code") is False
-    assert config.protection_posture == "protected"
-    reloaded = load_guard_config(guard_home)
-    assert reloaded.harness_postures == {"codex": "watch"}
 
 
 def test_harness_override_is_merge_patch_and_null_clears(tmp_path: Path) -> None:
@@ -134,17 +111,6 @@ def test_config_for_harness_applies_override_and_noops_without_one(tmp_path: Pat
     scoped = config_for_harness(config, "codex")
     assert scoped.mode == "observe" and scoped.protection_posture == "watch"
     assert config_for_harness(config, "claude-code") is config
-
-
-def test_managed_lock_discards_local_weakening_overrides(tmp_path: Path) -> None:
-    guard_home = tmp_path / ".hol-guard"
-    update_guard_settings(guard_home, {"harness_postures": {"codex": "watch", "cursor": "extra_careful"}})
-    locked = load_guard_config(
-        guard_home, managed_policy_state=_managed({"protection_posture": "protected"}, {"protection_posture"})
-    )
-    assert locked.harness_postures == {"cursor": "extra_careful"}
-    assert harness_is_recording_only(locked, "codex") is False
-    assert editable_guard_settings(locked)["harness_postures_locked"] is True
 
 
 def test_managed_lock_rejects_local_watch_write(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

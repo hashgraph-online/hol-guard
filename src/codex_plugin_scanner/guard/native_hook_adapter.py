@@ -398,21 +398,6 @@ def _plain(query: dict[str, object]) -> _Builder:
     return build
 
 
-def native_command_detail(text: str, *, home_dir: Path | str | None, guard_home: Path | str | None = None) -> str:
-    """Return the redacted command text (secrets and absolute-path mentions)."""
-
-    query: dict[str, object] = {
-        "kind": "command_detail",
-        "text": text,
-        "home_dir": _optional_text(home_dir),
-        "host": _host_facts(),
-    }
-    result = _call(_plain(query), guard_home=guard_home, deadline=None, shape="plain")
-    if not isinstance(result, dict) or set(result) != {"text"} or not isinstance(result["text"], str):
-        raise NativeHookAdapterError(_INVALID)
-    return result["text"]
-
-
 def native_command_text(
     tool_name: object,
     tool_input: object,
@@ -493,7 +478,6 @@ __all__ = [
     "hook_adapter_memo",
     "native_action_envelope",
     "native_apply_patch_paths",
-    "native_command_detail",
     "native_command_text",
     "native_prepare_payload",
     "native_workspace_label",

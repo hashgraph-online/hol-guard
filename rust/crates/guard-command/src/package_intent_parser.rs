@@ -36,6 +36,7 @@ use managers_js::*;
 
 #[path = "package_intent_parser/execution_intent.rs"]
 mod execution_intent;
+pub use execution_intent::runner_packages;
 use execution_intent::*;
 
 #[path = "package_intent_parser/managers_python.rs"]

@@ -18,6 +18,8 @@ members = [
     "crates/guard-policy-snapshot",
     "crates/guard-policy-bundle",
     "crates/guard-pack-compiler",
+    "crates/guard-plugin-kit",
+    "crates/guard-plugin-telemetry",
     "crates/guard-rule-contract",
     "crates/guard-runtime",
     "crates/guard-runtime-pyjson",

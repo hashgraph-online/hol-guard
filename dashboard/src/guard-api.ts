@@ -1118,6 +1118,13 @@ export async function fetchReleaseFeedApi(input: RequestInfo, init?: RequestInit
   return fetchWithGuardAuth(input, init);
 }
 
+export async function fetchPluginUpdatesApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  if (input !== "/v1/plugins/updates" && input !== "/v1/plugins/updates/dismiss") {
+    throw new Error("Invalid plugin updates API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
 function guardAuthHeaders(): HeadersInit {
   const guardToken = readGuardToken();
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};

@@ -679,8 +679,11 @@ fn a_case_label_and_an_empty_prefix_keep_their_approval() {
     let controls = controls(serde_json::json!([]), false);
     let mut wrong = Vec::new();
     for command in [
-        "case $MODE in a) echo a;; *) echo b;; esac",
-        "case \"$f\" in *.ts|*.tsx) echo ts;; *) echo other;; esac",
+        // `case $MODE in a) echo a;; *) echo b;; esac` is not here: the flatten
+        // pass reads a `case` whose labels are plain glob text as the lists its
+        // clauses hold, so a construct holding only safe commands allows
+        // outright. One holding a command that carries its own review, such as
+        // the package verb below, still reaches that review.
         "case $1 in start) npm run dev;; stop) npm run stop;; *) echo usage;; esac",
         // `while IFS= read -r line; do echo one; done < list.txt` is not
         // here: the flatten pass reads a redirected `read` loop as the file

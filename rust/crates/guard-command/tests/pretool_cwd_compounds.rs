@@ -60,6 +60,32 @@ fn cwd_compounds_validate_reads_and_one_bounded_write() {
             ("&& cat one.txt &", false),
             ("&& cat $(echo one.txt)", false),
             ("&& cat one.txt && gh auth token", false),
+            // A reader the standalone proof admits in the verified directory
+            // keeps that proof behind the `cd`. Each of these allows on its
+            // own from inside `project`, so reviewing the compound only taught
+            // callers to split it in two. Readers whose proof also needs a
+            // stamped home - `pip`, `npm`, `brew`, `kubectl` - cannot be
+            // proven from this harness, which declares a fixture home the
+            // process does not run with; the benign gate covers those.
+            ("&& awk 'NR<2' one.txt", true),
+            ("&& file one.txt", true),
+            ("&& basename one.txt", true),
+            ("&& realpath one.txt", true),
+            // Programs whose own proof can authorize an effect stay out of the
+            // generic branch: a write belongs to the bounded two-segment form
+            // above, and a process stop has no bounded form at all.
+            ("&& pkill -f server", false),
+            ("&& rustfmt one.txt", false),
+            // The same holds for an effect a program's own proof authorizes
+            // while its other shapes read: `docker start` runs an existing
+            // container again, `curl` writes what it fetched into the
+            // directory the `cd` named, and `hol-guard dashboard` starts
+            // Guard's daemon.
+            ("&& docker start web", false),
+            ("&& docker container start web", false),
+            ("&& curl -o out.json https://example.com/data", false),
+            ("&& curl --output out.json https://example.com/data", false),
+            ("&& hol-guard dashboard", false),
         ] {
             let command = format!("cd {} {suffix}", project.display());
             let result = evaluate_pre_tool_envelope_with_context(

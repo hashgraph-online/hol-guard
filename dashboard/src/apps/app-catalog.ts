@@ -164,6 +164,11 @@ export const RISK_CONTROL_CONSEQUENCES: Readonly<Record<string, RiskControlConse
     example: "A skill, MCP server, or plugin has a HOL Registry trust score below 80",
     impact: "Guard flags low-trust skills, MCP servers, and plugins, and pauses them when this action asks for review",
   },
+  runtime_known_vulnerable: {
+    key: "runtime_known_vulnerable",
+    example: "A command starts a Node.js build with a known high or critical advisory",
+    impact: "Guard checks the Node.js executable before launch and pauses or stops it when this action asks",
+  },
 };
 
 export type SettingSearchMatch = {
@@ -194,6 +199,7 @@ const SETTINGS_SEARCH_INDEX: SettingSearchMatch[] = [
   { key: "package_custom_registry", label: "Custom registries", description: "Installs that use a non-default package index or registry.", section: "risk" },
   { key: "package_install", label: "Every package install", description: "Every package install or update, even with no risk signal.", section: "risk" },
   { key: "low_trust_artifact", label: "Low trust scores", description: "Skills, MCP servers, and plugins scoring below 80 in the HOL Registry.", section: "risk" },
+  { key: "runtime_known_vulnerable", label: "Vulnerable runtimes", description: "Node.js builds with a known high or critical advisory, checked before launch.", section: "risk" },
   { key: "default_action", label: "First-time action", description: "What Guard does the first time it sees a new action.", section: "defaults" },
   { key: "unknown_publisher_action", label: "Unknown source", description: "What Guard does when it cannot verify who published a tool or command.", section: "defaults" },
   { key: "changed_hash_action", label: "Changed command", description: "What Guard does when an approved command changes.", section: "defaults" },

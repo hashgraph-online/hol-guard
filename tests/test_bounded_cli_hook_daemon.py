@@ -345,3 +345,26 @@ def test_grok_bridge_preserves_daemon_result_when_store_fails(
     assert stdout == original
     assert stderr == "keep-stderr"
     assert code == 2
+
+
+def test_grok_cli_fallback_review_gets_the_daemon_path_approval_wait(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.adapters import grok_approval_resume
+
+    monkeypatch.setattr(grok_approval_resume, "wait_for_grok_live_approval", lambda **_kwargs: "allow")
+    monkeypatch.setattr(bounded_cli_hook_daemon, "try_daemon_hook", lambda **_kwargs: None)
+    review = {"decision": "deny", "policy_action": "review", "approval_requests": [{"request_id": "req-1"}]}
+    monkeypatch.setattr(
+        bounded_cli_hook_bridge,
+        "run_isolated_hook_process",
+        lambda *_args, **_kwargs: BoundedHookProcessResult(2, json.dumps(review), False, False),
+    )
+    output = io.StringIO()
+    with redirect_stdout(output):
+        code = bounded_cli_hook_bridge.run_bounded_cli_hook(
+            _config(tmp_path, harness="grok"), input_text=json.dumps({"hook_event_name": "PreToolUse"})
+        )
+    assert code == 0
+    assert json.loads(output.getvalue())["decision"] == "allow"

@@ -63,7 +63,6 @@ from .extension_control_contract import (
 from .extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
     _layer_payload,  # pyright: ignore[reportPrivateUsage]
-    current_extension_control_snapshot,
 )
 from .github_workflow_authorization import GitHubWorkflowAuthorization
 from .native_command_extension_evidence import (
@@ -146,7 +145,7 @@ def evaluate_command(
     authenticated one the native evidence is bound to.
     """
 
-    snapshot = extension_control_snapshot or current_extension_control_snapshot()
+    snapshot = extension_control_snapshot
     if native_extension_evidence is None:
         raise NativeCommandExtensionEvidenceError("native_command_extension_evidence_required")
     if canonical_command is None:

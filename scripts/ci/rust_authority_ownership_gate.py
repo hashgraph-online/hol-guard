@@ -419,7 +419,6 @@ def _assert_policy_floor_fail_closed(path: Path) -> None:
 
 
 _CONTAINMENT_ADAPTER = Path("src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py")
-_CONTAINMENT_CLI = Path("src/codex_plugin_scanner/guard/cli/commands_hook_native_containment.py")
 _CONTAINMENT_DAEMON = Path("src/codex_plugin_scanner/guard/daemon/hook_worker_native.py")
 _CONTAINMENT_TRANSPORT = Path("src/codex_plugin_scanner/guard/native_hook_containment_route.py")
 # The routing tables the resident's ``containment_route``/``containment_sink`` replaced.
@@ -436,7 +435,7 @@ def _top_level_function(tree: ast.Module, name: str, path: Path) -> ast.Function
 
 
 def _assert_containment_routed_by_resident() -> None:
-    """Containment routing is the resident's answer on both hook paths; Python only does the I/O."""
+    """Containment routing is the resident's answer on the hook path; Python only does the I/O."""
 
     adapter = ast.parse(_read(_CONTAINMENT_ADAPTER), filename=str(_CONTAINMENT_ADAPTER))
     for node in adapter.body:
@@ -452,12 +451,6 @@ def _assert_containment_routed_by_resident() -> None:
         fn = _top_level_function(adapter, name, _CONTAINMENT_ADAPTER)
         if "native_containment_sink" not in _ordered_call_names(fn):
             raise RuntimeError(f"{name} does not ask the resident whether the sink takes the call")
-    cli = ast.parse(_read(_CONTAINMENT_CLI), filename=str(_CONTAINMENT_CLI))
-    emit = _top_level_function(cli, "emit_native_containment_route", _CONTAINMENT_CLI)
-    if "edge_containment_route" not in _ordered_call_names(emit):
-        raise RuntimeError("CLI containment does not ask the resident for the route")
-    if any(isinstance(node, ast.Constant) and node.value == "sandbox-required" for node in ast.walk(emit)):
-        raise RuntimeError("CLI containment still picks the route from the result's action")
     if "edge_containment_route(" not in _read(_CONTAINMENT_DAEMON):
         raise RuntimeError("daemon containment does not ask the resident for the route")
     if "edge_route(" not in _read(Path("rust/crates/guard-runtime/src/edge.rs")):
@@ -497,29 +490,7 @@ def _cli_gate() -> None:
         raise RuntimeError("CLI native authority helper is missing")
     calls = _ordered_call_names(fn)
     if "try_native_hook_authority" not in calls:
-        if "run_native_hook_pipeline" not in calls:
-            raise RuntimeError("CLI hook path is missing native authority routing")
-        pipeline_path = Path("src/codex_plugin_scanner/guard/cli/commands_hook_native_pipeline.py")
-        pipeline_tree = ast.parse(_read(pipeline_path), filename=str(pipeline_path))
-        pipeline_fn = next(
-            (
-                node
-                for node in pipeline_tree.body
-                if isinstance(node, ast.FunctionDef) and node.name == "run_native_hook_pipeline"
-            ),
-            None,
-        )
-        if pipeline_fn is None:
-            raise RuntimeError("CLI native pipeline dispatcher is missing")
-        pipeline_calls = _ordered_call_names(pipeline_fn) + [
-            child.func.attr
-            for child in ast.walk(pipeline_fn)
-            if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute)
-        ]
-        if "native_hook_route" not in pipeline_calls or "run_route_plan" not in pipeline_calls:
-            raise RuntimeError("CLI native pipeline does not take its route from the resident")
-        # The native edge call lives in the route's `native_edge` handler, which
-        # the pretool graph gate above checks.
+        raise RuntimeError("CLI hook path is missing native authority routing")
     for retired in ("_try_source_ref_fast_path", "record_python_semantic_hook_route", "evaluate_source_file_ref"):
         if retired in calls:
             raise RuntimeError(f"CLI hook path still calls retired Python route {retired}")

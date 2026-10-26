@@ -100,8 +100,8 @@ def test_only_harnesses_every_config_agrees_on_are_bound(tmp_path: Path) -> None
     home = _config(tmp_path)
     workspace = _config(tmp_path, harness_postures={"cursor": "watch"})
 
-    assert set(uniform_harness_views([home])) == {"codex", "copilot", "cursor", "opencode"}
-    assert set(uniform_harness_views([home, workspace])) == {"codex", "copilot", "opencode"}
+    assert set(uniform_harness_views([home])) == {"codex", "copilot", "cursor", "hermes", "opencode"}
+    assert set(uniform_harness_views([home, workspace])) == {"codex", "copilot", "hermes", "opencode"}
     assert uniform_harness_views([]) == {}
 
 
@@ -117,7 +117,7 @@ def test_a_bound_harness_carries_the_redaction_level_every_config_agrees_on(tmp_
     # A disagreement leaves the harnesses bound without the level, so only a
     # queued call defers.
     unlevelled = uniform_harness_views([home, workspace])
-    assert set(unlevelled) == {"codex", "copilot", "cursor", "opencode"}
+    assert set(unlevelled) == {"codex", "copilot", "cursor", "hermes", "opencode"}
     assert all(REDACTION_LEVEL_KEY not in view for view in unlevelled.values())  # type: ignore[operator]
     assert unlevelled["codex"] == harness_view(home, "codex")
 
@@ -197,7 +197,7 @@ def test_the_binding_carries_the_view_only_for_a_resident_that_accepts_it(tmp_pa
     bound = publisher._with_mcp_relay_view({"generation": 1}, FEATURES)
     assert bound is not None
     view = bound[MCP_RELAY_BINDING_KEY]
-    assert isinstance(view, dict) and set(view["harnesses"]) == {"codex", "copilot", "cursor", "opencode"}
+    assert isinstance(view, dict) and set(view["harnesses"]) == {"codex", "copilot", "cursor", "hermes", "opencode"}
     assert publisher._with_mcp_relay_view({"generation": 1}, ()) == {"generation": 1}
     assert publisher._with_mcp_relay_view(None, FEATURES) is None
     harnesses = publisher._compiled_mcp_relay_harnesses

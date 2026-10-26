@@ -53,3 +53,36 @@ fn the_existing_branch_and_stash_forms_are_unchanged() {
     assert!(!keeps("checkout main"));
     assert!(!keeps("stash drop"));
 }
+
+#[test]
+fn stash_push_narrowed_to_pathspecs_keeps_the_work() {
+    assert!(keeps("stash push -- src/a.ts"));
+    assert!(keeps("stash push src/a.ts src/b.ts"));
+    assert!(keeps(
+        "stash push -m warm -- Dockerfile __tests__/a.test.ts"
+    ));
+    assert!(keeps("stash push --message=warm -- Dockerfile"));
+    assert!(keeps("stash push -u -q -- src/a.ts"));
+    assert!(keeps("stash push --keep-index -- src/a.ts"));
+    assert!(keeps("stash push --staged"));
+    assert!(keeps("stash -- src/a.ts"));
+    assert!(keeps("stash push --"));
+}
+
+#[test]
+fn a_stash_subcommand_is_not_a_pathspec() {
+    assert!(!keeps("stash pop"));
+    assert!(!keeps("stash apply"));
+    assert!(!keeps("stash clear"));
+    assert!(!keeps("stash branch feature"));
+    assert!(!keeps("stash drop stash@{0}"));
+}
+
+#[test]
+fn stash_push_that_asks_for_more_keeps_its_review() {
+    assert!(!keeps("stash push -p"));
+    assert!(!keeps("stash push --patch -- src/a.ts"));
+    assert!(!keeps("stash push --pathspec-from-file=list.txt"));
+    assert!(!keeps("stash push -- -src/a.ts"));
+    assert!(!keeps("stash push -m"));
+}

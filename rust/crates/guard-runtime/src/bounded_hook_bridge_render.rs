@@ -63,8 +63,9 @@ const LIFECYCLE_COMPACT_EVENTS: [&str; 13] = [
     "userpromptsubmitted",
     "subagentend",
 ];
-const REVIEW_CANNOT_FINISH_REASON_CODES: [&str; 24] = [
+const REVIEW_CANNOT_FINISH_REASON_CODES: [&str; 25] = [
     "native_policy_not_ready",
+    "native_policy_update_in_progress",
     "native_hook_event_unavailable",
     "native_pre_tool_unavailable",
     "native_post_tool_unavailable",
@@ -178,7 +179,7 @@ fn event_pauses_when_unavailable(event_name: &str) -> bool {
     !(compact == "posttooluse" || compact == "posttool" || compact.starts_with("after"))
 }
 
-fn is_permission_event(event_name: &str) -> bool {
+pub(crate) fn is_permission_event(event_name: &str) -> bool {
     matches!(
         compact_stripped(event_name).as_str(),
         "permissionrequest" | "permissionrequestv2" | "copilotpermissionrequest"
@@ -342,14 +343,15 @@ fn zcode_exit_blocks(policy_action: &str, event_name: &str) -> bool {
     RESTRICTIVE.contains(&policy_action)
 }
 
-/// `_should_exit_block`.
+/// `_should_exit_block`. Grok reaches it only from the `hol-guard hook`
+/// command; its bridge answers through `bounded_hook_bridge_grok`.
 fn should_exit_block(harness: &str, event_name: &str, policy_action: &str) -> bool {
     let compact = compact(event_name);
     let blocking = matches!(
         compact.as_str(),
         "pretooluse" | "userpromptsubmit" | "pretoolcall"
     ) || (harness == "devin" && compact == "permissionrequest");
-    if !matches!(harness, "kimi" | "zcode" | "devin") || !blocking {
+    if !matches!(harness, "grok" | "kimi" | "zcode" | "devin") || !blocking {
         return false;
     }
     if harness == "zcode" {
@@ -377,7 +379,7 @@ pub(crate) fn member<'a>(entries: &'a [(String, PyVal)], key: &str) -> Option<&'
 
 /// `_consistent_native_response`: the aligned response and the policy
 /// action that decides the exit code.
-fn consistent_native_response(
+pub(crate) fn consistent_native_response(
     daemon_response: &[(String, PyVal)],
     harness: &str,
     event_name: &str,
@@ -442,7 +444,7 @@ fn consistent_native_response(
                 set_member(entries, "permissionDecision", text(word));
             }
         }
-        if harness == "openclaw" && top.is_none() {
+        if matches!(harness, "grok" | "openclaw") && top.is_none() {
             top = Some("deny".to_owned());
             set_member(&mut response, "decision", text("deny"));
         }
@@ -529,7 +531,7 @@ fn first_truthy_text(response: &[(String, PyVal)], keys: &[&str]) -> Option<Stri
 }
 
 /// `_policy_action_from_daemon`.
-fn policy_action_from_daemon(response: &[(String, PyVal)], event_name: &str) -> String {
+pub(crate) fn policy_action_from_daemon(response: &[(String, PyVal)], event_name: &str) -> String {
     if let Some(action) = member(response, "policy_action")
         .and_then(PyVal::as_str)
         .map(py_strip)
@@ -669,7 +671,7 @@ pub(crate) fn daemon_response_to_native(
             }
         }
         payload.push(("hookSpecificOutput".to_owned(), PyVal::Dict(hook_specific)));
-        if let (Some(decision), "openclaw") = (decision, harness) {
+        if let (Some(decision), "grok" | "openclaw") = (decision, harness) {
             let word = if decision == "allow" { "allow" } else { "deny" };
             payload.push(("decision".to_owned(), text(word)));
             payload.push(("policy_action".to_owned(), text(&action)));

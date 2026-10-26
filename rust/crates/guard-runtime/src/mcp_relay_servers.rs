@@ -11,9 +11,10 @@
 //! the proxy reads as the command (`_command_argument`) no longer hold their
 //! server back; a package call the lane cannot settle defers, and that defer
 //! marks the server for the proxy the same way an unknown server's first
-//! session does. What remains is a Composio tool, whose provider lookup the
-//! resident does not answer (`delegated_tool`), and a definition with no
-//! usable name, which names no tool the catalog can decide against.
+//! session does. A Composio tool is decided there too: the resident reads the
+//! provider catalog hash its identity binds from the store. What remains is a
+//! definition with no usable name, which names no tool the catalog can decide
+//! against.
 //!
 //! The relay learns a catalog only after it started the server, so the
 //! resident remembers each server's catalog for later sessions:
@@ -122,16 +123,23 @@ pub(crate) fn report(
         .map_err(|_| "mcp_relay_server_report_encoding_failed".to_owned())
 }
 
-/// Whether the proxy, not the resident, decides some call of `tool`. A
-/// definition without a name counts as one.
+/// Whether the proxy, not the resident, decides some call of `tool`: a
+/// definition without a name the relay can send.
 pub(crate) fn proxy_tool(tool: &Value) -> bool {
-    let Some(name) = tool.get("name").and_then(Value::as_str) else {
-        return true;
-    };
-    composio_tool(name)
+    !tool
+        .get("name")
+        .and_then(Value::as_str)
+        .is_some_and(sendable_name)
 }
 
-/// A tool the proxy routes through a Composio provider lookup.
+/// A tool name the relay sends a call for (`decide_request`); a call to any
+/// other name is never sent.
+pub(crate) fn sendable_name(name: &str) -> bool {
+    !name.is_empty() && name.is_ascii()
+}
+
+/// A Composio wrapper, whose identity binds the provider catalog hash
+/// (`composio_names_a_wrapper`).
 pub(crate) fn composio_tool(name: &str) -> bool {
     let tail = name.rsplit("__").next().unwrap_or(name);
     tail.to_ascii_lowercase().starts_with("composio_")

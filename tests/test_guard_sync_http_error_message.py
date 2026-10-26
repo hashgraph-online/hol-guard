@@ -1,5 +1,8 @@
+import errno
 import io
 import json
+import socket
+import ssl
 import threading
 import time
 import urllib.error
@@ -232,6 +235,53 @@ def test_fetch_supply_chain_bundle_payload_raises_retryable_unavailable_on_guard
         _fetch_supply_chain_bundle_payload(request)
     assert exc_info.value.retryable is True
     assert "Guard Cloud is unavailable" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        ConnectionRefusedError(61, "Connection refused"),
+        ConnectionResetError(54, "Connection reset by peer"),
+        socket.gaierror(8, "nodename nor servname provided, or not known"),
+        OSError(errno.EHOSTUNREACH, "No route to host"),
+        OSError(errno.ENETUNREACH, "Network is unreachable"),
+        TimeoutError("timed out"),
+    ],
+)
+def test_fetch_supply_chain_bundle_payload_reports_unreachable_guard_cloud_as_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+    reason: OSError,
+) -> None:
+    def _raise_unreachable(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise urllib.error.URLError(reason)
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.runner._urlopen_json_with_timeout_retry",
+        _raise_unreachable,
+    )
+    request = urllib.request.Request("https://hol.org/api/guard/supply-chain/bundle?workspaceId=test")
+    with pytest.raises(GuardSyncNotAvailableError) as exc_info:
+        _fetch_supply_chain_bundle_payload(request)
+    assert exc_info.value.retryable is True
+    assert str(exc_info.value) == "Guard Cloud could not be reached. Local Guard keeps protecting this machine."
+    assert "Errno" not in str(exc_info.value)
+
+
+def test_fetch_supply_chain_bundle_payload_keeps_tls_failures_non_retryable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _raise_tls_failure(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise urllib.error.URLError(ssl.SSLCertVerificationError(1, "certificate verify failed"))
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.runner._urlopen_json_with_timeout_retry",
+        _raise_tls_failure,
+    )
+    request = urllib.request.Request("https://hol.org/api/guard/supply-chain/bundle?workspaceId=test")
+    with pytest.raises(RuntimeError) as exc_info:
+        _fetch_supply_chain_bundle_payload(request)
+    assert not isinstance(exc_info.value, GuardSyncNotAvailableError)
+    assert "certificate verify failed" in str(exc_info.value)
 
 
 def _cloudflare_error(body: str, headers: dict[str, str], *, code: int = 403) -> urllib.error.HTTPError:

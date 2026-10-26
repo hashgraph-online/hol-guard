@@ -172,14 +172,17 @@ test.describe("Supply chain actions against the live daemon", () => {
     expect(restored.installed_managers).toEqual(expect.arrayContaining([manager, other]));
   });
 
-  test("sync without Guard Cloud points to the workspace audit setup", async ({ page }) => {
+  test("sync without Guard Cloud asks for approval to sync intel only", async ({ page }) => {
     // Sync posts a package-protection change and holds its lock, so it runs
     // with the other changes instead of beside parallel read specs.
     await page.goto("/supply-chain");
     await expectNoErrorBoundary(page);
     await page.getByRole("button", { name: "Sync", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "Finish workspace audit setup" });
+    // A standalone sync runs no audit afterwards, so the dialog must not promise one.
+    const dialog = page.getByRole("dialog", { name: "Approve supply-chain intel sync" });
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Approve supply-chain intel sync" })).toBeVisible();
+    await expect(dialog.getByText("Run audit", { exact: true })).toHaveCount(0);
     await expect(dialog.getByRole("textbox", { name: "Approval password" })).toHaveValue("");
     await expect(dialog.getByRole("button", { name: "Sync supply-chain intel", exact: true })).toBeDisabled();
     await dialog.getByRole("button", { name: "Close", exact: true }).click();

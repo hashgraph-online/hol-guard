@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import local_cli_grant_decision as decision
-from codex_plugin_scanner.guard.local_cli_trust import matching_local_cli_grant, utc_now
+from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.native_local_cli_grant import NativeLocalCliGrant
 from codex_plugin_scanner.guard.native_local_cli_identity import LocalCliIdentityUnavailableError
 from codex_plugin_scanner.guard.runtime.local_cli_identity import identify_unlisted_cli
@@ -27,6 +27,14 @@ def _blocked_store(tmp_path: Path):
     return store, command, identity
 
 
+def _decide(store: GuardStore, command: str, cwd: Path, current_action: str):
+    identity = identify_unlisted_cli(command, cwd=cwd, home_dir=cwd)
+    assert identity is not None
+    return decision.decide_local_cli_grant(
+        store=store, identity=identity, command=command, cwd=cwd, home_dir=cwd, current_action=current_action
+    )
+
+
 @pytest.mark.parametrize("answer", ["none_reply", "other_identity"])
 def test_native_failure_is_unavailable_never_no_grant(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, answer: str
@@ -40,7 +48,7 @@ def test_native_failure_is_unavailable_never_no_grant(
     monkeypatch.setattr(decision, "native_local_cli_grant", lambda **_kwargs: reply)
 
     with pytest.raises(LocalCliIdentityUnavailableError):
-        matching_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow")
+        _decide(store, command, tmp_path, "allow")
 
 
 def test_native_answer_is_presented_not_recomputed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -54,10 +62,7 @@ def test_native_answer_is_presented_not_recomputed(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(decision, "native_local_cli_grant", answer)
 
     # The store row says blocked; only the resident's answer decides.
-    matched = matching_local_cli_grant(
-        store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="review"
-    )
-    assert matched is not None and matched[1] == "allowed"
+    assert _decide(store, command, tmp_path, "review") == "allowed"
     assert calls[0]["current_action"] == "review"
     assert calls[0]["source"] == identity.identity_source
 
@@ -133,7 +138,7 @@ def test_failure_code_is_raised_and_logged(
         caplog.at_level("WARNING", logger=decision.__name__),
         pytest.raises(LocalCliIdentityUnavailableError, match="native_local_cli_grant_schema_invalid"),
     ):
-        matching_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow")
+        _decide(store, command, tmp_path, "allow")
     assert "native_local_cli_grant_schema_invalid" in caplog.text
 
 
@@ -152,4 +157,4 @@ def test_catalog_read_failure_holds_instead_of_dropping_a_block(
     monkeypatch.setattr(decision, "native_local_cli_grant", native_must_not_run)
 
     with pytest.raises(LocalCliIdentityUnavailableError, match="native_local_cli_grant_catalog_unavailable"):
-        matching_local_cli_grant(store=store, command=command, cwd=tmp_path, home_dir=tmp_path, current_action="allow")
+        _decide(store, command, tmp_path, "allow")

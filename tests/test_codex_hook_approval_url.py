@@ -17,7 +17,6 @@ from codex_plugin_scanner.guard.approval_hook_copy import (
 )
 from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
     _native_approval_center_context,
-    _native_hook_reason_for_harness,
 )
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool_review
@@ -85,24 +84,6 @@ def test_live_hook_copy_adds_scoped_token_on_loopback(tmp_path: Path) -> None:
     review_url = live[start : live.index(". After you choose")]
     fragment = parse_qs(urlparse(review_url).fragment)
     assert fragment["guard-token"][0].startswith("gld1.")
-
-
-def test_hook_reason_does_not_repeat_untokenized_approval_url() -> None:
-    untokenized = (
-        "Open HOL Guard to approve or keep this blocked: http://127.0.0.1:5474/requests/req-1. "
-        "After you choose, retry the same Grok action."
-    )
-    tokenized = (
-        "Open HOL Guard to approve or keep this blocked: "
-        "http://127.0.0.1:5474/requests/req-1#guard-token=gld1.abc.def. "
-        "After you choose, retry the same Grok action."
-    )
-    joined = join_native_hook_reason(untokenized, tokenized)
-    grok_reason = _native_hook_reason_for_harness("grok", untokenized, tokenized)
-    assert joined == tokenized
-    assert grok_reason == tokenized
-    assert joined.count("http://") == 1
-    assert "guard-token=" in grok_reason
 
 
 def test_hook_reason_keeps_policy_copy_with_one_tokenized_url() -> None:
@@ -238,7 +219,7 @@ def test_watch_posture_with_stale_prompt_mode_does_not_block_codex_hook(tmp_path
     store = GuardStore(home_dir)
 
     assert rc == 0
-    assert captured.out == ""
-    pending = store.list_approval_requests(limit=5)
-    assert len(pending) == 1
-    assert pending[0]["scanner_evidence"][-1]["authoritative_action"] == "allow"
+    output = json.loads(captured.out)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "allow"
+    assert output["policy_action"] == "warn"
+    assert store.list_approval_requests(limit=5) == []

@@ -262,7 +262,9 @@ fn pulls_stay_refreshes_under_the_users_own_gpg_program() {
     // The program runs only when Git signs or checks a signature.
     assert_allowed(&session, &pull, &cwd, REFRESH);
     assert_allowed(&session, &fast_forward, &cwd, REFRESH);
-    // A program the repository picks keeps both reviewed.
+    // A program the repository picks keeps both reviewed: Git builds the
+    // merge message before it decides to fast-forward, and verifies a signed
+    // tag there with `gpg.program`.
     session.config(&["gpg.program", "/tmp/gpg"]);
     assert_reviewed(&session, &pull, &cwd);
     assert_reviewed(&session, &fast_forward, &cwd);

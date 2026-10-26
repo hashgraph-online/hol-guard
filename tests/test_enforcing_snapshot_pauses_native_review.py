@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.daemon import hook_native_review_approval
+from codex_plugin_scanner.guard.daemon.hook_native_exact_action import native_exact_action
 from tests.test_native_review_fixtures import _edge, _worker
 
 # Only a review the agent's retry can match pauses for approval; without a
@@ -15,7 +16,10 @@ _RETRY_BINDING = f"native-review-v4:{'ab' * 32}:ask:review:review:r"
 
 
 def _bind_retry(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(hook_native_review_approval, "native_review_binding", lambda *_args, **_kwargs: _RETRY_BINDING)
+    def evidence(**kwargs: object) -> tuple[str | None, str | None, str | None]:
+        return (_RETRY_BINDING, *native_exact_action(**kwargs))  # type: ignore[arg-type]
+
+    monkeypatch.setattr(hook_native_review_approval, "native_review_evidence", evidence)
 
 
 def _review(worker: object, tmp_path: Path, harness: str) -> dict[str, object]:

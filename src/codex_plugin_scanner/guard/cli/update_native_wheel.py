@@ -2,7 +2,7 @@
 
 PyPI does not carry every native wheel. Alpha publication uploads only the
 pure ``py3-none-any`` wheel, and stable publication keeps the platforms with
-few users (Intel macOS and Windows ARM64) off PyPI to stay inside the project
+few users (Intel macOS, Windows ARM64 and Linux ARM64) off PyPI to stay inside the project
 storage quota. A pure wheel has no bundled ``_native/hol-guard-runtime``, so
 this module picks the platform wheel that matches the running interpreter,
 downloads it from the ``v<version>`` release (``alpha/v<version>`` for
@@ -61,13 +61,14 @@ PUBLISHED_PLATFORM_TAGS = frozenset(
     {
         "macosx_11_0_arm64",
         "macosx_13_0_x86_64",
+        "manylinux_2_17_aarch64",
         "manylinux_2_17_x86_64",
         "win_amd64",
         "win_arm64",
     }
 )
 # Stable native wheels for these platforms are attached to the GitHub release and never uploaded to PyPI.
-GITHUB_ONLY_PLATFORM_TAGS = frozenset({"macosx_13_0_x86_64", "win_arm64"})
+GITHUB_ONLY_PLATFORM_TAGS = frozenset({"macosx_13_0_x86_64", "manylinux_2_17_aarch64", "win_arm64"})
 # The marker keeps its alpha-era name so installs recorded by earlier updaters stay managed.
 _MARKER_NAME = "alpha-native-wheel.json"
 _MARKER_SCHEMA_VERSION = 1

@@ -18,9 +18,7 @@ exactly which output the old routing produced:
 Each vector holds the resident's inputs (``facts``), the extra transport facts
 (``extra``), the directive fields the recorded output exhibits
 (``directive``), and the stubbed ``stdout``, ``stderr`` and ``rc``. The Rust
-``hook_decision_artifact_directive_tests`` replays the directive fields;
-``tests/test_artifact_directive_parity.py`` re-renders every vector through
-the new transport with the same stubs and compares the output.
+``hook_decision_artifact_directive_tests`` replays the directive fields.
 """
 
 from __future__ import annotations

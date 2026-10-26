@@ -30,7 +30,7 @@ MCP_RELAY_DECIDE_FEATURE = "mcp-relay-decide-v2"
 MCP_RELAY_BINDING_KEY = "mcp_relay"
 MCP_RELAY_VIEW_SCHEMA = "guard-mcp-relay-view.v2"
 # The harnesses whose MCP proxy the relay replaces.
-MCP_RELAY_HARNESSES = ("codex", "copilot", "cursor", "opencode")
+MCP_RELAY_HARNESSES = ("codex", "copilot", "cursor", "hermes", "opencode")
 
 # The field a bound harness carries its receipt redaction level in.
 REDACTION_LEVEL_KEY = "receipt_redaction_level"

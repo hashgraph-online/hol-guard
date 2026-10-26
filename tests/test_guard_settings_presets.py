@@ -9,8 +9,8 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.config import (
-    SECURITY_LEVEL_RISK_ACTIONS,
     VALID_RISK_ACTION_KEYS,
+    _effective_risk_actions,
     load_guard_config,
     resolve_risk_action,
     update_guard_settings,
@@ -20,6 +20,13 @@ from codex_plugin_scanner.guard.config import (
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
+
+
+def _preset_config(home_dir: Path, preset: str):
+    """A configuration that sets nothing but the preset, for its baseline."""
+
+    _write_text(home_dir / "config.toml", f'security_level = "{preset}"\n')
+    return load_guard_config(home_dir)
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -63,8 +70,8 @@ class TestPresetRiskActionMaps:
     """L288 — each named preset maps every risk key to the expected action."""
 
     @pytest.mark.parametrize("preset", ["relaxed", "gentle", "balanced", "strict", "paranoid"])
-    def test_preset_covers_all_risk_keys(self, preset: str) -> None:
-        assert set(SECURITY_LEVEL_RISK_ACTIONS[preset].keys()) == VALID_RISK_ACTION_KEYS
+    def test_preset_covers_all_risk_keys(self, tmp_path: Path, preset: str) -> None:
+        assert set(_effective_risk_actions(_preset_config(tmp_path / "home", preset))) == VALID_RISK_ACTION_KEYS
 
     @pytest.mark.parametrize("preset,sentinel", list(_PRESET_SENTINEL.items()))
     def test_preset_sentinel_actions_match_spec(self, tmp_path: Path, preset: str, sentinel: dict[str, str]) -> None:
@@ -134,7 +141,7 @@ class TestPresetCliCommands:
         assert rc == 0
         capsys.readouterr()
         loaded = load_guard_config(home_dir)
-        expected = SECURITY_LEVEL_RISK_ACTIONS[preset]["local_secret_read"]
+        expected = _effective_risk_actions(_preset_config(tmp_path / "baseline", preset))["local_secret_read"]
         actual = resolve_risk_action(loaded, "local_secret_read", harness="codex")
         assert actual == expected
         assert loaded.risk_actions == {}

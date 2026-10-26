@@ -10,10 +10,7 @@ from codex_plugin_scanner.guard.config import (
     resolve_risk_action,
     update_guard_settings,
 )
-from codex_plugin_scanner.guard.protection_posture import (
-    derive_protection_posture,
-    dual_write_from_posture,
-)
+from codex_plugin_scanner.guard.protection_posture import dual_write_from_posture
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -212,12 +209,7 @@ def test_relaxed_implicit_maps_stay_warn(tmp_path: Path) -> None:
     assert resolve_risk_action(config, "credential_exfiltration", harness="codex") == "warn"
 
 
-def test_derive_and_dual_write_tables() -> None:
-    assert derive_protection_posture("observe", "balanced") == "watch"
-    assert derive_protection_posture("prompt", "balanced") == "protected"
-    assert derive_protection_posture("enforce", "strict") == "extra_careful"
-    assert derive_protection_posture("enforce", "paranoid") == "extra_careful"
-    assert derive_protection_posture("prompt", "gentle") == "protected"
+def test_dual_write_tables() -> None:
     assert dual_write_from_posture("protected") == ("enforce", "balanced")
     assert dual_write_from_posture("extra_careful") == ("enforce", "strict")
     assert dual_write_from_posture("watch", current_security_level="balanced") == ("observe", "balanced")

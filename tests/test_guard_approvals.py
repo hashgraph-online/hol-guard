@@ -2707,7 +2707,8 @@ class TestGuardApprovals:
         assert "codex<script>" not in body
         assert "guard-dashboard-root" in body
         assert "Local approval center" in body
-        assert "Hashgraph Online" in body
+        assert 'guard-loading-shell__eyebrow">HOL</p>' in body
+        assert "Hashgraph Online" not in body
 
     def test_guard_daemon_rejects_cross_origin_post_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -3058,7 +3059,8 @@ class TestGuardApprovals:
 
         assert "guard-dashboard-root" in body
         assert "Local approval center" in body
-        assert "Hashgraph Online" in body
+        assert 'guard-loading-shell__eyebrow">HOL</p>' in body
+        assert "Hashgraph Online" not in body
 
     def test_guard_daemon_serves_dashboard_assets_when_present(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

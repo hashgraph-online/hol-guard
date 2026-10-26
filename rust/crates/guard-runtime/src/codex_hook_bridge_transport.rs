@@ -25,6 +25,7 @@ use crate::claude_hook_bridge_transport::{
     hook_event_name, json_failure, new_nonce, request_identity_challenge, BridgeError,
 };
 use crate::claude_hook_bridge_url::assert_loopback_http_url;
+use crate::codex_hook_bridge_direct_resident::{DirectMiss, DIRECT_MISS_HEADER};
 use crate::hook_env_stamp::with_remaining_hint;
 use crate::resident_transport::constant_time_eq;
 
@@ -115,6 +116,7 @@ pub(crate) fn authenticated_codex_hook_response(
     query: &str,
     data: &str,
     deadline: Instant,
+    miss: DirectMiss,
 ) -> Result<String, HookFailure> {
     let state = authenticated_state(state_path)
         .map_err(|message| unsent(BridgeError::Transport(message), true))?;
@@ -165,6 +167,7 @@ pub(crate) fn authenticated_codex_hook_response(
                 ("X-Guard-Token", &token),
                 ("X-Guard-Daemon-Nonce", &nonce),
                 ("X-Guard-Daemon-Proof", &proof),
+                (DIRECT_MISS_HEADER, miss.code()),
             ],
             hinted.as_bytes(),
             deadline,

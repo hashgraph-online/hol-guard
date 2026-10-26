@@ -13,10 +13,6 @@ from contextlib import suppress
 from pathlib import Path
 
 _CURSOR_HOOK_ATTESTATION_RELATIVE = Path("secrets") / "cursor-hook-attestation.key"
-_CURSOR_SHELL_BINDINGS_DIR = Path("cursor-shell-bindings")
-_MANAGED_HOOK_ENV = "HOL_GUARD_MANAGED_CURSOR_HOOK"
-_AFTER_SHELL_PROOF_ENV = "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"
-_APPROVAL_BINDING_ENV = "HOL_GUARD_CURSOR_APPROVAL_BINDING"
 _AFTER_SHELL_PROOF_EVENT = "afterShellExecution"
 _MAX_CURSOR_SHELL_NORMALIZE_BYTES = 8192
 _LEAN_CTX_COMMAND_MARKER = "lean-ctx"
@@ -109,15 +105,6 @@ def normalize_cursor_shell_command(command: str) -> str:
     return stripped
 
 
-def _cursor_shell_binding_segment(conversation_id: str) -> str:
-    cleaned = conversation_id.strip()
-    if not cleaned:
-        return "missing-conversation"
-    if "/" in cleaned or "\\" in cleaned or cleaned in {".", ".."}:
-        return hashlib.sha256(cleaned.encode("utf-8")).hexdigest()[:32]
-    return cleaned
-
-
 def is_lean_ctx_wrapper_command(command: str) -> bool:
     stripped = command.strip()
     if not stripped:
@@ -184,46 +171,6 @@ def cursor_after_observer_proof_message(
 
 def cursor_hook_attestation_secret_path(guard_home: Path) -> Path:
     return guard_home / _CURSOR_HOOK_ATTESTATION_RELATIVE
-
-
-def cursor_shell_binding_path(guard_home: Path, conversation_id: str, command: str) -> Path:
-    normalized_command = normalize_cursor_shell_command(command)
-    fingerprint = hashlib.sha256(normalized_command.encode("utf-8")).hexdigest()[:24]
-    return guard_home / _CURSOR_SHELL_BINDINGS_DIR / _cursor_shell_binding_segment(conversation_id) / fingerprint
-
-
-def write_cursor_shell_binding_file(
-    guard_home: Path,
-    *,
-    conversation_id: str,
-    command: str,
-    approval_binding: str,
-) -> None:
-    binding_path = cursor_shell_binding_path(guard_home, conversation_id, command)
-    binding_path.parent.mkdir(parents=True, exist_ok=True)
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
-    try:
-        fd = os.open(binding_path, flags, 0o600)
-    except OSError:
-        binding_path.write_text(approval_binding, encoding="utf-8")
-        with suppress(OSError):
-            binding_path.chmod(0o600)
-        return
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(approval_binding)
-    except OSError:
-        with suppress(OSError):
-            binding_path.unlink(missing_ok=True)
-        raise
-
-
-def remove_cursor_shell_binding_file(guard_home: Path, *, conversation_id: str, command: str) -> None:
-    binding_path = cursor_shell_binding_path(guard_home, conversation_id, command)
-    with suppress(OSError):
-        binding_path.unlink()
-    with suppress(OSError):
-        binding_path.parent.rmdir()
 
 
 _ATTESTATION_SECRET_MAX_BYTES = 4096
@@ -321,40 +268,6 @@ def ensure_cursor_hook_attestation_secret(guard_home: Path) -> bytes:
     return generated
 
 
-def _optional_string(value: object) -> str | None:
-    if isinstance(value, str):
-        stripped = value.strip()
-        return stripped or None
-    return None
-
-
-def cursor_generation_id(payload: Mapping[str, object]) -> str | None:
-    for key in ("generation_id", "generationId"):
-        value = _optional_string(payload.get(key))
-        if value is not None:
-            return value
-    return None
-
-
-def resolve_cursor_approval_binding(
-    payload: Mapping[str, object],
-    *,
-    env: Mapping[str, str] | None = None,
-) -> str | None:
-    binding = cursor_generation_id(payload)
-    if binding is not None:
-        return binding
-    source = os.environ if env is None else env
-    return _optional_string(source.get(_APPROVAL_BINDING_ENV))
-
-
-def ensure_cursor_approval_binding(payload: Mapping[str, object]) -> str:
-    binding = cursor_generation_id(payload)
-    if binding is not None:
-        return binding
-    return f"hol-guard:{secrets.token_urlsafe(24)}"
-
-
 def compute_cursor_after_observer_proof(
     *,
     secret: bytes,
@@ -390,83 +303,14 @@ def compute_cursor_after_shell_proof(
     )
 
 
-def managed_cursor_hook_invocation(env: Mapping[str, str] | None = None) -> bool:
-    source = os.environ if env is None else env
-    return source.get(_MANAGED_HOOK_ENV) == "1"
-
-
-def after_shell_proof_from_env(env: Mapping[str, str] | None = None) -> str | None:
-    source = os.environ if env is None else env
-    return _optional_string(source.get(_AFTER_SHELL_PROOF_ENV))
-
-
-def cursor_after_observer_trusted(
-    *,
-    guard_home: Path,
-    pending: Mapping[str, object],
-    payload: Mapping[str, object],
-    conversation_id: str,
-    command: str,
-    env: Mapping[str, str] | None = None,
-) -> bool:
-    from ..native_hook_render import native_cursor_observer_event
-    from ..runtime.harness_attribution import cursor_runtime_detected
-
-    if not managed_cursor_hook_invocation(env):
-        return False
-    if not cursor_runtime_detected(env):
-        return False
-    pending_binding = _optional_string(pending.get("approval_binding")) or _optional_string(
-        pending.get("generation_id")
-    )
-    payload_binding = resolve_cursor_approval_binding(payload, env=env)
-    if pending_binding is None or payload_binding is None:
-        return False
-    if pending_binding != payload_binding:
-        return False
-    proof = after_shell_proof_from_env(env)
-    if proof is None:
-        return False
-    observer_event = _optional_string(pending.get("observer_event"))
-    if observer_event is None:
-        # The event is part of the message the proof was computed over, so a
-        # resident that cannot name it leaves the observer untrusted rather
-        # than checking the proof against an event Python chose for it.
-        observer_event = native_cursor_observer_event(payload, guard_home=guard_home)
-        if observer_event is None:
-            return False
-    expected_proof = pending.get("after_shell_proof")
-    from ..native_cursor_observer_proof import native_cursor_observer_proof_valid
-
-    return native_cursor_observer_proof_valid(
-        guard_home=guard_home,
-        conversation_id=conversation_id,
-        command=command,
-        approval_binding=payload_binding,
-        observer_event=observer_event,
-        proof=proof,
-        pending_proof=expected_proof if isinstance(expected_proof, str) else None,
-        require_pending_match=True,
-    )
-
-
 __all__ = [
-    "after_shell_proof_from_env",
     "compute_cursor_after_observer_proof",
     "compute_cursor_after_shell_proof",
     "cursor_after_observer_proof_message",
-    "cursor_after_observer_trusted",
-    "cursor_generation_id",
     "cursor_hook_attestation_secret_path",
     "cursor_hook_payload_is_mcp_execution",
-    "cursor_shell_binding_path",
-    "ensure_cursor_approval_binding",
     "ensure_cursor_hook_attestation_secret",
     "is_lean_ctx_wrapper_command",
     "is_shell_wrapper_command",
-    "managed_cursor_hook_invocation",
     "normalize_cursor_shell_command",
-    "remove_cursor_shell_binding_file",
-    "resolve_cursor_approval_binding",
-    "write_cursor_shell_binding_file",
 ]

@@ -130,13 +130,17 @@ fn sibling_worktree_add_stays_reviewed_with_repository_programs() {
         ("filter.fixture.smudge", "cat"),
         ("filter.lfs.process", "git-lfs filter-process"),
         ("credential.helper", "osxkeychain"),
-        ("core.pager", "cat"),
     ] {
         session.config(&[key, value]);
         assert_reviewed(&session, &add);
         assert_reviewed(&session, &chain);
         session.config(&["--unset-all", key]);
     }
+    // A display pager names how another command prints, not anything
+    // `worktree add` runs.
+    session.config(&["core.pager", "cat"]);
+    assert_allow_at(&session, &session.org, &add, WORKTREE_ADD);
+    session.config(&["--unset-all", "core.pager"]);
     let hook = session.primary.join(".git/hooks/post-checkout");
     executable_hook(&hook);
     assert_reviewed(&session, &add);
@@ -235,9 +239,11 @@ fn git_reads_after_a_proven_worktree_add_keep_their_proof() {
             result.reason_code
         );
     }
+    // The checkout's own display pager names how `git log` prints; neither the
+    // add nor the status after it runs one.
     session.config(&["core.pager", "cat"]);
     let result = session.evaluate_at(&format!("{add} && git status --short"), &session.primary);
-    assert_ne!(result.minimum_action, "allow", "{}", result.reason_code);
+    assert_eq!(result.minimum_action, "allow", "{}", result.reason_code);
 }
 
 fn fresh_temporary_leaf(label: &str) -> std::path::PathBuf {

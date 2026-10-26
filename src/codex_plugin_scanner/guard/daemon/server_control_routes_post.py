@@ -26,7 +26,9 @@ from .harness_version_api import handle_harness_version_write
 from .local_approval_continuation import apply_local_approval_continuation
 from .local_cli_http import handle_local_cli_post
 from .manager import repair_approval_center_locator
+from .plugin_updates_http import handle_plugin_updates_dismiss
 from .server_common import _now
+from .workspace_assessment_api import handle_workspace_assessment_post
 
 _AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
 
@@ -220,6 +222,9 @@ class _ControlPostRoutes:
         if parsed.path == "/v1/update/reconnect/prepare":
             self._handle_dashboard_reconnect_prepare()
             return
+        if parsed.path == "/v1/plugins/updates/dismiss":
+            handle_plugin_updates_dismiss(self, payload)
+            return
         if parsed.path == "/v1/update/channel":
             self._handle_update_channel(payload)
             return
@@ -250,6 +255,8 @@ class _ControlPostRoutes:
                 self._run_package_firewall_mutation(action, handle_package_action)
             else:
                 handle_package_action()
+            return
+        if handle_workspace_assessment_post(self, parsed.path, payload):
             return
         if parsed.path == "/v1/supply-chain/choose-folder":
             self._handle_supply_chain_choose_folder()

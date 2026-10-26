@@ -389,8 +389,22 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
     return run_frozen_package_shim(frozen_shim_path, requested_argv[1:])
 
 
+def _frozen_module_argv(argv: list[str]) -> list[str]:
+    """Drop the ``-m codex_plugin_scanner.cli`` prefix a frozen build cannot run.
+
+    MCP proxy entries keep the Python module argv so the native relay can parse
+    them, and the relay runs that argv unchanged when it hands a session back
+    to the proxy or restarts the daemon. A frozen launcher reads it as the CLI.
+    """
+
+    if bool(getattr(sys, "frozen", False)) and argv[:2] == ["-m", "codex_plugin_scanner.cli"]:
+        return argv[2:]
+    return argv
+
+
 def main(argv: list[str] | None = None) -> int:
-    effective_argv = sys.argv[1:] if argv is None else argv
+    argv = _frozen_module_argv(sys.argv[1:] if argv is None else argv)
+    effective_argv = argv
     if bool(getattr(sys, "frozen", False)) and effective_argv[:1] == ["__guard-bounded-hook"]:
         from .guard.adapters.bounded_cli_hook_bridge import main_from_argv
 
@@ -400,7 +414,7 @@ def main(argv: list[str] | None = None) -> int:
 
         return run_frozen_cursor_hook(effective_argv[1:])
     program_name = Path(sys.argv[0]).name or "plugin-scanner"
-    requested_argv = sys.argv[1:] if argv is None else argv
+    requested_argv = argv
     frozen_exit = _run_frozen_early_dispatch(requested_argv)
     if frozen_exit is not None:
         return frozen_exit
@@ -409,6 +423,19 @@ def main(argv: list[str] | None = None) -> int:
         from .guard.secrets.cli import main as secrets_main
 
         return secrets_main(requested_argv[1:], program_name=f"{program_name} secrets")
+    if _is_hol_guard_program(program_name) and list(requested_argv[:2]) == ["plugin", "updates"]:
+        from .guard.plugin_telemetry.updates import main as plugin_updates_main
+
+        return plugin_updates_main(requested_argv[2:], program_name=f"{program_name} plugin updates")
+    if _is_hol_guard_program(program_name) and requested_argv and requested_argv[0] == "plugin":
+        from .guard.plugin_kit.cli import main as plugin_kit_main
+
+        return plugin_kit_main(requested_argv[1:], program_name=f"{program_name} plugin")
+
+    if _is_hol_guard_program(program_name) and requested_argv and requested_argv[0] == "telemetry":
+        from .guard.plugin_telemetry.cli import main as plugin_telemetry_main
+
+        return plugin_telemetry_main(requested_argv[1:], program_name=f"{program_name} telemetry")
     if _is_guard_program(program_name):
         program_mode = "guard"
     elif _is_hol_guard_program(program_name):

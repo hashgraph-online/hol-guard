@@ -96,7 +96,7 @@ fn package_permission(item: &Value) -> bool {
     ) else {
         return false;
     };
-    crate::pretool::PACKAGE_EXTENSIONS.contains(&extension)
+    crate::package_extension_ids::PACKAGE_EXTENSIONS.contains(&extension)
         && permission
             .strip_prefix(extension)
             .is_some_and(|rest| rest == ".permission.package-protection")

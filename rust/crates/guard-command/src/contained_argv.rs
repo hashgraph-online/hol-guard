@@ -332,11 +332,11 @@ fn invalid_vitest<T>() -> Result<T, RestrictedPytestError> {
     ))
 }
 
-/// The command a virtualenv activation hands its verdict to, or null when
-/// the activation is not one the scan can read through. A sink that plans the
-/// call again has to plan the text the pre-tool pass answered for, or it
-/// refuses the work that answer already admitted.
-fn venv_activation_target(input: &Value) -> Value {
+/// The command the pre-tool pass answered for, or null when the call is its
+/// own answer: a trailing group's command list, an activation's target, or
+/// both. A sink that plans the call again has to plan the text the pre-tool
+/// pass answered for, or it refuses the work that answer already admitted.
+fn contained_target(input: &Value) -> Value {
     let text = input
         .get("text")
         .and_then(Value::as_str)
@@ -346,13 +346,12 @@ fn venv_activation_target(input: &Value) -> Value {
         cwd: input.get("cwd").and_then(Value::as_str),
         ..Default::default()
     };
-    crate::pretool::generic::venv_activation_target(text, context)
-        .map_or(Value::Null, Value::String)
+    crate::pretool::generic::contained_target(text, context).map_or(Value::Null, Value::String)
 }
 
 pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
-    if operation == "venv_activation_target" {
-        return Some(json!({ "value": venv_activation_target(input) }));
+    if operation == "contained_target" {
+        return Some(json!({ "value": contained_target(input) }));
     }
     if !matches!(
         operation,
@@ -365,6 +364,7 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             | "vitest_arguments"
             | "contained_kind"
             | "launcher_program"
+            | "transparent_prefix"
     ) {
         return None;
     }
@@ -390,6 +390,10 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         "vitest_arguments" => vitest_arguments(&command).map(|v| json!(v)),
         "contained_kind" => contained_kind(&command),
         "launcher_program" => Ok(json!(crate::parser_wrappers::launcher_program(&command, 0))),
+        "transparent_prefix" => {
+            let prefix = crate::parser_wrappers::transparent_prefix(&command, 0);
+            Ok(json!(prefix.map(|(index, _)| index)))
+        }
         _ => unreachable!(),
     };
     Some(match result {

@@ -53,7 +53,7 @@ fn only_a_fully_published_home_queues() {
     assert_eq!(queued(CLAUDE_CODE, &binding, &review), Some(true));
     assert_eq!(queued("Claude_Code", &binding, &review), None);
     // A package review without a command is left to the queue; an npm
-    // install the daemon may settle stays with it, except on Windows.
+    // install the daemon may settle stays with it on every platform.
     let package =
         json!({"reason_code": package::PACKAGE_REVIEW_REASON, "minimum_action": "review"});
     assert_eq!(queued("codex", &binding, &package), Some(true));
@@ -62,10 +62,7 @@ fn only_a_fully_published_home_queues() {
         "guard_execution_environment": {"path": "/usr/bin", "environment_names": []},
     });
     let install = install.as_object().unwrap();
-    assert_eq!(
-        queued_payload("codex", &binding, &package, install),
-        cfg!(windows).then_some(true)
-    );
+    assert_eq!(queued_payload("codex", &binding, &package, install), None);
     let mut safe_alternative = ask_binding();
     safe_alternative.review.blocked_request_mode = Some("safe-alternative".to_owned());
     assert_eq!(queued("codex", &safe_alternative, &review), Some(false));

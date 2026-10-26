@@ -133,6 +133,14 @@ pub(super) fn safe_git_arguments(
         // spelling that moves work keeps its own review.
         return allow_helper_context && super::git_stash_reads::read_form(&arguments[1..]);
     }
+    if subcommand == "submodule" {
+        // A status line is printed from the superproject, whose index it
+        // reads, so a configured `core.fsmonitor` there can start and the
+        // configuration probe has to clear it first. The recursive walk,
+        // which reads each submodule's own configuration, and every verb
+        // that moves work keep their own review.
+        return allow_helper_context && super::git_submodule_reads::read_form(&arguments[1..]);
+    }
     if matches!(subcommand, "bisect" | "notes") {
         // A bisect log and a note print through the pager (core.pager), so
         // the configuration probe has to clear it first. Every spelling of

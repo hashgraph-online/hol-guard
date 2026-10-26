@@ -13,6 +13,7 @@ use crate::claude_hook_bridge_http::{
     remaining, LoopbackConnection, MAX_DAEMON_RESPONSE_BYTES, MINIMUM_OPERATION,
 };
 use crate::claude_hook_bridge_render::py_strip;
+use crate::codex_hook_bridge_direct_resident::{DirectMiss, DIRECT_MISS_HEADER};
 use crate::hook_env_stamp::{json_string, with_remaining_hint};
 use crate::pyjson::{self, in_surrogate_plane, JsonFailure, PyVal};
 
@@ -287,6 +288,7 @@ pub(crate) fn authenticated_claude_hook_response(
     query: &str,
     data: &str,
     timeout: Duration,
+    miss: DirectMiss,
 ) -> Result<String, BridgeError> {
     let deadline = Instant::now() + timeout;
     let state = authenticated_state(state_path).map_err(BridgeError::Transport)?;
@@ -326,6 +328,7 @@ pub(crate) fn authenticated_claude_hook_response(
             ("Connection", "close"),
             ("X-Guard-Daemon-Nonce", &nonce),
             ("X-Guard-Daemon-Proof", &proof),
+            (DIRECT_MISS_HEADER, miss.code()),
         ],
         hinted.as_bytes(),
         deadline,

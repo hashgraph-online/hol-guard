@@ -1,27 +1,17 @@
 import { useCallback, useState } from "react";
 import {
   HiMiniCheckCircle,
-  HiMiniExclamationCircle,
-  HiMiniWrenchScrewdriver,
-  HiMiniXCircle,
-  HiMiniChevronRight,
   HiMiniClipboard,
   HiMiniClipboardDocumentCheck,
-  HiMiniEye,
 } from "react-icons/hi2";
 import {
   ActionButton,
   EmptyState,
   SectionLabel,
-  Tag,
   GuardHero,
   ProofStrip,
 } from "./approval-center-primitives";
 import { harnessDisplayName } from "./approval-center-utils";
-import {
-  resolveAppInstallStatus,
-  APP_STATUS_LABELS,
-} from "./apps/app-catalog";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import {
   detectedHarnesses,
@@ -29,15 +19,13 @@ import {
   useHarnessDetection,
   versionCompatibilityFor,
   visibleHarnessesFor,
-  type DetectedAppStatus,
 } from "./harness-detection";
-import type { HarnessVersionCompatibility } from "./harness-version-compatibility";
-import { HarnessVersionLabel } from "./harness-version-label";
 import { protectionHealthFor, useProtectionPresentationState } from "./protection-health";
 import { ConnectGuardCloudButton } from "./connect-guard-cloud-button";
 import { resolveFleetHeroCopy } from "./fleet-hero-copy";
 import { FleetProtectionRecovery } from "./fleet-protection-recovery";
-import { FleetAppProtection, type FleetPostureApp } from "./fleet-app-protection";
+import type { FleetPostureApp } from "./fleet-app-protection";
+import { FleetAppCoverage, type FleetCoverageApp } from "./fleet-app-coverage";
 import type {
   GuardInventoryItem,
   GuardPolicyDecision,
@@ -94,89 +82,6 @@ export function repairHarnessesFor(
   ));
 }
 
-function toInstallStatus(status: DetectedAppStatus): ReturnType<typeof resolveAppInstallStatus> {
-  if (status === "protected") return "active";
-  if (status === "partial") return "partial";
-  if (status === "needs_repair") return "partial";
-  if (status === "found_unprotected") return "observed";
-  return "not_installed";
-}
-
-function StatusIcon({ status }: { status: DetectedAppStatus }) {
-  if (status === "protected") return <HiMiniCheckCircle className="h-4 w-4 text-emerald-500" aria-hidden="true" />;
-  if (status === "found_unprotected") return <HiMiniEye className="h-4 w-4 text-slate-400" aria-hidden="true" />;
-  if (status === "needs_repair") return <HiMiniWrenchScrewdriver className="h-4 w-4 text-brand-purple" aria-hidden="true" />;
-  if (status === "not_found") return <HiMiniXCircle className="h-4 w-4 text-slate-300" aria-hidden="true" />;
-  return <HiMiniExclamationCircle className="h-4 w-4 text-brand-attention" aria-hidden="true" />;
-}
-
-function StatusBadge({ status }: { status: DetectedAppStatus }) {
-  if (status === "partial") return <span className="text-xs font-medium text-brand-blue">Partially protected</span>;
-  if (status === "needs_repair") {
-    return <span className="text-xs font-medium text-brand-attention">Needs repair</span>;
-  }
-  const installStatus = toInstallStatus(status);
-  const label = APP_STATUS_LABELS[installStatus];
-  if (installStatus === "active") return <span className="text-xs font-medium text-emerald-600">{label}</span>;
-  if (installStatus === "partial") return <span className="text-xs font-medium text-brand-purple">{label}</span>;
-  if (installStatus === "observed") return <span className="text-xs font-medium text-slate-500">{label}</span>;
-  return <span className="text-xs text-slate-400">{label}</span>;
-}
-
-type AppRowProps = {
-  harness: string;
-  status: DetectedAppStatus;
-  inventoryCount: number;
-  policyCount: number;
-  versionCompatibility?: HarnessVersionCompatibility | null;
-  onOpenAppDetail?: (harness: string) => void;
-};
-
-function AppRow({ harness, status, inventoryCount, policyCount, versionCompatibility, onOpenAppDetail }: AppRowProps) {
-  const isClickable = onOpenAppDetail !== undefined;
-
-  const handleClick = useCallback(() => {
-    onOpenAppDetail?.(harness);
-  }, [onOpenAppDetail, harness]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        onOpenAppDetail?.(harness);
-      }
-    },
-    [onOpenAppDetail, harness]
-  );
-
-  return (
-    <div
-      className={`flex items-center justify-between gap-3 py-3 transition-colors ${
-        isClickable ? "cursor-pointer hover:bg-slate-50/60" : ""
-      }`}
-      onClick={isClickable ? handleClick : undefined}
-      role={isClickable ? "button" : undefined}
-      tabIndex={isClickable ? 0 : undefined}
-      onKeyDown={isClickable ? handleKeyDown : undefined}
-    >
-      <div className="flex min-w-0 items-center gap-3">
-        <StatusIcon status={status} />
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-brand-dark">{harnessDisplayName(harness)}</p>
-          <p className="text-xs text-slate-400">
-            {formatCount(inventoryCount)} actions · {formatCount(policyCount)} decisions
-          </p>
-          <HarnessVersionLabel compatibility={versionCompatibility ?? null} />
-        </div>
-      </div>
-      <div className="flex items-center gap-2">
-        <StatusBadge status={status} />
-        {isClickable && <HiMiniChevronRight className="h-4 w-4 text-slate-300" aria-hidden="true" />}
-      </div>
-    </div>
-  );
-}
-
 export function FleetWorkspace(props: FleetWorkspaceProps) {
   const harnessDetection = useHarnessDetection();
   const harnesses = collectHarnesses(props.runtime);
@@ -215,6 +120,19 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
     return Array.from(known, (harness) => ({ harness, active: activeSet.has(harness) }))
       .sort((a, b) => a.harness.localeCompare(b.harness));
   })();
+  const coverageApps: FleetCoverageApp[] = visibleHarnesses.map((harness) => {
+    const install = managedInstalls.find((i) => i.harness === harness);
+    const presentInventory = inventory.filter((i) => i.harness === harness && i.present);
+    const appProtection = protectionHealthFor(props.runtime, harness);
+    const status = resolveDetectedAppStatus(install, appProtection, presentInventory.length > 0, receiptHarnesses.has(harness), detected.includes(harness));
+    return {
+      harness,
+      status,
+      inventoryCount: presentInventory.length,
+      policyCount: props.policies.filter((p) => p.harness === harness).length,
+      versionCompatibility: versionCompatibilityFor(harnessDetection, harness) ?? null,
+    };
+  });
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
     activeInstalls.length,
@@ -276,78 +194,46 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
         />
       ) : null}
 
-      <FleetAppProtection apps={postureApps} onChanged={props.onRuntimeRefresh} />
+      <FleetAppCoverage
+        apps={coverageApps}
+        postureApps={postureApps}
+        onOpenAppDetail={props.onOpenAppDetail}
+        onPostureChanged={props.onRuntimeRefresh}
+        notes={
+          <>
+            {props.inventory.kind === "error" ? (
+              <p className="mt-3 text-xs text-slate-500">{props.inventory.message}</p>
+            ) : null}
+            {harnessDetection.kind === "error" ? (
+              <p className="mt-3 text-xs text-slate-500">{harnessDetection.message}</p>
+            ) : null}
+          </>
+        }
+      />
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
-        <section>
-          <div className="mb-4">
-            <SectionLabel>App coverage</SectionLabel>
-            <p className="mt-1 text-sm text-slate-500">Which apps Guard is watching on this machine.</p>
+      <section>
+        <div className="mb-4">
+          <SectionLabel>Recent choices</SectionLabel>
+          <p className="mt-1 text-sm text-slate-500">What Guard decided recently.</p>
+        </div>
+        {props.runtime.latest_receipts.length > 0 ? (
+          <div className="grid border-t border-slate-100 sm:grid-cols-2 sm:gap-x-8">
+            {props.runtime.latest_receipts.slice(0, 6).map((receipt) => (
+              <div key={receipt.receipt_id} className="min-w-0 border-b border-slate-100 py-2.5">
+                <p className="truncate text-sm font-medium text-brand-dark">
+                  {receipt.artifact_name ?? receipt.artifact_id}
+                </p>
+                <p className="text-xs text-slate-400">{renderReceiptContext(receipt)}</p>
+              </div>
+            ))}
           </div>
-
-          {visibleHarnesses.length > 0 ? (
-            <div className="divide-y divide-slate-100 border-t border-slate-100">
-              {visibleHarnesses.map((harness) => {
-                const install = managedInstalls.find((i) => i.harness === harness);
-                const harnessInventory = inventory.filter((i) => i.harness === harness && i.present);
-                const harnessPolicies = props.policies.filter((p) => p.harness === harness);
-                const hasReceipts = receiptHarnesses.has(harness);
-                const isDetected = detected.includes(harness);
-                const appProtection = protectionHealthFor(props.runtime, harness);
-                const status = resolveDetectedAppStatus(install, appProtection, harnessInventory.length > 0, hasReceipts, isDetected);
-                return (
-                  <AppRow
-                    key={harness}
-                    harness={harness}
-                    status={status}
-                    inventoryCount={harnessInventory.length}
-                    policyCount={harnessPolicies.length}
-                    versionCompatibility={versionCompatibilityFor(harnessDetection, harness)}
-                    onOpenAppDetail={props.onOpenAppDetail}
-                  />
-                );
-              })}
-            </div>
-          ) : (
-            <EmptyState
-              title="No watched apps yet"
-              body="Run HOL Guard once with Codex, Claude Code, OpenCode, Copilot, Cursor, Gemini, Hermes, or another supported app and this machine will show coverage here."
-              tone="teach"
-            />
-          )}
-
-          {props.inventory.kind === "error" ? (
-            <p className="mt-3 text-xs text-slate-500">{props.inventory.message}</p>
-          ) : null}
-          {harnessDetection.kind === "error" ? (
-            <p className="mt-3 text-xs text-slate-500">{harnessDetection.message}</p>
-          ) : null}
-        </section>
-
-        <section>
-          <div className="mb-4">
-            <SectionLabel>Recent choices</SectionLabel>
-            <p className="mt-1 text-sm text-slate-500">What Guard decided recently.</p>
-          </div>
-          {props.runtime.latest_receipts.length > 0 ? (
-            <div className="space-y-0 divide-y divide-slate-100 border-t border-slate-100">
-              {props.runtime.latest_receipts.slice(0, 6).map((receipt) => (
-                <div key={receipt.receipt_id} className="py-2.5">
-                  <p className="truncate text-sm font-medium text-brand-dark">
-                    {receipt.artifact_name ?? receipt.artifact_id}
-                  </p>
-                  <p className="text-xs text-slate-400">{renderReceiptContext(receipt)}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState
-              title="No choices yet"
-              body="Allow or block an action once and HOL Guard will start building local history for this machine."
-            />
-          )}
-        </section>
-      </div>
+        ) : (
+          <EmptyState
+            title="No choices yet"
+            body="Allow or block an action once and HOL Guard will start building local history for this machine."
+          />
+        )}
+      </section>
 
       {activeInstalls.length === 0 && (
         <SetupGuide

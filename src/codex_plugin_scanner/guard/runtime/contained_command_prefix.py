@@ -56,8 +56,51 @@ def _data_assignment(word: str) -> bool:
     )
 
 
+def _peel_transparent_prefix(command: list[str], assignments: dict[str, str], *, drop_data: bool) -> list[str] | None:
+    """Peel a prefix that only hands the program its own settings, as native reads it.
+
+    Native authority owns that grammar — which names stand transparently in
+    front of a program, and which words between the name and the program
+    belong to it — so the sink asks it where the program stands and keeps no
+    list of the names itself. A second copy of that list is what drift looks
+    like: the parser reads `/usr/bin/env` and `/bin/env` as the `env` they
+    are, while the copy here held only the bare spelling, so
+    `/usr/bin/env CI=1 pytest -q` reached the planners with `/usr/bin/env` as
+    its program and was refused, though native authority had already read it
+    as the `pytest -q` it runs. The copy also peeled a bare `env pytest`,
+    which the parser deliberately leaves alone — `env` with no assignment
+    only bypasses shell functions, and extension floors key on that spelling
+    — so the sink planned a program native authority had not judged.
+
+    The settings the prefix carries stay the sink's own business. Each one
+    must still be an inert assignment, which the runner exports to its source
+    environment for the run, or, with `drop_data`, a plain-data setting the
+    read-only profile would drop anyway. A word that is neither leaves the
+    prefix in place, so the planners refuse the command rather than run its
+    program with a setting nobody filtered.
+
+    Returns the command behind the prefix, or ``None`` when there is no
+    prefix here to peel.
+    """
+    if len(command) < 2 or not command[0] or command[0].startswith("-") or _assignment_word(command[0]):
+        return None
+    from ..native_restricted_pytest import restricted_native
+
+    index = restricted_native("transparent_prefix", {"command": command}, (int, type(None)))
+    if type(index) is not int or not 0 < index < len(command):
+        return None
+    carried: dict[str, str] = {}
+    for word in command[1:index]:
+        if (assignment := _inert_assignment(word)) is not None:
+            carried[assignment[0]] = assignment[1]
+        elif not (drop_data and _data_assignment(word)):
+            return None
+    assignments.update(carried)
+    return command[index:]
+
+
 def _split_command_prefix(command: list[str], *, drop_data: bool = False) -> tuple[list[str], dict[str, str]]:
-    """Peel `command`/`time`/`env` prefixes and inert `NAME=value` assignments.
+    """Peel the transparent prefixes native authority reads, and inert assignments.
 
     The native model reads `CI=1 command bun run build` as `bun run build`
     with an inert assignment. With `drop_data`, a plain-data setting
@@ -67,16 +110,19 @@ def _split_command_prefix(command: list[str], *, drop_data: bool = False) -> tup
     the setting, and a workspace receipt still runs the original as issued.
     An option such as `command -v` or `env -i` keeps its prefix, and any
     other assignment stays in the command, so the core is rejected.
+
+    An assignment is read here before the prefix is asked about, because a
+    word carrying `=` is no prefix name and the answer would be the same.
     """
     assignments: dict[str, str] = {}
     for _ in range(16):
-        if len(command) > 1 and command[0] in {"command", "time", "env"} and not command[1].startswith("-"):
-            command = command[1:]
-        elif command and (assignment := _inert_assignment(command[0])) is not None:
+        if command and (assignment := _inert_assignment(command[0])) is not None:
             assignments[assignment[0]] = assignment[1]
             command = command[1:]
         elif drop_data and len(command) > 1 and _data_assignment(command[0]):
             command = command[1:]
+        elif (peeled := _peel_transparent_prefix(command, assignments, drop_data=drop_data)) is not None:
+            command = peeled
         else:
             break
     return command, assignments
@@ -178,19 +224,24 @@ def _assignment_word(word: str) -> bool:
     return bool(separator and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name))
 
 
-# Native authority reads a launcher only when the first word is exactly one of
-# these names, so any other command keeps its words without asking it.
-_LAUNCHERS = frozenset({"nice", "stdbuf"})
-
-
 def _peel_launcher(command: list[str]) -> list[str]:
-    """The program a system `nice` or `stdbuf` runs, as the native parser reads it.
+    """The program a system launcher runs, as the native parser reads it.
 
-    Native authority owns that grammar, so the sink asks it for the program's
-    position and never parses launcher options itself. A launcher the parser
-    leaves in place stays in place, and the planners refuse it.
+    Native authority owns that grammar — which names are launchers, and where
+    each one's options end — so the sink asks it for the program's position and
+    keeps no list of the names itself. A second copy of that list is what drift
+    looks like: the parser learned to read the shell's `exec` as a launcher
+    while the copy here still held `nice` and `stdbuf`, so `exec pytest -q`
+    reached the planners with `exec` as its program and was refused, though
+    native authority had already read it as the `pytest -q` it runs.
+
+    A launcher stands as a bare name in front of a program, so a command too
+    short to hold both, or one whose first word is spelled as a path, is not
+    one and is not asked about. Every other command is, and the parser answers
+    for the names it reads. A launcher it leaves in place stays in place, and
+    the planners refuse it.
     """
-    if not command or command[0] not in _LAUNCHERS:
+    if len(command) < 2 or not command[0] or "/" in command[0] or "\\" in command[0]:
         return command
     from ..native_restricted_pytest import restricted_native
 
@@ -201,13 +252,14 @@ def _peel_launcher(command: list[str]) -> list[str]:
 def peel_run_prefixes(command: list[str]) -> tuple[list[str], int | None]:
     """Peel the prefixes native authority reads through, and the tightest clock.
 
-    A system `timeout`, `nice` and `stdbuf` each run the program they name
-    unchanged, so the planners are handed that program, as native authority
-    is. Each peel is followed by the inert `command`/`env` prefix and
-    assignment split the planners already receive. `nice` and `stdbuf` set
-    only scheduling priority and stdio buffering; the contained runner applies
-    its own process limits and returns the output when the run ends, so
-    neither setting changes what the caller reads.
+    A system `timeout`, and every launcher the native parser reads, run the
+    program they name unchanged, so the planners are handed that program, as
+    native authority is. Each peel is followed by the inert `command`/`env`
+    prefix and assignment split the planners already receive. `nice` and
+    `stdbuf` set only scheduling priority and stdio buffering, and the shell's
+    `exec` replaces the shell process rather than forking one; the contained
+    runner applies its own process limits and returns the output when the run
+    ends, so none of them changes what the caller reads.
     """
     seconds: int | None = None
     for _ in range(4):

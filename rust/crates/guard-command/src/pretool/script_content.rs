@@ -138,6 +138,20 @@ fn structure(
     if model.confidence == "exact" {
         return Some((model.normalized_text.clone(), model.segments.clone()));
     }
+    text_structure(&model.normalized_text, context)
+}
+
+/// Whether `text`, read the way an uncertain command is read above, is
+/// commands this scan models exactly.
+pub(crate) fn models_exactly(text: &str, context: PathContext<'_>) -> bool {
+    read_paths::verified_path_context(context.home_dir, context.cwd)
+        && text_structure(text, context).is_some()
+}
+
+fn text_structure(
+    text: &str,
+    context: PathContext<'_>,
+) -> Option<(String, Vec<crate::CommandSegmentV1>)> {
     let parse = |text: &str| {
         let structured = crate::critical_floor_context::parse_floor_command(
             text,
@@ -147,13 +161,12 @@ fn structure(
         (structured.confidence == "exact" && structured.wrapper_chain.is_empty())
             .then_some((structured.normalized_text, structured.segments))
     };
-    parse(&model.normalized_text)
-        .or_else(|| parse(foreground_job(&model.normalized_text)?))
+    parse(text)
         .or_else(|| {
-            parse(crate::native_command_controls::launcher_body(
-                &model.normalized_text,
-            )?)
+            (!background_moves_shell(text)).then_some(())?;
+            parse(&sequential_jobs(text)?)
         })
+        .or_else(|| parse(crate::native_command_controls::launcher_body(text)?))
 }
 
 /// The text of a command whose only unreadable part is the `&` that
@@ -173,6 +186,132 @@ pub(crate) fn foreground_job(text: &str) -> Option<&str> {
     (!body.is_empty() && !body.contains('&')).then_some(body)
 }
 
+/// The command list with every job-ending `&` read as the `;` that ends a
+/// foreground command, or `None` when the text has no such `&`.
+///
+/// `node server.js & echo started` starts the server and prints a line: the
+/// programs `node server.js; echo started` runs, in the same directory and as
+/// the same user. The parser leaves any background job uncertain, so a launch
+/// followed by another command lost its segments, and the interpreter looked
+/// like a program nobody read, exactly as the trailing `&` above once did.
+/// The jobs are found by the parser's own split, so a quoted `&`, the `&&` of
+/// a list and the `&` of a redirect such as `2>&1` stay what they are.
+pub(crate) fn sequential_jobs(text: &str) -> Option<String> {
+    let (mut chars, separators) = job_separators(text)?;
+    let last = *separators.last()?;
+    let trailing = chars[last + 1..].iter().all(|c| c.is_whitespace());
+    for &index in &separators {
+        chars[index] = ';';
+    }
+    if trailing {
+        chars.truncate(last);
+    }
+    let list: String = chars.into_iter().collect();
+    let list = list.trim();
+    (!list.is_empty()).then(|| list.to_owned())
+}
+
+/// Whether a job that runs before another one could change the shell the
+/// later one runs in, were it read in the foreground.
+///
+/// A background job runs in a subshell, so `cd app && npm start & curl ...`
+/// leaves `curl` in the starting directory. Read as a list, the `cd` would
+/// move every command after it, and the paths those commands name would
+/// resolve somewhere the shell never looks. Any such builtin or assignment in
+/// command position ahead of the last job keeps the text uncertain.
+fn background_moves_shell(text: &str) -> bool {
+    let Some((chars, separators)) = job_separators(text) else {
+        return false;
+    };
+    let ahead = separators
+        .iter()
+        .copied()
+        .filter(|&index| !chars[index + 1..].iter().all(|c| c.is_whitespace()))
+        .max()
+        .unwrap_or(0);
+    let prefix: String = chars[..ahead].iter().collect();
+    // Splitting ignores quoting, so it can only add candidate command words,
+    // never hide one that follows a real separator.
+    prefix
+        .split([';', '&', '|', '(', ')', '{', '}', '\n'])
+        .any(|command| command_word(command).is_some_and(moves_shell))
+}
+
+/// The word in command position of one simple command, past reserved words
+/// and the `command` and `builtin` wrappers that still run the builtin.
+fn command_word(command: &str) -> Option<&str> {
+    let mut wrapped = false;
+    command.split_whitespace().find(|word| {
+        if matches!(*word, "command" | "builtin" | "time") {
+            wrapped = true;
+            return false;
+        }
+        // `command -p cd` and `time -p cd` still run the builtin.
+        if wrapped && word.starts_with('-') {
+            return false;
+        }
+        !matches!(
+            *word,
+            "!" | "if" | "then" | "else" | "elif" | "do" | "while" | "until"
+        )
+    })
+}
+
+fn moves_shell(word: &str) -> bool {
+    // The shell strips quotes and escapes before it looks a builtin up, and a
+    // substitution can expand to one, so `'cd'`, `c\d` and `$(echo cd)` may
+    // all move the shell. Such a word is not unquoted here; it stays uncertain.
+    word.contains(['\'', '"', '\\', '`', '$'])
+        || matches!(
+            word,
+            "cd" | "pushd"
+                | "popd"
+                | "source"
+                | "."
+                | "set"
+                | "shopt"
+                | "umask"
+                | "export"
+                | "unset"
+                | "alias"
+                | "declare"
+                | "typeset"
+                | "readonly"
+                | "local"
+                | "eval"
+                | "exec"
+                | "trap"
+                | "ulimit"
+                | "hash"
+                | "enable"
+        )
+        || word.split_once('=').is_some_and(|(name, _)| {
+            name.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
+                && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+        })
+}
+
+/// The characters of `text` and the indices of the `&`s that end a job.
+fn job_separators(text: &str) -> Option<(Vec<char>, Vec<usize>)> {
+    let segments =
+        crate::parser_segments::split_pipelines_including_background(text, cfg!(windows)).ok()?;
+    let chars: Vec<char> = text.chars().collect();
+    let mut separators: Vec<usize> = segments
+        .iter()
+        .filter_map(|segment| {
+            let index = segment.end
+                + chars
+                    .get(segment.end..)?
+                    .iter()
+                    .position(|c| !c.is_whitespace())?;
+            (chars[index] == '&' && chars.get(index + 1) != Some(&'&')).then_some(index)
+        })
+        .collect();
+    separators.sort_unstable();
+    separators.dedup();
+    Some((chars, separators))
+}
+
 /// Whether backgrounding is the only part of this command the scan could not
 /// read: the same text without its trailing `&` is one exactly modelled
 /// command.
@@ -186,7 +325,7 @@ pub(crate) fn backgrounded_launch(model: &CanonicalCommandV1, context: PathConte
     model.uncertainty_reason.as_deref() == Some("background_job_not_yet_supported")
         && model.wrapper_chain.is_empty()
         && !model.path_overridden
-        && foreground_job(&model.normalized_text).is_some()
+        && sequential_jobs(&model.normalized_text).is_some()
         && structure(model, context).is_some()
 }
 
@@ -1068,3 +1207,7 @@ fn extension(path: &Path) -> String {
         .unwrap_or_default()
         .to_ascii_lowercase()
 }
+
+#[cfg(test)]
+#[path = "script_content/jobs_tests.rs"]
+mod jobs_tests;

@@ -30,6 +30,7 @@ from .review_fixtures import (
     worktree_checks,
     write_gh_stub,
 )
+from .runtime_cases import runtime_case_checks
 from .script_cases import script_case_checks
 from .session_folder import session_folder_checks
 from .sibling_runner_fixtures import add_sibling_test_runner
@@ -372,6 +373,7 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
     checks.update(github_checks(fixture.gh_log_root, scenario_id))
     checks.update(supply_chain_checks(fixture.workspace, scenario_id))
     checks.update(script_case_checks(fixture.home, fixture.canary, scenario_id))
+    checks.update(runtime_case_checks(fixture.workspace, scenario_id))
     checks.update(long_lived_clone_checks(fixture.workspace, scenario_id))
     checks.update(fast_forward_checks(fixture.workspace, scenario_id))
     checks.update(session_folder_checks(fixture.home, scenario_id))

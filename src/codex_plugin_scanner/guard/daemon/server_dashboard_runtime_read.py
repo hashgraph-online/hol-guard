@@ -20,8 +20,10 @@ from .dashboard_update import merge_dashboard_update_progress
 from .extension_control_api import ExtensionControlApiError
 from .harness_version_api import attach_version_compatibility
 from .local_cli_http import handle_local_cli_list
+from .plugin_updates_http import handle_plugin_updates_read
 from .server_common import _now, _ServerProxy, _settings_export_payload, _settings_response_payload
 from .server_control_cloud_sync import _managed_controls_publish_for, _maybe_queue_first_cloud_sync
+from .workspace_assessment_api import handle_workspace_assessment_get
 
 m = _ServerProxy()
 
@@ -130,6 +132,8 @@ class _DashboardRuntimeReadRoutes:
         if parsed.path == "/v1/supply-chain/bundle":
             self._handle_get_supply_chain_bundle()
             return True
+        if handle_workspace_assessment_get(self, parsed.path, parsed.query):
+            return True
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "apps"] and path_parts[3] == "cloud":
             self._handle_cloud_app_handoff(path_parts[2], parsed.query)
             return True
@@ -184,6 +188,9 @@ class _DashboardRuntimeReadRoutes:
             from .cloud_review_settings import cloud_review_settings_status
 
             self._write_json(cloud_review_settings_status(store), extra_headers={"Cache-Control": "no-store"})
+            return True
+        if parsed.path == "/v1/plugins/updates":
+            handle_plugin_updates_read(self)
             return True
         if parsed.path == "/v1/update/status":
             self._write_json(

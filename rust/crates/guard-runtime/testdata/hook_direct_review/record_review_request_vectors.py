@@ -32,6 +32,43 @@ REQUEST_ID = "0123456789abcdef0123456789abcdef"
 CENTER = "http://127.0.0.1:4781"
 
 
+def _settleable_uncertainties_only(evidence: Mapping[str, object], count: object) -> bool:
+    """Frozen copy of the daemon's former gate; the resident owns it now."""
+
+    if count == 0:
+        return True
+    if not isinstance(count, int) or isinstance(count, bool) or count <= 0:
+        return False
+    permission_observations = evidence.get("permission_observations")
+    if isinstance(permission_observations, list) and any(
+        isinstance(item, Mapping) and item.get("uncertainty_reasons") for item in permission_observations
+    ):
+        return False
+    observations = evidence.get("observations")
+    if not isinstance(observations, list):
+        return False
+    uncertain = [item for item in observations if isinstance(item, Mapping) and item.get("uncertainty_reasons")]
+    return len(uncertain) == count
+
+
+def _definite_review(native_result: Mapping[str, object]) -> bool:
+    """Whether the pause is a definite extension review (`allow_hint_candidate`'s first half)."""
+
+    if native_result.get("minimum_action") not in ("review", "require-reapproval"):
+        return False
+    if native_result.get("reason_code") != "native_command_review_required":
+        return False
+    evidence = native_result.get("command_extensions")
+    if not isinstance(evidence, Mapping) or evidence.get("evaluation_error"):
+        return False
+    binding = evidence.get("binding")
+    if not isinstance(binding, Mapping):
+        return False
+    return _settleable_uncertainties_only(evidence, binding.get("uncertainty_count")) and isinstance(
+        binding.get("observations_digest"), str
+    )
+
+
 def _envelope(harness: str, action_type: str, **fields: object) -> dict[str, object]:
     envelope: dict[str, object] = {
         "schema_version": 1,
@@ -207,7 +244,7 @@ def _record(case: Mapping[str, object], host: Mapping[str, str]) -> dict[str, ob
         mock.patch.object(native_hook_adapter, "_call", call),
         mock.patch.object(review, "native_review_policy_binding", lambda **_: None),
         mock.patch.object(review, "validate_native_decision_receipt", validate),
-        mock.patch.object(review, "native_review_extension_allow_hint", lambda *_, **__: None),
+        mock.patch.object(review, "native_review_hint", lambda *_, **__: None),
         mock.patch.object(review, "uuid", SimpleNamespace(uuid4=lambda: uuid.UUID(REQUEST_ID))),
     ):
         stored = review.queue_native_pre_tool_review(
@@ -228,7 +265,7 @@ def _record(case: Mapping[str, object], host: Mapping[str, str]) -> dict[str, ob
     payload = case["payload"]
     assert isinstance(payload, Mapping)
     hint_candidate = (
-        hint._definite_review_binding(case["result"]) is not None
+        _definite_review(case["result"])
         and pre_tool_command(payload) is not None
         and hint._command_only_payload(payload)
     )

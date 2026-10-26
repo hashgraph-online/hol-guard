@@ -50,7 +50,8 @@ def test_native_replay_shards_are_complete_and_required() -> None:
     job = jobs["native-gates"]
     assert job["needs"] == "native-command-evaluators"
     assert job["strategy"]["fail-fast"] is False
-    assert job["strategy"]["matrix"]["shard-index"] == list(range(8))
+    shards = job["strategy"]["matrix"]["shard-index"]
+    assert shards == list(range(24))
     assert job["timeout-minutes"] == 10
     steps = job["steps"]
     assert any(step.get("uses") == "./.github/actions/setup-ci-python" for step in steps)
@@ -76,7 +77,9 @@ def test_native_replay_shards_are_complete_and_required() -> None:
         for step in steps
         if step.get("name") == "Benign false-positive and Gauntlet replay gates (model-free, native path)"
     )
-    assert replay["env"]["SHARD_COUNT"] == 8
+    # A SHARD_COUNT that disagrees with the matrix silently drops gate cases
+    # or runs them twice, and the gate reports green either way.
+    assert replay["env"]["SHARD_COUNT"] == len(shards)
     assert "set -o pipefail" in replay["run"]
     assert "pytest --collect-only -q" in replay["run"]
     assert "sort gate-nodes.txt | awk" in replay["run"]
