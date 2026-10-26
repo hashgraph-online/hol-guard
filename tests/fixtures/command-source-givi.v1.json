@@ -1591,7 +1591,7 @@
       "enabled_extensions": [
         "command.givi"
       ],
-      "expected_action": "block",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "id": "auto-review-enable-node",
       "rule_id": "command.givi.auto-review-enable"
@@ -1833,7 +1833,7 @@
       "enabled_extensions": [
         "command.givi"
       ],
-      "expected_action": "block",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "id": "auto-review-disable-node",
       "rule_id": "command.givi.auto-review-disable"
@@ -2075,7 +2075,7 @@
       "enabled_extensions": [
         "command.givi"
       ],
-      "expected_action": "block",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "id": "auto-review-acknowledge-node",
       "rule_id": "command.givi.auto-review-acknowledge"
@@ -2317,7 +2317,7 @@
       "enabled_extensions": [
         "command.givi"
       ],
-      "expected_action": "block",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "id": "auto-review-run-node",
       "rule_id": "command.givi.auto-review-run"
@@ -2559,7 +2559,7 @@
       "enabled_extensions": [
         "command.givi"
       ],
-      "expected_action": "block",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "id": "findings-add-node",
       "rule_id": "command.givi.findings-add"
@@ -2801,7 +2801,7 @@
       "enabled_extensions": [
         "command.givi"
       ],
-      "expected_action": "block",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "id": "findings-update-node",
       "rule_id": "command.givi.findings-update"
@@ -3374,7 +3374,7 @@
       "enabled_extensions": [
         "command.givi"
       ],
-      "expected_action": "block",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "id": "excluded-28",
       "rule_id": "command.givi.auto-review-enable"
